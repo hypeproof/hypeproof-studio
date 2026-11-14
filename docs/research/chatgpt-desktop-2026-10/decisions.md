@@ -2289,3 +2289,18 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-SHELL-R-014 follow-up: the 내 작업 내보내기 row (2026-11-14)
+
+Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend on #4053. The drawing is an agent choice.
+
+- **Rows.** 내 작업 내보내기 joins because its behaviour shipped (CGP-SHELL-R-028).
+  - 화면 밝기 stays with #4053 (CGP-SHELL-R-016).
+  - 팁 보기 is not drawn. Tips (REQ-SHELL-19 / CGP-SHELL-R-019) are not built: no trigger and no "팁 그만 보기" exist, so the row would be a switch with nothing behind it (DEC-SHELL-R014).
+  - The sheet now draws 4 of the 6 rows, and 5 once #4053 lands.
+- **Shape (agent choice).**
+  - An action row drawn like "고급 설정" (a 48px button, with the row-name weight), not a toggle, because export is an action.
+  - A one-line note under it says what is saved and that the learner picks the folder.
+  - The sheet closes first, so the native folder picker is not under a modal.
+- **Who sees it.** Every seat, minors included. The export is local only, the same rule as its other entry points.
+

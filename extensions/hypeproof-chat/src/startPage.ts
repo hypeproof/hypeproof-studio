@@ -984,6 +984,9 @@ export class StartPage {
       if ((await this.settingsView()).advanced) await vscode.commands.executeCommand("workbench.action.openSettings");
       return;
     }
+    // CGP-SHELL-R-014 — the sheet's 내 작업 내보내기 row runs the shipped export (CGP-SHELL-R-028): local only, every
+    // seat, no token. The chat host owns the flow (folder picker, progress, result) and its busy and stream guards.
+    if (msg.type === "startExportMyWork") { await this.chat.exportMyWork?.(); return; }
     if (msg.type === "startSetting") {
       const write = parseStartSettingWrite(msg);
       if (!write) return;

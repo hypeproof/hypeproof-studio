@@ -8146,9 +8146,16 @@ behaviour exists in the build (DEC-SHELL-R014):
   (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
 - 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
   native task notices while the window is unfocused; notices never carry answer text.
+- 내 작업 내보내기 (2026-11-14) — an action row drawn like "고급 설정", with the note "작업 폴더와 대화를
+  ZIP 파일 하나로 저장해요. 저장할 폴더는 직접 골라요." under it. It closes the sheet and the host runs the
+  shipped export (CGP-SHELL-R-028, `ChatPanelProvider.exportMyWork`: folder picker, progress, the
+  result line, its busy and active-turn guards). It is offered in every seat, minors included,
+  because the export is local only (no network, no token). Only the exact `startExportMyWork`
+  message runs it.
 
-화면 밝기(테마), 팁 보기 and 내 작업 내보내기 join when REQ-SHELL-16, REQ-SHELL-19 and
-REQ-SHELL-28 ship; until then they are not drawn, so no row is a switch that does nothing.
+화면 밝기(테마) joins with REQ-SHELL-16 (CGP-SHELL-R-016, #4053). 팁 보기 joins when REQ-SHELL-19
+(CGP-SHELL-R-019) ships: the tips themselves are not built yet. Until then neither is drawn, so
+no row is a switch that does nothing.
 
 "고급 설정" at the end of the sheet is the only start-page path to the VS Code settings editor.
 It is hidden for a minor cohort: a connected or previewed profile that `isMinorProfile` calls
@@ -8156,7 +8163,7 @@ minor (it fails closed on an unknown tier) or a free start answered "under14". T
 the same rule when the request arrives, so a forged request from a minor seat opens nothing. With
 no seat and no under-14 answer it stays (adult or staff setup, as before this row).
 
-Every write is host-validated: only the three keys with their exact values are stored; any other
+Every write is host-validated: only the three setting keys with their exact values are stored; any other
 key or value stores nothing and sends nothing. A failed write says
 "설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요." and keeps the shown value. The sheet reuses the
 chat settings dialog: Escape, × and the backdrop close it, focus returns to "설정", 44px targets,
