@@ -143,6 +143,18 @@ export function clearStudioMemoryJournal(): void { journal.length = 0; }
 
 export interface RevertResult { reverted: number; kept: number; failed: number; unchecked: boolean }
 
+/**
+ * When a quarantined file was put there: the stamp its name starts with (`<stamp>-…` or `moved-<stamp>-…`), never its
+ * mtime, which a move keeps from the original (a photo copied in from the file manager keeps its old date) and a turn
+ * can set to anything. A name without a stamp counts as oldest.
+ */
+export function quarantinedAt(name: string): number {
+  const m = /^(?:moved-)?(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/.exec(name);
+  if (!m) return 0;
+  const t = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
+  return Number.isNaN(t) ? 0 : t;
+}
+
 /** Removes quarantined copies older than the retention, then the oldest past the per-activity count and byte caps. */
 export async function pruneQuarantine(base: string, now = Date.now()): Promise<void> {
   const scopes = await fs.readdir(base).catch(() => [] as string[]);
@@ -155,8 +167,9 @@ export async function pruneQuarantine(base: string, now = Date.now()): Promise<v
         const file = path.join(taskDir, name);
         const stat = await fs.lstat(file).catch(() => null);
         if (!stat) continue;
-        if (!stat.isFile() || now - stat.mtimeMs > QUARANTINE_LIMITS.retentionMs) { await fs.rm(file, { force: true }).catch(() => undefined); continue; }
-        files.push({ file, at: stat.mtimeMs, size: stat.size });
+        const at = quarantinedAt(name);
+        if (!stat.isFile() || now - at > QUARANTINE_LIMITS.retentionMs) { await fs.rm(file, { force: true }).catch(() => undefined); continue; }
+        files.push({ file, at, size: stat.size });
       }
       if (!(await fs.readdir(taskDir).catch(() => [])).length) await fs.rmdir(taskDir).catch(() => undefined);
     }
@@ -236,7 +249,10 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
       if (moves >= QUARANTINE_LIMITS.movesPerTurn) { result.failed++; continue; }
       try {
         await ensureQuarantine();
-        await fs.rename(path.join(dir, name), path.join(quarantine, `${MOVED_PREFIX}${stamp}-${++seq}-${path.basename(name)}`));
+        const target = path.join(quarantine, `${MOVED_PREFIX}${stamp}-${++seq}-${path.basename(name)}`);
+        await fs.rename(path.join(dir, name), target);
+        // Belt and braces: the stamp in the name decides the age, and the file's own times say "now" as well.
+        await fs.utimes(target, now / 1000, now / 1000).catch(() => undefined);
         moves++; result.reverted++;
       } catch { result.failed++; }
       continue;

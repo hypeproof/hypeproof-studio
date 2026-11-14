@@ -429,7 +429,8 @@ drop of a stale message is a second layer.
   start: the rewrite is still put back, every new file is gone, and junk names are moved, not copied.
 - **No data loss:** a learner's 200 KB photo dropped in mid-turn is moved byte for byte; an item swapped for a folder
   keeps its earlier bytes in the quarantine and is reported. Moves are capped per turn, the rest is left and reported,
-  and a moved file is outside the byte cap.
+  and a moved file is outside the byte cap. A moved photo with a 30-day-old mtime survives the prune right after its move,
+  junk with a future mtime does not outrank newer copies, and retention and order follow the stamp in the name.
 - **Studio's last state:** a learner's editor save, then a shell overwrite in the same turn, ends with the learner's
   save; the overwrite is quarantined. A BOM and CRLF file saved in the editor is journaled from disk and kept byte for
   byte.
@@ -456,7 +457,8 @@ Mutants each fail it:
 - junk deleted instead of moved;
 - a folder swap losing the item's bytes;
 - no per-turn move cap;
-- moved files counted in the byte cap.
+- moved files counted in the byte cap;
+- the quarantine aged by mtime instead of the stamp in the name.
 
 A real coach shell command and the packaged app are not run here.
 

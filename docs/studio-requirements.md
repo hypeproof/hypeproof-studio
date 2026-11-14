@@ -9389,7 +9389,9 @@ catches what the checks above cannot see: a shell command that builds the path a
   - **Other files are moved, never deleted.** A new name the store would never read as memory (a photo the learner
     dropped in from the file manager, or junk) is renamed into the quarantine: no copy, no extra disk. At most 200 per
     turn; the rest is left in place and reported. A move across volumes is not attempted, and the file stays and is
-    reported. Moved files follow the count and seven-day caps, but not the byte cap.
+    reported. Moved files follow the count and seven-day caps, but not the byte cap. Age and order come from the stamp in
+    the quarantined file's name, never its mtime (a move keeps the original's date, and a turn can set any date); the
+    moved file's times are set to the move as well.
   - **An item that cannot be put back keeps its bytes.** When the item was replaced by a folder, its earlier bytes are
     copied into the quarantine before the failure is reported.
   - **Quarantine bounds.**

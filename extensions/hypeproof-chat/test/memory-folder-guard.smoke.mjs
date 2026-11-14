@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { ActivityMemory, MEMORY_LIMITS } from '../src/activityMemory.ts';
-import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
+import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, quarantinedAt, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'memory-guard-')));
 let passed = 0;
@@ -152,6 +152,29 @@ try {
     assert.equal(r.reverted, 1, 'the photo move');
   });
 
+  await t("a moved file with an old or future mtime keeps the turn's age: not pruned at once, does not outrank newer copies", async () => {
+    clearStudioMemoryJournal();
+    const root = path.join(top, 'mtimes'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'item.md'), '원래 기억\n');
+    const since = Date.now();
+    const before = await snapshotMemoryFolder(root);
+    const photo = path.join(memDir(root), 'photo.png'); fs.writeFileSync(photo, Buffer.alloc(100, 1));
+    const thirtyDaysAgo = (Date.now() - 30 * 24 * 3600_000) / 1000; fs.utimesSync(photo, thirtyDaysAgo, thirtyDaysAgo);
+    const future = path.join(memDir(root), '.junk-future'); fs.writeFileSync(future, 'j');
+    const inAYear = (Date.now() + 365 * 24 * 3600_000) / 1000; fs.utimesSync(future, inAYear, inAYear);
+    fs.writeFileSync(path.join(memDir(root), 'item.md'), '바뀐 기억\n');
+    const base = path.join(top, 'q-mtimes'); const q = path.join(base, 'c'.repeat(24), 'task');
+    await revertTurnChanges(root, before, since, q);
+    await pruneQuarantine(base);
+    const names = ls(q);
+    assert.ok(names.some(n => n.startsWith(MOVED_PREFIX) && n.endsWith('photo.png')), 'the 30-day-old photo survives the prune right after its move');
+    assert.ok(names.some(n => n.endsWith('item.md')), "the rewrite's copy is still there");
+    for (const n of names) assert.ok(Math.abs(quarantinedAt(n) - Date.now()) < 60_000, `every entry is aged from the move: ${n}`);
+    const photoName = names.find(n => n.endsWith('photo.png'));
+    assert.ok(Math.abs(fs.statSync(path.join(q, photoName)).mtimeMs - Date.now()) < 60_000, 'and its mtime says now too');
+    assert.equal(quarantinedAt('no-stamp.md'), 0, 'a name without a stamp counts as oldest');
+  });
+
   await t('moves are capped per turn and moved files sit outside the byte cap', async () => {
     clearStudioMemoryJournal();
     const root = path.join(top, 'many-moves'); fs.mkdirSync(memDir(root), { recursive: true });
@@ -164,9 +187,10 @@ try {
     assert.equal(r.failed, 7, 'the rest is left in place and reported');
     assert.equal(ls(memDir(root)).length, 7);
     const big = path.join(top, 'q-bytecap', 'b'.repeat(24), 't'); fs.mkdirSync(big, { recursive: true });
-    fs.writeFileSync(path.join(big, `${MOVED_PREFIX}huge.bin`), Buffer.alloc(QUARANTINE_LIMITS.bytes + 10, 1));
+    const hugeName = `${MOVED_PREFIX}${new Date().toISOString().replace(/[:.]/g, '-')}-1-huge.bin`;
+    fs.writeFileSync(path.join(big, hugeName), Buffer.alloc(QUARANTINE_LIMITS.bytes + 10, 1));
     await pruneQuarantine(path.join(top, 'q-bytecap'));
-    assert.ok(fs.existsSync(path.join(big, `${MOVED_PREFIX}huge.bin`)), 'a moved file is not removed by the byte cap');
+    assert.ok(fs.existsSync(path.join(big, hugeName)), 'a moved file is not removed by the byte cap');
   });
 
   await t("the learner's save during the turn wins over the turn's later shell overwrite", async () => {
@@ -202,18 +226,19 @@ try {
     const base = path.join(top, 'qbase');
     const scope = 'a'.repeat(24), task = 'task-1';
     const dir = path.join(base, scope, task); fs.mkdirSync(dir, { recursive: true });
-    const old = path.join(dir, 'old.md'); fs.writeFileSync(old, 'x');
-    const past = (Date.now() - QUARANTINE_LIMITS.retentionMs - 60_000) / 1000; fs.utimesSync(old, past, past);
-    const fresh = path.join(dir, 'fresh.md'); fs.writeFileSync(fresh, 'z');
+    const stampOf = (t) => new Date(t).toISOString().replace(/[:.]/g, '-');
+    const old = path.join(dir, `${stampOf(Date.now() - QUARANTINE_LIMITS.retentionMs - 60_000)}-1-old.md`); fs.writeFileSync(old, 'x');
+    const fresh = path.join(dir, `${stampOf(Date.now())}-1-fresh.md`); fs.writeFileSync(fresh, 'z');
+    // The file's own times say nothing: a fresh-named file with an ancient mtime stays, an old-named one with a new mtime goes.
+    fs.utimesSync(fresh, 1, 1);
     await pruneQuarantine(base);
-    assert.deepEqual(ls(dir), ['fresh.md'], 'retention alone: the week-old copy goes, a fresh one stays (no cap in play)');
+    assert.deepEqual(ls(dir), [path.basename(fresh)], 'retention by the stamp in the name, not by mtime');
     fs.rmSync(fresh);
-    for (let i = 0; i < QUARANTINE_LIMITS.files + 3; i++) { const f = path.join(dir, `n${String(i).padStart(4, '0')}.md`); fs.writeFileSync(f, 'y'); const at = (Date.now() - (QUARANTINE_LIMITS.files + 3 - i) * 1000) / 1000; fs.utimesSync(f, at, at); }
+    for (let i = 0; i < QUARANTINE_LIMITS.files + 3; i++) fs.writeFileSync(path.join(dir, `${stampOf(Date.now() - (QUARANTINE_LIMITS.files + 3 - i) * 1000)}-${i}-n${String(i).padStart(4, '0')}.md`), 'y');
     await pruneQuarantine(base);
     const left = ls(dir);
-    assert.equal(left.includes('old.md'), false, 'past the retention: gone');
     assert.equal(left.length, QUARANTINE_LIMITS.files, 'count cap');
-    assert.equal(left.includes('n0000.md'), false, 'the oldest go first');
+    assert.equal(left.some(n => n.endsWith('n0000.md')), false, 'the oldest (by stamp) go first');
     await purgeTaskQuarantine(base, scope, task);
     assert.equal(fs.existsSync(dir), false, 'a task purge removes its folder');
     await purgeTaskQuarantine(base, '../..', 'x');
