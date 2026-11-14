@@ -118,11 +118,13 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
     const before = asked.length;
     await tick(5_000); await tick(5_000);
     assert.equal(asked.length, before, "asks closer than a minute apart (focus, back in view) do not reach the Service");
+    const beforeRemount = asked.length;
     await h.handleMessage({ type: "serviceStatusRequest", mount: true });
     assert.deepEqual(statuses(), [false, true, false, false], "a remounted panel is told again");
+    assert.equal(asked.length, beforeRemount, "a remount inside the interval re-posts the last answer without a Service request");
     state.now += S.SERVICE_STATUS_POLL_MS;
     await Promise.all([h.refreshServiceStatus(), h.refreshServiceStatus()]);
-    assert.equal(asked.length, before + 2, "concurrent asks share one request");
+    assert.equal(asked.length, before + 1, "concurrent asks share one request");
     ok("host: busy, dedupe, recovery, minimum interval, remount, shared request");
   }
   {

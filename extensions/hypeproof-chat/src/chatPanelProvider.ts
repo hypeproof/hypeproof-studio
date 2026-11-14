@@ -1915,14 +1915,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Test seams: the fetch used to ask (undefined = the global fetch) and the clock. */
   serviceStatusFetch: Parameters<typeof askServiceStatus>[0] | undefined;
   serviceStatusNow: (() => number) | undefined;
-  /** A remount starts over: re-post the state, and ask again even after an unserved answer. */
-  resetServiceStatus(): void { this.serviceBusyPosted = undefined; this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; }
+  /** The last answer, re-posted to a remounted panel without asking the Service again inside the interval. */
+  private serviceStatusLast: boolean | undefined;
+  /**
+   * A remount (a task switch, the panel coming back) re-posts the last answer; it asks the Service again only once the
+   * interval has passed, or once after an unserved answer. A task switch never adds a Service request of its own.
+   */
+  resetServiceStatus(): void { this.serviceBusyPosted = undefined; if (this.serviceStatusNextAt === Number.POSITIVE_INFINITY) { this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; } }
   refreshServiceStatus(): Promise<void> {
     if (this.serviceStatusRun) return this.serviceStatusRun;
     const run = (async () => {
       try {
         const now = (this.serviceStatusNow ?? Date.now)();
-        if (now < this.serviceStatusNextAt) return;
+        if (now < this.serviceStatusNextAt) {
+          if (this.serviceBusyPosted === undefined && this.serviceStatusLast !== undefined && await this.post({ type: "serviceStatus", busy: this.serviceStatusLast }) !== false) this.serviceBusyPosted = this.serviceStatusLast;
+          return;
+        }
         const proxyUrl = this.proxyUrl();
         const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
         const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
@@ -1930,6 +1938,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.serviceStatusErrors = answer.outcome === 'error' ? this.serviceStatusErrors + 1 : 0;
         // No token yet is not a verdict on the seat: ask again on the next request.
         this.serviceStatusNextAt = answer.outcome === 'skipped' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
+        this.serviceStatusLast = answer.busy;
         if (answer.busy === this.serviceBusyPosted) return;
         if (await this.post({ type: "serviceStatus", busy: answer.busy }) !== false) this.serviceBusyPosted = answer.busy;
       } catch (error) {
