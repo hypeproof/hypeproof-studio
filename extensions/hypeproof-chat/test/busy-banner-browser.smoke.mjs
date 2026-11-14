@@ -73,7 +73,9 @@ try{
    const fc=await browser.evaluate(`(()=>{const a=document.activeElement,s=getComputedStyle(a),bar=getComputedStyle(document.querySelector('${BANNER}'));return {w:parseFloat(s.outlineWidth),style:s.outlineStyle,edge:parseFloat(bar.borderLeftWidth),edgeStyle:bar.borderLeftStyle}})()`);
    assert.ok(fc.w>=2&&fc.style!=='none',`${label}: forced-colours focus ring`);assert.ok(fc.edge>=1&&fc.edgeStyle!=='none',`${label}: forced-colours edge stays`);
    await browser.send('Emulation.setEmulatedMedia',{features:[{name:'forced-colors',value:'none'},{name:'prefers-color-scheme',value:dark?'dark':'light'},{name:'prefers-reduced-motion',value:'reduce'}]});
-   assert.equal(await browser.evaluate(`[document.querySelector('${BANNER}'),...document.querySelectorAll('${BANNER} *')].filter(n=>{const s=getComputedStyle(n);return s.animationName!=='none'||parseFloat(s.transitionDuration)>0}).length`),0,`${label}: reduced motion, still no motion`);
+   // The shared reduce-motion rule sets every duration to 0.01 ms; at or below 1 ms nothing visibly moves.
+   const moving=await browser.evaluate(`[document.querySelector('${BANNER}'),...document.querySelectorAll('${BANNER} *')].map(n=>{const s=getComputedStyle(n);return {n:n.tagName+'.'+(n.getAttribute('class')||''),a:s.animationName,ad:s.animationDuration,t:s.transitionProperty,td:s.transitionDuration}}).filter(x=>(x.a!=='none'&&parseFloat(x.ad)>0.001)||parseFloat(x.td)>0.001)`);
+   assert.deepEqual(moving,[],`${label}: reduced motion, still no motion: ${JSON.stringify(moving)}`);
    await browser.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:dark?'dark':'light'}]});
   }
   // Nothing is held: Enter in the composer sends while the banner is up.
