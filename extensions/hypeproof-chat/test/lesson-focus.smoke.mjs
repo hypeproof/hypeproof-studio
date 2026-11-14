@@ -129,5 +129,18 @@ const B = { sha256: "b".repeat(64), version: "m2026.09.22-12", content: { steps:
   assert.deepEqual(F.collapsedBlocksFrom("k1"), []);
   assert.deepEqual(F.collapsedBlocksFrom(["k1", 3, "", null, "k1", "x".repeat(600), "k2"]), ["k1", "k2"], "malformed entries dropped");
   ok("block collapse: per key, restorable, bounded, malformed webview state dropped");
+  // The seat the set belongs to: Service seat id, else the capability receipt, else the local activity; never a guess.
+  const A = "a".repeat(64);
+  assert.equal(F.collapseSeat({ activityId: A, entryId: "e1", localActivityId: "l1" }), "seat:" + A);
+  assert.equal(F.collapseSeat({ activityId: "short", entryId: "e1", localActivityId: "l1" }), "entry:e1", "a malformed seat id is not a seat");
+  assert.equal(F.collapseSeat({ localActivityId: "l1" }), "local:l1");
+  assert.equal(F.collapseSeat({}), "");
+  const st = F.collapsedStateFrom({ seat: "seat:" + A, keys: ["k1", 3, "k2"] });
+  assert.deepEqual(st, { seat: "seat:" + A, keys: ["k1", "k2"] });
+  assert.deepEqual(F.collapsedFor(st, "seat:" + A), ["k1", "k2"], "its own seat sees its set");
+  assert.deepEqual(F.collapsedFor(st, "seat:" + "b".repeat(64)), [], "another seat sees nothing");
+  assert.equal(F.collapsedStateFrom(["k1"]), null, "#4023's bare array (no seat) is dropped");
+  assert.equal(F.collapsedStateFrom({ keys: ["k1"] }), null);
+  ok("block collapse seat: Service seat, receipt, local activity; a seat sees only its own set");
 }
 console.log(`${n} lesson focus checks passed`);

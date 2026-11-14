@@ -22,7 +22,7 @@ const page=(theme,state)=>{const vars=Object.entries(theme).filter(([k,v])=>!['k
  return `<!doctype html><html style="${vars};--vscode-editor-foreground:${theme.foreground}"><head><style>${css}</style></head><body class="${KIND_CLASS[theme.kind]}"><div id="root"></div><script>if(!crypto.randomUUID)crypto.randomUUID=()=>'u-'+Math.random().toString(16).slice(2);window.messages=[];window.saved=${JSON.stringify(state??null)};window.acquireVsCodeApi=()=>({postMessage:m=>messages.push(m),getState(){return window.saved},setState(s){window.saved=s}});${js.replaceAll('</script','<\\/script')}</script></body></html>`;};
 const configFor=(seat,les)=>({hasToken:true,coach:{name:'코치',configured:true},activity:{id:'a1',name:'작업',kind:seat,workspace:'/synthetic',verified:true},taskWorkspace:seat==='personal'?{scope:'s',revision:1,tasks:[],sourceSelection:null}:undefined,profile:{profile_id:'synthetic',activity_kind:seat,lesson:seat==='classroom'?les:null,welcome:{greeting_md:''},ux:{coach:{naming_mode:'fixed',fallback_name:'코치'},suggestions:{initial:[],follow_up:[]},hints:{short_input:{enabled:false},roll_input_button:{enabled:false}},retry_button:{enabled:false}}},textSize:'base'});
 const send=async(msg)=>{await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(msg)}}))`);await new Promise(r=>setTimeout(r,120));};
-const open=async(theme,width,seat,state,les=lesson)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme,state),{width,height:900,dark:theme.kind==='dark'});await send({type:'config',config:configFor(seat,les)});};
+const open=async(theme,width,seat,state,les=lesson)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme,state),{width,height:900,dark:theme.kind==='dark',appReady:true});await send({type:'config',config:configFor(seat,les)});};
 const tips=()=>browser.evaluate(`[...document.querySelectorAll('.hps-lesson-tip')].map(e=>({step:e.dataset.lessonTip,text:e.querySelector('.hps-lesson-tip-text').textContent,html:e.innerHTML}))`);
 try{
  // Behaviour (Dark+, 800px).
@@ -74,7 +74,7 @@ try{
  // Seat and lock paths (verify 2026-10-25): the instructor console never shows a tip; a seat that
  // cannot type (unavailable) keeps the row but its action is inert; a rehearsal shows the
  // tip exactly as a learner seat does.
- const openWith=async(cfg)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme0,null),{width:800,height:900,dark:true});await send({type:'config',config:cfg});};
+ const openWith=async(cfg)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme0,null),{width:800,height:900,dark:true,appReady:true});await send({type:'config',config:cfg});};
  const useState=()=>browser.evaluate(`(()=>{const b=document.querySelector('.hps-lesson-tip-use'),d=document.querySelector('.hps-lesson-tip-dismiss');return {use:b?b.disabled:null,dismiss:d?d.disabled:null};})()`);
  const pressUse=async()=>{await browser.evaluate(`document.querySelector('.hps-lesson-tip-use').click()`);await new Promise(r=>setTimeout(r,80));return browser.evaluate(`document.querySelector('.hps-input textarea')?.value??''`);};
  await openWith({...configFor('classroom',lesson),isInstructor:true});
@@ -108,7 +108,7 @@ try{
  const longHint=Array.from({length:12},(_,i)=>`${i+1}번째 줄: 학교 규정 원문 어디와 대조할지 먼저 정하고, 다른 자료와 비교해 보면 쉬워요.`).join('\n');
  const longLesson={...lesson,content:{...content,steps:[{...first,hint:longHint},...content.steps.slice(1)]}};
  for(const width of [320,800,1420])for(const textSize of ['base','xlarge']){
-  await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme0,null),{width,height:900,dark:true});
+  await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme0,null),{width,height:900,dark:true,appReady:true});
   await send({type:'config',config:{...configFor('classroom',longLesson),textSize}});
   const L=await browser.evaluate(`(()=>{const tips=document.querySelectorAll('.hps-lesson-tip');const tip=tips[0],text=tip.querySelector('.hps-lesson-tip-text'),input=document.querySelector('.hps-input');const r=tip.getBoundingClientRect(),c=input.getBoundingClientRect(),q=text.getBoundingClientRect();
    const lh=parseFloat(getComputedStyle(text).lineHeight)||parseFloat(getComputedStyle(text).fontSize)*1.5;
@@ -125,7 +125,7 @@ try{
   if(width>=800){const mid=k=>(k.top+k.bottom)/2,m0=mid(L.kids[0]);for(const k of L.kids)assert.ok(k.top<m0&&k.bottom>m0,`${tag}: badge, text and buttons share one line ${JSON.stringify(L.kids)}`);}
  }
  // Forced colours: the row keeps a system-colour border and the buttons stay system colours.
- await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme0,null),{width:800,height:900,dark:true,forcedColors:true});
+ await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme0,null),{width:800,height:900,dark:true,forcedColors:true,appReady:true});
  await send({type:'config',config:configFor('classroom',lesson)});
  const fc=await browser.evaluate(`(()=>{const tip=document.querySelector('.hps-lesson-tip'),s=getComputedStyle(tip),b=getComputedStyle(document.querySelector('.hps-lesson-tip-use'));return {bw:parseFloat(s.borderTopWidth),bs:s.borderTopStyle,bc:s.borderTopColor,fg:s.color,btn:b.color};})()`);
  assert.ok(fc.bw>=1&&fc.bs!=='none','forced colours: the row keeps its border');

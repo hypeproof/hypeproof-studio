@@ -45,6 +45,7 @@ import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
+import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
 import { setLocalStallTimeoutProvider } from './localRuntime/stallWatch';
@@ -8260,8 +8261,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let local: LocalRuntimeConfig | null = null;
     try { local = (localRuntimeConfig(vscode.env.appName, s.proxyUrl) ?? instructorLocalRuntime(s.isInstructor, this.releaseRuntime)); } catch { local = null; }
     const connection = connectionFor(local?.provider, local !== null);
-    // Same choices as the legacy panel (instructorModelChoices); only with a local runner (#3564).
-    const models = contractModels(local ? localModelSelection(local) : null);
+    // chalk#25: the contract list is the allowlist (instructorModelChoices). The legacy panel keeps localModelSelection.
+    const models = local ? contractModels(instructorModelChoices(local)) : undefined;
     const want = { isInstructor: s.isInstructor, panelMode: s.panelMode, issuerToken: s.issuerToken, url: s.proxyUrl, connection, models };
     this.contractSync = this.contractSync
       .then(async () => { this.contractView = await syncInstructorSession(host, this.contractView, want); })
@@ -8286,11 +8287,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
     return {
       available: () => local() !== null,
-      executorModel: () => local()?.model,
+      executorModel: (requested) => {
+        const l = local();
+        return l ? executorModelFor(l, requested) : undefined;
+      },
       run: async (input) => {
         // #3608 — a Chalk turn re-checks a gate closed for no CLI or a failed login, so a CLI installed since then is used.
         if (!!this.contractView.token && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
-        return this.runContractTurn(input, local());
+        // chalk#25: the turn runs on the requested model only when it is in the allowlist (withTurnModel).
+        const l = local();
+        return this.runContractTurn(input, l ? withTurnModel(l, input.model) : null);
       },
       previewOpen: (webPath) => this.contractPreviewOpen(webPath),
     };
