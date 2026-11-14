@@ -8754,7 +8754,10 @@ moves to that button. While collapsed, the card body stays mounted and hidden (t
 polite state line is not drawn. 다시 보기 restores the card open, the state it was collapsed from (also after a re-mount, which forgets open/closed), and focus moves to the menu button.
 
 The collapsed set belongs to the learner's own view. It is keyed by lesson version and step, like open/closed, and kept in the
-webview's own state, so it survives a hide/show re-mount in the session. It is bounded to 50, and a new lesson version starts
+webview's own state, so it survives a hide/show re-mount in the session. It is stored with its seat. The seat is the Service seat
+id (`activity_id`); without one, the lesson capability receipt id; without that, the local activity id. A seat sees only its
+own set. Classroom PCs are shared, so when another learner's seat appears on the same window, the previous learner's set is
+cleared from the webview state, not only hidden. It is bounded to 50, and a new lesson version starts
 with every block shown. It is never sent to the host, so it is not work, not a report and not an observation event. Seats:
 every seat that draws the lesson rail. Default: on. Display only, with no new data flow and no new learner text field.
 
@@ -8766,7 +8769,8 @@ Evidence:
   - names, 44px, 14px, focus ring, and no sideways scroll;
   - the collapsed row and where focus goes;
   - no host message and no fetch;
-  - the state survives a re-mount;
+  - the state survives a re-mount for the same learner;
+  - a second learner on the same window sees every block, and the first learner's set is cleared;
   - another step and a new lesson version are shown;
   - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
 - `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
