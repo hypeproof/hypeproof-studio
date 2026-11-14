@@ -87,11 +87,11 @@ struct SharedConversationView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         if model.signedIn {
-                            if model.selected != nil { Button("내 상황과 의도") { voice.stop(); focused = false; showContext = true } }
+                            if model.selected != nil { Button("내 상황과 의도") { voice.stop(); focused = false; showContext = true }.disabled(model.loggingOut) }
                             Button("새로 고침") { model.refresh() }
                             Button("이 기기의 연동 기록 내보내기") { voice.stop(); focused = false; exportURL = model.exportCache() }
                             Button("이 기기의 사본 삭제") { voice.stop(); focused = false; clearCache = true }
-                            Button("로그아웃") { voice.stop(); model.logout() }.disabled(model.busy || model.syncing)
+                            Button("로그아웃") { voice.stop(); voiceRequestID = nil; model.logout() }.disabled(!model.canLogout)
                         }
                         Button("이 기기의 기록") { voice.stop(); focused = false; showNotebook = true }.accessibilityIdentifier("localNotebook")
                         Button("대화와 개인정보") { voice.stop(); focused = false; showPrivacy = true }
@@ -101,6 +101,10 @@ struct SharedConversationView: View {
                         }
                         if NativeJourneyFixture.longHistory {
                             Button("Simulate remote reply") { NativeJourneyFixture.advanceHistory() }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
+                        }
+                        if NativeJourneyFixture.logoutSync {
+                            Button("Hold next history read") { NativeJourneyFixture.holdNextHistory(); model.refresh() }.accessibilityIdentifier("nativeJourneyHoldHistory")
+                            Button("Finish held history read") { NativeJourneyFixture.releaseHistory() }.accessibilityIdentifier("nativeJourneyReleaseHistory")
                         }
 #endif
                         Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
@@ -451,6 +455,7 @@ struct SharedConversationView: View {
         }
     }
     @ViewBuilder private var status: some View {
+        if model.loggingOut { ProgressView("계정 확인을 마치고 로그아웃하는 중이에요.").font(.caption).accessibilityIdentifier("sharedLoggingOut") }
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
         if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
@@ -462,7 +467,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in
@@ -475,6 +480,9 @@ struct SharedConversationView: View {
                 journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
                 if NativeJourneyFixture.longHistory {
                     journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))
+                }
+                if NativeJourneyFixture.logoutSync {
+                    journeyDiagnostic("nativeJourneyPendingRequestID", label: "Retained request identity", value: model.cache.request?.id ?? "")
                 }
             }
         }

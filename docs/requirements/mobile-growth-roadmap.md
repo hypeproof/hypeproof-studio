@@ -230,6 +230,15 @@ An example path is: install and use the same account → “요즘 어떤 일에
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
 
+Under MPER-03/04 and MIRS-01, an explicit iPhone logout remains available during
+background history synchronization. It waits for the existing credential/read
+operation without cancelling one-use token rotation, then revokes the same
+account/session once using its current credentials. Pending logout blocks new
+edits and execution, takes precedence over an in-memory queued Send, and retains
+the durable request ID and words in that account's cache. Stale callbacks cannot
+clear a newer account. The app shows pending status until confirmation; an
+uncertain revoke retains the account and requires another explicit action.
+
 ### Conversation from the first screen (Studio #3937)
 
 MPER-01 includes an editable text/voice composer before login. A person can write

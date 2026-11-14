@@ -513,6 +513,74 @@ final class StudioJourneyTests: XCTestCase {
         let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", String(revision)), object: applied)
         XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 10), .completed)
     }
+    @MainActor func testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords() throws {
+        let app = launch("logout-sync"); signIn(app)
+        let words = "Keep my queued thought"
+        field(app).tap(); field(app).typeText(words)
+        app.buttons["conversationSettings"].tap(); app.buttons["nativeJourneyHoldHistory"].tap()
+        XCTAssertTrue(app.buttons["nativeJourneyHoldHistory"].waitForNonExistence(timeout: 5))
+        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
+        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        let transport = diagnostic("nativeJourneyTrace", in: app)
+        let held = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = transport.value as? String, let bytes = text.data(using: .utf8),
+                  let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
+            return (value["delayed_history_reads"] as? Int) == 1
+                && (value["history_barrier_completions"] as? Int) == 0
+                && (value["history_barrier_timeouts"] as? Int) == 0
+                && (value["history_barrier_cancellations"] as? Int) == 0
+        }, object: transport)
+        XCTAssertEqual(XCTWaiter.wait(for: [held], timeout: 5), .completed)
+        // Ordinary Send creates the durable local request during the held GET.
+        // Logout must consume its scheduler intent without erasing those words.
+        app.buttons["sharedSend"].tap()
+        XCTAssertTrue(app.staticTexts[words].waitForExistence(timeout: 5))
+        let requestID = try XCTUnwrap(diagnostic("nativeJourneyPendingRequestID", in: app).value as? String)
+        XCTAssertFalse(requestID.isEmpty)
+        app.buttons["conversationSettings"].tap()
+        let logout = app.buttons["로그아웃"]
+        XCTAssertTrue(logout.waitForExistence(timeout: 5))
+        XCTAssertTrue(logout.isEnabled); XCTAssertTrue(logout.isHittable)
+        XCTAssertTrue(syncing.exists, "The one logout tap must overlap the actual held GET.")
+        logout.tap()
+        let pending = app.descendants(matching: .any).matching(identifier: "sharedLoggingOut").firstMatch
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertTrue(logout.waitForNonExistence(timeout: 5), "The accepted action dismisses Settings while the read remains held.")
+        XCTAssertFalse(app.buttons["linkDesktop"].exists, "Waiting is not confirmed logout.")
+        XCTAssertFalse(app.buttons["sharedSend"].isEnabled)
+        let waiting = try trace(app)
+        XCTAssertEqual(waiting["logout_requests"] as? Int, 0)
+        XCTAssertEqual(waiting["submitted_ids"] as? [String], [])
+        XCTAssertEqual(waiting["history_barrier_completions"] as? Int, 0)
+        XCTAssertEqual(waiting["history_barrier_timeouts"] as? Int, 0)
+        // Release only the synthetic HTTP response; never alter account/model state.
+        app.buttons["conversationSettings"].tap()
+        XCTAssertFalse(app.buttons["내 상황과 의도"].isEnabled)
+        app.buttons["nativeJourneyReleaseHistory"].tap()
+        enabled(app.buttons["linkDesktop"])
+        let loggedOut = try trace(app)
+        XCTAssertEqual(loggedOut["logout_requests"] as? Int, 1)
+        XCTAssertEqual(loggedOut["logout_during_history"] as? Int, 0)
+        XCTAssertEqual(loggedOut["history_barrier_completions"] as? Int, 1)
+        XCTAssertEqual(loggedOut["history_barrier_cancellations"] as? Int, 0)
+        XCTAssertEqual(loggedOut["submitted_ids"] as? [String], [])
+        app.terminate(); app.launch(); signIn(app)
+        XCTAssertEqual(try trace(app)["history_account"] as? Int, 2)
+        XCTAssertFalse(app.staticTexts[words].exists)
+        XCTAssertFalse((field(app).value as? String ?? "").contains(words))
+        // A second explicit logout returns the fixture to account 1. Its actual
+        // disk cache must retain the same local ID without sending it on login.
+        app.buttons["conversationSettings"].tap(); enabled(app.buttons["로그아웃"]); app.buttons["로그아웃"].tap()
+        signIn(app)
+        XCTAssertTrue(app.staticTexts[words].waitForExistence(timeout: 5))
+        XCTAssertEqual(diagnostic("nativeJourneyPendingRequestID", in: app).value as? String, requestID)
+        let restored = try trace(app)
+        XCTAssertEqual(restored["history_account"] as? Int, 1)
+        XCTAssertEqual(restored["logout_requests"] as? Int, 2, "One revoke per explicit logout; restart must not retry it.")
+        XCTAssertEqual(restored["submitted_ids"] as? [String], [])
+        XCTAssertEqual(restored["accepted_turns"] as? Int, 0)
+        try evidence("journey-logout-during-sync", app: app)
+    }
     @MainActor func testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch() throws {
         let app = launch("long-history"); signInToHistory(app)
         XCTAssertEqual(try trace(app)["history_window_messages"] as? Int, 80)

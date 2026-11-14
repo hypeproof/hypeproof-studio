@@ -131,6 +131,7 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-036 | `testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID` |
 | BB-036 | `testRecordedFailureCannotReplaceExistingDraft` |
 | BB-036 | `testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch` |
+| BB-036 | `testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords` |
 | BB-036 | `testEightyMessageWindowFollowsNewTailWithoutInterruptingReading` |
 | BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
 | BB-037 | `testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch` |

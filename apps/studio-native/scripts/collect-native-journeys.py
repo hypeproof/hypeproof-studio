@@ -22,6 +22,7 @@ REQUIRED = {
     'MFR-T05-recorded': 'testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID',
     'MFR-T05-collision': 'testRecordedFailureCannotReplaceExistingDraft',
     'MPER-T03-history': 'testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch',
+    'MPER-T03-logout': 'testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords',
     'MPER-T03-following': 'testEightyMessageWindowFollowsNewTailWithoutInterruptingReading',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',
     'MFR-T01-failure': 'testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking',
