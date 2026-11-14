@@ -8470,6 +8470,10 @@ carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`
    A failed refresh keeps the last known status and shows the Service's Korean sentence (`role="alert"`).
 4. Nothing in Studio deletes anything. The Service records the request; an operator processes it by hand.
    The host logs nothing about it and touches no file.
+5. Local copies a request does not reach, because they never leave the device: the memory quarantine of keep-off turns
+   (REQ-STUDIO-TASK-MEMORY-SWITCHES, `memory-quarantine/` in the extension's global storage). It keeps at most 200 copies
+   per activity and seven days. It is removed with its task when the task is archived or moved, and it is never uploaded
+   or logged.
 
 Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
 `worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (DEC-23), status after the
@@ -9360,6 +9364,35 @@ keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMO
   - reads by the local CLI runtime's tools.
 
   Through any of these, memory text could reach that task's later requests.
+
+**Turn-end folder check (#4014).** A turn that begins with keep off takes a snapshot of `.hypeproof/memory/` and compares
+it when the turn ends, in every runtime: the Agent SDK runtime and the local CLI runtime share the same turn `finally`. That
+catches what the checks above cannot see: a shell command that builds the path at run time, or the local runtime's shell.
+  - **What happens to changes.** An added file is moved out of the store into a quarantine. A changed file gets its earlier
+    bytes back (written beside it and renamed over it), and the turn's version goes to the quarantine. A deleted file is
+    restored.
+  - **Studio's own changes are left alone:** every `ActivityMemory` append, restore and remove (the memory list, an undo),
+    and the learner's own save of a memory file in the editor.
+  - **The line.** One line in that turn, kept with it, names only the count: `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`.
+    It never shows memory content or a file name.
+  - **Snapshot bounds (the store's own limits).** At most the item count plus 50 entries. Bytes are read only up to the
+    16 KiB item size; a larger file is compared by its size, change time and inode and is never read. Past the entry bound
+    the turn is not checked, and it says `기억 폴더에 파일이 너무 많아서 이번에는 바뀐 내용을 확인하지 못했어요. 기억 목록에서 확인해 주세요.`.
+    A file past the item size cannot be put back or copied. It is left in place (it is never read as memory either), and
+    the turn says `기억 파일 N개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`.
+  - **Quarantine bounds.**
+    - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
+      with one folder per seat activity (a keyed hash of its scope) and per task.
+    - Per activity: at most the store's item count (200 copies) and that many full items' bytes. The oldest go first.
+    - Nothing older than seven days is kept, applied at every check and at activation.
+    - A task's folder is removed when the task is archived or moved.
+    - Nothing reads it back into memory, uploads it or logs it (tested).
+    - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
+  - **Write side, with this check.** No memory write from a keep-off turn survives the turn, whatever form the shell
+    command took. The two edges are told in the turn, not silent: more than 250 entries in the folder, and a file past the
+    item size.
+  - **A turn that began with keep on is not checked.** If keep is turned on during a keep-off turn, a shell write after
+    that is still put back.
 
 - **Policy.** The switches only narrow what the served memory policy allows. Where memory is not available for the seat
   (no store binding: class, lesson and instructor seats), there is no group and no write path.

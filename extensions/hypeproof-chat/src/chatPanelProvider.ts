@@ -418,6 +418,7 @@ import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
 import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
 import { insideFolder } from "./memoryPathCheck";
+import { FOLDER_GUARD_COPY, TOO_MANY, noteStudioMemoryChange, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder, type Snapshot } from "./memoryFolderGuard";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
@@ -1121,9 +1122,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               renameUndone = await store.undoRename(held.undo).then(() => true, () => false);
             }
           }
-          else if (msg.type === 'taskArchive') await store.archiveTask(msg.taskId, expected);
+          else if (msg.type === 'taskArchive') { await store.archiveTask(msg.taskId, expected); await this.purgeTaskMemoryQuarantine(msg.taskId); }
           else if (msg.type === 'taskRestore') await store.restoreTask(msg.id, expected);
-          else if (msg.type === 'taskMove') moved = await this.moveTask(store, msg.id, msg.destination, expected);
+          else if (msg.type === 'taskMove') { moved = await this.moveTask(store, msg.id, msg.destination, expected); await this.purgeTaskMemoryQuarantine(msg.id); }
           this.orchestratorState = undefined;
           // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
           if (leaving) this.endTaskCommandAllows();
@@ -3638,6 +3639,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(setFolderConsentPresenter(folder => this.folderConsentRequest.ask(folder)));
     context.subscriptions.push(onFolderConsentChanged(() => { this.endTaskCommandAllows(); void this.postConfig().catch(() => {}); }));
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
+    // CGP-KNOW-R-028 follow-up (#4014) — the learner's own save of a memory file in the editor is Studio's change, never
+    // something a keep-off turn check puts back.
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(document => {
+      const file = document.uri.fsPath;
+      if (document.uri.scheme !== "file" || path.basename(path.dirname(file)) !== "memory" || path.basename(path.dirname(path.dirname(file))) !== ".hypeproof") return;
+      void noteStudioMemoryChange(path.dirname(file), path.basename(file), Buffer.from(document.getText(), "utf8"));
+    }));
+    // The quarantine's retention and caps are applied at activation too (a window closed for a week starts clean).
+    try { void pruneQuarantine(this.memoryQuarantineBase()).catch(() => undefined); } catch { /* no global storage yet: the next guard run prunes */ }
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
     context.subscriptions.push(setProblemSink(facts => this.noteProblem(facts)));
     // REQ-STUDIO-DOCTOR — background checks: once ~60 s after startup, after failures, before a report is sent.
@@ -7756,6 +7766,58 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (readTool && !sw.use) return TASK_MEMORY_COPY.useRefusal;
     return null;
   }
+  /**
+   * CGP-KNOW-R-028 follow-up (#4014) — a turn that begins in a task whose keep switch is off takes a snapshot of the
+   * activity's memory folder; at its end whatever it added, changed or deleted, except Studio's own changes, is put back
+   * (`revertTurnChanges`), the turn's versions kept in the extension's global storage, and one line says so in that turn.
+   */
+  private memoryFolderGuards?: Map<string, { root: string; scope: string; task: string | null; at: number; snap: Snapshot | typeof TOO_MANY }>;
+  private memoryQuarantineBase(): string {
+    return path.join(this.context.globalStorageUri.fsPath, "memory-quarantine");
+  }
+  private memoryQuarantineScope(scope: string): string {
+    return createHash("sha256").update(`hps-memory-quarantine/1\0${scope}`).digest("hex").slice(0, 24);
+  }
+  async startMemoryFolderGuard(streamId: string): Promise<void> {
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    const task = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
+    if (!binding || this.taskMemorySwitches(binding.scope, task).keep) return;
+    const at = Date.now();
+    const snap = await snapshotMemoryFolder(binding.root).catch(() => null);
+    if (snap) (this.memoryFolderGuards ??= new Map()).set(streamId, { root: binding.root, scope: binding.scope, task, at, snap });
+  }
+  async endMemoryFolderGuard(streamId: string): Promise<{ reverted: number; kept: number; failed: number } | typeof TOO_MANY | null> {
+    const guard = this.memoryFolderGuards?.get(streamId);
+    if (!guard) return null;
+    this.memoryFolderGuards!.delete(streamId);
+    const lines: Array<[string, "done" | "error"]> = [];
+    let result: { reverted: number; kept: number; failed: number } | typeof TOO_MANY;
+    if (guard.snap === TOO_MANY) result = TOO_MANY;
+    else {
+      const base = this.memoryQuarantineBase();
+      const quarantine = path.join(base, this.memoryQuarantineScope(guard.scope), guard.task && /^[A-Za-z0-9_-]{1,128}$/.test(guard.task) ? guard.task : "no-task");
+      result = await revertTurnChanges(guard.root, guard.snap, guard.at, quarantine);
+      await pruneQuarantine(base).catch(() => undefined);
+    }
+    if (result === TOO_MANY) lines.push([FOLDER_GUARD_COPY.tooMany, "error"]);
+    else {
+      if (result.reverted) lines.push([FOLDER_GUARD_COPY.reverted(result.reverted), "done"]);
+      if (result.failed) lines.push([FOLDER_GUARD_COPY.failed(result.failed), "error"]);
+    }
+    // Counts only, never content or file names. Shown in the turn and kept with it (its items were saved before this ran).
+    for (const [label, state] of lines) {
+      const id = randomId();
+      this.postToolLog(streamId, { id, icon: "🔒", label, state });
+      await this.appendHistory([{ id, role: "tool", content: "", createdAt: Date.now(), tool: { icon: "🔒", label, state } }]).catch(() => undefined);
+    }
+    return result;
+  }
+  /** The quarantine of one task goes with it: archived or moved to another activity. */
+  private async purgeTaskMemoryQuarantine(taskId: unknown): Promise<void> {
+    const scope = this.activityMemoryBinding?.scope ?? activityConnections(this.context)?.scope;
+    if (typeof taskId !== "string" || !scope) return;
+    await purgeTaskQuarantine(this.memoryQuarantineBase(), this.memoryQuarantineScope(scope), taskId).catch(() => undefined);
+  }
   /** CGP-KNOW-R-028 — the task each turn began in, so a task switch mid-turn cannot move its writes. */
   private taskMemoryStreams?: Map<string, string | null>;
   private activeTaskId(): string | null {
@@ -9897,6 +9959,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-KNOW-R-028 — the task this turn belongs to, for the keep switch.
     this.taskMemoryStreams ??= new Map();
     this.taskMemoryStreams.set(streamId, this.activeTaskId());
+    await this.startMemoryFolderGuard(streamId);
     while (this.taskMemoryStreams.size > 64) this.taskMemoryStreams.delete(this.taskMemoryStreams.keys().next().value as string);
     if (memoryTurn) { this.memoryTurns ??= new Map(); this.memoryTurns.set(streamId, { scope: memoryTurn.scope, used: memoryTurn.used }); }
     // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
@@ -10970,6 +11033,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await Promise.race([Promise.allSettled(pendingReveals), new Promise((r) => { timer = setTimeout(r, 10_000); })]);
         clearTimeout(timer);
       }
+      // CGP-KNOW-R-028 follow-up (#4014) — a keep-off turn's memory folder is put back before the turn closes.
+      await this.endMemoryFolderGuard(streamId).catch(() => undefined);
       await this.endTurnRestore(turnRestorePoint, streamId, messageId, assistantText);
       this.delegationControls.delete(streamId);
       this.activeStreams.delete(streamId);

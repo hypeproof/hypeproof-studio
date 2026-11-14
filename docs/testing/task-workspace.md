@@ -418,6 +418,30 @@ drop of a stale message is a second layer.
 - one mount in the personal dialog, gated on the host view;
 - 44px rows, the caption step, and no physical box properties.
 
+`test/memory-folder-guard.smoke.mjs` covers the turn-end folder check (#4014) on real files and through the provider:
+- **Put back:** an added file is quarantined; a changed file and a deleted file are put back; the turn's versions are kept.
+  A second run finds nothing.
+- **Studio's own changes are kept:** `ActivityMemory` append and remove, and the learner's editor save.
+- **Bounds:** a file over the item size is never read or copied, and is reported (left in place). More than the entry
+  bound returns "too many" before reading anything.
+- **Quarantine:** the seven-day retention, the per-activity count cap (oldest first), a task purge, a malformed key
+  touching nothing, and modes 0700/0600.
+- **Provider:** a keep-off turn's shell write, through a path built at run time, is put back. The line names the count
+  only and is kept with the turn. No fetch is made, and nothing of the content is logged. Archiving the task purges its
+  quarantine. A keep-on turn takes no snapshot, and its write stays. A turn that changed nothing posts nothing.
+- **Wiring:** the guard starts after the turn is bound to its task and ends before the turn restore point. Both runtime
+  calls run inside it. Archive and move purge the task's quarantine, and retention is applied at activation.
+
+Mutants each fail it:
+- Studio's changes not kept;
+- deletions not restored;
+- the guard running on keep-on turns;
+- the end hook missing;
+- the retention ignored;
+- the caps ignored;
+- the archive purge removed;
+- no entry bound.
+
 A real coach shell command and the packaged app are not run here.
 
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
