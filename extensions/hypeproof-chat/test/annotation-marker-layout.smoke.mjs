@@ -26,9 +26,11 @@ try {
  assert.equal(await isAnnotationOverlayNode(browser,node.backendNodeId),false,'ordinary page node remains pickable');
  const measure=()=>browser.evaluate(`(()=>{const host=document.querySelector('[data-hps-annotation-marker="1"]'),b=host.shadowRoot.querySelector('span'),r=b.getBoundingClientRect(),a=document.getElementById('picked').getBoundingClientRect();return {dx:r.left-a.left,dy:r.top-a.top,w:r.width,h:r.height,radius:getComputedStyle(b).borderRadius}})()`);
  const check=async()=>{const m=await measure();assert.ok(Math.abs(m.dx)<=2&&Math.abs(m.dy)<=2,JSON.stringify(m));assert.equal(m.w,24);assert.equal(m.h,24);assert.equal(m.radius,'50%');assert.deepEqual(await browser.evaluate(`(()=>{const r=document.querySelector('[data-hps-annotation-marker="1"]').shadowRoot.querySelector('button').getBoundingClientRect();return [r.width,r.height]})()`),[44,44],'hit target is 44px');};
+ // Poll after a scroll or resize instead of a fixed 60 ms: a busy CI runner repositions the marker later (same cause as #3911).
+ const settled=async()=>{const end=Date.now()+2000;for(;;){try{return await check()}catch(e){if(Date.now()>end)throw e;await new Promise(r=>setTimeout(r,25))}}};
  await check();
- await browser.evaluate('scrollTo(0,180)');await new Promise(r=>setTimeout(r,60));await check();
- await browser.send('Emulation.setDeviceMetricsOverride',{width:320,height:600,deviceScaleFactor:1,mobile:false});await new Promise(r=>setTimeout(r,60));await check();
+ await browser.evaluate('scrollTo(0,180)');await settled();
+ await browser.send('Emulation.setDeviceMetricsOverride',{width:320,height:600,deviceScaleFactor:1,mobile:false});await settled();
  await markerComment(browser,1,'고친 의견',10,2);
  await markerComment(browser,1,'늦은 의견',10,1);
  await markerComment(browser,1,'이전 마커',9,3);
