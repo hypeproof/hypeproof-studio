@@ -1,5 +1,6 @@
 /** Optional, content-free product observations. Never an approval or execution authority. */
 import type { ApprovalIdentity } from './memberApproval';
+import { validQuestionKey } from './accountCards';
 export type ProductRoute = 'consent' | 'events' | 'trigger';
 export type QuestionFocus = 'goal' | 'method' | 'decision';
 export interface TeamProductView { available: boolean; granted: boolean; busy: boolean; binding?: string; pendingFocus?: QuestionFocus; notice?: string; message?: string }
@@ -73,7 +74,10 @@ export class TeamProductLoop {
       this.state={...this.state,pendingFocus:choice};
       const result=await this.options.request(identity,'trigger',{schema:'hps-question-trigger/1',id,kind:'choice',source_id:id,source_revision:1,choice});
       if(!await this.current(epoch,identity)){if(epoch===this.epoch)this.invalidate();return;}
-      if(result?.schema!=='hps-question-trigger/1'||result.model_calls!==0)throw Error('Invalid trigger receipt');
+      if(result?.schema!=='hps-question-trigger/1'||result.model_calls!==0||result.policy!=='team-question/1'
+        ||!validQuestionKey(result.key)||!result.key.startsWith('growth:')||typeof result.created!=='boolean'
+        ||result.source?.kind!=='choice'||result.source?.id!==id||result.source?.revision!==1
+        ||result.reentry?.method!=='GET'||result.reentry?.path!=='/v1/me/cards')throw Error('Invalid trigger receipt');
       await this.options.saveFocus(identity.accountID,undefined);
       if(!await this.current(epoch,identity)){if(epoch===this.epoch)this.invalidate();return;}
       this.state={...this.state,pendingFocus:undefined};
