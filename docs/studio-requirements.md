@@ -851,7 +851,7 @@ sheets and panels inside the chat (키보드 단축키, 새로운 기능, the le
 approval and lesson panels, whose fixed 15px size now adds the step, plus the mission header's sentence and the lesson
 material cards, which also had fixed sizes) and
 the start page with its 설정 sheet: the step is set on every chat shell, not only the personal one, and
-on the start page root, where every font size adds it. A classroom seat has no 대화 설정, so its
+on the start page root, where every font size adds it. A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so its
 learner sets the size in the start page 설정 sheet, whose note now says "대화와 시작 화면의 글자 크기예요.".
 At 아주 크게 every surface fits a 320px pane and a 640px pane at 200% zoom without horizontal scroll or a
 clipped control; in a 320px pane at 200% (160 CSS px) the start-page footer tagline and the lesson tip's 입력창에 넣기

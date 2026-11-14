@@ -63,7 +63,7 @@ t("크게 / 아주 크게 are +2 / +4px over base for body, composer and reply c
   ok(/:root, \.hps-shell, \.studio-start \{[^}]*--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/.test(tokens), "size tokens are re-declared on the shell and the start page root, where the step is set");
   for (const part of [".hps-reply-choices button", ".hps-choice-help button"]) ok(/^var\(--hp-font-[a-z]+\)$/.test(lastSize(`${P} ${part}`) || lastSize(`${part} {`)), `${part} uses a size token`);
 });
-// CGP-SHELL-R-017: the step is set on every chat shell, so the classroom seat (no 대화 설정 of its own;
+// CGP-SHELL-R-017: the step is set on every chat shell, so the classroom seat (no text-size picker in its 대화 설정;
 // the start page 설정 sheet sets it) reads the same 16/18/20px. A personal-only step would leave it at 16px.
 t("the step is not scoped to personal chat (classroom seats follow the choice)", () => {
   ok(!css.includes(`${P}[data-text-size=`), "step still scoped to personal chat");
