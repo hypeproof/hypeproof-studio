@@ -7743,6 +7743,58 @@ personal and classroom, dark/light, 320/1420 px). This serves PI#1 (useful work 
 before losing work) and the access principle that limits never hide or take away the
 learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
 
+## Busy banner (CGP-AGENT-R-031)
+
+REQ-CGP-AGENT-66 / CGP-AGENT-R-031 / DES-CGP-AGENT-66 / CGP-AGENT-D-027 / PI#4 / ADAPT:
+while the AI side is struggling, Studio says so before the learner sends, calmly, and
+never stops them from sending.
+
+- Signal: the Service serves `GET /v1/service-status` → `{"busy": true|false}` to an
+  authenticated participant seat only (hypeproof-service#465). It is derived from the
+  upstream failures learner turns already meet (429, 529, 5xx and unreachable, not a
+  learner's own Stop), over a short window. The body names no provider, model, status
+  or count, and the public `/health` carries no such flag.
+- When Studio asks: the panel asks on mount, when it comes back into view, on window
+  focus, and once a minute while the view is visible and the window is focused. The host
+  asks only for a signed-in participant seat on the Service (no token, a local coach, or an
+  instructor or issuer seat asks nothing, because the route answers 401 to an issuer token), and never more than once a minute: a remount inside that minute (a task switch, the panel
+  coming back) re-posts the last answer without asking again. After an error (network, timeout, 5xx)
+  the wait doubles up to 15 minutes and a good answer returns it to a minute. When the Service
+  has no such route (404), that seat stops asking until its token or the Service address changes.
+  A 401 or 403 is an error and backs off like one: a 403 `session_inactive` clears when the class
+  opens with the same token. An
+  unchanged answer is not re-posted, and concurrent asks share one request
+  (`src/serviceStatus.ts`, `ChatPanelProvider.refreshServiceStatus`).
+- Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,
+  a 5-second timeout, a 401, a 404 from a Service without the route, or a malformed body
+  reads as not busy. The offline banner (CGP-SHELL-R-011) covers a lost network.
+- What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요", and one
+  close button ("붐빔 알림 닫기"). It is `role="status"`. It
+  leaves on its own when the Service reads healthy and comes back if busy returns. Closing it
+  hides it for that busy episode: the host keeps the closed state with the last answer, so a
+  remount (a task switch) re-posts it closed. The episode ends when the Service reads not busy,
+  and the next busy episode shows the banner again. Focus returns to the composer.
+- Not: it never holds a send, disables the composer, names a provider or a cause, or
+  replaces the stall watchdog (REQ-M26), which still handles a turn that does not answer.
+- Design (DES-CGP-AGENT-66): an amber edge (`--hp-border-warn-default`) on the widget
+  background, one line of text at least 14px from 320 to 1420 px, a 44px close with the
+  shared focus ring, no animation or transition at all (so reduced motion needs no
+  override), and in forced colours the edge becomes a text-coloured line and the ring
+  stays.
+
+Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
+fail-quiet fetch with positive and negative controls, outcomes and backoff; the real
+`ChatPanelProvider` for busy, dedupe, recovery, the minimum interval, backoff and its cap,
+the 404 stop and 401/403 backoff (a 403 that clears with the same token), remount, shared requests, a seat without a token,
+instructor and issuer seats that never ask (control: a participant seat with the same token does), and a dismissal that
+survives remounts for the busy episode and ends when the Service reads not busy) and
+`busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
+classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
+44px close, focus ring, Enter still sends, healthy removes it, closing tells the host, and after a remount the host's
+`dismissed` keeps it closed (control: busy without `dismissed` shows it); fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser). The installed app against the
+deployed Service is NOT RUN.
+
 ## Lesson skill shelf (CGP-AGENT-R-020)
 
 REQ-CGP-AGENT-36 / CGP-AGENT-R-020 / DES-CGP-AGENT-36 / CGP-AGENT-D-017 / PI#1 / PI#3: Jay approved this on 2026-11-14.

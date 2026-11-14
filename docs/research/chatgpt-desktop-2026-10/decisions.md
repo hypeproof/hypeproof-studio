@@ -2503,6 +2503,21 @@ Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-0
 - Not covered: a real installed App and a screen reader: NOT RUN.
 - Confirmed by Jay: no.
 
+## CGP-AGENT-R-031 / CGP-AGENT-D-027: busy banner before send (2026-11-14)
+
+Confirmed by Jay: no. These are agent choices within the rows, and the coordinator set the constraints: no flag on the public health, authenticated seats only, derived from existing signals, no provider names, never block sending.
+
+- **Signal (agent choice).** It counts the upstream failures learner turns already meet at the Service's four failure sites: 429, 529, 5xx and unreachable, not a learner's own Stop. Busy is 4 or more in the current minute and the two before it, memoised per isolate for 20 s (hypeproof-service#465). Two sources were rejected:
+  - The provider breaker covers only the OpenAI router path, and when it is open the fallback still serves the turn.
+  - The heartbeat runs every 15 minutes, so the banner would stay up long after recovery.
+- **Route (agent choice).** It is a new authenticated `GET /v1/service-status` → `{busy}`, not a `/v1/profile` field. Studio reads the profile at start, not on a timer, and the profile route runs gate checks and builds a large body.
+- **Asking (coordinator constraints; the numbers are agent choices).** The panel asks on mount, back in view, on focus, and once a minute, but only while the view is visible and the window is focused. The host asks at most once a minute. Errors double the wait up to 15 minutes. A 404 (no such route) stops asking for that seat until its token or the Service address changes; a 401 or 403 backs off like an error, because a 403 session_inactive clears when the class opens with the same token; a remount re-posts the last answer without a new request. Fail quiet: only a confirmed `true` shows the banner.
+- **Service cost (coordinator).** Failures are counted per isolate and written to KV at most once per 12 s per isolate, into one window key. A read is one KV get behind a 20 s memo. A failed KV write is dropped.
+- **Copy.** "AI가 지금 붐벼요", the row's own text only. A second clause ("답이 늦을 수 있어요.") wrapped to two lines at 320 px beside the icon and the 44px close, and DES-CGP-AGENT-66 asks for one line.
+- **Close (agent choice within "dismissible per session", revised after verify-r027).** Closing hides the banner for that busy episode, and focus returns to the composer. The host keeps the closed state with the last answer, so a remount (a task switch) re-posts it closed; panel state alone was lost on every remount. The episode ends when the Service reads not busy, so the next busy episode shows the banner again. A time window was rejected: it would hide a new busy episode that starts within it. A healthy answer removes the banner on its own.
+- **Instructor and issuer seats (after verify-r027).** The host does not ask for them, because the route answers 401 to an issuer token every time, so they would back off forever. The check uses instructor mode or the issuer token's unverified shape; it only saves a request and grants nothing.
+- **Not covered:** the installed app against the deployed Service, and a real screen reader.
+
 ## CGP-AGENT-R-020 / CGP-AGENT-D-017: learner skill cards (2026-11-14)
 
 Confirmed by Jay: yes for the scope (2026-11-14): a learner-facing skill card authored in Chalk, frozen with the lesson version, and Studio showing only these cards and never the coach's SKILL.md or `Profile.skills`. The rest are agent choices, approved by the coordinator.
