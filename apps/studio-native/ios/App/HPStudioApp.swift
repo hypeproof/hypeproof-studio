@@ -57,6 +57,16 @@ struct StudioHome: View {
                                     .background(message.role == "user" ? Color(uiColor: .secondarySystemGroupedBackground) : .green.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
                             }
                             if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("statusError") }
+                            if model.hasUnsavedEdits {
+                                HStack {
+                                    Button { leaveComposer(); model.savePendingEdits() } label: {
+                                        Text("다시 저장").frame(minHeight: 44)
+                                    }.accessibilityIdentifier("retryNotebookSave")
+                                    Button { leaveComposer(); exportURL = model.export() } label: {
+                                        Text("작성한 기록 내보내기").frame(minHeight: 44)
+                                    }.accessibilityIdentifier("exportUnsavedNotebook")
+                                }.buttonStyle(.bordered)
+                            }
                             if !project.messages.isEmpty {
                                 Button { leaveComposer(); showIntent = true } label: { Label("지금의 의도 정리하기", systemImage: "square.and.pencil") }.buttonStyle(.bordered).accessibilityIdentifier("openIntent")
                             }
@@ -76,7 +86,7 @@ struct StudioHome: View {
             .navigationTitle("기기 기록").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { leaveComposer(); onReturnToConversation() } label: {
+                    Button { leaveComposer(); if model.savePendingEdits() { onReturnToConversation() } } label: {
                         Label("대화", systemImage: "chevron.backward")
                             .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
@@ -89,6 +99,12 @@ struct StudioHome: View {
                     Menu {
                         Button("새 생각") { leaveComposer(); model.newProject() }
                         Button(model.readOnly ? "읽지 못한 원본 내보내기" : "전체 기록 내보내기") { leaveComposer(); exportURL = model.export() }
+#if DEBUG
+                        if model.notebookFixtureEnabled {
+                            Button("Block notebook writes") { leaveComposer(); model.blockNotebookFixtureWrites() }.accessibilityIdentifier("blockNotebookWrites")
+                            Button("Restore notebook storage") { leaveComposer(); model.restoreNotebookFixtureWrites() }.accessibilityIdentifier("restoreNotebookWrites")
+                        }
+#endif
                         if model.readOnly { Button("원본 보존 후 새로 시작") { leaveComposer(); showRecovery = true } }
                         if model.project != nil { Button("현재 기록 삭제", role: .destructive) { leaveComposer(); showDelete = true } }
                     } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
@@ -113,6 +129,16 @@ struct StudioHome: View {
                 }
             }
         }.tint(ink)
+        .interactiveDismissDisabled(model.hasUnsavedEdits)
+#if DEBUG
+        .overlay(alignment: .topLeading) {
+            if model.notebookFixtureEnabled {
+                Color.clear.frame(width: 1, height: 1).accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Notebook storage evidence").accessibilityValue(model.notebookFixtureEvidence)
+                    .accessibilityIdentifier("notebookStorageEvidence")
+            }
+        }
+#endif
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { voice.resumeIfActive() }
             else if phase == .background || voice.turn.phase != .authorizing { stopVoice() }

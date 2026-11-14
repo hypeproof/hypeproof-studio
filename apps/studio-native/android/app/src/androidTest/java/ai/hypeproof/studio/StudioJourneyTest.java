@@ -191,15 +191,41 @@ public class StudioJourneyTest {
                 assertEquals("저장 실패 후에도 지킬 관찰",exported.projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
             }catch(Exception e){throw new AssertionError(e);}});
             onView(withText("닫기")).perform(click());
+            onView(withText("메뉴")).perform(click());onView(withText("나의 질문으로")).perform(click());
+            onView(withText("아직 저장하지 못했어요")).check(matches(isDisplayed()));
+            app.onActivity(activity->assertFalse("Failed writes must not finish the only owner of pending words",activity.isFinishing()));
+            onView(withText("계속 적기")).perform(click());
+            Espresso.pressBack();
+            onView(withText("아직 저장하지 못했어요")).check(matches(isDisplayed()));
+            intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
+            onView(withText("내보내기")).perform(click());
+            StudioState exitExport=new StudioState(new String(Files.readAllBytes(new File(context.getCacheDir(),"exports/HP-Studio-records.json").toPath()),StandardCharsets.UTF_8));
+            assertEquals("저장 실패 후에도 지킬 관찰",exitExport.projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
+            screenshot("android-unsaved-notebook-exit");
             onView(withText("생각 정리")).perform(scrollTo(),click());
             onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
         } finally {
-            app.onActivity(activity->{try{java.lang.reflect.Field field=MainActivity.class.getDeclaredField("records");field.setAccessible(true);field.set(activity,original.get());}catch(Exception e){throw new AssertionError(e);}});
+            if(app.getState()!=androidx.lifecycle.Lifecycle.State.DESTROYED)
+                app.onActivity(activity->{try{java.lang.reflect.Field field=MainActivity.class.getDeclaredField("records");field.setAccessible(true);field.set(activity,original.get());}catch(Exception e){throw new AssertionError(e);}});
             Files.deleteIfExists(blocker.toPath());
         }
+        // Exit itself must flush the pending words once storage is writable;
+        // no later edit may accidentally make this boundary pass.
+        onView(withText("닫기")).perform(click());
+        onView(withText("메뉴")).perform(click());onView(withText("나의 질문으로")).perform(click());
+        onView(withContentDescription("질문 대화 입력")).check(matches(isDisplayed()));
+        app.close();app=ActivityScenario.launch(MainActivity.class);
+        onView(withText("생각 정리")).perform(scrollTo(),click());
+        onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
         onView(withContentDescription("누구의 어떤 불편인가요?")).perform(scrollTo(),replaceText("나중에 저장한 다른 항목"),closeSoftKeyboard());
         assertEquals("저장 실패 후에도 지킬 관찰",notebook().projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
         assertEquals("나중에 저장한 다른 항목",notebook().projects().getJSONObject(0).getJSONObject("reflection").getString("audience"));
+        onView(withText("닫기")).perform(click());
+        onView(withText("메뉴")).perform(click());onView(withText("나의 질문으로")).perform(click());
+        onView(withContentDescription("질문 대화 입력")).check(matches(isDisplayed()));
+        app.close();app=ActivityScenario.launch(MainActivity.class);
+        onView(withText("생각 정리")).perform(scrollTo(),click());
+        onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
     }
     @Test public void observationIntentDraftAndProjectsSurviveNativeRelaunch() throws Exception {
         begin(); draft("동네 가게에서 기다리는 사람이 많다"); record();
