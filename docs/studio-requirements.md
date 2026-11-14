@@ -3611,7 +3611,11 @@ against the slice's label set (AI/Studio/올림/기록 없음 only). Cases cover
   while its bytes stay, anything else reads 기록 없음;
 - a ledger file carrying a learner-change event is rejected as damaged;
 - a lock that the label table, event kinds, host-write actors, provider and webview contain no
-  `내가 고침`, no learner-save kind and no editor save subscription;
+  `내가 고침` and no learner-save kind;
+- an import-graph lock (`test/artifact-provenance-imports.smoke.mjs`, #4124): no module that imports
+  `artifactProvenance` or `artifactProvenanceView` subscribes to an editor or notebook save event, except
+  `previewProvider.ts` (it reloads the watched preview), whose save callback must not reach a provenance import,
+  directly or through a method of the same class. It parses the TypeScript AST, and planted violations are caught;
 - the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
 - the hash cache and skipped Python environments.
 
@@ -9696,7 +9700,12 @@ catches what the checks above cannot see: a shell command that builds the path a
       counts as oldest; one within 60 s is clamped to now. Known residual: an entry Studio really wrote while the clock
       ran more than 60 s fast, after the clock is corrected, is taken for a planted one and removed at the next prune.
     - Nothing older than seven days is kept, applied at every check and at activation.
-    - A task's folder is removed when the task is archived or moved.
+    - A task's folder is removed when the task is archived or moved. The folder is renamed to a `.purge-…` tombstone at
+      once, before the handler moves on, and only the tombstone is deleted afterwards, so a turn right after a restore
+      writes into a fresh folder the late delete cannot reach. A tombstone a crash left behind is removed at the next
+      prune. A host without global storage, or a seat without a memory scope, archives and moves as before with nothing
+      to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move, refused move, the race,
+      the tombstone sweep and the no-op hosts), not by source text.
     - Nothing reads it back into memory, uploads it or logs it (tested).
     - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
   - **Write side, with this check.** A new or deleted memory file, or a changed one among the read entries, does not
