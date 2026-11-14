@@ -76,6 +76,11 @@ from optional measurement consent: declining measurement does not disable questi
 Notification permission is also a separate explicit choice. An unconfigured
 provider remains visibly unavailable; a late permission/token callback after
 logout or disable cannot register for the previous account.
+The existing TestFlight environment defaults push configuration off. Enabling it
+requires a matching App Store distribution profile with production APNs; the
+exported signed app must carry the expected app/team entitlements and enabled
+configuration before upload. Qualification preserves the existing candidate/run
+gate and upload receipt and does not prove provider acceptance or device receipt.
 
 The existing Mac desktop is the sole desktop product. The previous Catalyst preview is superseded and no longer built or uploaded; its local data is preserved. Mobile parity means the essential user outcomes, not replicating a desktop IDE on a phone. Foundry owns versioned execution and verification; existing platform CI and release engines remain the executors. Keep Foundry/policy/adapter/product versions distinct. READY, merged, signed, uploaded, available to testers, installed and user-accepted are separate states.
 

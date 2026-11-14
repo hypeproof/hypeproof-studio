@@ -464,6 +464,12 @@ receipts, and opening a notice with current authorization. The default unconfigu
 build never substitutes a token or reports delivery. Use `apps/studio-native/PUSH.md`
 for the provisioning boundary; source review and local transport do not qualify
 APNs/FCM acceptance or a physical notification.
+`test_apple_push_config.py` executes the fixed release helper and controlled actual
+upload shell path. A wrong profile, disabled exported flag, wrong signed app/team,
+non-production APNs entitlement or unsafe/ambiguous IPA must stop before upload.
+The old upload script is a negative control; mocked signing commands are not
+Apple signature or device evidence. Existing deployment and two-source gate tests
+retain their assertions, and the new tests run in the existing native contract CI.
 
 For MFR-03/04 and MVOICE-03/04, automatic personal-history reads keep a cached ready conversation
 visually quiet. `testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft`

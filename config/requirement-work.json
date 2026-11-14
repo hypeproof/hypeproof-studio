@@ -989,7 +989,7 @@
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "04ab0d034be54418d12209ecedcb2ee8d3334086029c5bf89b33ea6ea733854a",
+      "sha256": "6b7de4be35af596a7a3bdd9142a2135cee5622c088c230b1cfae5f048dde153e",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5218,7 +5218,10 @@
         "apps/studio-native/ios/App/AccountPushView.swift",
         "apps/studio-native/ios/App/HPStudio-Push.entitlements.example",
         "apps/studio-native/ios/App/HPStudioApp.swift",
-        "apps/studio-native/ios/Sources/StudioCore/AccountPush.swift"
+        "apps/studio-native/ios/Sources/StudioCore/AccountPush.swift",
+        "apps/studio-native/scripts/apple-push-config.py",
+        "apps/studio-native/scripts/apple-upload.sh",
+        ".github/workflows/studio-apple-testflight.yml"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/account-cards.smoke.mjs",
@@ -5235,7 +5238,9 @@
         "apps/studio-native/tests/test_native_journey_evidence.py",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativePushTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java",
-        "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift"
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift",
+        "apps/studio-native/tests/test_apple_push_config.py",
+        "apps/studio-native/tests/test_native_deployment_contract.py"
       ]
     }
   ]
