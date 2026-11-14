@@ -13,12 +13,12 @@ from pathlib import Path
 
 from core import (Blocked, authorize, canonical, candidate_contract, committed_cost, digest, handoff, initial,
                   now, policy_contract, public_payload, record_check, record_cost,
-                  record_tokens, require, reserve, resume_upload, settle)
+                  record_tokens, require, reserve, resume_build, resume_upload, settle)
 from operations import (build_runs, collect, create_tag, create_ticket, engine_check,
                         observe_tag, observe_ticket, report, retry_failed_build,
-                        source_prs, support_assets, tag_message, ticket_request,
-                        verify_remote_packages)
-from transport import GitHub, GitHubStore, LocalGitStore, NativeGitHub
+                        source_prs, support_assets, tag_message, tag_trigger_contract, ticket_request,
+                        verify_remote_packages, DESKTOP_BUILD_ADAPTER, execute_desktop_build, observe_desktop_build)
+from transport import GitHub, GitHubStore, LocalGitStore, NativeGitHub, DesktopBuildActions
 import native_testflight
 import routing
 import publisher
@@ -116,6 +116,10 @@ def parser():
     resume = commands.add_parser("resume-upload")
     for key in ["operation", "quote", "directory"]: resume.add_argument("--" + key, required=True)
     resume.add_argument("--plan", action="store_true")
+    resume = commands.add_parser('resume-build')
+    for key in ('operation', 'quote', 'checkout'):
+        resume.add_argument('--' + key, required=True)
+    resume.add_argument('--plan', action='store_true')
     commands.add_parser("collect").add_argument("--directory", required=True)
     commands.add_parser("report").add_argument("--directory", required=True)
     promotion = commands.add_parser("promote-check")
@@ -163,6 +167,14 @@ def _main(argv, github, actions, identity, cleanup):
             actor = github.actor()
         store = GitHubStore(github, a.state_repo, candidate)
     session = Session(store, policy, actor, candidate, github)
+    def desktop_actions(request):
+        nonlocal actions
+        if not any(w['trigger'] == 'workflow_dispatch' for w in request['triggerContract']['workflows']):
+            return None
+        if actions is None:
+            actions = DesktopBuildActions(candidate['repository'])
+            cleanup.callback(actions.close)
+        return actions
     if a.command == "init":
         if session.state:
             session.own()
@@ -317,7 +329,10 @@ def _main(argv, github, actions, identity, cleanup):
         if native:
             require(kind == native_testflight.KIND, "unexpected native operation kind")
             result = native_testflight.observe(actions, request, operation["requestDigest"])
-        elif kind == "build": result = observe_tag(github, candidate, request["message"])
+        elif kind == "build":
+            result = (observe_desktop_build(session, a.operation, github)
+                      if request.get('adapter') == DESKTOP_BUILD_ADAPTER
+                      else observe_tag(github, candidate, request["message"]))
         elif kind == "retry-build":
             run = github.api(f"repos/{candidate['repository']}/actions/runs/{request['runId']}")
             require(run["head_sha"] == candidate["sourceSha"] and run["head_branch"] == candidate["tag"], "run identity changed")
@@ -332,7 +347,24 @@ def _main(argv, github, actions, identity, cleanup):
         require(result is not None, "UNKNOWN: no conclusive matching result; do not replay or hand off. Inspect provider records with the current owner")
         if native:
             return session.save(native_testflight.settle_upload(s, a.operation, result))
-        return session.save(settle(s, a.operation, "DONE", result))
+        return session.save(settle(session.state, a.operation, "DONE", result))
+    if a.command == 'resume-build':
+        operation = s['operations'].get(a.operation)
+        require(operation and operation['kind'] == 'build' and operation['status'] == 'UNKNOWN' and
+                operation['request'].get('adapter') == DESKTOP_BUILD_ADAPTER, 'only an uncertain journaled build can resume')
+        request = operation['request']
+        require(tag_trigger_contract(candidate, a.checkout) == request['triggerContract'] and
+                tag_message(candidate, a.checkout) == request['message'], 'original build source and contract required')
+        effects = operation.get('effects', {})
+        require('tag' not in effects or any(w['trigger'] == 'workflow_dispatch' and w['platform'] not in effects
+                for w in request['triggerContract']['workflows']), 'all build writes were attempted; reconcile without replay')
+        if a.plan:
+            return {'kind': 'build', 'candidateDigest': s['candidateDigest'], 'request': request,
+                    'requestDigest': operation['requestDigest'], 'resume': a.operation}
+        session.save(resume_build(s, policy, actor, a.operation, read(a.quote)))
+        result = execute_desktop_build(session, a.operation, github, desktop_actions(request))
+        require(result is not None, 'build observations incomplete; preserve UNKNOWN and reconcile without replay')
+        return session.save(settle(session.state, a.operation, 'DONE', result))
     if a.command == "testflight":
         require(s.get("preparation", {}).get("nativeGate"), "prepare exact native CI and source PRs first")
         request = native_testflight.request(candidate, a.operation, s["preparation"])
@@ -347,11 +379,15 @@ def _main(argv, github, actions, identity, cleanup):
                                  lambda: native_testflight.dispatch(github, actions, candidate, request, fingerprint))
     if a.command == "build":
         require(s.get("preparation"), "prepare explicit source PRs first")
+        triggers = tag_trigger_contract(candidate, a.checkout)
         message = tag_message(candidate, a.checkout)
         require(message == s["preparation"]["tagMessage"], "prepared build contract changed")
         request = {"sourceSha": candidate["sourceSha"], "tag": candidate["tag"], "message": message,
-                   "adapter": "github-tag-push", "workflows": ["build-mac.yml", "build-windows.yml"]}
-        action = lambda: create_tag(github, candidate, message)
+                   "adapter": DESKTOP_BUILD_ADAPTER, "workflows": ["build-mac.yml", "build-windows.yml"],
+                   "triggerContract": triggers}
+        require(a.operation in s['operations'] or not any(op['kind'] == 'build' for op in s['operations'].values()),
+                'candidate already has a build operation; resume/reconcile it, never start another build')
+        action = lambda: execute_desktop_build(session, a.operation, github, desktop_actions(request))
     elif a.command == "retry-build":
         require(s.get("preparation"), "prepare and verify managed build support before retrying")
         request = {"runId": a.run, "previousAttempt": a.attempt, "adapter": "github-rerun-failed-jobs"}
