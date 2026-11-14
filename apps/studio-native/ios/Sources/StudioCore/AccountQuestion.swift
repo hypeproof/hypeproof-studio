@@ -1,5 +1,13 @@
 import Foundation
 
+public struct AccountQuestionIntent: Codable, Sendable {
+    public let accountID, id, choice: String
+    public init(accountID: String, id: String = UUID().uuidString.lowercased(), choice: String) { self.accountID = accountID; self.id = id; self.choice = choice }
+    public func validate(account: String) throws {
+        guard accountID == account, UUID(uuidString: id)?.uuidString.lowercased() == id, ["goal", "method", "decision"].contains(choice) else { throw SyncFailure.invalidResponse }
+    }
+}
+
 /// Existing Service hps-card/1 data. Card actions never imply approval authority.
 public struct AccountQuestion: Decodable, Sendable {
     public struct Choice: Decodable, Identifiable, Sendable { public let id, label: String }
@@ -49,6 +57,7 @@ public struct AccountQuestion: Decodable, Sendable {
         public var busy = false, message = ""
         public var words = "", choice: String?
         public var canStart = false
+        public var pendingChoice: String?
         public init() {}
     }
     public private(set) var view = View()
@@ -58,9 +67,11 @@ public struct AccountQuestion: Decodable, Sendable {
     private let load: (MemberApprovalIdentity) async throws -> AccountQuestion?
     private let act: (MemberApprovalIdentity, String, String, [String: String]) async throws -> String
     private let start: (MemberApprovalIdentity, String, String) async throws -> Void
+    private let loadIntent: (String) throws -> AccountQuestionIntent?
+    private let saveIntent: (String, AccountQuestionIntent?) throws -> Void
     private let changed: (View) -> Void
-    public init(identity: @escaping () async throws -> MemberApprovalIdentity?, load: @escaping (MemberApprovalIdentity) async throws -> AccountQuestion?, act: @escaping (MemberApprovalIdentity, String, String, [String: String]) async throws -> String, start: @escaping (MemberApprovalIdentity, String, String) async throws -> Void = { _, _, _ in throw SyncFailure.invalidResponse }, changed: @escaping (View) -> Void) {
-        self.identity = identity; self.load = load; self.act = act; self.start = start; self.changed = changed
+    public init(identity: @escaping () async throws -> MemberApprovalIdentity?, load: @escaping (MemberApprovalIdentity) async throws -> AccountQuestion?, act: @escaping (MemberApprovalIdentity, String, String, [String: String]) async throws -> String, start: @escaping (MemberApprovalIdentity, String, String) async throws -> Void = { _, _, _ in throw SyncFailure.invalidResponse }, loadIntent: @escaping (String) throws -> AccountQuestionIntent? = { _ in nil }, saveIntent: @escaping (String, AccountQuestionIntent?) throws -> Void = { _, _ in }, changed: @escaping (View) -> Void) {
+        self.identity = identity; self.load = load; self.act = act; self.start = start; self.loadIntent = loadIntent; self.saveIntent = saveIntent; self.changed = changed
     }
     public func invalidate() { generation = UUID(); binding = nil; draftKey = nil; shownKey = nil; view = View(); changed(view) }
     public func dismiss() { generation = UUID(); view.card = nil; view.busy = false; changed(view) }
@@ -75,22 +86,30 @@ public struct AccountQuestion: Decodable, Sendable {
             guard g == generation else { return }
             if binding != account { view.words = ""; view.choice = nil; draftKey = nil; shownKey = nil }
             binding = account
+            let pending = try loadIntent(account.accountID); try pending?.validate(account: account.accountID)
+            view.pendingChoice = pending?.choice
             let card = try await load(account); try card?.validate()
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
             if let card, card.available() {
                 if draftKey != card.key { view.words = card.text?.value ?? ""; view.choice = nil; draftKey = card.key }
                 view.card = card; view.message = ""
-            } else { view.canStart = view.words.isEmpty; view.message = "지금 도착한 질문이 없어요. 어떤 생각부터 정리할까요?" }
+            } else { view.canStart = view.words.isEmpty; view.message = pending == nil ? "지금 도착한 질문이 없어요. 어떤 생각부터 정리할까요?" : "아직 결과를 확인하지 못한 선택이 있어요. 같은 선택을 누르면 같은 요청으로 확인해요." }
         } catch { if g == generation { view.message = "질문을 불러오지 못했어요. 작성한 답은 남겨 두었어요." } }
         if g == generation { view.busy = false; changed(view) }
     }
     public func begin(_ choice: String) async {
-        guard !view.busy, view.canStart, view.words.isEmpty, ["goal", "method", "decision"].contains(choice), let binding else { return }
+        guard !view.busy, view.canStart, view.words.isEmpty, ["goal", "method", "decision"].contains(choice), view.pendingChoice == nil || view.pendingChoice == choice, let binding else { return }
         let g = generation; view.busy = true; view.canStart = false; changed(view)
         do {
             guard try await current(g, binding) else { if g == generation { invalidate() }; return }
-            try await start(binding, UUID().uuidString.lowercased(), choice)
+            let intent = try loadIntent(binding.accountID) ?? AccountQuestionIntent(accountID: binding.accountID, choice: choice)
+            try intent.validate(account: binding.accountID)
+            guard intent.choice == choice else { throw SyncFailure.invalidResponse }
+            try saveIntent(binding.accountID, intent) // Never dispatch an unrecorded intent.
+            view.pendingChoice = choice
+            try await start(binding, intent.id, choice)
             guard try await current(g, binding) else { if g == generation { invalidate() }; return }
+            try saveIntent(binding.accountID, nil); view.pendingChoice = nil
             view.busy = false
             await refresh() // Read the existing card; never answer or send a conversation automatically.
         } catch {
@@ -98,8 +117,10 @@ public struct AccountQuestion: Decodable, Sendable {
         }
     }
     public func presented(_ key: String) async {
-        guard shownKey != key, !view.busy, view.card?.key == key, let binding else { return }
-        shownKey = key; let g = generation
+        guard !view.busy, let card = view.card, card.key == key, let binding else { return }
+        let marker = key + ":" + String(card.attempt)
+        guard shownKey != marker else { return }
+        shownKey = marker; let g = generation
         do { guard try await current(g, binding) else { return }; _ = try await act(binding, key, "shown", ["surface": "mobile"]) }
         catch { /* A failed exposure receipt is not a successful answer; never retry automatically. */ }
     }

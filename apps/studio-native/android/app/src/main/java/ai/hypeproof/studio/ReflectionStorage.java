@@ -44,6 +44,13 @@ final class ReflectionStorage implements ReflectionModel.Store, NativeTeamModel.
     public void saveApprovalPending(String account,JSONArray pending)throws Exception {
         name(account);byte[] bytes=ReflectionState.encode(pending.toString());if(pending.length()>50||bytes.length>262144)throw new IOException("storage_limit");write("approval-"+account+".json",bytes);
     }
+    public JSONObject loadQuestionIntent(String account)throws Exception {
+        name(account);byte[] bytes=read("question-intent-"+account+".json",4096);if(bytes==null)return null;
+        JSONObject value=new JSONObject(ReflectionState.decode(bytes));return value.isNull("intent")?null:value.getJSONObject("intent");
+    }
+    public void saveQuestionIntent(String account,JSONObject intent)throws Exception {
+        name(account);byte[] bytes=ReflectionState.encode(new JSONObject().put("intent",intent==null?JSONObject.NULL:intent).toString());if(bytes.length>4096)throw new IOException("storage_limit");write("question-intent-"+account+".json",bytes);
+    }
     void exportOriginal(String account,File destination) throws Exception {try(InputStream in=file(name(account)).openRead();OutputStream out=new FileOutputStream(destination)){byte[] chunk=new byte[8192];for(int n;(n=in.read(chunk))!=-1;)out.write(chunk,0,n);}}
     private javax.crypto.SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);

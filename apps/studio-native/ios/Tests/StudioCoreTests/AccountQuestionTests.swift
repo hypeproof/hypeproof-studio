@@ -99,6 +99,29 @@ final class AccountQuestionTests: XCTestCase {
         await controller.begin("method"); XCTAssertEqual(posts, 1); XCTAssertNotNil(controller.view.card)
         await controller.refresh(); XCTAssertEqual(posts, 1); XCTAssertFalse(controller.view.canStart)
     }
+    @MainActor func testLostStartingReceiptReusesPersistedIdentityAfterReopenAndBlocksOtherChoice() async throws {
+        let account = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
+        var disk: AccountQuestionIntent?, attempts: [String] = [], loseReceipt = true, failSave = false
+        func reopened() -> AccountQuestionController {
+            AccountQuestionController(identity: { account }, load: { _ in nil }, act: { _, _, _, _ in XCTFail("No answer"); return "" }, start: { _, id, choice in
+                XCTAssertEqual(choice, "method"); attempts.append(id); if loseReceipt { throw URLError(.networkConnectionLost) }
+            }, loadIntent: { _ in disk }, saveIntent: { _, intent in
+                if failSave { throw CocoaError(.fileWriteOutOfSpace) }; disk = intent
+            }, changed: { _ in })
+        }
+        let first = reopened(); await first.refresh(); await first.begin("method")
+        let id = try XCTUnwrap(disk?.id); XCTAssertEqual(attempts, [id])
+        let next = reopened(); await next.refresh(); XCTAssertEqual(next.view.pendingChoice, "method")
+        await next.begin("goal"); XCTAssertEqual(attempts, [id])
+        loseReceipt = false; await next.begin("method"); XCTAssertEqual(attempts, [id, id]); XCTAssertNil(disk)
+        failSave = true; await next.begin("method"); XCTAssertEqual(attempts, [id, id]); XCTAssertNil(disk)
+    }
+    @MainActor func testSameQuestionSecondServerAttemptRecordsAnotherRealExposure() async throws {
+        var object = Self.card, shown = 0
+        let controller = AccountQuestionController(identity: { .init(accountID: "A", sessionID: "session-A") }, load: { _ in try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object)) }, act: { _, _, action, _ in XCTAssertEqual(action, "shown"); shown += 1; return "" }, changed: { _ in })
+        await controller.refresh(); await controller.presented("team:choice-a"); await controller.presented("team:choice-a"); XCTAssertEqual(shown, 1)
+        object["attempt"] = 2; await controller.refresh(); await controller.presented("team:choice-a"); XCTAssertEqual(shown, 2)
+    }
     func testUnknownSchemaExpiredCardAndUnknownChoiceCannotAct() throws {
         var object = Self.card; object["expires_at"] = 1
         let expired = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object)); try expired.validate()

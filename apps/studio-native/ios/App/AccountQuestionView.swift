@@ -18,7 +18,7 @@ struct AccountQuestionView: View {
                     if model.state.canStart {
                         ForEach([("goal", "목표를 정리하고 싶어요"), ("method", "방법이 막혔어요"), ("decision", "결정을 앞두고 있어요")], id: \.0) { choice in
                             Button { Task { await model.controller?.begin(choice.0) } } label: { Text(choice.1).frame(minHeight: 44) }
-                                .buttonStyle(.bordered).disabled(model.state.busy)
+                                .buttonStyle(.bordered).disabled(model.state.busy || (model.state.pendingChoice != nil && model.state.pendingChoice != choice.0))
                         }
                     }
                     if let card = model.state.card {
@@ -51,7 +51,7 @@ struct AccountQuestionView: View {
                         if let skip = card.skip { Button { model.answer(skip: true) } label: { Text(skip).frame(minHeight: 44) }.disabled(model.state.busy) }
                         if let note = card.note { Text(note).font(.caption).foregroundStyle(.secondary) }
                     }
-                }.padding().task(id: model.state.card?.key) {
+                }.padding().task(id: model.state.card.map { $0.key + ":" + String($0.attempt) }) {
                     if let key = model.state.card?.key { await model.controller?.presented(key) }
                 }
             }.navigationTitle("도착한 질문").navigationBarTitleDisplayMode(.inline)

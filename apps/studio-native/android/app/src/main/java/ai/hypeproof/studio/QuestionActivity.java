@@ -256,7 +256,7 @@ public final class QuestionActivity extends Activity {
         }
         if(!approvalDialog&&team.canStart){
             String[] labels={"목표를 정리하고 싶어요","방법이 막혔어요","결정을 앞두고 있어요"},values={"goal","method","decision"};
-            for(int i=0;i<values.length;i++){String choice=values[i];Button b=button(labels[i],()->model.withCurrentAccount(c->team.begin(c,choice)));b.setEnabled(!team.busy&&!model.busy);teamContent.addView(b);}
+            for(int i=0;i<values.length;i++){String choice=values[i];Button b=button(labels[i],()->model.withCurrentAccount(c->team.begin(c,choice)));b.setEnabled(!team.busy&&!model.busy&&(team.pendingChoice==null||team.pendingChoice.equals(choice)));teamContent.addView(b);}
         }
         Button refresh=button("새로고침",()->model.withCurrentAccount(c->{if(approvalDialog)team.approvals(c);else team.questions(c);}));refresh.setEnabled(!team.busy&&!model.busy);teamContent.addView(refresh);
     }

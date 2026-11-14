@@ -26,6 +26,8 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 public class TeamEntryJourneyTest {
     private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
     private final AtomicInteger triggers=new AtomicInteger(),answers=new AtomicInteger(),decisions=new AtomicInteger(),turns=new AtomicInteger(),shown=new AtomicInteger();
+    private final AtomicBoolean loseTrigger=new AtomicBoolean(),triggerCommitted=new AtomicBoolean();
+    private final java.util.List<String> triggerIDs=new java.util.concurrent.CopyOnWriteArrayList<>();
     @Before public void setup()throws Exception {
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -37,9 +39,9 @@ public class TeamEntryJourneyTest {
             if(path.equals("/me"))return new NativeDeviceSignIn.Reply(200,Map.of("account_id","team-account","account_status","active","session_id","team-session","display_name","지윤"));
             if(path.equals("/me/reflection"))return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",0).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
             if(path.equals("/me/approval-inbox"))return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-member-approval-inbox/1","availability","ready","cards",new JSONArray().put(approval())));
-            if(path.equals("/me/cards?surface=mobile"))return new NativeDeviceSignIn.Reply(200,Map.of("card",triggers.get()==0?JSONObject.NULL:question()));
+            if(path.equals("/me/cards?surface=mobile"))return new NativeDeviceSignIn.Reply(200,Map.of("card",!triggerCommitted.get()?JSONObject.NULL:question()));
             if(path.equals("/me/question-triggers")){
-                assertEquals("method",body.get("choice"));assertEquals(body.get("id"),body.get("source_id"));assertEquals("1",body.get("source_revision"));triggers.incrementAndGet();
+                assertEquals("method",body.get("choice"));assertEquals(body.get("id"),body.get("source_id"));assertEquals("1",body.get("source_revision"));triggers.incrementAndGet();triggerIDs.add(body.get("id"));if(loseTrigger.get())return new NativeDeviceSignIn.Reply(503,Map.of("error","unavailable"));triggerCommitted.set(true);
                 return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-question-trigger/1","key","team:fixture","source",new JSONObject().put("kind","choice").put("id",body.get("id")).put("revision",1),"reentry",new JSONObject().put("method","GET").put("path","/v1/me/cards"),"model_calls",0));
             }
             if(path.endsWith("/shown")){shown.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("ok",true));}
@@ -72,6 +74,18 @@ public class TeamEntryJourneyTest {
         assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
         app.close();app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));assertEquals(1,triggers.get());assertEquals(1,answers.get());assertEquals(0,turns.get());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("아직 보내지 않은 내 생각")));screenshot("android-team-greeting-restored");
+    }
+    @Test public void lostStartingChoiceRetainsIntentAcrossRelaunchAndDoesNotOverwriteDraft()throws Exception{
+        loseTrigger.set(true);app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);
+        onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.contains("자동으로 다시 요청하지 않아요"));
+        String id=store.loadQuestionIntent("team-account").getString("id");assertEquals(1,triggers.get());assertEquals(id,triggerIDs.get(0));
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart&&"method".equals(t.pendingChoice));
+        onView(withText("목표를 정리하고 싶어요")).inRoot(isDialog()).check(matches(isNotEnabled()));assertEquals(1,triggers.get());screenshot("android-team-pending-choice");
+        loseTrigger.set(false);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);
+        assertEquals(2,triggers.get());assertEquals(id,triggerIDs.get(1));assertNull(store.loadQuestionIntent("team-account"));assertEquals(0,answers.get());assertEquals(0,turns.get());assertEquals(0,decisions.get());
+        assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private static JSONObject question()throws Exception{return new JSONObject().put("schema","hps-card/1").put("key","team:fixture").put("kind","team:choice").put("attempt",1).put("expires_at",System.currentTimeMillis()+60000).put("prompt","지금 바꿔 볼 작은 방법은 무엇인가요?").put("segments",new JSONArray()).put("choices",new JSONArray().put(new JSONObject().put("id","next").put("label","한 가지 바꿔 볼게요"))).put("select","tap").put("text",JSONObject.NULL).put("actions",new JSONArray()).put("skip","나중에");}
     private static JSONObject approval()throws Exception{long now=System.currentTimeMillis()/1000;return new JSONObject().put("id","review-fixture").put("request_digest","d".repeat(64)).put("source",new JSONObject().put("repo","hypeproof/hypeproof-studio").put("pr",4111).put("head","a".repeat(40)).put("base","b".repeat(40)).put("policy_digest","c".repeat(64)).put("evidence_digest","e".repeat(64)).put("context_digest","f".repeat(64))).put("reviewer","synthetic-reviewer").put("brief",new JSONObject().put("authored",new JSONArray().put("summary: 새 질문을 바로 볼 수 있어요")).put("verified",new JSONArray().put("실제 기기 검증 전"))).put("state","pending").put("created_at",now-10).put("expires_at",now+600).put("lease_expires_at",now+50).put("can_decide",true).put("unavailable_reason",JSONObject.NULL).put("decision",JSONObject.NULL).put("review",JSONObject.NULL);}

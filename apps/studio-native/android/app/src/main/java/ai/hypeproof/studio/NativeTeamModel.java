@@ -7,15 +7,15 @@ import java.util.function.*;
 
 /** UI-thread presentation owner; network work is bounded by the existing native transport. */
 final class NativeTeamModel {
-    interface Store {JSONArray loadApprovalPending(String account)throws Exception;void saveApprovalPending(String account,JSONArray value)throws Exception;}
+    interface Store {JSONArray loadApprovalPending(String account)throws Exception;void saveApprovalPending(String account,JSONArray value)throws Exception;JSONObject loadQuestionIntent(String account)throws Exception;void saveQuestionIntent(String account,JSONObject value)throws Exception;}
     private final Supplier<NativeDeviceSignIn.Credentials> current;
     private final NativeDeviceSignIn.Transport http;private final ExecutorService worker;private final Consumer<Runnable> ui;private final Store store;private final Runnable changed;
     private NativeDeviceSignIn.Credentials binding;private NativeDeviceSignIn.Cancel operation,profileCancel,exposureCancel;private long generation;private String draftKey,shownKey;
-    String displayName="",message="",words="",choice;boolean busy,canStart;NativeAccountCard question;
+    String displayName="",message="",words="",choice,pendingChoice;boolean busy,canStart;NativeAccountCard question;
     List<NativeApprovalCard> approvals=new ArrayList<>();Set<String> pending=new HashSet<>();String availability="";
     NativeTeamModel(Supplier<NativeDeviceSignIn.Credentials> current,NativeDeviceSignIn.Transport http,ExecutorService worker,Consumer<Runnable> ui,Store store,Runnable changed){this.current=current;this.http=http;this.worker=worker;this.ui=ui;this.store=store;this.changed=changed;}
     static boolean same(NativeDeviceSignIn.Credentials a,NativeDeviceSignIn.Credentials b){return a!=null&&b!=null&&a.account().equals(b.account())&&a.session().equals(b.session());}
-    void invalidate(){generation++;if(operation!=null)operation.cancel();if(profileCancel!=null)profileCancel.cancel();if(exposureCancel!=null)exposureCancel.cancel();binding=null;question=null;approvals=new ArrayList<>();pending.clear();displayName="";message="";words="";choice=null;draftKey=null;shownKey=null;busy=false;canStart=false;availability="";}
+    void invalidate(){generation++;if(operation!=null)operation.cancel();if(profileCancel!=null)profileCancel.cancel();if(exposureCancel!=null)exposureCancel.cancel();binding=null;question=null;approvals=new ArrayList<>();pending.clear();displayName="";message="";words="";choice=null;draftKey=null;shownKey=null;pendingChoice=null;busy=false;canStart=false;availability="";}
     void dismiss(){generation++;if(operation!=null)operation.cancel();if(exposureCancel!=null)exposureCancel.cancel();busy=false;question=null;approvals=new ArrayList<>();}
     private boolean bind(NativeDeviceSignIn.Credentials c){if(!same(c,current.get()))return false;if(!same(c,binding))invalidate();binding=c;return true;}
     private boolean live(long g,NativeDeviceSignIn.Credentials c){return generation==g&&same(c,current.get())&&same(c,binding);}
@@ -36,21 +36,20 @@ final class NativeTeamModel {
     }
     void questions(NativeDeviceSignIn.Credentials c){
         if(busy||!bind(c))return;long g=++generation;operation=new NativeDeviceSignIn.Cancel();NativeDeviceSignIn.Cancel cancel=operation;busy=true;canStart=false;question=null;message="질문을 불러오고 있어요.";changed.run();
-        worker.execute(()->{NativeAccountCard found=null;String name="";boolean failed=false;try{name=verify(c,cancel);JSONObject result=call("/me/cards?surface=mobile",null,c,cancel);if(!result.isNull("card"))found=new NativeAccountCard(result.getJSONObject("card"));}catch(Exception e){failed=true;}
-            NativeAccountCard card=found;String greeting=name;boolean error=failed;ui.accept(()->{if(!live(g,c))return;busy=false;if(error){message="질문을 불러오지 못했어요. 작성한 답은 남겨 두었어요.";}else{displayName=greeting;question=card!=null&&card.available()?card:null;canStart=question==null&&words.isEmpty();message=question==null?"지금 도착한 질문이 없어요. 어떤 생각부터 정리할까요?":"";if(question!=null&&!Objects.equals(draftKey,question.key)){draftKey=question.key;choice=null;words=question.json.optJSONObject("text")==null?"":question.json.optJSONObject("text").optString("value","");}}changed.run();});});
+        worker.execute(()->{NativeAccountCard found=null;String name="",pending=null;boolean failed=false;try{name=verify(c,cancel);JSONObject intent=questionIntent(c);pending=intent==null?null:intent.getString("choice");JSONObject result=call("/me/cards?surface=mobile",null,c,cancel);if(!result.isNull("card"))found=new NativeAccountCard(result.getJSONObject("card"));}catch(Exception e){failed=true;}
+            NativeAccountCard card=found;String greeting=name,pendingStart=pending;boolean error=failed;ui.accept(()->{if(!live(g,c))return;busy=false;if(error){message="질문을 불러오지 못했어요. 작성한 답은 남겨 두었어요.";}else{displayName=greeting;pendingChoice=pendingStart;question=card!=null&&card.available()?card:null;canStart=question==null&&words.isEmpty();message=question==null?(pendingChoice==null?"지금 도착한 질문이 없어요. 어떤 생각부터 정리할까요?":"아직 결과를 확인하지 못한 선택이 있어요. 같은 선택을 누르면 같은 요청으로 확인해요."):"";if(question!=null&&!Objects.equals(draftKey,question.key)){draftKey=question.key;choice=null;words=question.json.optJSONObject("text")==null||question.json.optJSONObject("text").isNull("value")?"":question.json.optJSONObject("text").optString("value","");}}changed.run();});});
     }
     void begin(NativeDeviceSignIn.Credentials c,String choice){
-        if(busy||!canStart||!words.isEmpty()||!Set.of("goal","method","decision").contains(choice)||!same(c,binding)||!bind(c))return;
+        if(busy||!canStart||!words.isEmpty()||(pendingChoice!=null&&!pendingChoice.equals(choice))||!Set.of("goal","method","decision").contains(choice)||!same(c,binding)||!bind(c))return;
         long g=++generation;operation=new NativeDeviceSignIn.Cancel();NativeDeviceSignIn.Cancel cancel=operation;busy=true;canStart=false;changed.run();
-        String id=UUID.randomUUID().toString();
         worker.execute(()->{boolean success=false;try{
-            verify(c,cancel);JSONObject result=call("/me/question-triggers",Map.of("schema","hps-question-trigger/1","id",id,"kind","choice","source_id",id,"source_revision","1","choice",choice),c,cancel);
+            verify(c,cancel);JSONObject intent=questionIntent(c);if(intent==null)intent=new JSONObject().put("account",c.account()).put("id",UUID.randomUUID().toString()).put("choice",choice);if(!intent.getString("choice").equals(choice))throw new Exception("pending_choice");check(cancel);store.saveQuestionIntent(c.account(),intent);check(cancel);String id=intent.getString("id");JSONObject result=call("/me/question-triggers",Map.of("schema","hps-question-trigger/1","id",id,"kind","choice","source_id",id,"source_revision","1","choice",choice),c,cancel);
             JSONObject source=result.getJSONObject("source"),reentry=result.getJSONObject("reentry");
-            if(!result.getString("schema").equals("hps-question-trigger/1")||!NativeAccountCard.validKey(result.getString("key"))||!source.getString("kind").equals("choice")||!source.getString("id").equals(id)||NativeAccountCard.integer(source,"revision")!=1||!reentry.getString("method").equals("GET")||!reentry.getString("path").equals("/v1/me/cards")||NativeAccountCard.integer(result,"model_calls")!=0)throw new Exception("invalid_trigger");success=true;
+            if(!result.getString("schema").equals("hps-question-trigger/1")||!NativeAccountCard.validKey(result.getString("key"))||!source.getString("kind").equals("choice")||!source.getString("id").equals(id)||NativeAccountCard.integer(source,"revision")!=1||!reentry.getString("method").equals("GET")||!reentry.getString("path").equals("/v1/me/cards")||NativeAccountCard.integer(result,"model_calls")!=0)throw new Exception("invalid_trigger");check(cancel);store.saveQuestionIntent(c.account(),null);success=true;
         }catch(Exception ignored){}boolean ok=success;ui.accept(()->{if(!live(g,c))return;busy=false;if(ok)questions(c);else{message="질문을 준비한 결과를 확인하지 못했어요. 새로고침으로 확인해 주세요. 자동으로 다시 요청하지 않아요.";changed.run();}});});
     }
     void presented(){
-        NativeAccountCard card=question;NativeDeviceSignIn.Credentials c=binding;if(card==null||busy||Objects.equals(shownKey,card.key)||!same(c,current.get()))return;shownKey=card.key;
+        NativeAccountCard card=question;NativeDeviceSignIn.Credentials c=binding;if(card==null||busy||!same(c,current.get()))return;String marker=card.key+":"+card.json.optInt("attempt");if(Objects.equals(shownKey,marker))return;shownKey=marker;
         NativeDeviceSignIn.Cancel cancel=new NativeDeviceSignIn.Cancel();exposureCancel=cancel;worker.execute(()->{try{verify(c,cancel);call("/me/cards/"+card.key+"/shown",Map.of("surface","mobile"),c,cancel);}catch(Exception ignored){/* Never infer answer success or retry exposure automatically. */}});
     }
     void answer(NativeDeviceSignIn.Credentials c,String action,String selected,boolean skip){
@@ -59,6 +58,10 @@ final class NativeTeamModel {
         long g=++generation;operation=new NativeDeviceSignIn.Cancel();NativeDeviceSignIn.Cancel cancel=operation;busy=true;changed.run();
         worker.execute(()->{String outcome=null;try{verify(c,cancel);if(!card.available())throw new Exception("expired");JSONObject result=call("/me/cards/"+card.key+(skip?"/skip":"/answer"),body,c,cancel);if(!NativeAccountCard.bool(result,"ok"))throw new Exception("invalid_reply");outcome=NativeAccountCard.text(result,skip?"message":"thanks",4000);}catch(Exception ignored){}
             String result=outcome;ui.accept(()->{if(!live(g,c))return;busy=false;question=null;if(result==null)message="처리 결과를 확인하지 못했어요. 작성한 답은 남겨 두었어요. 자동으로 다시 보내지 않아요.";else{message=result;words="";choice=null;draftKey=null;}changed.run();});});
+    }
+    private JSONObject questionIntent(NativeDeviceSignIn.Credentials c)throws Exception{
+        JSONObject value=store.loadQuestionIntent(c.account());if(value==null)return null;
+        String id=value.getString("id");if(!c.account().equals(value.getString("account"))||!id.equals(UUID.fromString(id).toString())||!Set.of("goal","method","decision").contains(value.getString("choice")))throw new Exception("invalid_question_intent");return value;
     }
     private JSONArray pending(NativeDeviceSignIn.Credentials c)throws Exception{
         JSONArray rows=store.loadApprovalPending(c.account());if(rows.length()>50)throw new Exception("invalid_pending");Set<String> ids=new HashSet<>();

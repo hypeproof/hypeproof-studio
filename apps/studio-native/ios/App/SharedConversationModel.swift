@@ -117,6 +117,21 @@ private struct SharedCacheFile: Codable {
             guard let self else { throw CancellationError() }
             let token = try await self.approvalToken(binding)
             try await self.service.startAccountQuestion(id: id, choice: choice, token: token)
+        }, loadIntent: { [weak self] account in
+            guard let self else { throw CancellationError() }
+            let file = try self.questionIntentFile(account)
+            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+            let data = try Data(contentsOf: file); guard data.count < 4096 else { throw SyncFailure.invalidResponse }
+            let intent = try JSONDecoder().decode(AccountQuestionIntent.self, from: data); try intent.validate(account: account); return intent
+        }, saveIntent: { [weak self] account, intent in
+            guard let self else { throw CancellationError() }
+            let file = try self.questionIntentFile(account)
+            if let intent {
+                try intent.validate(account: account)
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+                var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+                try JSONEncoder().encode(intent).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            } else if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
         }, changed: { [weak presentation] in presentation?.state = $0 })
         return presentation
     }()
@@ -178,6 +193,10 @@ private struct SharedCacheFile: Codable {
         guard StoredAccount.validID(account) else { throw SyncFailure.invalidResponse }
         let key = Data(account.utf8).base64EncodedString().replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "=", with: "")
         return directory.appendingPathComponent("approval-decisions", isDirectory: true).appendingPathComponent(key, isDirectory: true)
+    }
+    private func questionIntentFile(_ account: String) throws -> URL {
+        let key = try approvalDirectory(account).lastPathComponent
+        return directory.appendingPathComponent("question-intents", isDirectory: true).appendingPathComponent(key + ".json")
     }
     private func approvalIdentity() async throws -> MemberApprovalIdentity? {
         guard signedIn, !loggingOut, let before = account else { return nil }
