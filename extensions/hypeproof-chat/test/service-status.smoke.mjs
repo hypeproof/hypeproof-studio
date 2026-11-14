@@ -227,6 +227,29 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
     ok("host: dismissal survives remounts for the busy episode and ends when the Service reads not busy");
   }
   {
+    // A transient error mid-episode is not the end of the episode: the closed banner stays closed when busy is seen again.
+    for (const code of [0, 500, 401, 403]) {
+      const { h, state, tick } = make("seat-tok");
+      const shown = () => posts(h).filter((m) => m.type === "serviceStatus").map((m) => [m.busy, m.dismissed === true]);
+      state.busy = true;
+      await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+      await h.handleMessage({ type: "serviceStatusDismiss" });
+      assert.deepEqual(shown().at(-1), [true, true], `${code}: closed`);
+      state.status = code; await tick();
+      assert.deepEqual(shown().at(-1), [false, false], `${code}: the error reads as not busy (fail quiet)`);
+      state.status = 200; state.busy = true;
+      for (let i = 0; i < 40 && shown().at(-1)[0] !== true; i++) await tick();
+      assert.deepEqual(shown().at(-1), [true, true], `${code}: busy again after the error: still closed for this episode`);
+    }
+    // Control: a confirmed healthy answer does end it, so the next busy shows the banner.
+    const { h, state, tick } = make("seat-tok");
+    const shown = () => posts(h).filter((m) => m.type === "serviceStatus").map((m) => [m.busy, m.dismissed === true]);
+    state.busy = true; await h.handleMessage({ type: "serviceStatusRequest", mount: true }); await h.handleMessage({ type: "serviceStatusDismiss" });
+    state.busy = false; await tick(); state.busy = true; await tick();
+    assert.deepEqual(shown().at(-1), [true, false], "control: after a healthy answer the next busy shows the banner");
+    ok("host: an error mid-episode keeps the dismissal; only a healthy answer ends the episode");
+  }
+  {
     const anon = make(undefined);
     anon.state.busy = true;
     await anon.h.handleMessage({ type: "serviceStatusRequest", mount: true });

@@ -1975,7 +1975,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // No token yet, or a staff seat, is not a verdict on the seat: ask again on the next request.
         this.serviceStatusNextAt = answer.outcome === 'skipped' || answer.outcome === 'unserved' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
         this.serviceStatusLast = answer.busy;
-        if (!answer.busy) this.serviceStatusDismissed = false;
+        // Only a confirmed healthy answer ends the busy episode. An error (network, timeout, 5xx, 401, 403) reads as not busy
+        // and hides the banner, but it is no verdict on the episode, so a closed banner stays closed when busy is seen again.
+        if (answer.outcome === 'ok' && !answer.busy) this.serviceStatusDismissed = false;
         await this.postServiceStatus(answer.busy);
       } catch (error) {
         console.warn('[serviceStatus] check failed', error);

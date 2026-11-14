@@ -7772,8 +7772,9 @@ never stops them from sending.
   close button ("붐빔 알림 닫기"). It is `role="status"`. It
   leaves on its own when the Service reads healthy and comes back if busy returns. Closing it
   hides it for that busy episode: the host keeps the closed state with the last answer, so a
-  remount (a task switch) re-posts it closed. The episode ends when the Service reads not busy,
-  and the next busy episode shows the banner again. Focus returns to the composer.
+  remount (a task switch) re-posts it closed. The episode ends only when the Service answers
+  healthy (a 200 with `busy: false`); an error answer hides the banner but keeps it closed for
+  the episode. The next busy episode shows the banner again. Focus returns to the composer.
 - Not: it never holds a send, disables the composer, names a provider or a cause, or
   replaces the stall watchdog (REQ-M26), which still handles a turn that does not answer.
 - Design (DES-CGP-AGENT-66): an amber edge (`--hp-border-warn-default`) on the widget
