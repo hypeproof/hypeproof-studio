@@ -145,7 +145,7 @@ await test("ops host: an older Service (kind not named) gives not_sent and queue
 await test("ops host: the answer is the Service's outcome for that seq; a rejected seq, a timeout or a dropped connection is never sent", async () => {
   const Host = await load("classroomOpsHost", "ClassroomOpsHost");
   Host.REPORT_ANSWER_MS = 200;
-  const make = () => { const added = []; let next = 0; const inbox = []; const h = Object.assign(Object.create(Host.prototype), { outbox: { addSeq: async (...a) => { added.push(a); return ++next; } }, loop: { nudge() {} }, inboxListeners: new Set([() => inbox.push(1)]), log() {} });
+  const make = () => { const added = []; let next = 0; const inbox = []; const h = Object.assign(Object.create(Host.prototype), { outbox: { addSeq: async (...a) => { added.push(a); return ++next; }, close: async () => {} }, loop: { nudge() {}, stop() {} }, inboxListeners: new Set([() => inbox.push(1)]), log() {} });
     h.inboxChanged = () => inbox.push(1); return { h, added, inbox }; };
   const live = () => true;
   const { h, added, inbox } = make();
