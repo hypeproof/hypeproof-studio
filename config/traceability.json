@@ -14115,6 +14115,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/chatShortcuts.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatKeys.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ShortcutSheet.tsx"
         },
         {
@@ -14138,6 +14141,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/shortcut-sheet-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chat-keys.test.tsx"
         }
       ]
     },
@@ -19042,6 +19048,22 @@
       ]
     },
     {
+      "id": "ST-IMP-GUARDIAN",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-GUARDIAN"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/childProfile.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/childProfileHost.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-GUARDIAN",
       "stage": "test",
       "owner": "jayleekr",
@@ -19521,77 +19543,6 @@
       ]
     },
     {
-      "id": "ST-REQ-THEME-CHOICE",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-INT-NATIVE"
-      ],
-      "sources": [
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "### Theme choice: HP Dark, HP Light, 기기 설정 따르기 (CGP-SHELL-R-016)"
-        },
-        {
-          "path": "docs/research/chatgpt-desktop-2026-10/domains/settings-account-shell.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-THEME-CHOICE",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-THEME-CHOICE"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/media/hypeproof-light-theme.json"
-        },
-        {
-          "path": "extensions/hypeproof-chat/package.json"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/startSettings.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/startPage.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/StartSettingsSheet.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-THEME-CHOICE",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-THEME-CHOICE",
-        "ST-IMP-THEME-CHOICE"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/test/hp-light-theme.smoke.mjs"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/start-settings-host.smoke.mjs"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/text-contrast-computed.smoke.mjs"
-        }
-      ]
-    },
-    {
       "id": "ST-REQ-MEMBER-APPROVAL",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -19704,18 +19655,73 @@
       ]
     },
     {
-      "id": "ST-IMP-GUARDIAN",
-      "stage": "implementation",
+      "id": "ST-REQ-THEME-CHOICE",
+      "stage": "requirement",
       "owner": "jayleekr",
       "depends_on": [
-        "ST-REQ-GUARDIAN"
+        "ST-INT-NATIVE"
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/src/childProfile.ts"
+          "path": "docs/studio-requirements.md",
+          "section": "### Theme choice: HP Dark, HP Light, 기기 설정 따르기 (CGP-SHELL-R-016)"
         },
         {
-          "path": "extensions/hypeproof-chat/src/childProfileHost.ts"
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/settings-account-shell.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-THEME-CHOICE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-THEME-CHOICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/media/hypeproof-light-theme.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startSettings.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartSettingsSheet.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-THEME-CHOICE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-THEME-CHOICE",
+        "ST-IMP-THEME-CHOICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/hp-light-theme.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-settings-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/text-contrast-computed.smoke.mjs"
         }
       ]
     }

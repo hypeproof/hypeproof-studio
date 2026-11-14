@@ -78,6 +78,7 @@ import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
 import { MemorySettingsList } from './MemorySettingsList';
 import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
+import { useChatKeys } from './chatKeys';
 import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
@@ -1369,6 +1370,13 @@ export function ChatPanel(props: Props) {
     setToolMode(queuedToolMode);
     setQueued(null); setQueuedPaused(false);
   };
+  // CGP-CHAT-R-030 — Esc stops the answer (only while one streams, only an Escape nobody else handled) and Alt+Shift+K
+  // puts the cursor in the message box. Same stop as the stop button: a parked message goes back to the draft.
+  useChatKeys({
+    streaming,
+    stop: () => { restoreQueuedToDraft(); props.onCancel(); },
+    focusComposer: () => { const box = textareaRef.current; if (!box || box.disabled) return false; box.focus({ preventScroll: false }); return true; },
+  });
 
   // Shared attach path for both clipboard paste (⌘V) and drag-and-drop.
   // Downscales oversized screenshots instead of rejecting them (#384), bounds
