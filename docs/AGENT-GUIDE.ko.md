@@ -169,6 +169,12 @@ section for the exact head: the preview link of each changed page and what chang
 A link is evidence only where the check says `shown`; a `NOT SHOWN` route is stated plainly
 as a decision for the owner, never presented as proof (#566, `skills/hype-deliver`).
 
+사람에게 승인·결정을 요청할 때(PR 리뷰/승인, merge, CI 재실행, 설정·콘솔 클릭 등)는
+항목마다 바로 클릭할 수 있는 전체 URL을 하나씩 준다. 예:
+`https://github.com/hypeproof/hypeprooflab/pull/1645`. `#1645`나 `Lab #1645`만 쓰지 않는다.
+승인 대기 항목을 다시 나열하는 상태 보고에도 링크를 반복하고 "위 참조"로 대신하지 않는다
+(소유자 결정 2026-11-14).
+
 리뷰 요청과 배포 권한은 repo마다 다르게 해석하지 않는다.
 
 - 일반 HypeProof 작업은 현재 사용자의 명시적 요청 없이 reviewer를 요청하지 않는다.
