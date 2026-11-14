@@ -20,16 +20,28 @@ export interface SkillCard { name: string; summary: string; prompt: string }
 // Control characters, bidi controls, line/paragraph separators and zero-width characters are not a single plain line.
 const UNSAFE_LINE = /[\p{Cc}\p{Cf}  ]/u;
 
+/** Schemes refused even without `//` (the Service's LINK_SCHEMES), plus the `vscode…` and `hypeproof…` prefixes. */
+const LINK_SCHEMES = ["http", "https", "ftp", "ftps", "javascript", "vbscript", "data", "file", "blob", "mailto", "tel", "sms", "intent"];
+const CONFUSABLE: Record<string, string> = {
+  "а": "a", "в": "b", "с": "c", "ԁ": "d", "е": "e", "һ": "h", "н": "h", "і": "i", "ј": "j", "к": "k", "м": "m", "о": "o", "р": "p",
+  "ԛ": "q", "ѕ": "s", "т": "t", "υ": "u", "ѵ": "v", "ԝ": "w", "х": "x", "у": "y", "α": "a", "ο": "o", "ρ": "p", "τ": "t",
+  "ν": "v", "ι": "i", "κ": "k", "χ": "x", "ε": "e", "ѡ": "w",
+};
+
 /**
- * The Service's `hasLink` (lesson-skill-cards.ts): NFKC first, then any scheme token (a word with a Latin letter
- * directly followed by ':' and a non-space, confusable mixes included), `www.`, or `//` at the start or after a space.
+ * The Service's `hasLink` (hypeproof-service lesson-skill-cards.ts), the same rule. Coding text with colons passes
+ * (`color:red`, `a:hover`, `std::cout`, `C:\Users`, `//주석`). After NFKC and folding the colon look-alikes, it refuses
+ * `<scheme>://`, a known scheme directly followed by ':' (Cyrillic/Greek look-alikes folded), `www.` plus a domain,
+ * and `//` followed by a host.
  */
 export function hasLink(text: string): boolean {
-  const n = text.normalize("NFKC");
-  if (/(?:^|\s)\/\//u.test(n)) return true;
-  if (/(?:^|[^\p{L}\p{N}])www\./iu.test(n)) return true;
-  for (const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])([\p{L}\p{N}][\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu)) if (/[A-Za-z]/.test(m[1]!)) return true;
-  return false;
+  const n = text.normalize("NFKC").replace(/[\u02D0\uA789\u2236\uFE13\uFE55]/g, ":");
+  if (/(?:^|[^\p{L}\p{N}+.\-])\p{L}[\p{L}\p{N}\p{M}+.\-]*:\/\//u.test(n)) return true;
+  for (const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])(\p{L}[\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu)) {
+    const k = [...m[1]!.toLowerCase()].map((ch) => CONFUSABLE[ch] ?? ch).join("");
+    if (LINK_SCHEMES.includes(k) || k.startsWith("vscode") || k.startsWith("hypeproof")) return true;
+  }
+  return /(?:^|[^\p{L}\p{N}])www\.[\p{L}\p{N}-]+\.[\p{L}\p{N}-]{2,}/iu.test(n) || /(?:^|[^\p{L}\p{N}:])\/\/[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u.test(n);
 }
 
 const oneLine = (value: unknown, max: number): string | null => {
