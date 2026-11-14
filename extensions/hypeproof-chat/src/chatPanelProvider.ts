@@ -1,6 +1,6 @@
 import { sharedTexts, type MobileScope } from "./mobileConversation";
 import type { AccountSession } from './accountSession';
-import { readReflection, reflectionFailure, REFLECTION_BINDING_KEY, type ReflectionBinding, type ReflectionSnapshot } from './personalReflection';
+import { readReflection, reflectionFailure, reflectionAdmissionCode, readReflectionAdmission, resolvedReflectionAdmission, REFLECTION_BINDING_KEY, type ReflectionAdmissionFailure, type ReflectionBinding, type ReflectionSnapshot } from './personalReflection';
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
@@ -676,6 +676,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionRefresh?: Promise<void>;
   private reflectionWrites: Promise<void> = Promise.resolve();
   private reflectionMaking = false;
+  private reflectionUnsavedFailure?: { binding: ReflectionBinding; failure: ReflectionAdmissionFailure };
   isPersonalReflection(): boolean { return !!this.reflectionBinding(); }
   setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
   private reflectionStreams = new Map<string,{binding:ReflectionBinding;id:string}>();
@@ -715,8 +716,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if(current.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
       const pending=current.pending;
       const acknowledged=pending&&(value.acknowledged_id===pending.id||value.state.messages.some(m=>m.id===pending.id&&m.role==='user'&&m.content===pending.text));
-      return {...current,revision:value.state.revision,pending:acknowledged?undefined:pending};
+      const failure=readReflectionAdmission(current.admissionFailure);
+      return {...current,revision:value.state.revision,pending:acknowledged?undefined:pending,
+        admissionFailure:failure&&!resolvedReflectionAdmission(failure,value)?failure:undefined};
     });
+    const unsaved=this.reflectionUnsavedFailure;
+    if(unsaved?.binding.session===b.session&&unsaved.binding.task===b.task&&unsaved.binding.workspace===b.workspace
+      &&unsaved.binding.activity===b.activity&&resolvedReflectionAdmission(unsaved.failure,value))this.reflectionUnsavedFailure=undefined;
     // An app exit between saving the outbox and dispatch must leave recoverable input.
     const pending=this.reflectionBinding()?.pending;
     if(stillHere()&&pending&&!this.hasActiveStream()){
@@ -834,8 +840,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       await this.saveReflectionBinding({...b,pending},held=>{
         if(held.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
-        return {...held,pending};
+        return {...held,pending,admissionFailure:undefined};
       });
+      this.reflectionUnsavedFailure=undefined;
       if(refresh)await refresh;
       if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
       if(this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory||this.verifySession?.running||this.opsHold||this.interruptedHistory)throw Error('현재 작업 상태를 확인한 뒤 다시 보내 주세요.');
@@ -856,7 +863,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch(error) {
       if(!controller.signal.aborted&&stillHere()&&await accounts.conversationSession()===b.session&&stillHere()){
         if(!terminal){
-          await this.post({type:'streamError',streamId,error:reflectionFailure(error)});terminal=true;
+          const code=reflectionAdmissionCode(error);
+          if(code){
+            if(this.reflectionBinding()?.pending?.id!==id)return true;
+            const failure={id,code};
+            try {
+              await this.saveReflectionBinding(b,current=>!controller.signal.aborted&&stillHere()&&current.session===b.session&&current.pending?.id===id
+                ? {...current,admissionFailure:failure} : current);
+            } catch {
+              // Retain a visible, explicitly unsaved explanation without claiming durability.
+              if(!controller.signal.aborted&&stillHere())this.reflectionUnsavedFailure={binding:b,failure};
+            }
+          }
+          if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+          await this.post({type:'streamError',streamId,error:reflectionFailure(error)+(this.reflectionUnsavedFailure?.failure.id===id?' 이 안내를 이 기기에 저장하지 못했어요. 이 화면을 닫으면 안내가 사라질 수 있어요.':'')});terminal=true;
         } else {
           void vscode.window.showWarningMessage('답변은 계정에 저장됐지만 이 기기에 기록하지 못했어요. 입력은 보관하고 대화를 다시 확인할게요.');
         }
@@ -12429,6 +12449,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if (msg.type === 'history') {
+      const binding=this.reflectionBinding(),accounts=this.reflectionAccounts,store=this.currentTaskStore();
+      const heldUnsaved=this.reflectionUnsavedFailure;
+      if(binding&&accounts&&(readReflectionAdmission(binding.admissionFailure)
+        ||heldUnsaved?.binding.session===binding.session&&heldUnsaved.binding.activity===binding.activity
+          &&heldUnsaved.binding.workspace===binding.workspace&&heldUnsaved.binding.task===binding.task)){
+        const same=(b:ReflectionBinding|undefined)=>b?.session===binding.session&&b.activity===binding.activity&&b.workspace===binding.workspace&&b.task===binding.task;
+        const session=await accounts.conversationSession();
+        if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!same(this.reflectionBinding()))return false;
+        if(session===binding.session){
+          const current=this.reflectionBinding()!;
+          const unsaved=this.reflectionUnsavedFailure;
+          const transient=unsaved&&same(unsaved.binding)?unsaved.failure:undefined;
+          const failure=transient??readReflectionAdmission(current.admissionFailure);
+          if(failure&&(current.pending?.id===failure.id||msg.messages.some(m=>m.id===failure.id&&m.role==='user')))
+            msg={...msg,reflectionFailure:{...failure,persisted:!transient}};
+        }
+      }
+    }
     if (msg.type === 'config') {
       const binding = this.reflectionBinding();
       const view = msg.config.taskWorkspace;

@@ -15,7 +15,25 @@ export function readReflection(value:unknown):ReflectionSnapshot {
   }
   return v;
 }
-export interface ReflectionBinding { session:string;activity:string;workspace:string;task:string;revision:number;pending?:{id:string;text:string;revision:number;awaitingRefresh?:boolean} }
+export type ReflectionAdmissionCode = 'reflection_access_required' | 'reflection_monthly_limit' | 'reflection_budget_limit' | 'reflection_admission_unavailable';
+export interface ReflectionAdmissionFailure { id: string; code: ReflectionAdmissionCode }
+/** Only public admission codes cross the durable/UI boundary; never provider messages. */
+export function reflectionAdmissionCode(error: unknown): ReflectionAdmissionCode | undefined {
+  const code = (error as {code?: unknown})?.code;
+  return code === 'reflection_access_required' || code === 'reflection_monthly_limit'
+    || code === 'reflection_budget_limit' || code === 'reflection_admission_unavailable' ? code : undefined;
+}
+export function readReflectionAdmission(value: unknown): ReflectionAdmissionFailure | undefined {
+  const failure = value as ReflectionAdmissionFailure;
+  const code = reflectionAdmissionCode(failure);
+  return code && typeof failure?.id === 'string' && /^[A-Za-z0-9._:-]{1,120}$/.test(failure.id)
+    ? { id: failure.id, code } : undefined;
+}
+export function resolvedReflectionAdmission(failure: ReflectionAdmissionFailure, value: ReflectionSnapshot): boolean {
+  const turn = value.state.turn;
+  return !!turn && (turn.id !== failure.id || turn.status === 'completed' || turn.status === 'cancelled');
+}
+export interface ReflectionBinding { session:string;activity:string;workspace:string;task:string;revision:number;admissionFailure?:ReflectionAdmissionFailure;pending?:{id:string;text:string;revision:number;awaitingRefresh?:boolean} }
 export const REFLECTION_BINDING_KEY='hps.personalReflection.v1';
 export function reflectionFailure(error:unknown):string {
   const code=(error as {code?:string})?.code;

@@ -286,3 +286,70 @@ test('local storage failure after a server answer ends the stream once and prese
  f.store.append=append;await f.h.refreshPersonalReflection();
  assert.deepEqual(Array.from(f.store.getHistory(),m=>m.id),['accepted','accepted-answer']);assert.equal(f.h.reflectionBinding().pending,undefined);
 }));
+
+
+// #4019: actual host/store ordering, with controlled Service replies (no provider calls).
+const admissionSnapshot=(body,status='failed',revision=1)=>({state:{id:'personal-reflection',revision,
+ messages:[{id:body.id,role:'user',content:body.text,created_at:1}],has_earlier:false,
+ turn:{id:body.id,text:body.text,status,updated_at:revision}},opening:'Question?',hint:'Optional'});
+async function admissionHost(f, code='reflection_monthly_limit') {
+ const scope=f.h.mobileConversationScope(),binding={session:'admission-session',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};
+ await f.h.saveReflectionBinding(binding);
+ let remote, posts=0,session=binding.session;
+ const accounts={conversationSession:async()=>session,reflectionRequest:async(_session,path,body)=>{
+  if(path==='/turns'){posts++;remote=admissionSnapshot(body);throw Object.assign(Error('private provider detail must never persist'),{code});}
+  return remote;
+ }};
+ f.h.setReflectionAccount(accounts);
+ const message={type:'sendMessage',text:'Preserve these words',history:[],userMessageId:'admission-request'};
+ return {binding,accounts,message,get remote(){return remote;},set remote(value){remote=value;},get posts(){return posts;},set session(value){session=value;}};
+}
+test('public admission explanations survive failed/unknown reads; only matching resolution or deliberate new send clears',async t=>{
+ for(const code of ['reflection_monthly_limit','reflection_budget_limit','reflection_admission_unavailable','reflection_access_required','unclassified_429'])await t.test(code,async()=>host(async f=>{
+  const a=await admissionHost(f,code),typed=code!=='unclassified_429';
+  await f.h.sendPersonalReflection(a.message);
+  assert.equal(a.posts,1);assert.equal(f.store.getHistory().filter(m=>m.id===a.message.userMessageId).length,1);
+  assert.deepEqual(f.h.reflectionBinding().admissionFailure?JSON.parse(JSON.stringify(f.h.reflectionBinding().admissionFailure)):undefined,typed?{id:a.message.userMessageId,code}:undefined);
+  if(typed)assert.equal(f.posts.findLast(m=>m.type==='history').reflectionFailure.code,code);
+  else assert.equal(f.posts.findLast(m=>m.type==='history').reflectionFailure,undefined,'generic429 must not invent a durable typed/monthly reason');
+  a.remote={...a.remote,state:{...a.remote.state,turn:null,revision:2}};
+  await f.h.refreshPersonalReflection();assert.equal(!!f.h.reflectionBinding().admissionFailure,typed,'unknown current outcome does not erase a known refusal');
+  a.remote=admissionSnapshot({id:a.message.userMessageId,text:a.message.text},'completed',3);
+  await f.h.refreshPersonalReflection();assert.equal(f.h.reflectionBinding().admissionFailure,undefined);
+  assert.equal(a.posts,1,'history reads never POST');
+  await f.h.sendPersonalReflection({...a.message,userMessageId:'next-deliberate-request'});
+  if(typed)assert.equal(f.h.reflectionBinding().admissionFailure.id,'next-deliberate-request');
+  assert.equal(a.posts,2);
+ }));
+});
+test('admission persistence failure preserves the stored binding and labels the current explanation unsaved',async()=>host(async f=>{
+ const a=await admissionHost(f),global=f.h.context.globalState,update=global.update.bind(global);
+ global.update=async(key,value)=>{if(value?.admissionFailure)throw Error('synthetic full disk');return update(key,value);};
+ await f.h.sendPersonalReflection(a.message);
+ assert.equal(f.h.reflectionBinding().admissionFailure,undefined);
+ assert.equal(f.posts.findLast(m=>m.type==='history').reflectionFailure.persisted,false);
+ assert.ok(f.posts.some(m=>m.type==='streamError'&&m.error.includes('저장하지 못')));
+ assert.equal(f.store.getHistory()[0].content,a.message.text);assert.equal(a.posts,1);
+ await f.h.refreshPersonalReflection();assert.equal(f.posts.findLast(m=>m.type==='history').reflectionFailure.persisted,false);
+ // A fresh host has no in-memory claim that this failed write became durable.
+ f.h.reflectionUnsavedFailure=undefined;await f.h.postHistory();assert.equal(f.posts.findLast(m=>m.type==='history').reflectionFailure,undefined);
+}));
+test('Stop, session, task and replaced request fence a late admission refusal',async t=>{
+ for(const change of ['stop','session','task','request'])await t.test(change,async()=>host(async f=>{
+  const a=await admissionHost(f);let release,started;const entered=new Promise(r=>started=r),held=new Promise(r=>release=r);
+  a.accounts.reflectionRequest=async(_session,path,body)=>{
+   if(path==='/turns'){started();await held;throw Object.assign(Error('late refusal'),{code:'reflection_monthly_limit'});}
+   return admissionSnapshot(a.message.userMessageId?{id:a.message.userMessageId,text:a.message.text}:body,'cancelled');
+  };
+  f.vscode.window.showInformationMessage=async()=>{};f.vscode.window.showWarningMessage=async()=>{};
+  const sending=f.h.sendPersonalReflection(a.message);await entered;
+  if(change==='stop')await f.h.stopPersonalReflection([...f.h.reflectionStreams.keys()][0]);
+  if(change==='session')a.session='different-session';
+  if(change==='task'){await f.store.create('Other task',{taskId:f.store.getView().activeTaskId,revision:f.store.getView().revision});}
+  if(change==='request')await f.h.saveReflectionBinding({...f.h.reflectionBinding(),pending:{id:'new-request',text:'Different words',revision:0}});
+  release();await sending;
+  assert.equal(f.h.reflectionBinding()?.admissionFailure,undefined);
+  assert.equal(f.posts.some(m=>m.type==='streamError'&&m.error.includes('이번 달')),false);
+  assert.equal(f.posts.some(m=>m.type==='history'&&m.reflectionFailure),false);
+ }));
+});
