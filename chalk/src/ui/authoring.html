@@ -286,7 +286,7 @@ function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-
 function step(data={id:'step-'+crypto.randomUUID().slice(0,8),title:'',instructions:'',hint:'',acceptance:''}){const f=document.createElement('fieldset');f.className='step';for(const [key,label] of Object.entries({id:'단계 ID',title:'단계 제목',instructions:'안내·실습',hint:'힌트',acceptance:'완료 기준'})){const l=document.createElement('label');l.textContent=label;const e=document.createElement(key==='id'||key==='title'?'input':'textarea');e.dataset.field=key;e.value=data[key]??'';l.append(e);if(key==='id')l.hidden=true;f.append(l);}stepTeaching(f,data);for(const [label,action] of [['위로',()=>f.previousElementSibling?.before(f)],['아래로',()=>f.nextElementSibling?.after(f)],['삭제',()=>f.remove()]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();changed();};f.append(b);}$('steps').append(f);}
 function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));const s={...carriedStep.get(own.id),...own,...stepTeachingValue(f)};if((s.ui??'')!==(f.dataset.uiOrig??'')){delete s.ui_version;delete s.ui_params;}return s;}),...assistantValue(name),...startersField(),...skillCardsField(),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...(lessonApprovalPreset?{approval_preset:lessonApprovalPreset}:{}),...learningValue()};}
 function carry(c){carriedTop=Object.fromEntries(Object.entries(c).filter(([k])=>!formKeys.includes(k)));carriedStep=new Map((c.steps||[]).map(s=>[s.id,Object.fromEntries(Object.entries(s).filter(([k])=>!stepFormKeys.includes(k)))]));}
-function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();lessonApprovalPreset=typeof c.approval_preset==='string'&&c.approval_preset?c.approval_preset:undefined;renderApproval();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';$('assistant_role').value=typeof c.assistant?.role==='string'?c.assistant.role:'';lessonTone=typeof c.assistant?.tone==='string'&&c.assistant.tone?c.assistant.tone:undefined;renderTone();setStarters(c.starters);styleSync();renderSkillRows();setSkillCards(c.skill_cards);skillSync();renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
+function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();lessonApprovalPreset=typeof c.approval_preset==='string'&&c.approval_preset?c.approval_preset:undefined;renderApproval();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';$('assistant_role').value=typeof c.assistant?.role==='string'?c.assistant.role:'';lessonTone=typeof c.assistant?.tone==='string'&&c.assistant.tone?c.assistant.tone:undefined;renderTone();setStarters(c.starters);styleSync();renderSkillRows();setSkillCards(c.skill_cards);skillSync();setLinkBaseline(c);renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
 async function call(path,method='GET',body,draftSave=false){let r,j;
 try{r=await fetch(path,{method,redirect:'error',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});j=await r.json();}
 catch(e){if(draftSave)throw Error('저장 결과를 확인하지 못했습니다. 입력한 내용은 이 화면에 남아 있습니다. 내용을 바꾸지 말고 ‘초안 저장’을 다시 눌러 주세요.');throw e;}
@@ -443,7 +443,7 @@ function styleCheck(){
   if(role.length>ROLE_MAX||STYLE_UNSAFE.test(role))throw fix($('assistant_role'),'AI 역할은 줄바꿈·보이지 않는 문자 없이 '+ROLE_MAX+'자 이내 한 줄로 적어 주세요.');
   if((role||lessonTone)&&!cleanLine($('assistant_name').value))throw fix($('assistant_name'),'AI 역할이나 말투를 쓰려면 AI 이름도 함께 적어 주세요. 이름 없이는 저장되지 않습니다.');
   for(const [i,e] of starterInputs().entries()){const v=cleanLine(e.value);if(v.length>STARTER_MAX||STYLE_UNSAFE.test(v))throw fix(e,'시작 문장 '+(i+1)+'번은 줄바꿈·보이지 않는 문자 없이 '+STARTER_MAX+'자 이내 한 줄로 적어 주세요.');}
-  for(const [i,e] of starterInputs().entries())if(hasLink(cleanLine(e.value)))throw fix(e,'시작 문장 '+(i+1)+'번에는 링크(https:// 등)를 넣을 수 없습니다.');
+  for(const [i,e] of starterInputs().entries())if(newLink('starters',cleanLine(e.value)))throw fix(e,'시작 문장 '+(i+1)+'번에는 링크(https:// 등)를 넣을 수 없습니다.');
   const d=starterDuplicates();if(d.length)throw fix(starterInputs()[d[0]-1],'시작 문장 '+d[0]+'번이 앞의 문장과 같습니다. 하나를 바꾸거나 지운 뒤 저장하세요.');
 }
 const startersLine=a=>Array.isArray(a)&&a.length?a.map((x,i)=>(i+1)+'. '+x).join(' / '):'없음';
@@ -453,9 +453,20 @@ const startersLine=a=>Array.isArray(a)&&a.length?a.map((x,i)=>(i+1)+'. '+x).join
 // Service without the key, the section hides and sends nothing. A card is saved only when all three fields are filled; empty rows
 // are dropped; the key is omitted when no card is left, so an old lesson keeps its bytes and digest. Cards are plain text: no link.
 const SKILL_DEFAULT={max_count:6,name_max:30,summary_max:80,prompt_max:300,prompt_max_lines:6};
-// The Service's hasLink (lesson-skill-cards.ts), the same rule: NFKC first, then any scheme token (a word with a Latin letter
-// directly followed by ':' and a non-space, confusable mixes included), www. or a leading //. Korean prose with a colon passes.
-const hasLink=t=>{const n=String(t??'').normalize('NFKC');if(/(?:^|\s)\/\//u.test(n)||/(?:^|[^\p{L}\p{N}])www\./iu.test(n))return true;for(const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])([\p{L}\p{N}][\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu))if(/[A-Za-z]/.test(m[1]))return true;return false;};
+// The Service's hasLink (lesson-skill-cards.ts), the same rule. Coding text with colons passes (color:red, a:hover,
+// std::cout, C:\Users, //주석). After NFKC and folding the colon look-alikes, refused: <scheme>://; a known scheme directly
+// followed by ':' (Cyrillic/Greek look-alikes folded); www. plus a domain; // followed by a host.
+const LINK_SCHEMES=['http','https','ftp','ftps','javascript','vbscript','data','file','blob','mailto','tel','sms','intent'];
+const LINK_CONFUSABLE={'а':'a','в':'b','с':'c','ԁ':'d','е':'e','һ':'h','н':'h','і':'i','ј':'j','к':'k','м':'m','о':'o','р':'p','ԛ':'q','ѕ':'s','т':'t','υ':'u','ѵ':'v','ԝ':'w','х':'x','у':'y','α':'a','ο':'o','ρ':'p','τ':'t','ν':'v','ι':'i','κ':'k','χ':'x','ε':'e','ѡ':'w'};
+const hasLink=t=>{const n=String(t??'').normalize('NFKC').replace(/[\u02D0\uA789\u2236\uFE13\uFE55]/g,':');
+  if(/(?:^|[^\p{L}\p{N}+.\-])\p{L}[\p{L}\p{N}\p{M}+.\-]*:\/\//u.test(n))return true;
+  for(const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])(\p{L}[\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu)){const k=[...m[1].toLowerCase()].map(ch=>LINK_CONFUSABLE[ch]??ch).join('');if(LINK_SCHEMES.includes(k)||k.startsWith('vscode')||k.startsWith('hypeproof'))return true;}
+  return /(?:^|[^\p{L}\p{N}])www\.[\p{L}\p{N}-]+\.[\p{L}\p{N}-]{2,}/iu.test(n)||/(?:^|[^\p{L}\p{N}:])\/\/[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u.test(n);};
+// Like the Service, only values this save introduces are checked: what the opened draft already had is left alone, so an
+// untouched old starter or card field with a link does not block the save.
+let linkBaseline={starters:new Set(),name:new Set(),summary:new Set(),prompt:new Set()};
+function setLinkBaseline(c){linkBaseline={starters:new Set(Array.isArray(c?.starters)?c.starters:[]),...Object.fromEntries(['name','summary','prompt'].map(f=>[f,new Set((Array.isArray(c?.skill_cards)?c.skill_cards:[]).map(x=>x?.[f]).filter(v=>typeof v==='string'))]))};}
+const newLink=(kind,v)=>!linkBaseline[kind].has(v)&&hasLink(v);
 const skillServed=()=>!(featureCatalogueScope===identity()&&featureCatalogue&&!(featureCatalogue.skill_cards&&typeof featureCatalogue.skill_cards==='object'));
 const skillLimits=()=>{const s=featureCatalogueScope===identity()&&featureCatalogue?.skill_cards;if(!s||typeof s!=='object')return SKILL_DEFAULT;const out={...SKILL_DEFAULT};for(const k of Object.keys(SKILL_DEFAULT))if(Number.isSafeInteger(s[k])&&s[k]>0)out[k]=s[k];return out;};
 const skillRows=()=>[...document.querySelectorAll('#skill-cards-list>li')];
@@ -491,7 +502,7 @@ function skillCheck(){
     if(sum.length>L.summary_max||STYLE_UNSAFE.test(sum))throw fix(s,'카드 '+no+'번의 한 줄 설명은 줄바꿈·보이지 않는 문자 없이 '+L.summary_max+'자 이내로 적어 주세요.');
     const lines=pr.split('\n');
     if(pr.length>L.prompt_max||lines.length>L.prompt_max_lines||lines.some(x=>x!==x.trim()||STYLE_UNSAFE.test(x)))throw fix(p,'카드 '+no+'번의 시작 프롬프트는 '+L.prompt_max+'자, '+L.prompt_max_lines+'줄 이내로, 줄 앞뒤 공백과 보이지 않는 문자 없이 적어 주세요.');
-    for(const [e,v,label] of [[n,name,'이름'],[s,sum,'한 줄 설명'],[p,pr,'시작 프롬프트']])if(hasLink(v))throw fix(e,'카드 '+no+'번의 '+label+'에는 링크(https:// 등)를 넣을 수 없습니다.');
+    for(const [e,v,label,kind] of [[n,name,'이름','name'],[s,sum,'한 줄 설명','summary'],[p,pr,'시작 프롬프트','prompt']])if(newLink(kind,v))throw fix(e,'카드 '+no+'번의 '+label+'에는 링크(https:// 등)를 넣을 수 없습니다.');
   }
   const d=skillDuplicates();if(d.length)throw fix(skillRows()[d[0]-1].querySelector('.skill-name'),'카드 '+d[0]+'번의 이름이 앞의 카드와 같습니다. 이름을 바꾼 뒤 저장하세요.');
 }
