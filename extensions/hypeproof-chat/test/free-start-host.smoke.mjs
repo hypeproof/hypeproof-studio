@@ -70,7 +70,7 @@ function harness({ freeStart = 'service', version = '0.1.58', secretsThrow = fal
   const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (key, fallback) => key === 'proxyUrl' ? SERVICE : key === 'siteBase' ? SITE : key === 'freeStart' ? freeStart : fallback }) },
     window: {}, commands: { executeCommand: async id => { world.commands.push(id); } }, Uri: { parse: s => s }, env: { openExternal: async url => { world.opened.push(url); return true; } } };
   const module = { exports: {} };
-  vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, AbortSignal, URL, process, TextEncoder, fetch, Response, Headers, Date, JSON,
+  vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, structuredClone, AbortSignal, URL, process, TextEncoder, fetch, Response, Headers, Date, JSON,
     // Only the claim_busy retry (3 s) fires, on the next turn of the loop, and only in its own case. The
     // first-paint bound never fires (the stub always answers the offer) and no purchase poll loop runs.
     setTimeout: (f, ms) => { if (ms === 3000 && fireRetry) setImmediate(f); return 0; }, clearTimeout: () => {} });

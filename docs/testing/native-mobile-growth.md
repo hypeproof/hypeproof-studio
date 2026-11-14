@@ -35,6 +35,43 @@ actual source/package, command, OS/device and whether recognizer/service data wa
 injected. Preserve failed attempts. A state machine simulating five turns is not
 a five-turn spoken conversation or evidence of reply quality.
 
+### iPhone playback-to-listening boundary — Studio #4024
+
+MVOICE-T03/T04 and MFR-T03 keep three different proofs separate. The existing
+hands-free fixture still substitutes a 400 ms completion. The condition-driven
+`testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop` instead
+enters the actual synthesizer delegate with a retained utterance, then checks
+exactly one next capture and refusal of a late completion after Stop.
+Before completing playback, it opens Settings and dismisses it with both Close
+and a swipe; neither dismissal may stop the live turn or dispatch another action.
+`testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped` checks that
+writing during playback prevents another capture, retains the draft and explains
+why the automatic continuation stopped. These use synthetic playback/capture.
+
+`testRealKoreanPlaybackCompletionReachesNextCaptureBoundary` opts into a real
+Korean `AVSpeechSynthesizer` utterance and its OS start/finish callbacks. It has no
+400 ms or English-voice fallback. Missing Korean voice or completion fails the
+case; it cannot become a skipped PASS. Service and the next microphone backend
+remain synthetic, so this does not prove `.playback` to `.record`, AVAudioEngine
+restart, hardware input or on-device Korean ASR. The collector requires all three
+cases and reports OS playback separately from `live_asr=NOT_RUN`.
+
+Already granted permissions use their current status without requesting them
+again. Unknown permissions retain the existing OS request and generation fences.
+An in-memory ring records only enum events, phases and relative milliseconds;
+manual Settings sharing exports that record, never text, audio, account/request
+identifiers or credentials. It is not an automatic telemetry upload. The record
+separates a missing playback callback, a blocked continuation and a failed new
+capture. It is not evidence that the physical incident was reproduced or fixed.
+
+For physical acceptance, bind the installed build and iOS/audio route, complete
+5–10 Korean turns with one start, and observe the system microphone indicator
+return after each spoken reply. Include Stop, background and route interruption;
+none may restart automatically. Preserve any failed trace without collecting
+conversation content. Local unsupported CLT checks and simulator evidence cannot
+replace this gate. This hardening adds no provider/model call or permission grant;
+existing inference and CI costs remain in their existing lanes.
+
 For a device testing candidate, confirm the same source passed native CI, the
 signed artifact processed successfully, and the tester can install that exact
 version. Record actual microphone permission, Korean language asset availability,
@@ -180,7 +217,7 @@ the new fixtures as a successful physical retest.
 | MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the recorded failed user event/request intact and no free-access fallback. Explicit restore only creates a local draft, never an automatic retry or new login. |
 | MFR-T02 | Dictation appends to an existing draft without sending; explicit Send creates one personal-reflection request and displays its answer without a running desktop. | A cleared composer or locally recorded text is not an AI answer. |
 | MFR-T03 | Start voice once, receive a reply and resume capture for the next turn without a recurring consent sheet or pressing an end-of-speech button. | Silence/no transcript cannot create an empty send. Stop cancels the held next capture and retains its partial draft; no second request. |
-| MFR-T03-queued | During a delayed history refresh, wait for Settings to dismiss and a usable voice target while the read remains held. Tap once and require actual voice-handler entry/capture before waiting for the reply. Finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST, fixture timeout release or manual retry to make the test pass. |
+| MFR-T03-queued | Open the native Settings sheet and tap its enabled, hittable Refresh action (at least 44pt). During the delayed history refresh, require Settings to dismiss and a usable voice target while the read remains held. Tap once and require actual voice-handler entry/capture before waiting for the reply. Finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST, fixture timeout release or manual retry to make the test pass. An open settings surface is a failure, never dismissed by a test-only extra tap. |
 | MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
 | MFR-T03-stop-denial | Stop races a recorded admission failure; the original POST delivers its typed403 after the snapshot already says failed. Relaunch. | Preserve the exact refusal reason and human words; no fake cancellation, extra POST or voice continuation. |
 | MFR-T03-response-stop | A real native voice turn leaves its POST pending while a Service-shaped running row exists. Explicitly stop; the original POST returns its late error before cancel acknowledgment, then relaunch with a separate draft. | The >=44pt action is usable during POST; only exact terminal acknowledgment shows stopped. Same human words/ID remain; no automatic replay, extra capture, reply or draft loss. Synthetic transport; physical/live voice remains separate. |
@@ -188,6 +225,7 @@ the new fixtures as a successful physical retest.
 | MFR-T05-recorded | A Service-shaped failed turn leaves its user event and terminal ID after the first POST. Relaunch, explicitly restore into an empty composer, relaunch again, then explicitly Send. | Restore/relaunch creates no POST; only Send creates a distinct ID at the reconciled revision. The original failed event remains. |
 | MFR-T05-collision | After a recorded failure, write a different draft and relaunch. | Restore stays disabled and preserves the draft. Pure controls also cover unsaved overlays, whitespace and all non-failed states. |
 | MPER-T03-history | Reopen an 80-message cached conversation, switch away while reading an equal-count cached conversation, and change synthetic account. | The correct latest answer is inside the actual viewport; history navigation creates no AI request and cannot retain the other account's messages. |
+| MPER-T03-logout | Hold a real history GET through the isolated HTTP fixture, queue one ordinary Send and tap Logout once while the read remains held. Release only that transport, then relaunch and switch accounts. | Logout waits for existing credential/read work, revokes once and never dispatches queued words. The other account cannot import them; returning to the original account restores the same durable local request ID without replay. Pending logout blocks new context edits; uncertain failure requires an explicit retry. This is simulator account/persistence evidence, not live authentication. |
 | MPER-T03-following | Advance a real App's HTTP snapshot beyond 80 messages without growing its window. At the bottom, follow the new tail; while reading old text, preserve a visible passage until explicit latest or Send. | The catch-up control is at least 44pt. Keyboard input remains reachable; only explicit Send creates the one new request. |
 | MFR-T06 | Collect actual native build/test exits and exact log hashes. Every named required simulator case executes once and passes. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
 | MPER-T01-cancel | Type a first thought before login, cancel the real model's pending login, relaunch and read the same words. | No browser callback, credential exchange or AI turn; cancellation cannot consume the guest draft. |

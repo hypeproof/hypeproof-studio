@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, collapseBlock, collapsedBlocksFrom, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, collapseBlock, collapsedFor, collapsedStateFrom, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
 import { ChatIcon, type IconKind } from "./ChatDetails";
 import { imeComposing } from "./imeGuard";
@@ -42,6 +42,8 @@ export function LessonStepPanel(props: {
   rehearsalState: { state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string } | null;
   busy: boolean;
   post: (m: WebviewMessage) => void;
+  /** CGP-LEARN-R-011 (c) — the seat the collapsed set belongs to (lessonFocus.ts collapseSeat). */
+  seat: string;
 }) {
   const { lesson, step, post } = props;
   const choices = helpChoices(step), surface = surfaceOf(step);
@@ -60,7 +62,18 @@ export function LessonStepPanel(props: {
   // back as it was (open or closed). The set lives in the webview's own state, so it survives a hide/show re-mount in this
   // session; it is never posted to the host: not work, not a report, not an observation event. The report item of DES-CGP-LEARN-11
   // ("자료가 틀린 것 같아요") is not built yet; the menu is where it will go.
-  const [collapsed, setCollapsed] = useState<string[]>(() => collapsedBlocksFrom(readWebviewState<{ lessonBlocksCollapsed: unknown }>().lessonBlocksCollapsed));
+  // The set is stored with its seat, and a seat sees only its own. When another learner signs in on the same window, the
+  // previous learner's set is cleared from the webview state, not just hidden.
+  const [stored, setStored] = useState(() => collapsedStateFrom(readWebviewState<{ lessonBlocksCollapsed: unknown }>().lessonBlocksCollapsed));
+  const collapsed = collapsedFor(stored, props.seat);
+  // An empty seat (a local/dev runtime, or an instructor profile without a Service seat id) is not one learner: it would be a
+  // bucket every such window shares. Its set lives in memory only, and switching to it clears what another seat stored.
+  const persist = (own: { seat: string; keys: string[] }) => patchWebviewState({ lessonBlocksCollapsed: own.seat ? own : null });
+  useEffect(() => {
+    if (stored && stored.seat === props.seat) return;
+    const own = { seat: props.seat, keys: [] };
+    setStored(own); persist(own);
+  }, [props.seat, stored]);
   const blockCollapsed = collapsed.includes(blockKey);
   const [menuFor, setMenuFor] = useState("");
   const menuOpen = menuFor === blockKey;
@@ -68,7 +81,8 @@ export function LessonStepPanel(props: {
   const focusAfter = useRef<"" | "restore" | "menu">("");
   const setBlockCollapsed = (on: boolean) => {
     const next = collapseBlock(collapsed, blockKey, on);
-    setCollapsed(next); patchWebviewState({ lessonBlocksCollapsed: next }); setMenuFor("");
+    const own = { seat: props.seat, keys: next };
+    setStored(own); persist(own); setMenuFor("");
     // A block is put away from its open card, so 다시 보기 brings it back open (also after a re-mount, which forgets open/closed).
     if (!on) setOpenBlocks((o) => ({ ...o, [blockKey]: true }));
     focusAfter.current = on ? "restore" : "menu";

@@ -262,6 +262,17 @@ public final class ConversationService: @unchecked Sendable {
         return try JSONDecoder().decode(AccountTokens.self, from: data)
     }
     public func logout(_ token: String) async throws { _ = try await request("/v1/auth/logout", method: "POST", body: [:], token: token) }
+    public func approvalInbox(_ token: String) async throws -> MemberApprovalInbox {
+        let (data, _) = try await request("/v1/me/approval-inbox", token: token)
+        let value = try JSONDecoder().decode(MemberApprovalInbox.self, from: data); try value.validate(); return value
+    }
+    public func approvalCard(_ id: String, decision: MemberApprovalPending? = nil, token: String) async throws -> MemberApprovalCard {
+        guard MemberApprovalCard.validID(id), decision == nil || decision?.cardID == id else { throw SyncFailure.invalidResponse }
+        if let decision { try decision.validate(account: decision.accountID) }
+        let body: [String: Any]? = decision.map { ["id": $0.id, "request_digest": $0.request_digest, "choice": $0.choice.rawValue] }
+        let (data, _) = try await request("/v1/me/approval-inbox/" + id + (decision == nil ? "" : "/decisions"), method: decision == nil ? "GET" : "POST", body: body, token: token)
+        let value = try JSONDecoder().decode(MemberApprovalCard.self, from: data); try value.validate(); return value
+    }
     public func list(_ token: String) async throws -> [SharedConversation] {
         struct List: Decodable { let conversations: [SharedConversation] }
         let (data, _) = try await request("/v1/me/conversations", token: token)

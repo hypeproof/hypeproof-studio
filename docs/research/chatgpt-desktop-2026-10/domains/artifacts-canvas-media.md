@@ -234,7 +234,8 @@ PI #2: the learner owns the decision to keep or discard their unsent judgment.
 "PDF로 저장" is the command "HypeProof: 덱 PDF로 저장" beside the deck skill's command (no button in
 `deck.html`). It writes `deck.pdf` next to `deck.html`: one image page per drafted slide at 16:9, the
 notes layer removed before capture, nothing written unless every slide was captured from an unchanged
-deck. 폴더에서 보기 stays the page card's action (CGP-ART-R-010). Contract:
+deck. 폴더에서 보기 is also on the PDF result itself (2026-11-14, #4057 §7.2): the saved notice's button reveals `deck.pdf` inside
+the served root after the page card's path checks, or refuses. The page card's own action is unchanged (CGP-ART-R-010). Contract:
 `docs/studio-requirements.md` "Deck PDF export (CGP-ART-R-023)"; choices: `decisions.md`.
 PI #1: the learner can hand the deck to others in a form that works outside Studio.
 

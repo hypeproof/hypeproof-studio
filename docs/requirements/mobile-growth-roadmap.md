@@ -152,6 +152,24 @@ outside capture. A failed or cancelled service reply preserves the already saved
 human message; it is not automatically replayed. Silence without words cannot
 send a turn.
 
+For iPhone playback continuation (#4024), already granted OS permissions do not
+require another permission-request round trip. Show the active listening,
+finalizing, waiting or playback phase; if a concurrent draft or unavailable
+conversation blocks the next capture, explain it and preserve the words. A
+bounded memory-only enum/timing record can be deliberately shared for diagnosis;
+it contains no audio, conversation content, identity or credentials. Actual OS
+playback callbacks, synthetic next capture and physical Korean continuation are
+separate evidence; this hardening alone does not establish the incident's cause.
+
+Conversation settings use an explicitly presented native sheet. Opening it,
+closing it or swiping it away must not stop an active voice turn. Refresh and
+Logout explicitly dismiss settings even when a history read changes state;
+Logout records its accepted intent immediately. Context, notebook, privacy and
+export destinations open once after settings has dismissed, with current account
+guards rechecked. Actions have at least 44pt targets and settings remain scrollable
+at larger text sizes. This preserves the existing voice/sync acceptance, including
+the requirement that settings has actually closed before the next voice tap.
+
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
 No raw audio is written to files or uploaded by the app. Optional self-listening
 retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,
@@ -220,6 +238,15 @@ An example path is: install and use the same account → “요즘 어떤 일에
 | MPER-05 | A clear making request is acknowledged without completing self-introduction; guide to an existing desktop task. The desktop action lets the person review their own words and creates an ordinary unsent task draft atomically, without copying the whole conversation or running tools. Cancel, account change and failed persistence preserve the original conversation. | Prompt/policy review, real task-store controls and actual conversation review before broader rollout. |
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
+
+Under MPER-03/04 and MIRS-01, an explicit iPhone logout remains available during
+background history synchronization. It waits for the existing credential/read
+operation without cancelling one-use token rotation, then revokes the same
+account/session once using its current credentials. Pending logout blocks new
+edits and execution, takes precedence over an in-memory queued Send, and retains
+the durable request ID and words in that account's cache. Stale callbacks cannot
+clear a newer account. The app shows pending status until confirmation; an
+uncertain revoke retains the account and requires another explicit action.
 
 ### Conversation from the first screen (Studio #3937)
 

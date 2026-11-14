@@ -228,6 +228,9 @@
 .hps-shell[data-chat-detail="personal"] .hps-attachment:has(.hps-photo-failure) { flex-wrap: wrap; align-items: center; width: min(100%, var(--ds-c-studio-chatdetails-size-106)); height: auto; }
 .hps-shell[data-chat-detail="personal"] .hps-attachment img { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); flex: 0 0 var(--ds-c-studio-chatdetails-size-8); }
 .hps-shell[data-chat-detail="personal"] .hps-attachment-remove { position: static; display: grid; place-items: center; width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); border-radius: 0; background: transparent; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); font-size: var(--ds-c-studio-chatdetails-type-5); }
+/* The personal × is a transparent 44px square with a foreground ×, not the corner dot: the base ::before dot is not drawn.
+   Left on, it anchored to the chip (this button is static) and painted a dark circle across the chip. */
+.hps-shell[data-chat-detail="personal"] .hps-attachment-remove::before { content: none; }
 .hps-shell[data-chat-detail="personal"] .hps-attachment-remove:hover { background: var(--hp-bg-control-hover); }
 .hps-shell[data-chat-detail="personal"] .hps-attachment-remove:active { background: var(--hp-bg-control-pressed); }
 @media (max-height: 500px) {

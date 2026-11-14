@@ -4,9 +4,14 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
+import android.util.Log;
 import android.view.*;
 import android.widget.TextView;
 import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.base.DefaultFailureHandler;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.json.*;
@@ -14,6 +19,7 @@ import org.junit.*;
 import org.junit.runner.RunWith;
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -22,11 +28,68 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.*;
 import static androidx.test.espresso.assertion.ViewAssertions.*;
 import static androidx.test.espresso.matcher.ViewMatchers.*;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 
 /** Real Activity, gestures, layout and persisted cache; no live requests. */
 @RunWith(AndroidJUnit4.class)
 public class ConversationHistoryTest {
     private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
+    @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    private File failureDirectory;
+    private Throwable firstFailure;
+    private final JSONArray imeObservations=new JSONArray();
+
+    // Espresso calls this before the exception unwinds into JUnit's @After.
+    // TestWatcher.failed would run too late to observe the original activity.
+    private void captureFailure(Throwable error) {
+        if(firstFailure!=null)return;
+        firstFailure=error;
+        try {
+            failureDirectory=new File(context.getExternalFilesDir(null),"evidence/failures/"+testName.getMethodName()+"-"+SystemClock.elapsedRealtime());
+            if(!failureDirectory.mkdirs())throw new java.io.IOException("Cannot create failure evidence directory");
+            String message=String.valueOf(error.getMessage());
+            JSONObject state=new JSONObject().put("phase","before_teardown").put("test",testName.getMethodName())
+                .put("elapsed_ms",SystemClock.elapsedRealtime()).put("error_class",error.getClass().getName())
+                .put("error_message",message.substring(0,Math.min(message.length(),4096))).put("scenario_state",app==null?"absent":app.getState().name());
+            if(app!=null)try {
+                app.onActivity(activity->{try {
+                    state.put("activity",activity.getClass().getName()).put("activity_destroyed",activity.isDestroyed())
+                        .put("activity_finishing",activity.isFinishing()).put("window_focus",activity.hasWindowFocus())
+                        .put("decor_visible",activity.getWindow().getDecorView().getVisibility())
+                        .put("ime",imeState(activity)).put("ime_observations",imeObservations);
+                }catch(Exception problem){throw new RuntimeException(problem);}});
+            }catch(Throwable problem){state.put("activity_observation_error",problem.getClass().getName());}
+            writeFailureJson("failure.json",state);
+            try {
+                Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+                if(pixels==null)throw new java.io.IOException("Screenshot unavailable");
+                try(FileOutputStream out=new FileOutputStream(new File(failureDirectory,"screen.png"))){
+                    if(!pixels.compress(Bitmap.CompressFormat.PNG,100,out))throw new java.io.IOException("Screenshot write failed");
+                }finally{pixels.recycle();}
+            }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
+            captureCommand("window.txt","timeout 3 dumpsys window",state);
+            captureCommand("power.txt","timeout 3 dumpsys power",state);
+            captureCommand("input-method.txt","timeout 3 dumpsys input_method",state);
+            captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
+            state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
+        }catch(Throwable problem){Log.e("StudioFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
+    }
+    private void captureCommand(String name,String command,JSONObject state) {
+        try(java.io.InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command));
+            FileOutputStream output=new FileOutputStream(new File(failureDirectory,name))) {
+            byte[] buffer=new byte[8192];int count,total=0;
+            while(total<512*1024&&(count=input.read(buffer,0,Math.min(buffer.length,512*1024-total)))!=-1){output.write(buffer,0,count);total+=count;}
+            state.put(name+"_bytes",total).put(name+"_at_byte_limit",total==512*1024);
+        }catch(Throwable problem){try{state.put(name+"_error",problem.getClass().getName());}catch(Exception ignored){/* Keep the original Espresso failure. */}}
+    }
+    private void writeFailureJson(String name,JSONObject value) throws Exception {
+        Files.write(new File(failureDirectory,name).toPath(),value.toString(2).getBytes(StandardCharsets.UTF_8));
+    }
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowOriginal(Throwable error) throws T { throw (T)error; }
+
+
     private final AtomicReference<JSONObject> reply=new AtomicReference<>();
     private final AtomicInteger posts=new AtomicInteger();
     private final AtomicBoolean delay=new AtomicBoolean();
@@ -38,7 +101,12 @@ public class ConversationHistoryTest {
     }
     @Before public void setup()throws Exception{
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
-        context=InstrumentationRegistry.getInstrumentation().getTargetContext();File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
+        context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Espresso.setFailureHandler((error,matcher)->{
+            captureFailure(error);
+            ConversationHistoryTest.<RuntimeException>rethrowOriginal(error);
+        });
+        File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("history-account","history-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         reply.set(snapshot(0,79,1));ReflectionState state=new ReflectionState("history-account");state.apply(reply.get());state.draft="지켜야 하는 초안";store.save(state);
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
@@ -47,15 +115,49 @@ public class ConversationHistoryTest {
             JSONObject next=reply.get();return new NativeDeviceSignIn.Reply(200,Map.of("state",next.getJSONObject("state"),"opening",next.getString("opening"),"hint",next.getString("hint")));
         };
     }
-    @After public void cleanup(){release.countDown();if(app!=null)app.close();QuestionActivity.testTransport=null;}
+    @After public void cleanup(){
+        release.countDown();
+        try {
+            if(app!=null)app.close();
+            if(failureDirectory!=null)try {
+                writeFailureJson("after-teardown.json",new JSONObject().put("phase","after_teardown")
+                    .put("elapsed_ms",SystemClock.elapsedRealtime()).put("scenario_state",app==null?"absent":app.getState().name()));
+            }catch(Exception problem){Log.e("StudioFailureEvidence","Teardown evidence write failed: "+problem.getClass().getName());}
+        } finally {
+            QuestionActivity.testTransport=null;
+            if(context!=null)Espresso.setFailureHandler(new DefaultFailureHandler(context));
+        }
+    }
     private void launch()throws Exception{app=ActivityScenario.launch(QuestionActivity.class);ready();}
     private void ready()throws Exception{
         for(int i=0;i<100;i++){AtomicBoolean busy=new AtomicBoolean();app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);busy.set(((ReflectionModel)field.get(a)).busy);}catch(Exception e){throw new AssertionError(e);}});if(!busy.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();return;}Thread.sleep(50);}throw new AssertionError("response did not settle");
     }
-    private void awaitIme()throws Exception{
-        for(int i=0;i<100;i++){AtomicBoolean shown=new AtomicBoolean();app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();shown.set(insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});if(shown.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();return;}Thread.sleep(50);}throw new AssertionError("actual IME did not appear");
+    private JSONObject imeState(QuestionActivity activity)throws Exception{
+        View decor=activity.getWindow().getDecorView();WindowInsets insets=decor.getRootWindowInsets();
+        List<TextView> texts=new ArrayList<>();collect(decor,texts);
+        TextView input=texts.stream().filter(v->"질문 대화 입력".contentEquals(v.getContentDescription()==null?"":v.getContentDescription())).findFirst().orElse(null);
+        JSONObject state=new JSONObject().put("elapsed_ms",SystemClock.elapsedRealtime()).put("window_focus",activity.hasWindowFocus())
+            .put("decor_layout_requested",decor.isLayoutRequested()).put("insets_present",insets!=null)
+            .put("ime_visible",insets!=null&&insets.isVisible(WindowInsets.Type.ime()))
+            .put("ime_bottom",insets==null?-1:insets.getInsets(WindowInsets.Type.ime()).bottom);
+        View focus=activity.getCurrentFocus();state.put("focused_view",focus==null?JSONObject.NULL:focus.getClass().getName());
+        if(input!=null){
+            int[] xy=new int[2];input.getLocationOnScreen(xy);Rect visible=new Rect();boolean shown=input.getGlobalVisibleRect(visible);
+            state.put("editor",new JSONObject().put("enabled",input.isEnabled()).put("focused",input.hasFocus())
+                .put("window_focus",input.hasWindowFocus()).put("attached",input.isAttachedToWindow()).put("layout_requested",input.isLayoutRequested())
+                .put("x",xy[0]).put("y",xy[1]).put("width",input.getWidth()).put("height",input.getHeight())
+                .put("visible",shown).put("visible_bounds",visible.toShortString()).put("text_length",input.length()));
+        }
+        return state;
     }
-    private void refresh(){onView(withContentDescription("메뉴")).perform(click());onView(withText("대화 다시 확인")).perform(click());}
+    private void observeIme(String phase){
+        app.onActivity(a->{try{imeObservations.put(imeState(a).put("phase",phase));}catch(Exception e){throw new AssertionError(e);}});
+    }
+    private void awaitIme()throws Exception{
+        for(int i=0;i<100;i++){AtomicBoolean shown=new AtomicBoolean();app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();shown.set(insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});if(shown.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();observeIme("visible");return;}Thread.sleep(50);}
+        AssertionError failure=new AssertionError("actual IME did not appear");captureFailure(failure);throw failure;
+    }
+    private void refresh(){onView(withContentDescription("메뉴")).perform(click());onView(withText("대화 다시 확인")).inRoot(isDialog()).perform(click());}
     private record Reading(String text,int y){}
     private void collect(View view,List<TextView> out){if(view instanceof TextView)out.add((TextView)view);if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++)collect(((ViewGroup)view).getChildAt(i),out);}
     private Reading readingIn(View root){
@@ -106,10 +208,12 @@ public class ConversationHistoryTest {
     @Test public void latestActionAndDraftStayUsableAboveKeyboard()throws Exception{
         if(InstrumentationRegistry.getArguments().getString("largeDark", "false").equals("true")){assertTrue(context.getResources().getConfiguration().fontScale>=1.9f);assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_YES,context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK);}
         launch();onView(withContentDescription("대화 기록")).perform(swipeDown(),swipeDown());
-        String draft="키보드에서 쓰던 글\n둘째 줄";onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft),click());awaitIme();
+        String draft="키보드에서 쓰던 글\n둘째 줄";observeIme("before_replace_and_click");onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft),click());observeIme("after_replace_and_click");awaitIme();
         onView(withText("최신 메시지")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;float d=v.getResources().getDisplayMetrics().density;assertTrue(v.getHeight()>=48*d);assertTrue(v.getWidth()>=48*d);assertTrue(v.createAccessibilityNodeInfo().isClickable());assertEquals("최신 메시지",v.createAccessibilityNodeInfo().getText().toString());});
         app.onActivity(a->{View decor=a.getWindow().getDecorView();WindowInsets insets=decor.getRootWindowInsets();assertNotNull(insets);assertTrue("actual IME is visible",insets.isVisible(WindowInsets.Type.ime()));});
         onView(withContentDescription("질문 대화 입력")).check(matches(isCompletelyDisplayed())).check(matches(withText(draft)));screenshot("android-history-keyboard");
+        File diagnostic=new File(context.getExternalFilesDir(null),"evidence/ime-observations.json");
+        Files.write(diagnostic.toPath(),imeObservations.toString(2).getBytes(StandardCharsets.UTF_8));
         onView(withText("최신 메시지")).perform(click());onView(withText(words(79))).check(matches(isDisplayed()));onView(withContentDescription("질문 대화 입력")).check(matches(withText(draft))).check(matches(hasFocus()));
         app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();assertTrue("Latest keeps actual IME visible",insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});assertEquals(draft,store.load("history-account").draft);assertEquals(0,posts.get());
     }

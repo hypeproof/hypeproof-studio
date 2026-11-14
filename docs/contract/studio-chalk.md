@@ -27,10 +27,11 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 
 | Command | Arguments | Result | Notes |
 |---|---|---|---|
-| `hypeproof.runtime.runLocalTurn` | `{ contractVersion, sessionNonce, turnId, messages, model?, tools, systemBrief, cwd, policy }` | `{ accepted: true, requestedModel, executorModel }` or `{ accepted: false, reason, message? }` | Starts a turn. Execution is asynchronous; the result arrives as events. `policy` must be `"chalk-instructor"`. |
+| `hypeproof.runtime.runLocalTurn` | `{ contractVersion, sessionNonce, turnId, messages, model?, tools, systemBrief, cwd, policy }` | `{ accepted: true, requestedModel, executorModel }` or `{ accepted: false, reason, message? }` | Starts a turn. Execution is asynchronous; the result arrives as events. `policy` must be `"chalk-instructor"`. `model?` runs only when it is in the allowlist (§7). |
 | `hypeproof.runtime.cancelTurn` | `{ contractVersion, sessionNonce, turnId }` | `{ cancelled }` | Stops the turn; Studio then sends `done(cancelled)`. |
 | `hypeproof.runtime.previewOpen` | `{ contractVersion, webPath }` | `{ ok, error? }` | No session nonce in v0 (this command is not tied to a turn). `webPath` must stay inside the Studio folder. |
 | `hypeproof.runtime.humanWait` | `{ contractVersion, sessionNonce, turnId, waitId, state }`, `state` is `start`, `keepalive` or `end` | `{ ok }` or `{ ok: false, reason }` | Chalk announces a wait for a person (approval, overwrite confirmation) in a Chalk turn (#3601). The turn's stall watch counts it as a pause. `reason`: `contractVersion`, `stale` (no session, unknown turn or waitId), `turn-ended`, `invalidArgs`, `limit` (more than 4 waits open). Ended by Chalk, by the turn closing, or by deactivate; a wait with no keepalive for 90 s ends by itself. Optional: a Chalk that does not send it leaves the stall watch to the tool rule. |
+| `hypeproof.runtime.enterRehearsalSeat` | `{ contractVersion, sessionNonce, token, expiresAt, rehearsalId }`; `expiresAt` is epoch ms or `null` (null means already expired on restart) | `{ ok: true }` or `{ ok: false, reason }`; `reason` is `inactive`, `stale`, `invalidArgs`, `contractVersion`, `unavailable` or `failed` | Starts a rehearsal seat in this Studio window (#4048). The token is never echoed. `inactive`, `stale` and `failed` show one Studio sentence; the others show nothing. |
 
 ### 2.3 Refusal reasons from `runLocalTurn`
 
@@ -85,8 +86,8 @@ Studio sends `done` exactly once per turn.
 - Studio's source for the value is the legacy computation (`chatPanelProvider.ts`, `instructorConnection`), which depends on the local executor. The value is fixed for the life of a process. A change (for example, a restart with other settings) starts a new session, so `activateInstructor` carries the new value. No separate notification is needed.
 
 - `models` (optional in `activateInstructor`, added 2026-11-07, #3564): `{ default: string, choices: [{ alias, id, label }] }`.
-  - Studio sends it only when a local runner exists. Its values are the ones the legacy panel shows (`localModelSelection`): one choice, the local model.
-  - It is display data only. The model that runs a turn is still Studio's `local.model`, whatever `model?` Chalk sends in `runLocalTurn`.
+  - Studio sends it only when a local runner exists. Its choices are the allowlist for the local provider (`instructorModelChoices`, chalk#25): claude `sonnet` and `opus`; codex has no extra choice (only the configured model). The configured model is always included. The legacy panel is not affected; it keeps `localModelSelection` (one choice).
+  - The model that runs a turn is the `model?` Chalk sends in `runLocalTurn`, when it is one of these choices. Otherwise the turn runs on the default (see §7).
   - Absent means no choices are known. Chalk must then show no model choice (the band shows "—" as before).
   - Chalk reads the named field and ignores fields it does not know. A Chalk without this change still activates.
   - `models` is not part of the session-sameness check. The local model is fixed for the life of the app, so a steady session is not re-activated for it.
@@ -125,8 +126,10 @@ Chalk calls these Studio commands. Each carries `contractVersion` and `sessionNo
 
 ## 7. Model
 
-- `model` in `runLocalTurn` is optional. Studio records it and reports it back as `requestedModel`. It does not change which model runs.
-- The executor runs with its own model (`executorModel`). This keeps the legacy behavior.
+- `model` in `runLocalTurn` is optional. Studio reports it back as `requestedModel`.
+- A `model` inside the allowlist from `activateInstructor.models` runs the turn (chalk#25). Studio reports that model as `executorModel`.
+- A `model` outside the allowlist, or none, runs the turn on the default. Studio reports the default as `executorModel`. Chalk compares the two values and shows a notice when they differ. The turn is not refused.
+- The legacy panel's model choice is unchanged.
 
 - On the release app, the instructor's own CLI (`hypeproofChat.instructorSubscription`, default off, machine scope) is the runner for the instructor turn when the Studio gate is open (#3597). The contract is unchanged; `connection` keeps its three values. The CLI's login file is never read; only the CLI's status command's exit status is used.
 
@@ -146,8 +149,10 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-11-14): `hypeproof.runtime.enterRehearsalSeat` (§2.2, #4048). Backward-compatible addition: a Chalk that does not send it sees no change; a Studio without the command answers `unavailable`.
 - v0 (2026-11-08): `hypeproof.runtime.humanWait` (§2.2, #3601). Backward-compatible addition: a Chalk that does not send it leaves the stall watch to the tool rule; a Studio without the command makes Chalk's call fail, which Chalk ignores.
 - v0 (2026-11-07): `deactivateInstructor` reason `runtimeChanged` (#3578). Backward-compatible: a Chalk that does not know the reason ends the session as a general end. Studio sends it once when the runtime leaves `chalk-extension` and a session is active.
+- v0 (2026-11-13, chalk#25): the meaning of `activateInstructor.models` and `runLocalTurn.model` changes (§5, §7). No field is added or removed, so the version stays v0. A `model` outside the list runs the default.
 - v0 (2026-11-07): `activateInstructor` gets an optional `models` field (§5, #3564). Backward-compatible addition; sent only with a local runner.
 - v0 (2026-10-28): S-2b adds the instructor parity commands (§6a) and corrects §6 about `approvalRequest`.
 - v0 (2026-10-23): first contract (S-2 in Studio; M-2 in Chalk). Adds `connection?` and `runLocalTurn` `message` as backward-compatible additions.

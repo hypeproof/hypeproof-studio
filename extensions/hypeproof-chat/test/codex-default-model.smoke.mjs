@@ -93,5 +93,16 @@ await t("index.ts sends the resolved model on the codex branch, not the raw conf
   assert.match(src, /await client\.connect\(\);\s*return await client\.complete\(\{\s*model: client\.resolveModel\(args\.config\.model\)/);
 });
 
+// chalk#25: the instructor's model list for the release codex model shows 기본 모델, not the sentinel.
+// The id stays "default" (it is what Studio matches and what the runner resolves).
+await t("the chalk choice for the release codex model is labelled 기본 모델, not the sentinel default", async () => {
+  const { instructorModelChoices } = await import("../src/localRuntime/instructorModels.ts");
+  const m = instructorModelChoices({ provider: "codex", model: "default" });
+  const c = m.choices.find((x) => x.id === "default");
+  assert.ok(c, "the choice keeps the id default");
+  assert.equal(c.label, "Codex · 로컬 구독 · 기본 모델");
+  assert.ok(!/\bdefault\b/.test(c.label), "the label must not show the sentinel word default");
+});
+
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log("\nall codex-default-model checks passed");
