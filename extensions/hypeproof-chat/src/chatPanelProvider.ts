@@ -292,7 +292,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, recheckFileInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, recheckFileInFolder, recordedRoot, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -2886,7 +2886,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 on the result: the file as written, inside the served root.
       const pdfRel = path.relative(canonicalFolder(root), target).split(path.sep).join("/");
       const shown = path.relative(workRoot, target).split(path.sep).join("/");
-      this.deckPdfSaved = { taskKey: this.turnRestoreTaskKey(), root: canonicalFolder(root), rel: pdfRel };
+      this.deckPdfSaved = { taskKey: this.turnRestoreTaskKey(), root: recordedRoot(root), rel: pdfRel };
       this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown });
     } catch {
       this.postPageNotice(DECK_PDF_COPY.notLoaded);
@@ -8067,7 +8067,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const items = timeline ? timelineEnd(timeline, Date.now()).items : [];
         const anchorId = [...items].reverse().find((m) => !m.id.startsWith("pending-"))?.id ?? messageId;
         const card = buildPageCard({ root: handle.root, turnId: handle.point.turnId, anchorId, changes });
-        if (card && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
+        // The gate walks with exactRoot, so the card's root is recorded in canonicalFolder's form (#4066 round 2: the turn
+        // root is JS realpath, which keeps a Windows `c:` and the opened case). A root that cannot be resolved makes no card.
+        let cardRoot: string | null = null;
+        try { cardRoot = recordedRoot(handle.root); } catch { /* the folder is gone: no card */ }
+        if (card && cardRoot && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, cardRoot, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
       } catch { /* no card */ }
       this.turnReview = {
         ...handle, measuredDigest: now.digest,

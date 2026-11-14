@@ -28,7 +28,7 @@ export type PageResolve =
  * Test seam: runs between the path check and the use (open or reveal), so a test can swap the file
  * for a link at exactly that moment. Production never sets it.
  */
-export const pageCardSeam: { afterCheck: ((abs: string) => void) | null } = { afterCheck: null };
+export const pageCardSeam: { afterCheck: ((abs: string) => void) | null; realpath: ((p: string) => string) | null } = { afterCheck: null, realpath: null };
 
 /**
  * `exactRoot`: the caller recorded `root` as a canonical folder earlier (a page card's turn root, a saved deck PDF's served
@@ -37,6 +37,17 @@ export const pageCardSeam: { afterCheck: ((abs: string) => void) | null } = { af
  * that no longer canonicalizes to itself is refused as outside.
  */
 export interface WalkOptions { exactRoot?: boolean }
+
+/**
+ * The form a root must be recorded in for an `exactRoot` walk: canonicalFolder's, the same function the walk re-resolves
+ * with. JS realpath is not that form: on Windows it keeps the drive letter as given (`c:\…`, workspaceRouting.ts) where
+ * canonicalFolder uppercases it, and on a case-insensitive volume it keeps the opened path's case where the native
+ * realpath reports the on-disk case. A root recorded any other way would refuse every legitimate walk. Throws when the
+ * folder cannot be resolved.
+ */
+export function recordedRoot(root: string): string {
+  return canonicalFolder(root, pageCardSeam.realpath ?? undefined);
+}
 
 /** Resolve a card row to the real file inside `root`, refusing links, climbs and non-files. */
 export function resolvePageInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
@@ -56,7 +67,7 @@ export function resolveFileInFolder(root: string, rel: string, opts: WalkOptions
 /** The walk both share (unchanged from the page card's): canonical root, every segment lstat-checked, a file inside it. */
 function walkInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
   let base: string;
-  try { base = canonicalFolder(root); } catch { return { ok: false, cause: "outside" }; }
+  try { base = canonicalFolder(root, pageCardSeam.realpath ?? undefined); } catch { return { ok: false, cause: "outside" }; }
   if (opts.exactRoot && base !== root) return { ok: false, cause: "outside" };
   let cur = base;
   try {

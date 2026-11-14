@@ -7,7 +7,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isPagePath, pageCardRows, PAGE_CARD_COPY, PAGE_CARD_MAX_ROWS } from "../src/pageCard.ts";
-import { buildPageCard, handlePageCardAction, pageCardSeam, PageCardRegistry, readPageInFolder, recheckFileInFolder, recheckPageInFolder, resolveFileInFolder, resolvePageInFolder } from "../src/pageCardHost.ts";
+import { buildPageCard, handlePageCardAction, pageCardSeam, PageCardRegistry, readPageInFolder, recheckFileInFolder, recheckPageInFolder, recordedRoot, resolveFileInFolder, resolvePageInFolder } from "../src/pageCardHost.ts";
+import { canonicalFolder } from "../src/folderConsent.ts";
 
 let fail = 0;
 const t = async (label, fn) => { try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${e.message}`); fail++; } };
@@ -228,6 +229,43 @@ await t("#4066 (verify-r004): the recorded root swapped for a link after the car
   assert.deepEqual(got, [], "nothing in the other folder is opened or revealed");
   assert.equal(recheckFileInFolder(rootA, "index.html", { exactRoot: true }).cause, "outside");
   assert.equal(recheckFileInFolder(rootA, "index.html").ok, true, "control: without exactRoot the walk follows the swapped root (why the gate needs it)");
+});
+
+await t("#4066 round 2: a root recorded in another spelling of the same folder still opens and reveals (mixed case, Windows drive letter)", async () => {
+  // A case-insensitive volume: the opened spelling is WORK, the native realpath reports the on-disk Work. Linux is
+  // case-sensitive, so the volume's answer comes from canonicalFolder's injectable realpath (the page card seam).
+  const caseDir = path.join(tmp, "case"), actual = path.join(caseDir, "Work"), spelled = path.join(caseDir, "WORK");
+  fs.rmSync(caseDir, { recursive: true, force: true }); fs.mkdirSync(actual, { recursive: true });
+  fs.writeFileSync(path.join(actual, "index.html"), "INSIDE");
+  const volume = (p) => (p.toLowerCase() === spelled.toLowerCase() || p.toLowerCase().startsWith(spelled.toLowerCase() + path.sep) ? actual + p.slice(actual.length) : fs.realpathSync.native(p));
+  pageCardSeam.realpath = volume;
+  try {
+    const got = [];
+    const press = async (root) => {
+      const reg = new PageCardRegistry();
+      reg.add("k", root, { turnId: "r1", anchorId: "a", pages: [{ path: "index.html", kind: "changed" }] });
+      const deps = { open: (abs) => got.push(["open", abs]), reveal: (abs) => got.push(["reveal", abs]) };
+      return [(await handlePageCardAction(reg, "k", { type: "pageCardOpen", turnId: "r1", path: "index.html" }, deps)).ok,
+              (await handlePageCardAction(reg, "k", { type: "pageCardReveal", turnId: "r1", path: "index.html" }, deps)).ok];
+    };
+    // Negative control: the opened spelling recorded as is (what JS realpath gives) refuses every legitimate press.
+    assert.deepEqual(await press(spelled), [false, false], "the round-2 bug: a non-canonical recorded root");
+    // The fix: the root recorded in canonicalFolder's form opens and reveals the file inside it.
+    assert.equal(recordedRoot(spelled), actual);
+    got.length = 0;
+    assert.deepEqual(await press(recordedRoot(spelled)), [true, true]);
+    assert.deepEqual(got, [["open", path.join(actual, "index.html")], ["reveal", path.join(actual, "index.html")]]);
+  } finally { pageCardSeam.realpath = null; }
+  // Windows: JS realpath keeps `c:`, canonicalFolder uppercases it. Recorded through recordedRoot, the walk's re-resolved
+  // base equals the recorded root (so exactRoot passes); recorded raw, it never does.
+  const win = "c:\\Users\\pupil\\work";
+  pageCardSeam.realpath = () => win;
+  try {
+    const rec = recordedRoot(win);
+    assert.equal(rec, "C:\\Users\\pupil\\work");
+    assert.equal(canonicalFolder(rec, pageCardSeam.realpath), rec, "re-resolving the recorded root gives the same string");
+    assert.notEqual(canonicalFolder(win, pageCardSeam.realpath), win, "the raw c: form would fail exactRoot");
+  } finally { pageCardSeam.realpath = null; }
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });
