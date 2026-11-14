@@ -36,7 +36,7 @@ jobs:
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    timeout-minutes: 30 # leave room for bounded simulator cleanup and evidence upload
+    timeout-minutes: 40 # allow the combined UI suite, result finalization, cleanup and evidence upload
     steps:
       - uses: actions/checkout@v4
         with:

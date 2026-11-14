@@ -19541,6 +19541,118 @@
           "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MEMBER-APPROVAL",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-PERSONAL-ACCOUNT"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/member-approval-inbox.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## L. Safety / observability"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-MEMBER-APPROVAL",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMBER-APPROVAL"
+      ],
+      "sources": [
+        {
+          "path": "docs/design/member-approval-inbox.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMBER-APPROVAL",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-MEMBER-APPROVAL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memberApproval.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemberApprovalInbox.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/memberApproval.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/MemberApproval.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/MemberApprovalView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMBER-APPROVAL",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMBER-APPROVAL",
+        "ST-IMP-MEMBER-APPROVAL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/member-approval.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/member-approval-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/member-approval.test.tsx"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/MemberApprovalTests.swift"
+        },
+        {
+          "path": "docs/testing/member-approval-inbox.md"
+        },
+        {
+          "path": "apps/studio-native/ios/App/NativeJourneyFixture.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        }
+      ]
     }
   ]
 }

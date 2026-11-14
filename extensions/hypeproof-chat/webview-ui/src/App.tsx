@@ -987,6 +987,7 @@ export function App() {
           postToHost({ type: "saveCoach", name, personality })
         }
         onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
+        onEndRehearsalSeat={() => postToHost({ type: "rehearsalSeatEnd" })}
         onDiagnose={() => postToHost({ type: "runDoctor" })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
