@@ -29,7 +29,10 @@ export const SNAPSHOT_MAX = { files: MEMORY_LIMITS.items + 50, keepBytes: MEMORY
  * extension's global storage (this OS account only, folders 0700, files 0600), one folder per activity scope and task;
  * a task's folder goes when the task is archived or moved. Nothing reads it back into memory, uploads it or logs it.
  */
-export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000, movesPerTurn: MEMORY_LIMITS.items } as const;
+// `files` and `bytes` cap the copies (memory items and the originals a swap displaced); moved files (`moved-…`, the
+// turn's or the learner's non-memory files) have their own count cap, `moved`, so a flood of moves never evicts a copy.
+// `clockSkewMs`: how far ahead of the clock a stamp may be and still count as now (see quarantinedAt).
+export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, moved: MEMORY_LIMITS.items, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000, movesPerTurn: MEMORY_LIMITS.items, clockSkewMs: 60_000 } as const;
 /** Files moved (renamed, never copied) out of the store: kept under the count and age caps, outside the byte cap. */
 export const MOVED_PREFIX = "moved-";
 
@@ -146,13 +149,22 @@ export interface RevertResult { reverted: number; kept: number; failed: number; 
 /**
  * When a quarantined file was put there: the stamp its name starts with (`<stamp>-…` or `moved-<stamp>-…`), never its
  * mtime, which a move keeps from the original (a photo copied in from the file manager keeps its old date) and a turn
- * can set to anything. A name without a stamp counts as oldest.
+ * can set to anything. A name without a stamp counts as oldest. The result is never later than `now`: a stamp up to
+ * `clockSkewMs` ahead (a clock adjusted backwards) is clamped to `now`; one further ahead was not written by Studio
+ * (the coach's shell can reach the folder) and counts as oldest, so it can neither outrank real copies nor escape the
+ * retention. Clamping a far-future stamp to `now` instead would re-clamp on every prune and never age.
  */
-export function quarantinedAt(name: string): number {
+export function quarantinedAt(name: string, now = Date.now()): number {
   const m = /^(?:moved-)?(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/.exec(name);
   if (!m) return 0;
   const t = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
-  return Number.isNaN(t) ? 0 : t;
+  if (Number.isNaN(t) || t > now + QUARANTINE_LIMITS.clockSkewMs) return 0;
+  return Math.min(t, now);
+}
+
+/** The prune order within a pool: newest stamp first; equal stamps (one turn) by path, so readdir order never decides. */
+export function quarantineOrder(a: { file: string; at: number }, b: { file: string; at: number }): number {
+  return b.at - a.at || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
 }
 
 /** Removes quarantined copies older than the retention, then the oldest past the per-activity count and byte caps. */
@@ -167,20 +179,26 @@ export async function pruneQuarantine(base: string, now = Date.now()): Promise<v
         const file = path.join(taskDir, name);
         const stat = await fs.lstat(file).catch(() => null);
         if (!stat) continue;
-        const at = quarantinedAt(name);
+        const at = quarantinedAt(name, now);
         if (!stat.isFile() || now - at > QUARANTINE_LIMITS.retentionMs) { await fs.rm(file, { force: true }).catch(() => undefined); continue; }
         files.push({ file, at, size: stat.size });
       }
       if (!(await fs.readdir(taskDir).catch(() => [])).length) await fs.rmdir(taskDir).catch(() => undefined);
     }
-    files.sort((a, b) => b.at - a.at);
+    // Two pools, each newest first: copies (memory items and displaced originals) under the count and byte caps, and
+    // moved files under their own count cap. A move never takes a copy's place, whatever its stamp, so junk a later turn
+    // moves out cannot evict an original an earlier turn saved. Equal stamps (one turn) fall back to the path, so the
+    // order never depends on readdir.
+    const newestFirst = quarantineOrder;
+    const isMoved = (f: { file: string }) => path.basename(f.file).startsWith(MOVED_PREFIX);
     let count = 0, bytes = 0;
-    for (const f of files) {
-      count++;
-      // A moved file (the learner's or the turn's non-memory file) costs no extra disk: the byte cap is for copies.
-      if (!path.basename(f.file).startsWith(MOVED_PREFIX)) bytes += f.size;
+    for (const f of files.filter((x) => !isMoved(x)).sort(newestFirst)) {
+      count++; bytes += f.size;
       if (count > QUARANTINE_LIMITS.files || bytes > QUARANTINE_LIMITS.bytes) await fs.rm(f.file, { force: true }).catch(() => undefined);
     }
+    // A moved file costs no extra disk (it left the workspace), so only the count caps it.
+    let moved = 0;
+    for (const f of files.filter(isMoved).sort(newestFirst)) if (++moved > QUARANTINE_LIMITS.moved) await fs.rm(f.file, { force: true }).catch(() => undefined);
     if (!(await fs.readdir(scopeDir).catch(() => [])).length) await fs.rmdir(scopeDir).catch(() => undefined);
   }
 }

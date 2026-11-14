@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { ActivityMemory, MEMORY_LIMITS } from '../src/activityMemory.ts';
-import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, quarantinedAt, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
+import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, quarantinedAt, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, quarantineOrder, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'memory-guard-')));
 let passed = 0;
@@ -253,6 +253,45 @@ try {
     assert.equal(fs.statSync(q).mode & 0o777, 0o700);
     assert.equal(fs.statSync(path.dirname(q)).mode & 0o777, 0o700);
     for (const n of ls(q)) assert.equal(fs.statSync(path.join(q, n)).mode & 0o777, 0o600);
+  });
+
+  await t('a flood of moved junk never evicts a saved original; moves have their own cap', async () => {
+    const base = path.join(top, 'qflood');
+    const stampOf = (t) => new Date(t).toISOString().replace(/[:.]/g, '-');
+    const a = path.join(base, 'c'.repeat(24), 'turn-a'), b = path.join(base, 'c'.repeat(24), 'turn-b');
+    fs.mkdirSync(a, { recursive: true }); fs.mkdirSync(b, { recursive: true });
+    // Turn A saved a swapped item's original a minute ago; turn B then moved more junk than the cap.
+    const original = `${stampOf(Date.now() - 60_000)}-1-goal.md`;
+    fs.writeFileSync(path.join(a, original), '원래 목표\n');
+    const now = Date.now();
+    for (let i = 0; i < QUARANTINE_LIMITS.moved + 50; i++) fs.writeFileSync(path.join(b, `${MOVED_PREFIX}${stampOf(now)}-${i + 1}-junk${String(i).padStart(4, '0')}`), 'j');
+    await pruneQuarantine(base, now);
+    assert.deepEqual(ls(a), [original], 'the earlier turn\'s original survives');
+    assert.equal(ls(b).length, QUARANTINE_LIMITS.moved, 'moves are capped on their own');
+    // One turn's entries share a stamp: which moves stay is fixed by name, not by readdir order.
+    const kept = new Set(ls(b));
+    assert.ok([...kept].every(n => n.startsWith(MOVED_PREFIX)), 'only moves in the move pool');
+    const all = Array.from({ length: QUARANTINE_LIMITS.moved + 50 }, (_, i) => `${MOVED_PREFIX}${stampOf(now)}-${i + 1}-junk${String(i).padStart(4, '0')}`).sort();
+    assert.deepEqual([...kept].sort(), all.slice(0, QUARANTINE_LIMITS.moved), 'equal stamps fall back to the name');
+    // The order itself, from a shuffled list (readdir order differs by platform: sorted on Linux, not on APFS).
+    const entries = [{ file: 'q/b', at: 5 }, { file: 'q/c', at: 9 }, { file: 'q/a', at: 5 }, { file: 'q/d', at: 1 }];
+    assert.deepEqual(entries.slice().sort(quarantineOrder).map(e => e.file), ['q/c', 'q/a', 'q/b', 'q/d'], 'newest first, equal stamps by path');
+    assert.deepEqual(entries.slice().reverse().sort(quarantineOrder).map(e => e.file), ['q/c', 'q/a', 'q/b', 'q/d'], 'whatever the input order');
+  });
+
+  await t('a stamp planted in the future is not trusted: it neither outranks real copies nor escapes the retention', async () => {
+    const now = Date.now();
+    const stampOf = (t) => new Date(t).toISOString().replace(/[:.]/g, '-');
+    assert.equal(quarantinedAt(`${stampOf(now + 365 * 24 * 3600_000)}-1-x.md`, now), 0, 'a far-future stamp counts as oldest');
+    assert.equal(quarantinedAt(`${MOVED_PREFIX}${stampOf(now + 365 * 24 * 3600_000)}-1-x`, now), 0, 'for moves too');
+    assert.equal(quarantinedAt(`${stampOf(now + 30_000)}-1-x.md`, now), now, 'a stamp within the clock skew is clamped to now');
+    const dir = path.join(top, 'qfuture', 'd'.repeat(24), 'task');
+    fs.mkdirSync(dir, { recursive: true });
+    const real = `${stampOf(now - 3600_000)}-1-real.md`;
+    fs.writeFileSync(path.join(dir, real), '진짜 사본\n');
+    for (let i = 0; i < QUARANTINE_LIMITS.files; i++) fs.writeFileSync(path.join(dir, `${stampOf(now + 365 * 24 * 3600_000)}-${i + 1}-planted.md`), 'p');
+    await pruneQuarantine(path.join(top, 'qfuture'), now);
+    assert.deepEqual(ls(dir), [real], 'the real copy stays and the planted future copies age out at once');
   });
 
   // ---- the provider ----
