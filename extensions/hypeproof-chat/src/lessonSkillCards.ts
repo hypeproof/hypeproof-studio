@@ -63,8 +63,8 @@ const prompt = (value: unknown): string | null => {
 const dedupeKey = (text: string): string => text.normalize("NFKC").toLowerCase();
 
 /** The cards to draw: at most six, in served order, each with a safe name, summary and prompt, names unique. */
-export function servedSkillCards(profile: { skill_cards?: unknown } | null | undefined): SkillCard[] {
-  const raw = profile?.skill_cards;
+export function servedSkillCards(profile: object | null | undefined): SkillCard[] {
+  const raw = (profile as { skill_cards?: unknown } | null | undefined)?.skill_cards;
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const out: SkillCard[] = [];
