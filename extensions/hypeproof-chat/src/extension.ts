@@ -52,6 +52,7 @@ import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import {
   RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
   enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation, storeIssuerUnlessHeld,
+  leaveWithoutReport, leaveAfterReport, type LeaveAsk,
   type SeatHost,
 } from "./rehearsalSeat";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -107,6 +108,17 @@ export async function endRehearsalSeat(): Promise<void> {
 }
 export async function hasRehearsalReturn(): Promise<boolean> {
   return seatHost ? hasReturnIssuer(seatHost) : false;
+}
+
+/** #4048 — the approved leave questions. Each asks only inside the rehearsal seat (see leaveWithoutReport). */
+const askLeave: LeaveAsk = async (message, buttons) => vscode.window.showInformationMessage(message, ...buttons);
+/** The palette item and the band button: leave without a report, after the question. */
+export async function leaveRehearsalWithoutReport(): Promise<void> {
+  if (seatHost) await leaveWithoutReport(seatHost, askLeave).catch(() => undefined);
+}
+/** After a successful report: ask whether to return. A failed report never calls this. */
+export async function leaveRehearsalAfterReport(): Promise<void> {
+  if (seatHost) await leaveAfterReport(seatHost, askLeave).catch(() => undefined);
 }
 
 /** The rehearsal folder is named by the rehearsal id, under global storage. The learner never picks it. */
@@ -768,6 +780,9 @@ export async function activate(context: vscode.ExtensionContext) {
         },
       });
     }),
+
+    // #4048 — palette item; hidden outside a rehearsal seat by the when clause, and a no-op there too.
+    vscode.commands.registerCommand("hypeproof-chat.endRehearsalSeat", () => leaveRehearsalWithoutReport()),
 
     vscode.commands.registerCommand("hypeproof-chat.forgetIssuerToken", async () => {
       await forgetIssuer(seatHost!);

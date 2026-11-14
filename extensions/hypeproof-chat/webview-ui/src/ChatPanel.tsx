@@ -272,6 +272,8 @@ interface Props {
   onCancel: () => void;
   onClear: () => void;
   onSetToken: () => void;
+  /** #4048 — the rehearsal band's button: ask the host to leave the rehearsal seat (the host confirms). */
+  onEndRehearsalSeat?: () => void;
   onSettings: () => void;
   onRunCode: (html: string) => void;
   onNamingRitual: () => void;
@@ -1956,6 +1958,7 @@ export function ChatPanel(props: Props) {
       {draftError && <p role="alert">{draftError}</p>}
       {linkBlockedBanner}
       {updateBanner}
+      <RehearsalSeatBand visible={!!config?.rehearsalSeat} onEnd={props.onEndRehearsalSeat ?? (() => undefined)} />
 
       <ConversationSupport compact={automationCompact}>
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
@@ -3202,6 +3205,17 @@ function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 
 
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
+}
+
+/** #4048 — the band in a rehearsal seat. Drawn only when the host sent the rehearsal signal; otherwise nothing. */
+export function RehearsalSeatBand({ visible, onEnd }: { visible: boolean; onEnd: () => void }) {
+  if (!visible) return null;
+  return (
+    <div className="hps-rehearsal-seat" role="status">
+      <span>리허설 중</span>{" "}
+      <button type="button" onClick={onEnd}>끝내고 돌아가기</button>
+    </div>
+  );
 }
 
 export function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {

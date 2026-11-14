@@ -196,6 +196,40 @@ export async function storeIssuerUnlessHeld(secrets: SeatSecrets, token: string,
   return true;
 }
 
+// ── The student-panel band and the leave questions (#4048, approved wording) ──
+export const REHEARSAL_BAND_TEXT = "리허설 중";
+export const REHEARSAL_BAND_BUTTON = "끝내고 돌아가기";
+export const LEAVE_WITHOUT_TEXT = "리허설 보고를 보내지 않았습니다. 그래도 강사로 돌아갈까요?";
+export const LEAVE_AFTER_TEXT = "리허설 보고를 보냈습니다. 강사로 돌아갈까요?";
+const LEAVE_WITHOUT_BUTTONS = ["돌아가기", "취소"] as const;
+const LEAVE_AFTER_BUTTONS = ["돌아가기", "계속하기"] as const;
+
+/** The band shows only in a rehearsal seat: a return is held, a seat is recorded, and the window is its folder. */
+export async function rehearsalSeatActiveFor(secrets: SeatSecrets, root: string | undefined): Promise<boolean> {
+  if (!root || !(await returnHeld(secrets))) return false;
+  const seat = parseSeat(await secrets.get(REHEARSAL_SEAT_KEY));
+  return !!seat && seat.rehearsalFolder === root;
+}
+
+/** Asks one question with two buttons; resolves to the label the person chose, or undefined when dismissed. */
+export type LeaveAsk = (message: string, buttons: readonly string[]) => Promise<string | undefined>;
+
+/** The leave question after a report was not sent (palette item and the band button). Outside the seat it asks nothing. */
+export async function leaveWithoutReport(h: SeatHost, ask: LeaveAsk): Promise<"none" | "stayed" | "reloading" | "done" | "failed"> {
+  if (!(await rehearsalSeatActiveFor(h.secrets, h.currentRoot()))) return "none";
+  const choice = await ask(LEAVE_WITHOUT_TEXT, LEAVE_WITHOUT_BUTTONS);
+  if (choice !== "돌아가기") return "stayed";
+  return endRehearsal(h) as Promise<"reloading" | "done" | "failed">;
+}
+
+/** The leave question after a report was sent successfully. A failed report never reaches this. */
+export async function leaveAfterReport(h: SeatHost, ask: LeaveAsk): Promise<"none" | "stayed" | "reloading" | "done" | "failed"> {
+  if (!(await rehearsalSeatActiveFor(h.secrets, h.currentRoot()))) return "none";
+  const choice = await ask(LEAVE_AFTER_TEXT, LEAVE_AFTER_BUTTONS);
+  if (choice !== "돌아가기") return "stayed";
+  return endRehearsal(h) as Promise<"reloading" | "done" | "failed">;
+}
+
 /** Is a credential held for a return (the seat is running or was interrupted)? Used by the chalk side. */
 export async function hasReturnIssuer(h: SeatHost): Promise<boolean> {
   return !!(await h.secrets.get(REHEARSAL_RETURN_KEY));

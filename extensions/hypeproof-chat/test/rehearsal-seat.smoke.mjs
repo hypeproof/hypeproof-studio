@@ -15,6 +15,13 @@ import {
   forgetIssuer,
   hasReturnIssuer,
   storeIssuerUnlessHeld,
+  rehearsalSeatActiveFor,
+  leaveWithoutReport,
+  leaveAfterReport,
+  LEAVE_WITHOUT_TEXT,
+  LEAVE_AFTER_TEXT,
+  REHEARSAL_BAND_TEXT,
+  REHEARSAL_BAND_BUTTON,
   ISSUER_REPLACE_BLOCKED,
   MINT_BLOCKED,
   ENTER_OPEN_FAILED,
@@ -279,6 +286,73 @@ await t("static: the mask list hides both new keys, and the forget command and m
   assert.match(ext, /onIssuerAutoRejected = \(\) => \{\s*void forgetIssuer\(/, "a rejected issuer clears the return key too");
   const mint = readFileSync(new URL("../src/mintStudentToken.ts", import.meta.url), "utf8");
   assert.match(mint, /status === 401 \|\| status === 403\) \{\s*await context\.secrets\.delete\(ISSUER_TOKEN_KEY\);\s*await context\.secrets\.delete\(REHEARSAL_RETURN_KEY\)/, "a rejected issuer in mint clears the return key");
+});
+
+// ── The student-panel band and the two leave questions (#4048, approved) ──
+const LEAVE_WITHOUT = "리허설 보고를 보내지 않았습니다. 그래도 강사로 돌아갈까요?";
+const LEAVE_AFTER = "리허설 보고를 보냈습니다. 강사로 돌아갈까요?";
+
+await t("band signal: active only with a held return, a seat, and the window in the rehearsal folder", async () => {
+  const seatJson = JSON.stringify({ phase: "inside", rehearsalId: REHEARSAL_ID, expiresAt: 1_000_000 + HOUR, homeFolder: HOME, rehearsalFolder: folder });
+  const inside = new Map([[REHEARSAL_RETURN_KEY, ISSUER], [REHEARSAL_SEAT_KEY, seatJson]]);
+  const secretsOf = (m) => ({ get: async (k) => m.get(k), store: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } });
+  assert.equal(await rehearsalSeatActiveFor(secretsOf(inside), folder), true);
+  assert.equal(await rehearsalSeatActiveFor(secretsOf(inside), HOME), false, "not in the rehearsal folder");
+  const noReturn = new Map([[REHEARSAL_SEAT_KEY, seatJson]]);
+  assert.equal(await rehearsalSeatActiveFor(secretsOf(noReturn), folder), false, "no held return");
+  const noSeat = new Map([[REHEARSAL_RETURN_KEY, ISSUER]]);
+  assert.equal(await rehearsalSeatActiveFor(secretsOf(noSeat), folder), false, "no seat record");
+});
+
+await t("leave without report: the question has the approved text and buttons, 취소 keeps the seat, 돌아가기 returns", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  const asked = [];
+  const r = await leaveWithoutReport(inRehearsal.host, async (message, buttons) => { asked.push([message, buttons]); return "취소"; });
+  assert.equal(r, "stayed");
+  assert.deepEqual(asked, [[LEAVE_WITHOUT, ["돌아가기", "취소"]]]);
+  assert.equal(store.get(REHEARSAL_RETURN_KEY), ISSUER, "취소 leaves the seat as it was");
+  const back = await leaveWithoutReport(inRehearsal.host, async () => "돌아가기");
+  assert.equal(back, "reloading");
+  assert.equal(store.get(ISSUER_TOKEN_KEY), ISSUER);
+});
+
+await t("leave without report: outside the rehearsal seat it asks nothing and does nothing", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const home = makeWindow({ store, root: HOME });
+  let asks = 0;
+  assert.equal(await leaveWithoutReport(home.host, async () => { asks++; return "돌아가기"; }), "none");
+  assert.equal(asks, 0);
+  assert.equal(store.get(REHEARSAL_RETURN_KEY), ISSUER, "the seat is untouched");
+});
+
+await t("leave after report: the question has the approved text and 계속하기 keeps the seat; 돌아가기 returns", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  const asked = [];
+  assert.equal(await leaveAfterReport(inRehearsal.host, async (m, b) => { asked.push([m, b]); return "계속하기"; }), "stayed");
+  assert.deepEqual(asked, [[LEAVE_AFTER, ["돌아가기", "계속하기"]]]);
+  assert.equal(store.get(REHEARSAL_RETURN_KEY), ISSUER);
+  assert.equal(await leaveAfterReport(inRehearsal.host, async () => "돌아가기"), "reloading");
+});
+
+await t("leave after report: outside the seat it asks nothing", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const home = makeWindow({ store, root: HOME });
+  let asks = 0;
+  assert.equal(await leaveAfterReport(home.host, async () => { asks++; return "돌아가기"; }), "none");
+  assert.equal(asks, 0);
+});
+
+await t("the approved leave and band sentences match exactly", () => {
+  assert.equal(LEAVE_WITHOUT_TEXT, LEAVE_WITHOUT);
+  assert.equal(LEAVE_AFTER_TEXT, LEAVE_AFTER);
+  assert.equal(REHEARSAL_BAND_TEXT, "리허설 중");
+  assert.equal(REHEARSAL_BAND_BUTTON, "끝내고 돌아가기");
 });
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
