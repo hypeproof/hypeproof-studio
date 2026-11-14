@@ -8149,9 +8149,9 @@ behaviour exists in the build (DEC-SHELL-R014):
 - 내 작업 내보내기 (2026-11-14) — an action row drawn like "고급 설정", with the note "작업 폴더와 대화를
   ZIP 파일 하나로 저장해요. 저장할 폴더는 직접 골라요." under it. It closes the sheet and the host runs the
   shipped export (CGP-SHELL-R-028, `ChatPanelProvider.exportMyWork`: folder picker, progress, the
-  result line, its busy and active-turn guards). It is offered in every seat, minors included,
-  because the export is local only (no network, no token). Only the exact `startExportMyWork`
-  message runs it.
+  result line, its busy and active-turn guards). It is offered where the shipped entry is: the
+  chat settings dialog draws that entry with no seat condition, so the row has none either and
+  adds no gate of its own. Only the exact `startExportMyWork` message runs it.
 
 화면 밝기(테마) joins with REQ-SHELL-16 (CGP-SHELL-R-016, #4053). 팁 보기 joins when REQ-SHELL-19
 (CGP-SHELL-R-019) ships: the tips themselves are not built yet. Until then neither is drawn, so

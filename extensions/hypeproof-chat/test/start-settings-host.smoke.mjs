@@ -100,7 +100,7 @@ assert.deepEqual(commands, [], 'under-14 answer: the host refuses the editor');
 global.set('hypeproofChat.freeStart.age.v1', '14+');
 await page.handle({ type: 'openAdvancedSettings' });
 assert.deepEqual(commands, ['workbench.action.openSettings'], 'no seat, 14+: the setup path stays');
-// CGP-SHELL-R-014: 내 작업 내보내기 runs the shipped export once, for every seat (minors too: it is local only).
+// CGP-SHELL-R-014: 내 작업 내보내기 runs the shipped export once, in the same seats as the chat settings entry (no seat gate there).
 for (const p of [adult, minor]) {
   current = p; chat.exports = 0;
   await page.handle({ type: 'startSetting', key: 'textSize', value: 'base' });

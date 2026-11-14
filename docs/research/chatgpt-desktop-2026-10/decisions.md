@@ -2302,5 +2302,5 @@ Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend
   - An action row drawn like "고급 설정" (a 48px button, with the row-name weight), not a toggle, because export is an action.
   - A one-line note under it says what is saved and that the learner picks the folder.
   - The sheet closes first, so the native folder picker is not under a modal.
-- **Who sees it.** Every seat, minors included. The export is local only, the same rule as its other entry points.
+- **Who sees it (no new policy).** The same seats as the shipped entry: the chat settings dialog draws 내 작업 내보내기 with no seat condition (`ChatPanel.tsx:2719` and `:2750`, CGP-SHELL-R-028), and the palette command is hidden (`package.json`, `when: false`). The row calls the same host function, `ChatPanelProvider.exportMyWork`, so its guards apply unchanged: a work folder must exist, no turn may be running, and one export runs at a time. The row adds no gate and drops none.
 
