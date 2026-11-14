@@ -51,7 +51,7 @@ import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import {
   RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
-  enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation,
+  enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation, storeIssuerUnlessHeld,
   type SeatHost,
 } from "./rehearsalSeat";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -788,11 +788,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       // #4048 — during a rehearsal the held credential is the instructor's; a new one must not be stored over it.
-      if (await hasRehearsalReturn()) {
-        vscode.window.showErrorMessage("리허설이 끝난 뒤에 강사 토큰을 바꿔 주세요.");
-        return;
-      }
-      await context.secrets.store(ISSUER_TOKEN_KEY, trimmed);
+      if (!(await storeIssuerUnlessHeld(context.secrets, trimmed, (m) => { void vscode.window.showErrorMessage(m); }))) return;
       await provider.refreshConfig();
       const whoamiStatus = provider.lastWhoamiStatus;
       if (whoamiStatus === "rejected") {

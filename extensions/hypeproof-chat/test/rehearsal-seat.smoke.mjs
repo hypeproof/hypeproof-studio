@@ -14,6 +14,10 @@ import {
   endRehearsal,
   forgetIssuer,
   hasReturnIssuer,
+  storeIssuerUnlessHeld,
+  ISSUER_REPLACE_BLOCKED,
+  MINT_BLOCKED,
+  ENTER_OPEN_FAILED,
 } from "../src/rehearsalSeat.ts";
 import { ISSUER_TOKEN_KEY } from "../src/mintStudentTokenHelpers.ts";
 
@@ -239,6 +243,32 @@ await t("a return key without a seat record is restored at once and the key is d
   assert.equal(await resumeOnActivation(win.host), "done");
   assert.equal(store.get(ISSUER_TOKEN_KEY), ISSUER);
   assert.equal(store.get(REHEARSAL_RETURN_KEY), undefined);
+});
+
+await t("guard setInstructorToken: a held return → nothing is stored and the approved sentence is shown", async () => {
+  const store = new Map([[REHEARSAL_RETURN_KEY, ISSUER]]);
+  const secrets = { get: async (k) => store.get(k), store: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } };
+  const shown = [];
+  const stored = await storeIssuerUnlessHeld(secrets, "synthetic-typed", (m) => shown.push(m));
+  assert.equal(stored, false);
+  assert.equal(store.get(ISSUER_TOKEN_KEY), undefined, "the typed credential is not stored");
+  assert.deepEqual(shown, ["리허설을 끝낸 뒤에 강사 토큰을 바꾸세요."]);
+});
+
+await t("guard setInstructorToken control: no return held → the typed credential is stored and nothing is shown", async () => {
+  const store = new Map();
+  const secrets = { get: async (k) => store.get(k), store: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } };
+  const shown = [];
+  const stored = await storeIssuerUnlessHeld(secrets, "synthetic-typed", (m) => shown.push(m));
+  assert.equal(stored, true);
+  assert.equal(store.get(ISSUER_TOKEN_KEY), "synthetic-typed");
+  assert.deepEqual(shown, []);
+});
+
+await t("approved copy: the three sentences match the chalk-po wording exactly", () => {
+  assert.equal(ISSUER_REPLACE_BLOCKED, "리허설을 끝낸 뒤에 강사 토큰을 바꾸세요.");
+  assert.equal(MINT_BLOCKED, "리허설을 끝낸 뒤에 학생 토큰을 발급하세요.");
+  assert.equal(ENTER_OPEN_FAILED, "리허설 창을 열지 못했습니다. 강사 자격은 그대로입니다.");
 });
 
 await t("static: the mask list hides both new keys, and the forget command and mint paths also clear the return key", () => {

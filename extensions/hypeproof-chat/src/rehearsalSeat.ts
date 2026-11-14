@@ -9,6 +9,9 @@ export const RESUME_QUESTION = "리허설 중에 앱이 닫혔습니다. 리허�
 export const RESUME_CONTINUE = "이어가기";
 export const RESUME_RETURN = "끝내고 돌아가기";
 export const RETURN_FAILED = "강사 자격으로 돌아가지 못했습니다. 앱을 다시 켜면 다시 시도합니다.";
+export const ENTER_OPEN_FAILED = "리허설 창을 열지 못했습니다. 강사 자격은 그대로입니다.";
+export const ISSUER_REPLACE_BLOCKED = "리허설을 끝낸 뒤에 강사 토큰을 바꾸세요.";
+export const MINT_BLOCKED = "리허설을 끝낸 뒤에 학생 토큰을 발급하세요.";
 
 export type SeatPhase = "entering" | "inside" | "returning";
 export interface SeatRecord {
@@ -80,7 +83,7 @@ export async function enterRehearsal(h: SeatHost, input: { token: string; expire
     await h.openFolder(folder);
   } catch {
     await restoreIssuer(h);
-    throw new RehearsalSeatError("리허설 창을 열지 못했어요. 강사 자격은 그대로 있어요.");
+    throw new RehearsalSeatError(ENTER_OPEN_FAILED);
   }
 }
 
@@ -179,6 +182,18 @@ export async function forgetIssuer(h: SeatHost): Promise<void> {
   await h.secrets.delete(ISSUER_TOKEN_KEY);
   await h.secrets.delete(REHEARSAL_RETURN_KEY);
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
+}
+
+/** A return is held: the instructor credential sits aside, so no new credential may take its slot. */
+export async function returnHeld(secrets: SeatSecrets): Promise<boolean> {
+  return !!(await secrets.get(REHEARSAL_RETURN_KEY));
+}
+
+/** setInstructorToken: store the typed credential unless a return is held. Returns whether it was stored. */
+export async function storeIssuerUnlessHeld(secrets: SeatSecrets, token: string, notify: (message: string) => void): Promise<boolean> {
+  if (await returnHeld(secrets)) { notify(ISSUER_REPLACE_BLOCKED); return false; }
+  await secrets.store(ISSUER_TOKEN_KEY, token);
+  return true;
 }
 
 /** Is a credential held for a return (the seat is running or was interrupted)? Used by the chalk side. */

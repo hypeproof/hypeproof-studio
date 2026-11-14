@@ -19,7 +19,7 @@ import {
 } from "./mintStudentTokenHelpers";
 
 export { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
-import { REHEARSAL_RETURN_KEY } from "./rehearsalSeat";
+import { MINT_BLOCKED, REHEARSAL_RETURN_KEY, returnHeld } from "./rehearsalSeat";
 
 export interface MintCommandDeps {
   context: vscode.ExtensionContext;
@@ -43,8 +43,8 @@ export async function runMintStudentToken(deps: MintCommandDeps): Promise<MintRe
   // 1. Issuer token — SecretStorage; prompt once if missing.
   let issuerToken = await context.secrets.get(ISSUER_TOKEN_KEY);
   // #4048 — during a rehearsal the credential is held aside; never take a new one into the same slot.
-  if (!issuerToken && (await context.secrets.get(REHEARSAL_RETURN_KEY))) {
-    vscode.window.showWarningMessage("리허설이 끝난 뒤에 강사 토큰을 발급해 주세요.");
+  if (!issuerToken && (await returnHeld(context.secrets))) {
+    vscode.window.showWarningMessage(MINT_BLOCKED);
     return undefined;
   }
   if (!issuerToken) {
