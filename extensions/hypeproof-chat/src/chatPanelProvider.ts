@@ -416,7 +416,7 @@ import { MEMORY_REMEMBER_TURN_CAP, type MemoryRememberHost } from "./memoryRemem
 import { MEMORY_WRITE_COPY, isMemoryWriteId, memoryWriteLabel } from "./memoryWriteLine";
 import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
-import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
+import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, insideFolder, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
@@ -7730,25 +7730,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * like the remember tool. The shell check is a string check (see the requirement's "not covered").
    */
   memoryFolderWriteRefusal(streamId: string, toolName: string, input: unknown): string | null {
+    const writeTool = ["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(toolName);
+    const readTool = ["Read", "Grep", "Glob", "NotebookRead"].includes(toolName);
     const shell = toolName === "Bash";
-    if (!shell && !["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(toolName)) return null;
+    if (!writeTool && !readTool && !shell) return null;
     const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
     if (!binding || !input || typeof input !== "object") return null;
+    const fields = input as Record<string, unknown>;
+    const sw = this.taskMemorySwitches(binding.scope, this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId());
+    if (sw.keep && sw.use) return null;
     if (shell) {
-      // Coarse and deny-only: while keep is off, a shell command that names `.hypeproof` (any case, any form of the
-      // path) is refused, reads included. A command that builds the name at run time is not caught (requirement row).
-      const command = (input as Record<string, unknown>).command;
-      if (typeof command !== "string" || !/\.hypeproof/i.test(command)) return null;
-      const turnTask = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
-      return this.taskMemorySwitches(binding.scope, turnTask).keep ? null : TASK_MEMORY_COPY.keepRefusal;
+      // Coarse and deny-only: a shell command that names `.hypeproof` (any case) is refused while keep is off (writes)
+      // or use is off (reads such as cat). Quote or escape splitting, interpreters and names built at run time are not
+      // caught here (the requirement's status); the turn-end folder check covers the write side.
+      if (typeof fields.command !== "string" || !/\.hypeproof/i.test(fields.command)) return null;
+      return !sw.keep ? TASK_MEMORY_COPY.keepRefusal : TASK_MEMORY_COPY.useRefusal;
     }
-    const target = (input as Record<string, unknown>).file_path ?? (input as Record<string, unknown>).notebook_path;
-    if (typeof target !== "string" || !path.isAbsolute(target)) return null;
     const folder = path.join(binding.root, ".hypeproof", "memory");
-    const rel = path.relative(folder, path.resolve(target));
-    if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
-    const task = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
-    return this.taskMemorySwitches(binding.scope, task).keep ? null : TASK_MEMORY_COPY.keepRefusal;
+    const targets = [fields.file_path, fields.notebook_path, fields.path].filter((v): v is string => typeof v === "string" && path.isAbsolute(v));
+    // A search's own pattern may aim at the folder from an ancestor (`path` the work folder, glob `.hypeproof/**`).
+    const aims = readTool && [fields.pattern, fields.glob].some(v => typeof v === "string" && /\.hypeproof/i.test(v));
+    if (!aims && !targets.some(t => insideFolder(folder, t))) return null;
+    if (writeTool && !sw.keep) return TASK_MEMORY_COPY.keepRefusal;
+    if (readTool && !sw.use) return TASK_MEMORY_COPY.useRefusal;
+    return null;
   }
   /** CGP-KNOW-R-028 — the task each turn began in, so a task switch mid-turn cannot move its writes. */
   private taskMemoryStreams?: Map<string, string | null>;

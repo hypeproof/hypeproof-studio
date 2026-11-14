@@ -19,7 +19,7 @@ import { build } from 'esbuild';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { runRemember, REMEMBER_REPLIES } from '../src/memoryRememberTool.ts';
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen } from '../src/memoryNotice.ts';
-import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, TASK_MEMORY_MAX } from '../src/taskMemorySwitches.ts';
+import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, insideFolder, setSwitches, switchesFor, useLocked, TASK_MEMORY_MAX } from '../src/taskMemorySwitches.ts';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'task-memory-')));
 let passed = 0;
@@ -53,6 +53,17 @@ try {
     assert.equal(Object.keys(big.s).length, TASK_MEMORY_MAX.tasks, 'oldest tasks go first');
     assert.equal(useLocked(0), false);
     assert.equal(useLocked(1), true);
+  });
+
+  await t('path check: links are followed and case is folded where the OS folds it', () => {
+    const r = path.join(top, 'paths'); const mem = path.join(r, '.hypeproof', 'memory'); fs.mkdirSync(mem, { recursive: true });
+    fs.symlinkSync(mem, path.join(r, 'link'));
+    assert.equal(insideFolder(mem, path.join(r, 'link', 'a.md')), true, 'a symlinked folder lands inside');
+    assert.equal(insideFolder(mem, path.join(r, '.HYPEPROOF', 'MEMORY', 'a.md'), 'darwin'), true, 'macOS: case variants are the same folder');
+    assert.equal(insideFolder(mem, path.join(r, '.HYPEPROOF', 'memory', 'a.md'), 'win32'), true, 'Windows too');
+    assert.equal(insideFolder(mem, path.join(r, '.HYPEPROOF', 'MEMORY', 'a.md'), 'linux'), false, 'Linux: another folder');
+    assert.equal(insideFolder(mem, path.join(r, '.hypeproof', 'memory-notes.md')), false, 'a sibling name is outside');
+    assert.equal(insideFolder(mem, mem), true, 'the folder itself');
   });
 
   // ---- the real provider ----
@@ -108,6 +119,14 @@ try {
     assert.deepEqual(sent, [], 'no request leaves the client while keep is off');
   });
 
+  await t('keep off: a Write through a symlinked folder is refused too', async () => {
+    fs.mkdirSync(memDir(work), { recursive: true });
+    const link = path.join(work, 'mem-link');
+    if (!fs.existsSync(link)) fs.symlinkSync(memDir(work), link);
+    assert.equal(write('turn-b', path.join(link, 'via-link.md')), TASK_MEMORY_COPY.keepRefusal);
+    fs.unlinkSync(link);
+  });
+
   await t('a host made before keep went off refuses on its next call (the switch is read again)', async () => {
     await set({ keep: true });
     const host = h.memoryRememberHostFor('turn-c');
@@ -130,6 +149,44 @@ try {
     assert.equal(await h.takeMemoryContext(PERSONAL), null, 'use off: nothing rides on the request');
     await set({ use: true });
     assert.ok(await h.takeMemoryContext(PERSONAL), 'use on again');
+  });
+
+  await t('use off: the coach cannot read the memory files either (Read, Grep, Glob, a shell naming the folder)', async () => {
+    await set({ use: false });
+    const read = (tool, input) => h.memoryFolderWriteRefusal('turn-r', tool, input);
+    h.taskMemoryStreams = new Map([['turn-r', taskId]]);
+    assert.equal(read('Read', { file_path: path.join(memDir(work), 'a.md') }), TASK_MEMORY_COPY.useRefusal);
+    assert.equal(read('Grep', { pattern: 'x', path: memDir(work) }), TASK_MEMORY_COPY.useRefusal);
+    assert.equal(read('Glob', { pattern: '.hypeproof/**/*.md', path: work }), TASK_MEMORY_COPY.useRefusal, 'a search aimed at it from the work folder');
+    assert.equal(read('Bash', { command: 'cat .hypeproof/memory/a.md' }), TASK_MEMORY_COPY.useRefusal);
+    assert.equal(read('Read', { file_path: path.join(work, 'index.html') }), null, 'negative control: other files are read as before');
+    assert.equal(read('Grep', { pattern: 'title', path: work }), null, 'negative control: a search not aimed at the folder');
+    await set({ use: true });
+    assert.equal(read('Read', { file_path: path.join(memDir(work), 'a.md') }), null, 'use on: reading memory is allowed');
+  });
+
+  await t("a turn stays pinned to its own task: switching tasks mid-turn does not move its writes", async () => {
+    await set({ keep: false });
+    h.taskMemoryStreams = new Map([['turn-p', taskId]]);
+    // The learner opens another task while the turn runs (the open task, as the host sees it, is now another one).
+    const OTHER = '7f0c2b1e-9a4d-4c3e-8b2a-1d5e6f7a8b9c';
+    h.activeTaskId = () => OTHER;
+    try {
+      assert.equal(write('turn-p', path.join(memDir(work), 'p.md')), TASK_MEMORY_COPY.keepRefusal, 'the turn still belongs to the keep-off task');
+      assert.equal(h.memoryRememberHostFor('turn-p'), undefined, 'no remember tool for that turn');
+      assert.equal(write('turn-new', path.join(memDir(work), 'p.md')), null, 'a turn in the other (keep-on) task may write');
+    } finally { delete h.activeTaskId; }
+    await set({ keep: true });
+  });
+
+  await t('a temporary task gets no group; the host guard refuses a change for another task id', async () => {
+    h.inTemporaryTask = () => true;
+    assert.equal(h.taskMemoryView(), undefined, 'no switches in a temporary task');
+    delete h.inTemporaryTask;
+    assert.ok(h.taskMemoryView(), 'back in an ordinary task');
+    await h.setTaskMemory({ taskId: TASK, keep: false });
+    assert.equal(h.taskMemoryView().keep, true, "setTaskMemory's own guard: another task id changes nothing");
+    assert.equal(switchesFor(acceptTaskMemory(h.context.workspaceState.get(TASK_MEMORY_KEY)), binding.scope, TASK).keep, true);
   });
 
   await t('use is locked once the task has a sent message; keep still changes', async () => {

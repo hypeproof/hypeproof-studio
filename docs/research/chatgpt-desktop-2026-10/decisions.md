@@ -2303,10 +2303,17 @@ Requirement: `docs/studio-requirements.md` "Task memory switches" (REQ-STUDIO-TA
   it from the task's message count, and the webview cannot unlock it.
 - **Keep off covers:** the `remember` tool, the one memory write path, and the SDK runtime's file tools aimed at
   `.hypeproof/memory/`.
-- **Shell (agent choice).** The SDK runtime also denies any shell command that names `.hypeproof`. This is a coarse,
-  deny-only check, chosen over parsing shell syntax. A command that builds the path at run time, and the local CLI
-  runtime's shell, are still open. The row is therefore partially met, and #4014 tracks a check of the
-  memory folder after each turn.
+- **Shell (agent choice).** The SDK runtime also denies any shell command that names `.hypeproof` while keep or use is
+  off. This is a coarse, deny-only check, chosen over parsing shell syntax.
+- **Path check (verifier should-fix).** File-tool targets are compared after the real path of their deepest existing
+  folder is resolved, with case folded on macOS and Windows, so case variants and symlinked folders count.
+- **Read side (verifier should-fix).** With use off, the SDK's `Read`, `Grep`, `Glob` and `NotebookRead` are denied on
+  the memory folder or on a pattern that names `.hypeproof`.
+- **Known gaps (agent choice: state them rather than claim more).**
+  - Write side: quote or escape splitting, interpreter one-liners, names built at run time, the local runtime's shell.
+    #4014's turn-end check covers these.
+  - Read side: the same shell forms, ancestor searches whose pattern does not name the folder, the local runtime. These
+    stay open, and the row stays partially met for reads.
 - **Storage.** `workspaceState`, booleans per scope and task. Nothing leaves the device.
 - **Seats.** Minors on personal and trial activities get the same switches, because memory is on for them too (DEC-02).
   Class, lesson and instructor seats have no memory store and so no switches.

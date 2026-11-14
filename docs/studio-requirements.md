@@ -9317,7 +9317,9 @@ keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMO
 - **Defaults.** Both switches are on, which is today's behaviour. No Service profile key serves other defaults yet, so
   none is read.
 - **기억 쓰기 (use).** Off: the task's requests carry no memory (`takeMemoryContext` returns nothing before reading the
-  store). It is locked once the task has a message: the box is disabled, with a lock glyph and the reason
+  store). In the Agent SDK runtime the coach's own `Read`, `Grep`, `Glob` and `NotebookRead` are also denied, with
+  `이 작업에서는 기억을 쓰지 않게 해 두었어요`, when their target is inside the memory folder or their pattern names
+  `.hypeproof`. A shell command naming `.hypeproof` is denied too. It is locked once the task has a message: the box is disabled, with a lock glyph and the reason
   `첫 메시지를 보낸 뒤에는 바꿀 수 없어요. 새 작업에서 다시 정할 수 있어요.` as text tied to it (`aria-describedby`). The
   host decides the lock from the task's own message count and refuses a locked change, whatever the webview sends.
 - **기억에 남기기 (keep).** It can change at any time. Off: no memory write comes from this task's turns.
@@ -9325,7 +9327,9 @@ keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMO
   - A host made earlier refuses its next call.
   - `recordTurnMemoryWrite()` refuses (`memoryWriteRefusal`, the same path as REQ-KNOW-47).
   - The coach's own file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) are denied in the Agent SDK runtime when
-    they target the activity's `.hypeproof/memory/`, with `이 작업은 기억에 남기지 않게 해 두었어요`.
+    they target the activity's `.hypeproof/memory/`, with `이 작업은 기억에 남기지 않게 해 두었어요`. The target is
+    compared after links are resolved (the real path of its deepest existing folder) and with case folded where the OS
+    folds it (macOS, Windows), so `.HYPEPROOF/MEMORY/…` and a symlinked folder are the same folder.
   - In the same runtime, any shell command that names `.hypeproof`, in any case and in any form of the path, is denied
     before the policy runs. This is a coarse, deny-only string check, and it refuses reads as well as writes.
 
@@ -9338,9 +9342,21 @@ keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMO
   equal to the default is removed. At most 50 scopes and 200 tasks per scope are kept, and the oldest go first. A
   malformed value falls back to on. No memory text and no task title are stored.
 
-**Status: partially met.** Keep off cannot yet stop a shell command that builds the path at run time (a variable, a glob,
-`cd` steps), and it does not cover the local CLI runtime's shell. Either could still write into `.hypeproof/memory/`. The
-follow-up issue #4014 tracks a check of the memory folder after each keep-off turn. Until it lands, the row is not fully met.
+**Status: partially met.** Every known gap:
+
+- **Write side, keep off.** Not stopped by these checks:
+  - shell quote or escape splitting (`.hype''proof`, `.hype"proof"`, `.hype\proof`);
+  - interpreter one-liners (`python3 -c`, `node -e`);
+  - names built at run time (a variable, a glob, `cd` steps);
+  - the local CLI runtime's shell.
+
+  #4014 (the turn-end check of the memory folder) covers all of these by putting the folder back after the turn.
+- **Read side, use off.** Not stopped; this stays partial after #4014:
+  - shell reads written in any of the forms above;
+  - a search from an ancestor folder whose pattern does not name `.hypeproof`;
+  - reads by the local CLI runtime's tools.
+
+  Through any of these, memory text could reach that task's later requests.
 
 - **Policy.** The switches only narrow what the served memory policy allows. Where memory is not available for the seat
   (no store binding: class, lesson and instructor seats), there is no group and no write path.

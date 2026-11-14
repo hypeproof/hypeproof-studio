@@ -10,6 +10,9 @@
 // The ledger lives in workspaceState next to the memory-use ledger: per activity scope, per task id, two booleans.
 // No memory text, no task title, nothing outside this device.
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 export const TASK_MEMORY_KEY = "hps.taskMemory.v1";
 /** Ledger bounds: activity scopes kept, tasks per scope (oldest entries go first). */
 export const TASK_MEMORY_MAX = { scopes: 50, tasks: 200 } as const;
@@ -28,6 +31,8 @@ export const TASK_MEMORY_COPY = {
   keepHint: "끄면 이 작업에서는 새 기억을 남기지 않아요.",
   /** The refusal a memory write from a no-keep task gets (timeline line and the remember tool). */
   keepRefusal: "이 작업은 기억에 남기지 않게 해 두었어요",
+  /** The refusal a coach tool reading the memory files gets in a task with use off. */
+  useRefusal: "이 작업에서는 기억을 쓰지 않게 해 두었어요",
 } as const;
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -85,3 +90,32 @@ export function setSwitches(ledger: TaskMemoryLedger, scope: string, taskId: str
 
 /** What the settings dialog draws for the open task. */
 export interface TaskMemoryView { taskId: string; use: boolean; keep: boolean; useLocked: boolean }
+
+/**
+ * A path as the file system will resolve it: the real path of its deepest existing ancestor (links followed), then the
+ * rest of the segments. So `<root>/link/a.md` with `link -> .hypeproof/memory` lands inside the memory folder.
+ */
+export function canonicalPath(p: string): string {
+  let cur = path.resolve(p);
+  const rest: string[] = [];
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(cur), ...rest.reverse()); } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p);
+      rest.push(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/** macOS (APFS default) and Windows compare names without case: `.HYPEPROOF/MEMORY` is the same folder there. */
+export function foldsCase(platform: string = process.platform): boolean {
+  return platform === "darwin" || platform === "win32";
+}
+
+/** True when `target` is the memory folder or inside it, after links are resolved and case is folded where the OS does. */
+export function insideFolder(folder: string, target: string, platform: string = process.platform): boolean {
+  const fold = (p: string) => (foldsCase(platform) ? p.toLowerCase() : p);
+  const rel = path.relative(fold(canonicalPath(folder)), fold(canonicalPath(target)));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}

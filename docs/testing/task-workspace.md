@@ -380,6 +380,14 @@ bundled as it ships. Cases:
   Negative controls: `npm test`, `ls` and `echo memory > notes.md` are untouched. With keep on, the shell is decided as
   before. No request leaves the client while keep is off (a fetch tripwire).
 - **Mid-turn:** a host made before keep went off refuses its next call; keep back on offers it again.
+- **Path check:** a symlinked folder lands inside; case variants are the same folder on macOS and Windows (another folder
+  on Linux); a Write through a symlinked folder is refused.
+- **Read side (use off):** Read, Grep, a Glob aimed at `.hypeproof/**` from the work folder, and `cat` on the folder are
+  refused with the use sentence. Negative controls: other files and other searches are read as before, and reads are
+  allowed with use on.
+- **Pinned turn:** a turn begun in the keep-off task stays refused (and has no remember tool) after another task opens,
+  while a new turn in the other task may write.
+- **Temporary task:** a temporary task gets no group, and `setTaskMemory`'s own guard refuses another task id.
 - **Use:** with the first-use notice seen, use on carries the stored item (positive control); use off carries nothing.
 - **Lock:** use is locked after a message, and keep still changes.
 - **Stale task:** a stale task id changes nothing.
@@ -387,8 +395,20 @@ bundled as it ships. Cases:
 - **SDK runtime:** `canUseTool`, with the provider's own check, denies a `Write` into the memory folder and a `Bash`
   command naming it, with the sentence. A page write is left to the usual policy.
 
-Mutants on snts each fail it: use gate off, keep gate off, file-tool guard off, shell check off, SDK hook off, lock ignored. Removing the
-host's task-id check is equivalent, because the stale message changes nothing even without it.
+Mutants on snts each fail it:
+- use gate off;
+- keep gate off;
+- file-tool guard off;
+- shell check off;
+- SDK hook off;
+- lock ignored;
+- no realpath;
+- no case fold;
+- read side off;
+- a temporary task getting the view;
+- not pinned to the turn's task;
+- `setTaskMemory`'s task-id guard off. The router-level
+drop of a stale message is a second layer.
 
 `test/task-memory-switches.test.tsx` renders the group on the minimal DOM:
 - two labelled native checkboxes under the legend;
