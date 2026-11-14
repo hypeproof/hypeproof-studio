@@ -75,7 +75,7 @@ try {
   for (const seat of ['personal', 'classroom']) for (const dark of [true, false]) for (const width of [800, 1420]) {
     const tag = `${seat}-${width}-${dark ? 'dark' : 'light'}`;
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 720, dark });
+    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 720, dark, appReady: true });
     const workspace = { scope: 'turn-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '치과 가격', createdAt: 1, updatedAt: 1, messageCount: history.length }], sourceSelection: null };
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: seat }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: seat === 'personal' ? workspace : undefined,
       // The persistent pass-status strip (personal only): an access state the host could not confirm.

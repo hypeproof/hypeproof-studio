@@ -46,7 +46,7 @@ const TARGET = 'a4';
 
 const open = async (seat, dark, width) => {
   await b.send('Page.navigate', { url: 'about:blank' });
-  await b.load(page(dark), { width, height: 800, dark });
+  await b.load(page(dark), { width, height: 800, dark, appReady: true });
   await send({ type: 'config', config: configFor(seat) });
   await send({ type: 'history', messages: history });
 };

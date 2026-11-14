@@ -577,12 +577,22 @@ else
   # Note: instructor (issuer) token is seeded only via HPS_DEV_ISSUER_TOKEN_FILE above.
   # Never write it to local-participant-token.txt (TOKEN_KEY student slot).
 
+  # #3569 keeps the Dev app's secrets in memory. HPS_REVIEW_PERSIST_SECRETS=1 keeps them on disk instead.
+  # The Dev copy reads the release app's "HypeProof Studio Safe Storage" key (same app name), so it adds no item.
+  # Only the value 1 changes anything; every other value keeps the flag.
+  if [[ "${HPS_REVIEW_PERSIST_SECRETS:-}" == "1" ]]; then
+    SECRET_FLAGS=()
+    echo "NOTE: HPS_REVIEW_PERSIST_SECRETS=1 keeps the Dev app secrets on disk. macOS may ask for the login keychain password; a person types it, never the agent. Allow once; do not delete the HypeProof Studio Safe Storage item."
+  else
+    SECRET_FLAGS=(--inmemory-secrets)
+  fi
+
   T5=$(ms)
   DEV_APP_RC=0
   DEV_APP_RAW="$(python3 "$WORKTREE_DIR/scripts/studio-dev.py" run \
     --provider "$PROVIDER" \
     --service local \
-    --inmemory-secrets \
+    ${SECRET_FLAGS[@]+"${SECRET_FLAGS[@]}"} \
     --no-workspace-trust \
     ${CHALK_FLAG:+$CHALK_FLAG} \
     ${HPS_REVIEW_CDP_PORT:+--cdp-port "$HPS_REVIEW_CDP_PORT"} 2>&1)" || DEV_APP_RC=$?

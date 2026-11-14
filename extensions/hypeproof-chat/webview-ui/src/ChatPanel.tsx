@@ -95,6 +95,7 @@ import { LessonStepPanel } from './LessonStepPanel';
 import { GoalStatusBar } from './GoalStatusBar';
 import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
+import { collapseSeat } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
@@ -171,6 +172,7 @@ interface Props {
    * — that was what split the screen into two blocks.
    */
   messages: ChatMessage[];
+  pageNoticeAction?: import("../../src/protocol").PageNoticeAction; // CGP-ART-R-023 — e.g. the deck PDF's 폴더에서 보기
   pageNotice: string | null;           // #308 — inline notice for "페이지를 코치에게"
   /** CR-09 — the picked element queued for the next turn (Curriculum Runtime only). */
   annotationsEnabled?: boolean;
@@ -272,6 +274,8 @@ interface Props {
   onCancel: () => void;
   onClear: () => void;
   onSetToken: () => void;
+  /** #4048 — the rehearsal band's button: ask the host to leave the rehearsal seat (the host confirms). */
+  onEndRehearsalSeat?: () => void;
   onSettings: () => void;
   onRunCode: (html: string) => void;
   onNamingRitual: () => void;
@@ -1476,9 +1480,14 @@ export function ChatPanel(props: Props) {
   //
   // If you need a new hook, add it **above** this block.
   // ─────────────────────────────────────────────────────────────────────────
-  const updateBanner = config?.update ? (
+  const updateBannerCore = config?.update ? (
     <UpdateBanner offer={config.update} onInstall={props.onInstallUpdate} onDismiss={props.onDismissUpdate} />
   ) : null;
+  // #4052 — the rehearsal band rides in the same slot as the update banner. Without the signal that slot is exactly the
+  // one main renders, so no sibling's tree position (and no React useId) moves. A new sibling would shift them.
+  const updateBanner = config?.rehearsalSeat ? (
+    <>{updateBannerCore}<RehearsalSeatBand visible onEnd={props.onEndRehearsalSeat ?? (() => undefined)} /></>
+  ) : updateBannerCore;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
   // #3563 — an instructor verified by the Chalk runtime sees the Chalk tab notice, not the student start screen.
@@ -1991,6 +2000,7 @@ export function ChatPanel(props: Props) {
               <p className="hp-rail-lesson-note">안내를 읽은 것만으로 이 단계가 끝나지는 않습니다. 직접 만들고 확인한 기록이 남아야 합니다.</p>
             </details>
             <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile!.rehearsal} busy={streaming} post={postToHost}
+              seat={collapseSeat({ activityId: config.profile?.activity_id, entryId: config.lessonCapabilityEntry?.id, localActivityId: config.activity?.id })}
               work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult} />
             {/* #751 F4 — a learner self-report for the current step, separate from region D's task completion gate. */}
             <p className="hp-rail-step-report">
@@ -2201,6 +2211,15 @@ export function ChatPanel(props: Props) {
           <div className="hps-page-notice" role="status" aria-live="polite">
             {/* REQ-STUDIO-STROKE-ICONS: the host's leading glyph becomes a stroke icon. */}
             {(() => { const notice = splitLeadingGlyph(props.pageNotice); return <>{notice.glyph && <><ChatIcon kind={glyphIconKind(notice.glyph)} size={16} /> </>}{notice.text}</>; })()}
+          </div>
+        )}
+        {/* CGP-ART-R-023 (REQ-ART-23 (2)) — the notice's one quiet action, outside its polite region so the region reads only the
+            sentence. The host decides which file it shows and checks it again before the OS call. */}
+        {props.pageNotice && props.pageNoticeAction?.kind === "deckPdfReveal" && (
+          <div className="hps-page-notice-actions">
+            <button type="button" className="hp-cta-quiet" data-page-notice-action="deckPdfReveal"
+              aria-label={`${props.pageNoticeAction.label}: ${props.pageNoticeAction.name}`}
+              onClick={() => postToHost({ type: "deckPdfReveal" })}>{props.pageNoticeAction.label}</button>
           </div>
         )}
 
@@ -3202,6 +3221,17 @@ function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 
 
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
+}
+
+/** #4048 — the band in a rehearsal seat. Drawn only when the host sent the rehearsal signal; otherwise nothing. */
+export function RehearsalSeatBand({ visible, onEnd }: { visible: boolean; onEnd: () => void }) {
+  if (!visible) return null;
+  return (
+    <div className="hps-rehearsal-seat" role="status">
+      <span>리허설 중</span>{" "}
+      <button type="button" onClick={onEnd}>끝내고 돌아가기</button>
+    </div>
+  );
 }
 
 export function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {

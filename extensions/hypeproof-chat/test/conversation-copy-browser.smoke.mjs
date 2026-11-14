@@ -52,7 +52,7 @@ let states = 0;
 try {
   for (const seat of ['personal', 'classroom']) for (const dark of [true, false]) for (const width of [320, 800, 1420]) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>${clipboardStub}window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 900, dark });
+    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>${clipboardStub}window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 900, dark, appReady: true });
     const workspace = { scope: 'copy-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '고양이 페이지', createdAt: 1, updatedAt: 1, messageCount: 4 }, { id: 'other', title: '다른 작업', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: seat }, profile: { ...chatConfig().profile, lesson: null }, coach: { ...chatConfig().coach, name: '코치' }, taskWorkspace: seat === 'personal' ? workspace : undefined });
     await send({ type: 'config', config: base });
@@ -144,7 +144,7 @@ try {
     states++;
   }
   // Forced colours: the shown status keeps a visible border.
-  await b.load(`<html><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>${clipboardStub}window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width: 800, height: 900, forcedColors: true });
+  await b.load(`<html><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>${clipboardStub}window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width: 800, height: 900, forcedColors: true, appReady: true });
   const fcBase = chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: { scope: 'fc', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '고양이 페이지', createdAt: 1, updatedAt: 1, messageCount: 4 }], sourceSelection: null } });
   await send({ type: 'config', config: fcBase }); await send({ type: 'history', messages: history });
   await openMenu(); await b.evaluate(`(${item}).click()`); await settle(); await b.evaluate(`window.__writes[0].resolve()`); await settle();
