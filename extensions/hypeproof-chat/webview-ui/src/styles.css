@@ -3313,3 +3313,14 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-lesson-starter:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-lesson-starter:disabled { cursor: not-allowed; opacity: 0.6; }
 .hps-lesson-starter:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+
+/* #4102 — the rehearsal route difference and the expected-stuck checklist, under the rehearsal band. Existing tokens only. */
+.hps-rehearsal-route, .hps-rehearsal-checklist {
+  margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1) 0; padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-1);
+  color: var(--hp-text-primary-default); font-size: var(--ds-c-studio-styles-type-9); overflow-wrap: anywhere;
+}
+.hps-rehearsal-route p, .hps-rehearsal-checklist p { margin: 0 0 var(--ds-c-studio-styles-space-2); }
+.hps-rehearsal-route-title, .hps-rehearsal-checklist-title { font-weight: var(--ds-s-typography-19); }
+.hps-rehearsal-check-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-1); margin: 0 0 var(--ds-c-studio-styles-space-2); }
+.hps-rehearsal-check-row > p { flex: 1 1 100%; margin: 0; }
+.hps-rehearsal-check-row textarea { flex: 1 1 100%; min-width: 0; color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); font: inherit; }

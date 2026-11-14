@@ -157,6 +157,12 @@ export interface ChatConfig {
   chalkInstructorTab?: true;
   /** #4048 — true only in a rehearsal seat (a return is held and this window is the rehearsal folder). Absent otherwise. */
   rehearsalSeat?: true;
+  /** #4102 — the rehearsal panel's content, only with the rehearsal signal: the seat's expected stucks and the route values. */
+  rehearsalPanel?: {
+    stucks: { id: string; expected_stuck: string }[];
+    /** Only a subscription rehearsal (profile.rehearsal.path === 'subscription', #4103). Absent otherwise. */
+    route?: { rehearsalModel: string | null; lessonModel: string | null; minor: boolean };
+  };
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -318,7 +324,8 @@ export interface ResolvedProfile {
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */
-  rehearsal?: { id: string; course_id: string; version: string; expires_at: number; judged: boolean };
+  /** #4099 — 'subscription' runs the rehearsal only on the local subscription runtime. Absent or unknown means 'server'. */
+  rehearsal?: { id: string; course_id: string; version: string; expires_at: number; judged: boolean; path?: "server" | "subscription" };
   /** Server-verified identity; never an execution grant. */
   activity_id?: string;
   /** Presentation only; derived from authenticated Service access, never grants authority. */
@@ -861,7 +868,7 @@ export type WebviewMessage = (
   // #751 G2 — a work-surface save (criterion_form → criterion, decision_form → decision) for one step of the current lesson.
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
-  | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission; checklist?: unknown }
   | { type: "rehearsalSeatEnd" }
   // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
   // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the

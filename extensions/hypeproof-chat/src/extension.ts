@@ -105,7 +105,7 @@ function rehearsalSeatChannel(): vscode.OutputChannel {
 let seatHost: SeatHost | undefined;
 
 /** #4048 — the host functions chalk#17 calls: enter a rehearsal in this window, end it, or ask whether a return is held. */
-export async function enterRehearsalSeat(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void> {
+export async function enterRehearsalSeat(input: { token: string; expiresAt: number; rehearsalId: string; stucks?: unknown }): Promise<void> {
   if (!seatHost) throw new Error("작업 창이 준비되지 않았어요. 다시 시도해 주세요.");
   await enterRehearsal(seatHost, input);
 }
