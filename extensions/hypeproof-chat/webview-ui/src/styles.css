@@ -1843,7 +1843,9 @@ body.vscode-light .hps-error { color: var(--vscode-errorForeground, var(--ds-c-s
 /* ── Region B's learning information — inside the coach rail, outside the message stream (SX-05) ──
    AE-01's goal block (`.hp-rail-goal`) is a rail card with the same look under its own name, so `.hp-rail-lesson`
    keeps meaning the lesson's own cards. */
-.hp-rail-lesson, .hp-rail-goal { margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--ds-c-studio-styles-type-2); max-height: 45vh; overflow: auto; flex-shrink: 0; }
+/* CGP-SHELL-R-017: the lesson, help-request and approval panels follow the learner's text size (the step is 0 outside a
+   chat shell or the start page). */
+.hp-rail-lesson, .hp-rail-goal { margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); font-size: calc(var(--ds-c-studio-styles-type-2) + var(--hp-font-step)); max-height: 45vh; overflow: auto; flex-shrink: 0; }
 .hp-rail-lesson p, .hp-rail-goal p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .hp-rail-lesson summary, .hp-rail-goal summary { min-height: var(--ds-c-studio-styles-size-8); cursor: pointer; padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-13); }
 .hp-rail-lesson-meta, .hp-rail-lesson-note { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-styles-type-1); }

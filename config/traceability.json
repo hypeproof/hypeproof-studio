@@ -7835,6 +7835,15 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/textSize.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
         }
       ]
     },
@@ -7852,6 +7861,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/text-size-geometry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/text-size-reach.smoke.mjs"
         }
       ]
     },

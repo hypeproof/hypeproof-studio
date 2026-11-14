@@ -392,12 +392,13 @@ body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-
 /* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
 .hps-shell[data-chat-detail="personal"] .hps-msg-body { word-break: keep-all; }
 
-/* CGP-DS-R-009 / CGP-DS-R-008: chat text size in personal chat (the picker lives in 대화 설정). The
-   shell sets the step; every --hp-text-* size inside it follows (tokens.css), so 크게 / 아주 크게 add
-   2px / 4px to the body, the composer, reply choices and every caption alike. Control heights and
-   44px targets do not change (min-heights only). */
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-7); }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-13); }
+/* CGP-DS-R-009 / CGP-DS-R-008 / CGP-SHELL-R-017: chat text size in every chat seat, personal and
+   classroom (the pickers live in 대화 설정 and in the start page 설정 sheet). The shell sets the step;
+   every --hp-font-* size inside it follows (tokens.css), so 크게 / 아주 크게 add 2px / 4px to the body,
+   the composer, reply choices, the help sheets (단축키, 새로운 기능), lesson tips, the classroom help
+   request and every caption alike. Control heights and 44px targets do not change (min-heights only). */
+.hps-shell[data-text-size="large"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-7); }
+.hps-shell[data-text-size="xlarge"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-13); }
 
 /* CGP-DS-R-008 (REQ-STUDIO-TYPE-SCALE, DEC-29): learner text in the personal chat reads at 14px or
    more. The shell's own size is the caption step, so text that only inherits follows the step too.
