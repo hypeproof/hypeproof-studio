@@ -19580,6 +19580,9 @@
           "path": "extensions/hypeproof-chat/src/memoryFolderGuard.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/memoryEditorSaves.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/activityMemory.ts"
         },
         {

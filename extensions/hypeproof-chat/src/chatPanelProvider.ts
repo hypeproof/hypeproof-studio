@@ -420,7 +420,8 @@ import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
 import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
 import { insideFolder } from "./memoryPathCheck";
-import { FOLDER_GUARD_COPY, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder, type Snapshot } from "./memoryFolderGuard";
+import { watchMemoryEditorSaves } from "./memoryEditorSaves";
+import { FOLDER_GUARD_COPY, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder, type Snapshot } from "./memoryFolderGuard";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
@@ -1124,9 +1125,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               renameUndone = await store.undoRename(held.undo).then(() => true, () => false);
             }
           }
-          else if (msg.type === 'taskArchive') { await store.archiveTask(msg.taskId, expected); await this.purgeTaskMemoryQuarantine(msg.taskId); }
+          else if (msg.type === 'taskArchive') { await store.archiveTask(msg.taskId, expected); void this.purgeTaskMemoryQuarantine(msg.taskId); }
           else if (msg.type === 'taskRestore') await store.restoreTask(msg.id, expected);
-          else if (msg.type === 'taskMove') { moved = await this.moveTask(store, msg.id, msg.destination, expected); await this.purgeTaskMemoryQuarantine(msg.id); }
+          else if (msg.type === 'taskMove') { moved = await this.moveTask(store, msg.id, msg.destination, expected); void this.purgeTaskMemoryQuarantine(msg.id); }
           this.orchestratorState = undefined;
           // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
           if (leaving) this.endTaskCommandAllows();
@@ -3671,16 +3672,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(setFolderConsentPresenter(folder => this.folderConsentRequest.ask(folder)));
     context.subscriptions.push(onFolderConsentChanged(() => { this.endTaskCommandAllows(); void this.postConfig().catch(() => {}); }));
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
-    // CGP-KNOW-R-028 follow-up (#4014) — the learner's own save of a memory file in the editor is Studio's change, never
-    // something a keep-off turn check puts back.
-    // Optional call: a host without the event (the hand-written vscode stubs of the provider smokes) simply has no
-    // editor saves to note.
-    const memorySaves = vscode.workspace.onDidSaveTextDocument?.(document => {
-      const file = document.uri.fsPath;
-      if (document.uri.scheme !== "file" || path.basename(path.dirname(file)) !== "memory" || path.basename(path.dirname(path.dirname(file))) !== ".hypeproof") return;
-      // The bytes on disk, not the editor's text: a byte-order mark or line endings would make the save look foreign.
-      void noteStudioMemorySave(file);
-    });
+    // CGP-KNOW-R-028 follow-up (#4014) — the learner's editor saves of memory files (memoryEditorSaves.ts).
+    const memorySaves = watchMemoryEditorSaves();
     if (memorySaves) context.subscriptions.push(memorySaves);
     // The quarantine's retention and caps are applied at activation too (a window closed for a week starts clean).
     try { void pruneQuarantine(this.memoryQuarantineBase()).catch(() => undefined); } catch { /* no global storage yet: the next guard run prunes */ }
@@ -7844,11 +7837,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     return result;
   }
-  /** The quarantine of one task goes with it: archived or moved to another activity. */
+  /**
+   * The quarantine of one task goes with it: archived or moved to another activity. The handler does not wait for it,
+   * and it never throws or rejects:
+   * the archive or move has already happened, and the task handler's own flow (its result, the rename undo, the
+   * switch) must run exactly as without it (task-workspace-host). A host without global storage has nothing to purge.
+   */
   private async purgeTaskMemoryQuarantine(taskId: unknown): Promise<void> {
-    const scope = this.activityMemoryBinding?.scope ?? activityConnections(this.context)?.scope;
-    if (typeof taskId !== "string" || !scope) return;
-    await purgeTaskQuarantine(this.memoryQuarantineBase(), this.memoryQuarantineScope(scope), taskId).catch(() => undefined);
+    try {
+      const scope = this.activityMemoryBinding?.scope ?? activityConnections(this.context)?.scope;
+      if (typeof taskId !== "string" || !scope) return;
+      await purgeTaskQuarantine(this.memoryQuarantineBase(), this.memoryQuarantineScope(scope), taskId);
+    } catch { /* nothing to purge */ }
   }
   /** CGP-KNOW-R-028 — the task each turn began in, so a task switch mid-turn cannot move its writes. */
   private taskMemoryStreams?: Map<string, string | null>;
