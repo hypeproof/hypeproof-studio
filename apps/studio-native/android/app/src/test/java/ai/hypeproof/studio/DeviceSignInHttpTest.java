@@ -13,7 +13,7 @@ public class DeviceSignInHttpTest {
         for(var sample:List.of(
             new Case(429,"reflection_monthly_limit","이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다."),
             new Case(503,"reflection_admission_unavailable","AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요."),
-            new Case(429,"reflection_budget_limit","이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요."),
+            new Case(429,"reflection_budget_limit","AI 이용 한도에 도달했어요. 기록은 그대로 남아 있어요."),
             new Case(429,"provider_quota","이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요."),
             new Case(403,"reflection_access_required","이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.")
         )) {
