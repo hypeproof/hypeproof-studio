@@ -14115,6 +14115,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/chatShortcuts.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatKeys.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ShortcutSheet.tsx"
         },
         {
@@ -14138,6 +14141,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/shortcut-sheet-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chat-keys.test.tsx"
         }
       ]
     },

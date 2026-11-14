@@ -7473,13 +7473,24 @@ between key caps only in a window 480px wide or narrower, so the table keeps two
 |---|---|---|
 | Enter | 메시지 보내기 (답하는 중에 누르면 끝나고 보내도록 예약해요) | composer key handler, #416 queue; nothing while the composer is read-only |
 | Shift + Enter | 줄 바꾸기 | the textarea's own newline |
+| Esc | 답변 멈추기 (답하는 중에 눌러요. 메뉴나 창이 열려 있으면 그것부터 닫아요) | `chatKeys.ts` `useChatKeys`, every ChatPanel seat: the same stop as the stop button (a parked message goes back to the draft), only while an answer streams |
+| Alt + Shift + K (macOS ⌥ Option + ⇧ Shift + K) | 입력창으로 가기 | `chatKeys.ts` `useChatKeys`, every ChatPanel seat, matched by the physical K key; not under a dialog or in an IME composition |
 | Esc | 열린 창·메뉴 닫기 | dialog, menu and panel focus contract |
 | Cmd + F (macOS) / Ctrl + F | 대화에서 찾기 (찾기 칸에서 Enter는 다음, Shift + Enter는 이전 결과) | ChatFindBar (CGP-CHAT-R-027), every ChatPanel seat |
 | Alt + Shift + J | 대화로 바로 가기 (작업 화면 안에서 눌러요; listed only while the personal task layout is shown) | TaskWorkspace (CGP-AGENT-D-019), focus inside the task layout |
 | ? | 이 단축키 목록 열기 (입력창 밖에서) | this sheet |
 
-Not listed because nothing binds them yet: Esc to stop an answer (Stop stays the button) and a
-focus-the-composer key. Cmd/Ctrl+Z in the sketch dialog is that dialog's own key and is not
+**Esc has many owners, and stopping an answer comes last** (CGP-CHAT-R-030, 2026-11-14). Esc stops only while an answer
+streams, and only when all of these hold:
+- the Escape has no modifier, is not a repeat and is not part of an IME composition;
+- it starts in the composer's text box or in a non-text place in the chat, not in another text field, the find bar, the
+  voice panel, a dialog, a menu or a list;
+- no dialog, open menu or list, dictation recording or microphone card is on screen;
+- no other listener handled it. The stop decision waits until the whole dispatch has finished, so an owner that calls
+  `preventDefault` after the chat's own listener still keeps its Escape.
+
+Alt+Shift+K has no VS Code default and no OS default on macOS or Windows, and sits beside the chat's Alt+Shift+J and
+Alt+Shift+M. Cmd/Ctrl+Z in the sketch dialog is that dialog's own key and is not
 listed in the chat sheet. A row is added in
 `webview-ui/src/chatShortcuts.ts` in the same change that binds its key. The sheet does not
 read the VS Code keybinding editor and does not reflect user rebinding (REQ-CGPV-29 asks for
@@ -7492,7 +7503,9 @@ colours; opens from settings and from `?`, not from the composer or with a modif
 composition; the listed rows equal the bound set and each listed key is pressed on the real
 panel with real key input: Enter sends, Shift+Enter inserts a line break without sending, Esc
 closes, Cmd+F (macOS) or Ctrl+F (Windows) opens find and the other platform's modifier does not,
-Alt+Shift+J focuses the conversation, `?` opens; the computed table has two columns side by side
+Alt+Shift+J focuses the conversation, Alt+Shift+K focuses the composer, Esc stops a streaming answer from the composer and
+does nothing without a stream, while the find bar or the sheet takes the Escape, in an IME composition, with Shift, or
+when a later listener handles it, `?` opens; the computed table has two columns side by side
 in every row at every width, key caps on one line at 800px and wider, Tab and Shift+Tab stay in
 the sheet; 44px entry and close, >=14px text,
 opaque surface inside the viewport, outlined key caps). It fails under

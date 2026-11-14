@@ -1,0 +1,61 @@
+// CGP-CHAT-R-030 — Esc stops an answer and Alt+Shift+K focuses the composer (webview-ui/src/chatKeys.ts), on a real DOM
+// (jsdom). Positive: Esc from the composer or a non-text place while an answer streams; Alt+Shift+K anywhere outside a
+// dialog. Negative controls, one per Escape owner: no stream, a modifier, a repeat, an IME composition, another text
+// field, a dialog, a menu, a listbox, the find bar, the voice panel, dictation recording, the microphone card, and an
+// Escape another listener handles after ours (the stop waits for the whole dispatch).
+// Run: node scripts/run-tsx-tests.mjs chat-keys
+import React from 'react';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const { JSDOM } = createRequire(process.cwd() + '/package.json')('jsdom');
+import { focusesComposer, mayStopAnswer } from '../webview-ui/src/chatKeys';
+
+void React;
+const dom = new JSDOM(`<body><div class="hps-shell"><div class="hps-messages" tabindex="-1"><p id="msg">답</p></div>
+  <footer class="hps-input-area"><div class="hps-input"><textarea id="box"></textarea></div></footer>
+  <input id="rename"><div class="hps-find"><input id="find"></div><div class="hps-voice-panel"><button id="voice">x</button></div>
+  <div role="menu" hidden><button id="menuitem">m</button></div></div></body>`);
+const doc = dom.window.document;
+(globalThis as unknown as { Element: unknown }).Element = dom.window.Element;
+const el = (id: string) => doc.getElementById(id)!;
+const esc = (target: Element, extra: Record<string, unknown> = {}) => ({ key: 'Escape', code: 'Escape', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, defaultPrevented: false, isComposing: false, keyCode: 27, target, ...extra }) as unknown as KeyboardEvent;
+const altK = (target: Element, extra: Record<string, unknown> = {}) => ({ ...esc(target), key: 'K', code: 'KeyK', altKey: true, shiftKey: true, keyCode: 75, ...extra }) as unknown as KeyboardEvent;
+
+let n = 0;
+const t = (label: string, fn: () => void) => { fn(); n++; console.log(`  ok   ${label}`); };
+
+t('Esc stops from the composer or the message list while an answer streams', () => {
+  assert.equal(mayStopAnswer(esc(el('box')), doc, true), true);
+  assert.equal(mayStopAnswer(esc(el('msg')), doc, true), true);
+  assert.equal(mayStopAnswer(esc(doc.body), doc, true), true);
+});
+
+t('negative controls: no stream, modifiers, repeat, IME, already handled', () => {
+  assert.equal(mayStopAnswer(esc(el('box')), doc, false), false, 'no answer streaming');
+  for (const extra of [{ shiftKey: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { repeat: true }, { isComposing: true }, { keyCode: 229 }, { defaultPrevented: true }])
+    assert.equal(mayStopAnswer(esc(el('box'), extra), doc, true), false, JSON.stringify(extra));
+});
+
+t('negative controls: every other Escape owner keeps it', () => {
+  for (const id of ['rename', 'find', 'voice', 'menuitem']) assert.equal(mayStopAnswer(esc(el(id)), doc, true), false, id);
+  // A closed menu left in the page (hidden) does not block; an open one does.
+  assert.equal(mayStopAnswer(esc(el('box')), doc, true), true, 'a hidden menu is not open');
+  for (const html of ['<dialog open></dialog>', '<div aria-modal="true"></div>', '<div role="listbox"></div>', '<div role="menu"></div>', '<div class="hps-voice-recording"></div>', '<div class="hps-voice-explain"></div>']) {
+    const holder = doc.createElement('div'); holder.innerHTML = html; doc.body.append(holder);
+    assert.equal(mayStopAnswer(esc(el('box')), doc, true), false, html);
+    holder.remove();
+  }
+  assert.equal(mayStopAnswer(esc(el('box')), doc, true), true, 'and stops again once they are gone');
+});
+
+t('Alt+Shift+K by physical key; not with other modifiers, in IME, or under a dialog', () => {
+  assert.equal(focusesComposer(altK(el('msg')), doc), true);
+  assert.equal(focusesComposer(altK(el('rename'), { key: '' }), doc), true, 'macOS Option layout: the key text differs, the code does not');
+  for (const extra of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: false }, { altKey: false }, { repeat: true }, { isComposing: true }, { code: 'KeyJ' }])
+    assert.equal(focusesComposer(altK(el('msg'), extra), doc), false, JSON.stringify(extra));
+  const d = doc.createElement('dialog'); d.setAttribute('open', ''); doc.body.append(d);
+  assert.equal(focusesComposer(altK(el('msg')), doc), false, 'a dialog keeps the keyboard');
+  d.remove();
+});
+
+console.log(`chat keys: ${n} passed`);

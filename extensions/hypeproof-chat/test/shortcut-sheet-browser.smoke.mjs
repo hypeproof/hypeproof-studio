@@ -1,7 +1,7 @@
 // CGP-CHAT-R-030: the real App bundle in headless Chromium. 키보드 단축키 opens from the settings
 // dialog and from `?` outside a text field (never from the composer). Every key the sheet lists is
-// then pressed on the real panel and must do what its row says; keys that are not bound (Esc to
-// stop, a focus-the-composer key) must not be listed. Platform modifiers follow navigator.platform
+// then pressed on the real panel and must do what its row says, including Esc stopping an answer and
+// Alt+Shift+K focusing the composer, and never stealing Escape from the find bar, a dialog or an IME. Platform modifiers follow navigator.platform
 // (⌘ on macOS, Ctrl on Windows). CGP-CHAT-D-030: the sheet is a two-column table (key, action) in
 // computed layout at every width, Tab and Shift+Tab stay inside it, Esc closes it. Computed
 // geometry: 44px entry and close targets, >=14px text, the dialog inside the viewport, forced
@@ -80,14 +80,16 @@ try {
     assert.equal(await b.evaluate(`!!${sheet}`), true, `sheet opens from settings (${label})`);
     assert.equal(await b.evaluate(`${sheet}.contains(document.activeElement)`), true, 'focus moves into the sheet');
     const listed = await rows();
-    const expected = seat === 'personal' ? ['send', 'newline', 'close', 'find', 'conversation', 'help'] : ['send', 'newline', 'close', 'find', 'help'];
+    const expected = seat === 'personal' ? ['send', 'newline', 'stop', 'focus', 'close', 'find', 'conversation', 'help'] : ['send', 'newline', 'stop', 'focus', 'close', 'find', 'help'];
     assert.deepEqual(listed.map(r => r.id), expected, `only bound keys are listed (${label})`);
     const mac = platform === 'MacIntel';
     assert.deepEqual(listed.find(r => r.id === 'newline').keys, [mac ? '⇧ Shift' : 'Shift', 'Enter'], 'platform Shift name');
     if (seat === 'personal') assert.deepEqual(listed.find(r => r.id === 'conversation').keys, [mac ? '⌥ Option' : 'Alt', mac ? '⇧ Shift' : 'Shift', 'J'], 'platform Alt name');
     assert.deepEqual(listed.find(r => r.id === 'find').keys, [mac ? '⌘ Cmd' : 'Ctrl', 'F'], 'platform Command glyph: ⌘ on macOS, Ctrl on Windows');
     const all = listed.map(r => r.text).join('\n');
-    for (const absent of ['멈추기', '입력창으로', mac ? 'Ctrl' : '⌘']) assert.ok(!all.includes(absent), `unbound key or other platform's name is not listed: ${absent}`);
+    assert.deepEqual(listed.find(r => r.id === 'focus').keys, [mac ? '⌥ Option' : 'Alt', mac ? '⇧ Shift' : 'Shift', 'K'], 'focus key, platform names');
+    assert.deepEqual(listed.find(r => r.id === 'stop').keys, ['Esc'], 'stop key');
+    for (const absent of [mac ? 'Ctrl' : '⌘']) assert.ok(!all.includes(absent), `the other platform's name is not listed: ${absent}`);
     // CGP-CHAT-D-030: a real two-column table, measured: every row has its key cell left of its
     // action cell on the same line, at 320px too.
     const table = await b.evaluate(`(()=>{const t=${sheet}.querySelector('table.hps-shortcut-list');if(!t)return null;const head=[...t.tHead.rows[0].cells].map(c=>c.textContent);const rows=[...t.tBodies[0].rows].map(r=>{const [k,a]=[...r.cells].map(c=>c.getBoundingClientRect());const caps=[...r.cells[0].querySelectorAll('kbd')].map(c=>c.getBoundingClientRect().top);return {cells:r.cells.length,scope:r.cells[0].getAttribute('scope'),beside:k.right<=a.left+0.5,line:Math.abs(k.top-a.top)<1,oneLine:caps.every(t=>Math.abs(t-caps[0])<1)}});return {display:getComputedStyle(t).display,head,rows}})()`);
@@ -149,6 +151,41 @@ try {
     await typeDraft('SHORTCUT-SEND');
     await press(composer, { key: 'Enter', code: 'Enter', vk: 13, text: '\r' }); await settle(120);
     assert.equal(await b.evaluate(`window.__posts.some(m=>m.type==='sendMessage'&&m.text==='SHORTCUT-SEND')`), true, `Enter sends (${label})`);
+    // `focus`: Alt+Shift+K (Option+Shift+K) puts the cursor in the message box from elsewhere in the panel.
+    await b.evaluate(`(()=>{const e=${outside};e.tabIndex=e.tabIndex<0?-1:e.tabIndex;e.focus()})()`);
+    await press(null, { key: 'K', code: 'KeyK', vk: 75, altKey: true, shiftKey: true });
+    assert.equal(await b.evaluate(`document.activeElement===${composer}`), true, `Alt+Shift+K focuses the composer (${label})`);
+    // `stop`: Esc stops a streaming answer, from the composer; nothing is stopped without a stream.
+    const cancels = () => b.evaluate(`window.__posts.filter(m=>m.type==='cancelStream').length`);
+    await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(80);
+    assert.equal(await cancels(), 0, `Esc with no answer streaming stops nothing (${label})`);
+    await send({ type: 'streamStart', streamId: 'shortcut-stream', messageId: 'shortcut-answer' });
+    await send({ type: 'streamChunk', streamId: 'shortcut-stream', delta: '답하는 중이에요' });
+    // Negative controls first: the find bar and an IME composition own Escape.
+    await press(outside, { key: 'f', code: 'KeyF', vk: 70, ...(mac ? { metaKey: true } : { ctrlKey: true }) }); await settle(80);
+    await press(null, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(80);
+    assert.equal(await b.evaluate(`!!${findInput}`), false, 'Esc closes find while an answer streams');
+    assert.equal(await cancels(), 0, `the find bar's Escape does not stop the answer (${label})`);
+    await b.evaluate(`(()=>{const e=${outside};e.focus()})()`);
+    await press(null, QUESTION); await settle(120);
+    assert.equal(await b.evaluate(`!!${sheet}`), true, 'the sheet opens during the answer');
+    await press(null, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(400);
+    assert.equal(await b.evaluate(`!!${sheet}`), false, 'Esc closes the sheet first');
+    assert.equal(await cancels(), 0, `a dialog's Escape does not stop the answer (${label})`);
+    await b.evaluate(`${composer}.focus()`);
+    await key(composer, { key: 'Escape', isComposing: true }); await settle(80);
+    assert.equal(await cancels(), 0, 'an IME composition keeps its Escape');
+    await key(composer, { key: 'Escape', shiftKey: true }); await settle(80);
+    assert.equal(await cancels(), 0, 'Shift+Esc is not the stop key');
+    // A window listener added after the App's (like voice conversation's) that handles Escape: the stop waits for the
+    // whole dispatch and sees it.
+    await b.evaluate(`window.__late=(e)=>{if(e.key==='Escape')e.preventDefault()};window.addEventListener('keydown',window.__late)`);
+    await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(80);
+    assert.equal(await cancels(), 0, 'an Escape handled by a later listener does not stop the answer');
+    await b.evaluate(`window.removeEventListener('keydown',window.__late)`);
+    await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(120);
+    assert.equal(await cancels(), 1, `Esc in the composer stops the answer (${label})`);
+    await send({ type: 'streamEnd', streamId: 'shortcut-stream' });
     // `conversation`: Alt+Shift+J moves focus to the conversation (personal task layout only).
     if (seat === 'personal') {
       await press(composer, { key: mac ? 'Ô' : 'J', code: 'KeyJ', vk: 74, altKey: true, shiftKey: true });

@@ -2289,3 +2289,19 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-CHAT-R-030 gaps: Esc stops an answer, Alt+Shift+K focuses the composer (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Keyboard shortcut sheet (CGP-CHAT-R-030)".
+
+- **Esc (agent choice).** It stops only while an answer streams, through the same path as the stop button.
+  - Every other Escape owner comes first: an IME composition, dialogs, open menus and lists, the find bar, the voice
+    panel and voice conversation, dictation recording, the microphone card, and another text field's own Escape.
+  - The decision waits until the event's dispatch has finished, so a listener that handles Escape later still wins.
+- **Focus key (agent choice): Alt+Shift+K (⌥ Option+⇧ Shift+K).** It is matched by the physical key, so macOS Option
+  layouts work. VS Code has no default binding for it and neither macOS nor Windows reserves it, and it sits beside the
+  chat's existing Alt+Shift+J and Alt+Shift+M. Shift+Esc was rejected: VS Code binds it in editor contexts, and a
+  webview forwards keys to the workbench.
+- **Scope.** Studio only, in every ChatPanel seat. The instructor panel and other surfaces are unchanged. Both rows
+  appear in the sheet only now that the keys are bound.
+- Confirmed by Jay: no.
