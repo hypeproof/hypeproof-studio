@@ -11,12 +11,12 @@ import { useVoice } from "./VoiceProvider";
 import { onHostMessage, postToHost } from "./vscode";
 import type { ComposerAddonApi } from "./composerAddon";
 import {
-  DictationRecorder, base64Of, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState,
+  DictationRecorder, base64Of, needsMicExplainer, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState, type MicPermission,
 } from "../../src/voiceDictation";
 import {
   CLASS_OFF, CLASS_OFF_HINT, CLOSE, DICTATE_CANCEL_LABEL, DICTATE_DONE, DICTATE_ELAPSED, DICTATE_LABEL, DICTATE_LIMIT_NOTE, DICTATE_RECORDING, DICTATE_START_TIP,
   DICTATE_STOP_LABEL, DICTATE_WORKING, GENERIC_UNAVAILABLE, MIC_BUSY, MIC_DENIED_BODY, MIC_DENIED_DISMISS, MIC_DENIED_TITLE, MIC_SETTINGS_BUTTON,
-  MIC_SETTINGS_FAILED, NO_MIC, RECOVERED_COPIED, RECOVERED_COPY, RECOVERED_INSERT, RETRY, RETRY_TEXT_LABEL, SOFT_TOO_SHORT, TOO_LARGE, UNSUPPORTED,
+  MIC_EXPLAIN_ALLOW, MIC_EXPLAIN_BODY, MIC_EXPLAIN_LATER, MIC_EXPLAIN_TITLE, MIC_SETTINGS_FAILED, NO_MIC, RECOVERED_COPIED, RECOVERED_COPY, RECOVERED_INSERT, RETRY, RETRY_TEXT_LABEL, SOFT_TOO_SHORT, TOO_LARGE, UNSUPPORTED,
 } from "../../src/voiceCopy";
 
 type View =
@@ -27,6 +27,8 @@ type View =
   | { kind: "done" }
   | { kind: "notice"; text: string; retry: boolean }
   | { kind: "denied"; settingsFailed: boolean }
+  /** CGP-SHELL-R-010: Studio's own explainer, before the OS microphone prompt can appear. */
+  | { kind: "explain" }
   | { kind: "recovered"; text: string; copied: boolean };
 
 export interface DictationController {
@@ -39,12 +41,28 @@ export interface DictationController {
   insertRecovered(): void;
   copyRecovered(): void;
   openSettings(): void;
+  /** CGP-SHELL-R-010: 허용하기 starts the recording (the OS may ask now); 나중에 goes back to idle. */
+  allowMic(): void;
+  laterMic(): void;
   busy: boolean;
   disabled: boolean;
 }
 
 /** Browser objects for the recorder. Tests replace this through `DictationEnvContext`. */
+/** CGP-SHELL-R-010: the Permissions API's answer for the microphone, or `unknown` (never throws, 1 s at most). */
+async function browserMicPermission(): Promise<MicPermission> {
+  try {
+    const query = navigator.permissions?.query({ name: "microphone" as PermissionName });
+    if (!query) return "unknown";
+    const state = await Promise.race([query.then((r) => r.state), new Promise<null>((r) => setTimeout(() => r(null), 1000))]);
+    return state === "granted" || state === "denied" || state === "prompt" ? state : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export const browserDictationEnv = (): DictationEnv => ({
+  micPermission: browserMicPermission,
   getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c) as Promise<MediaStream>,
   Recorder: (typeof MediaRecorder === "undefined" ? undefined : MediaRecorder) as unknown as DictationEnv["Recorder"],
   now: () => Date.now(),
@@ -123,7 +141,9 @@ function useDictation(api: ComposerAddonApi): DictationController {
   // re-render (the disclosure being acknowledged, a profile refresh) never swaps the recorder mid-clip.
   const handlers = useRef({ send, set });
   handlers.current = { send, set };
-  const [recorder] = useState(() => new DictationRecorder(makeEnv(), {
+  const [env] = useState(makeEnv);
+  const envRef = useRef(env);
+  const [recorder] = useState(() => new DictationRecorder(env, {
     onState: (state: DictationState) => {
       stopTick();
       apiRef.current.onDictationBusy?.(state !== "idle");
@@ -168,13 +188,38 @@ function useDictation(api: ComposerAddonApi): DictationController {
     return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", hide); };
   }, [recorder, dropClip]);
 
+  // CGP-SHELL-R-010: whether this control already showed the microphone explainer (one per control).
+  const explained = useRef(false);
   const toggle = useCallback(() => {
     if (apiRef.current.disabled) return;
+    // CGP-SHELL-R-010: the microphone is never asked for (no card, no query, no getUserMedia) unless
+    // dictation itself is served. The composer mounts this control only then, and the Alt+Shift+M
+    // listener lives in the button whatever it draws, so the press checks it too.
+    if (voice.availability.kind !== "on" || !voice.availability.served.dictation) return;
     if (recorder.current === "recording") { recorder.stop(); return; }
     if (recorder.current !== "idle" || inFlight.current) return;
     dropClip();
-    voice.gate(() => { void recorder.start(); });
-  }, [recorder, voice, dropClip]);
+    voice.gate(() => {
+      const ask = envRef.current.micPermission;
+      if (!ask || explained.current) { void recorder.start(); return; }
+      void ask().then((permission) => {
+        if (recorder.current !== "idle" || inFlight.current) return;
+        if (needsMicExplainer(permission, explained.current)) { set({ kind: "explain" }); return; }
+        void recorder.start();
+      });
+    });
+  }, [recorder, voice, dropClip, set]);
+  const allowMic = useCallback(() => {
+    if (view.kind !== "explain") return;
+    explained.current = true;
+    set({ kind: "idle" });
+    void recorder.start();   // the OS asks now, right after the learner read why
+  }, [view, recorder, set]);
+  const laterMic = useCallback(() => {
+    if (view.kind !== "explain") return;
+    explained.current = true;
+    set({ kind: "idle" });
+  }, [view, set]);
 
   const cancel = useCallback(() => { recorder.cancel(); set({ kind: "idle" }); }, [recorder, set]);
   const dismiss = useCallback(() => { dropClip(); set({ kind: "idle" }); }, [dropClip, set]);
@@ -203,7 +248,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
   }, [set]);
 
   const busy = view.kind === "starting" || view.kind === "recording" || view.kind === "working";
-  return { view, toggle, cancel, retry, dismiss, insertRecovered, copyRecovered, openSettings, busy, disabled: api.disabled };
+  return { view, toggle, cancel, retry, dismiss, insertRecovered, copyRecovered, openSettings, allowMic, laterMic, busy, disabled: api.disabled };
 }
 
 const ControllerContext = createContext<DictationController | null>(null);
@@ -310,6 +355,18 @@ export function DictationNotice() {
           <span className="hps-voice-btns">
             <button type="button" className="hps-voice-primary" onClick={controller.openSettings}>{MIC_SETTINGS_BUTTON}</button>
             <button type="button" className="hps-voice-link" onClick={controller.dismiss}>{MIC_DENIED_DISMISS}</button>
+          </span>
+        </div>
+      );
+    case "explain":
+      // CGP-SHELL-R-010 / DES-SHELL-09: an inline card in the chat, not a modal. The OS prompt comes only after 허용하기.
+      return (
+        <div className="hps-voice-note hps-voice-card hps-voice-explain" role="group" aria-labelledby="hps-voice-explain-title">
+          <strong id="hps-voice-explain-title"><ChatIcon kind="mic" size={20} /><span>{MIC_EXPLAIN_TITLE}</span></strong>
+          <span>{MIC_EXPLAIN_BODY}</span>
+          <span className="hps-voice-btns">
+            <button type="button" className="hps-voice-primary" autoFocus onClick={controller.allowMic}>{MIC_EXPLAIN_ALLOW}</button>
+            <button type="button" className="hps-voice-link" onClick={controller.laterMic}>{MIC_EXPLAIN_LATER}</button>
           </span>
         </div>
       );

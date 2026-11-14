@@ -366,6 +366,34 @@ should. Four mutants each fail at least one case: treating `not-allowed` as a pl
 from the first chunk, showing a blocked reading as pressed, and keeping no pending chunks. A real
 browser autoplay refusal, a screen reader and the packaged app are not run here.
 
+## Microphone explainer before the OS prompt (CGP-SHELL-R-010 / CGP-SHELL-D-009)
+
+`test/voice-mic-explainer.test.tsx` renders the composer's dictation control under a served-voice profile
+(disclosure read) on the minimal DOM. The recorder and the permission answer are scripted, and the test
+counts `getUserMedia`, the only call that can raise the OS prompt. Cases:
+- At mount, nothing is queried and nothing is asked.
+- `prompt`: the first press draws one inline card (not a dialog), with the mic glyph, the title, the
+  sentence about text chat, `허용하기` (focused) and `나중에`. `getUserMedia` is still not called.
+- Only `허용하기` calls it, once, and recording starts.
+- `unknown` also explains. `나중에` calls nothing, and the next press asks directly.
+- Negative controls: `granted`, `denied` and an env without the query draw no card. The denied card still
+  explains.
+- A denial after `허용하기` ends in `마이크 설정 열기` / `글로 계속하기`, and the mic button stays available.
+- Not served (no voice block, read-aloud only, an unknown policy version): no card, no permission query and
+  no microphone request. This is checked both as the composer mounts it and with the control forced
+  onto the page, with the Alt+Shift+M shortcut pressed.
+- The pure rule is checked on its own.
+
+`test/voice-browser.smoke.mjs` runs the real App bundle in headless Chromium at 320 and 480 in both seats and
+both themes. A first use (permission `prompt`) shows the card with no dialog and no microphone request. The
+card stays inside the viewport and clear of the composer, with 44px buttons, 14px text and focus on
+`허용하기`. `허용하기` asks for the microphone once, and recording starts. The other flows run with a
+granted (`ok`) or denied stub, as before.
+
+Red on main `f2def8a82`: the test does not build (`needsMicExplainer` is missing). Four mutants each fail
+at least one case: no card, `getUserMedia` before the card, `나중에` not remembered, no focus, and dropping the served check in the press. The forced-control case found that the shortcut listener stays live in a control mounted without dictation, so the press now checks that dictation is served. That cannot happen in the shipped composer, which mounts the control only when dictation is served. A real
+OS prompt, a screen reader and the packaged app are not run here.
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell
