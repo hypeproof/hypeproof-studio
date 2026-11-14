@@ -6312,6 +6312,15 @@ separate from installed Studio and native OS IME acceptance.
 | REQ-CGPV-41 | PI#2 (the learner keeps visible control of what the AI says) / CGP-VOICE-041 / VO-38 / VO-42: when the engine refuses to start sound without a press (autoplay policy: the speech synthesizer's `not-allowed` error, its form of the media `NotAllowedError`), read-aloud does not pretend to be reading. The answer's button returns to `읽어 주기` (`aria-pressed="false"`), the row's status says `소리가 막혔어요.` and never `읽는 중이에요`, and one action `소리 켜기` appears. One press of it reads on from the first chunk that did not finish: nothing already heard is repeated and nothing is lost. The press goes through the served-voice gate like any read-aloud press. `소리 끄기` (REQ-CGPV-02) clears the notice, and nothing speaks while it is on. Any other engine error keeps today's silent failure, because a press cannot fix it. Voice stays inert until served: an unserved seat has no read-aloud and no notice. Today the only audio Studio plays is read-aloud through the OS voice; the voice conversation has no audio transport yet, so it has no blocked state to recover (see decisions.md). Nothing is stored or logged. | `test/voice-autoplay-blocked.test.tsx` |
 | DES-CGPV-41 | Fallback notice, autoplay part (CGP-VOICE-D-021): one sentence and one action inline in the answer's action row, not a modal. It does not move focus. The action is a real button with the answer-action target and focus ring, the speaker glyph and the words `소리 켜기`. The text uses the theme's primary ink at the caption step (14px or more) and wraps at 320px. There is no animation or transition, so reduced motion has nothing to stop. It is shown once per refusal and disappears after the press, a stop, a normal end or 소리 끄기. The VAD-failure half of D-021 (REQ-CGPV-39) is not in this slice. | `test/voice-autoplay-blocked.test.tsx` (style case); CSS `.hps-voice-blocked` in `webview-ui/src/voice.css` |
 
+## Microphone explainer before the OS prompt (CGP-SHELL-R-010 / CGP-SHELL-D-009)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-SHELL-10 | PI#2 (the learner knows why something is asked before it is asked) / PI#4 / CGP-SHELL-017. Dictation is the only Studio feature that can raise an OS permission prompt (`getUserMedia` in `src/voiceDictation.ts`). The voice capability probe runs only from its command, never at activation (`src/voiceCapability.ts`). The voice panel has no capture. **Not served, nothing asked**: a seat without served dictation never sees the card and never has the microphone requested. The composer mounts the control only when dictation is served, and the press checks it again. Minor seats follow the served policy like any seat, with no extra rule. **Nothing asks at launch or at mount**: no permission query and no `getUserMedia` until the learner presses 받아쓰기. On that press, after the served-voice gate and the disclosure sheet, the control reads the browser's microphone permission (Permissions API, `unknown` when it cannot say, 1 s at most). When it is `prompt` or `unknown`, Studio shows its own card before anything can raise the OS prompt. Only `허용하기` calls `getUserMedia`. `나중에` calls nothing, stores nothing and leaves text chat as it was. The only memory is an in-memory flag for the life of the control, with no settings, globalState or webview state. The card is shown once per dictation control, so the next press goes straight on. `granted` (no prompt will come) and `denied` (the existing denied card explains, with `마이크 설정 열기` and `글로 계속하기`) show no card. A denial after `허용하기` ends in that denied card, and the mic button stays available for a retry. | `test/voice-mic-explainer.test.tsx` |
+| DES-SHELL-09 | The explainer is an inline card in the composer's dictation status area (the same card as the other voice notes), not a modal: `role="group"`, labelled by its title. It shows the 20px mic glyph, the title `목소리로 말하려면 마이크가 필요해요` and one sentence: `허용하기를 누르면 이 컴퓨터가 마이크를 써도 되는지 물어요. 허용하지 않아도 글로는 계속 이야기할 수 있어요.`. It has one primary `허용하기`, in the accent colour, focused when the card appears, and a secondary `나중에`. It wraps at 320px and keeps the voice notes' 44px controls and forced-colours borders. | same |
+
+Not covered: the desktop app's own OS purpose string (`NSMicrophoneUsageDescription` in the macOS bundle) still comes from VSCodium. Changing it needs a `vscodium-base` patch and a full build, so it is left to a separate change.
+
 ## Class window notice (CGP-SHELL-R-025)
 
 `REQ-STUDIO-CLASS-WINDOW` (PI#4, PI#1; REQ-B5): the chat rail shows a passive
@@ -9617,6 +9626,65 @@ pins and cap, host against a recording Service: flag and sign-in gates, nothing 
 consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
 and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
 Electron app and a deployed Service; both are NOT RUN in this slice.
+
+## Compact coach layout: `ux.coach_layout` (REQ-STUDIO-COACH-LAYOUT-COMPACT)
+
+`REQ-STUDIO-COACH-LAYOUT-COMPACT` (2026-11-12; instructor feedback from a dental-seminar test on a 761px-tall
+window, where the conversation area was left at 24px by the chrome above and below it). The served profile may carry
+`ux.coach_layout: 'compact'`. That one value turns on everything below; an absent field or any other value draws exactly
+today's layout (same DOM, same classes, the static `ChipRack`), and the instructor console never takes it. The gate is
+`data-coach-layout="compact"` on the shell root (CSS: the closing block of `chatDetails.css`, every rule scoped under it) plus one
+`compactLayout` flag in `ChatPanel`; the running-process card reads the same field in `App.tsx`. No host change.
+
+- **Chrome.** The mission header is one wrapping row; a collapsed lesson card, the model row, the collapsed access card
+  and (classroom seats) the composer lose padding and stacked rows. Every control keeps the learner's 44px floor
+  (`--hp-control-min`); only padding, margins and rows shrink.
+- **Composer footer.** The cohort-managed model reason ("선생님이 정한 설정이에요", `small.hps-managed-reason`) stays in the
+  DOM, visually hidden, because the disabled model select describes itself through it (`aria-describedby`). The collapsed
+  "이용권 · 사용량" panel (`AccessControl`) is not drawn in the footer on ANY activity (instructor decision 2026-11-13,
+  replacing the earlier "only where the header chip carries it"); it stays in the gear dialog next to "AI가 할 수 있는 일".
+  The one exception is a funding choice the learner must make before sending (`requiresFundingSelection`): that blocks
+  sending, so the footer panel and its "이용권을 선택해 주세요" summary stay. Limit errors and notices are separate
+  messages and are unchanged. The automation seat's summary says "대화 설정" when the panel is not inside it.
+- **Command approval (위험한 명령).** Only a prompt whose heading would read "코치가 위험한 명령을 실행하려고 해요"
+  (`purpose: 'destructive'`) changes. Title: `이 명령을 실행할까요?`. The fixed "되돌릴 수 없어요" line becomes one small
+  line (`.hps-command-warning-compact`, caption size) in the same slot. The prompt carries no reason code (the classifier
+  answers yes or no), so `compactDestructiveNote(command)` picks the sentence from the command's shape: a download piped
+  into a shell: "내려받은 것을 바로 실행하는 경우 내용을 확인할 수 없어 위험할 수 있습니다."; a delete/move/overwrite verb or
+  redirect: "파일을 지우거나 옮기거나 덮어쓰는 경우 되돌리기 어려워 위험할 수 있습니다."; several commands joined (`&&`, `;`,
+  `|`): "여러 명령을 이어 붙인 경우 그중에 파일을 지우거나 덮어쓰는 명령이 섞여 있으면 위험할 수 있습니다."; otherwise
+  "파일을 지우거나 덮어쓰는 명령이면 되돌리기 어려울 수 있습니다." The command, the 거절/허락 buttons, the deny-first focus, the
+  classifier and the approval flow are untouched; the outward and ordinary prompts keep their headings. The webview reads
+  `coach_layout` from the served profile itself, so no host change.
+- **Running processes.** One row per card: title, address (a shell shows its folder), and the 끄기/멈추기 button. The
+  "실행 중인 것" heading, the "보여 주는 곳" line, the "켜 두어요" note and the state word are not drawn; the heading and
+  state word stay for screen readers.
+- **Rail panels.** "이 수업에서 AI가 할 수 있는 일" (CGP-AGENT-R-003) and the "자료 N개" card
+  (REQ-STUDIO-ACTIVITY-MATERIALS) are no longer drawn above the conversation. The capabilities card is the first block in
+  the settings dialog, and the header gear opens that in-panel dialog on a classroom seat too (it used to open the app's
+  settings editor); the dialog's "앱 설정 열기" reaches it. The 자료 actions move into the composer's "+" menu as
+  "파일 넣기" and "주소 넣기 (https)", which post the rail card's own messages (`materialAddFile`, `materialAddUrl`);
+  the host-side behaviour, checks and refusal text are unchanged. The list shows as small tags directly above the
+  composer; pressing a tag puts it in or takes it out of the next question (`aria-pressed`), × removes a removable
+  item, nothing is pre-selected, and only selected items are sent ("고른 자료만 다음 질문과 함께 AI에게 보내요").
+- **Next steps.** A reply that ENDS with a line of exactly `다음에 해볼 만한 것` (optional trailing `:`) followed by one
+  to three lines each starting `→ ` is a block. Each step is trimmed, 1 to 60 characters, with no control or format
+  character, none of `<>` and the backtick, no `http`, no markdown link; anything else (text after the block, a fourth step,
+  a bad step) leaves the text as ordinary prose. A matched block is cut out of the bubble, also while it streams in (from a
+  complete header line on, while every non-empty line after it starts with `→`). Under the latest spoken answer, not while
+  streaming, the steps are single-line pills under a muted caption; a press fills the composer like any chip and never
+  sends. A latest reply with a block shows these and not the static follow-up chips; without one, the static chips behave
+  as before. Coach text never disappears without a chip for it: the block is cut only from the answer whose steps are drawn
+  as chips (not an older answer, not after an error or a stopped turn whose last line may be cut off, not while the
+  project-ideas offer holds the slot, and not when nothing else would be left of the bubble). The format-character check
+  applies to the block's own lines, not the body; an unclosed fence (3 or more backticks or tildes) hides a block inside
+  it; a step with `**`, `__` or a leading `www.` is refused.
+- **자료 menu.** The two "+" menu entries are offered only once the host has answered with its list (a press would
+  otherwise show nothing). The address form closes only on the answer to its own request and returns focus to the "+"
+  button or the text box.
+- **Evidence.** Parser: `test/next-steps-parser.test.tsx`. Gate on and off, tags, "+" menu, settings dialog, footer reason and usage panel,
+  next steps, running-process markup: `test/coach-layout-compact.test.tsx`; command-approval wording on and off: `test/command-approval.test.tsx`. Not covered: real-app pixel heights at 761px (run in the
+  installed app), and the Service serving the field (hypeproof-service).
 
 
 ### Android question-first local draft — Studio #3946
