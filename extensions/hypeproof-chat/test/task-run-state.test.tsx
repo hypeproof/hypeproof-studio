@@ -32,7 +32,7 @@ const taskButton = (html: string, id: string) => {
   const start = html.lastIndexOf("<button", meta);
   return html.slice(start, html.indexOf("</button>", meta));
 };
-const ALL: TaskRunState[] = ["preparing", "running", "approval", "stopped", "error", "done"];
+const ALL: TaskRunState[] = ["preparing", "running", "approval", "stopped", "access", "error", "done"];
 
 t("each state: words and a symbol on the active task, accessible name 'title, state' (positive controls)", () => {
   for (const state of ALL) {
@@ -95,6 +95,24 @@ t("reducer: a live turn and a new send clear the old outcome; dismissing the err
   ok(run([start, { type: "streamStopped" }, { type: "userSent", text: "다시" }]).lastOutcome === null, "old stop after a new send");
   ok(outcome(run([start, { type: "streamError", error: "x" }, { type: "streamEnd", dismissed: true }])) === "error", "dismissing the banner turned 오류 into 끝남");
   ok(outcome(chatPanelInitialState) === null, "fresh view guessed an outcome");
+});
+
+t("#2442: typed allowance endings are neutral pass checks; real errors remain errors", () => {
+  for (const cause of ["exhausted", "expired"] as const) {
+    const state = run([start, { type: "streamError", error: "이용권 확인", activityUnavailable: { cause, audience: "solo" } }]);
+    ok(outcome(state) === "access", `${cause}: rail outcome`);
+    const button = taskButton(render(outcome(state)), "t1");
+    ok(button.includes('aria-label="고양이 페이지, 이용권 확인 필요"'), "accessible reason");
+    ok(button.includes('data-intent="neutral"') && button.includes('data-icon="ticket"'), "neutral ticket icon");
+    ok(!button.includes('data-icon="alert"'), "no failure icon");
+  }
+  const card = { ending: "exhausted" as const, title: "이용권 확인", facts: [], primary: "이용권 확인", escape: "닫기", text: "이용권 확인" };
+  const ended = run([start, { type: "streamError", error: card.text, trialEndCard: card }]);
+  ok(outcome(ended) === "access", "typed end card without availability also classified");
+  ok(outcome(chatPanelReducer(ended, { type: "streamEnd", dismissed: true })) === "access", "dismissal preserves reason");
+  ok(chatPanelReducer(ended, { type: "userSent", text: "새 질문" }).lastOutcome === null, "new turn clears access state");
+  ok(outcome(run([start, { type: "streamError", error: "이용권 확인이라는 문구가 있는 네트워크 오류" }])) === "error", "never classify by error prose");
+  ok(outcome(run([start, { type: "streamError", error: "서버 오류" }])) === "error", "real failure preserved");
 });
 
 if (fail) { console.error(`task-run-state render: ${fail} failed`); process.exit(1); }
