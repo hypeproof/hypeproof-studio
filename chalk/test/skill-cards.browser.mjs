@@ -40,6 +40,7 @@ const LIMITS = { max_count: 6, name_max: 30, summary_max: 80, prompt_max: 300, p
 const MODELS = { default: 'sonnet', choices: [{ alias: 'sonnet', label: 'Sonnet' }], effort: { default: 'medium', allowed: ['medium'] } };
 const FEATURES = { choices: [{ key: 'read', label: '읽기' }], approval_presets: PRESETS, assistant_tones: TONES, skill_cards: LIMITS };
 const OLD_FEATURES = { choices: FEATURES.choices, approval_presets: PRESETS, assistant_tones: TONES };
+const SAFE_CASES = JSON.parse(readFileSync(new URL('./fixtures/safe-text-cases.json', import.meta.url), 'utf8')).cases;
 const FROZEN_CARDS = [{ name: '고정 카드', summary: '고정 설명', prompt: '고정 프롬프트' }];
 const FROZEN = { schema: 'hps-session-design/1', steps: [{ id: 's1', instructions: 'a' }], skill_cards: FROZEN_CARDS };
 const stub = `window.__puts=[];window.__saved=null;window.fetch=async(path,init)=>{const p=String(path),m=(init&&init.method)||'GET';
@@ -47,6 +48,7 @@ const stub = `window.__puts=[];window.__saved=null;window.fetch=async(path,init)
   if(p.includes('/models/'))return json(${JSON.stringify(MODELS)});
   if(p.includes('/features/'))return json(window.__old?${JSON.stringify(OLD_FEATURES)}:window.__limits?{...${JSON.stringify(FEATURES)},skill_cards:window.__limits}:${JSON.stringify(FEATURES)});
   if(p.includes('/versions/'))return json({module:{content:${JSON.stringify(FROZEN)}},source_revision:1,rehearsal:'passed',activated:false});
+  if(m==='PUT'&&window.__fail){window.__puts.push(JSON.parse(init.body));return json({error:window.__fail},400);}
   if(m==='PUT'){const body=JSON.parse(init.body);window.__puts.push(body);window.__saved=body.content;return json({revision:body.expected_revision+1});}
   if(m==='GET'&&window.__saved)return json({profile_id:'p1',revision:1,content:window.__saved});
   return json({});};
@@ -140,7 +142,7 @@ try {
     }
     // The same rule as the Service: Korean prose with a colon is not a link.
     // The same rule as the Service: coding text with colons passes; scheme, www. and host forms are refused.
-    const NOT_LINKS = ['color:red', 'a:hover', 'h1:first-child', 'std::cout', 'key:value', 'A:B 비율', 'C:\\Users', '//주석', 'TODO:x', 'fix:버그', '시간:10분', 'example.com/x'];
+    const NOT_LINKS = ['www.', 'www.x', 'www 사이트', 'color:red', 'a:hover', 'h1:first-child', 'std::cout', 'key:value', 'A:B 비율', 'C:\\Users', '//주석', 'TODO:x', 'fix:버그', '시간:10분', 'example.com/x'];
     const LINKS = ['https://x', 'http:x', 'ftp:x', 'sms:1', 'tel:010', 'vscode-insiders:x', 'hypeproof-studio://x', 'any-scheme://x', 'ｈｔｔｐｓ://x', 'https：//x', 'һttps:x', 'httpsː//x', 'www.example.com', '//evil.example'];
     assert.deepEqual(await ev(`return ${JSON.stringify(NOT_LINKS)}.map(hasLink)`), NOT_LINKS.map(() => false), `${width}px: coding text is not a link`);
     assert.deepEqual(await ev(`return ${JSON.stringify(LINKS)}.map(hasLink)`), LINKS.map(() => true), `${width}px: every link form is refused`);
@@ -158,6 +160,44 @@ try {
     assert.match(changed.refused ?? '', /카드 1번의 한 줄 설명에는 링크/, `${width}px: a new link in a changed field is refused`);
     await ev(`render({...content(),skill_cards:${JSON.stringify(expected)}});return 0`);
     checks += 2;
+
+    // 3c. Safe-text parity with the Service: the shared case list (also in hypeproof-service worker/test/fixtures).
+    const parity = await ev(`return ${JSON.stringify(SAFE_CASES)}.map(([t,r])=>chalkSafeLine(t,r))`);
+    assert.deepEqual(parity, SAFE_CASES.map(([, , safe]) => safe), `${width}px: Chalk's safe-text rule equals the shared case list`);
+    // Limits the mutants hit: a six-line prompt saves; a summary one over the cap (set past maxlength) is refused.
+    await ev(`${card(3, '여섯 줄', '설명', '1\n2\n3\n4\n5\n6')}return 0`);
+    const six = await trySave();
+    assert.ok(six.saved, `${width}px: a six-line prompt saves — ${six.refused}`);
+    await ev(`${card(3, '긴 설명', '가'.repeat(81), '프롬프트')}return 0`);
+    const long = await trySave();
+    assert.match(long.refused ?? '', /카드 3번의 한 줄 설명은/, `${width}px: an 81-unit summary is refused`);
+    const invalid = await ev(`return [document.getElementById('skill-card-3-summary').getAttribute('aria-invalid'),document.getElementById('skill-card-3-name').getAttribute('aria-invalid')]`);
+    assert.deepEqual(invalid, ['true', null], `${width}px: only the refused field is aria-invalid`);
+    await ev(`${set('skill-card-3-summary', '설명')}return 0`);
+    assert.equal(await ev(`return document.getElementById('skill-card-3-summary').getAttribute('aria-invalid')`), null, `${width}px: editing clears aria-invalid`);
+    // Each card is a fieldset with its own legend, so its three fields are named per card.
+    const legends = await ev(`return [...document.querySelectorAll('#skill-cards-list>li>fieldset.skill-card')].map(f=>[f.querySelector(':scope>legend')?.textContent,f.querySelectorAll('input,textarea').length])`);
+    assert.deepEqual(legends, Array.from({ length: 6 }, (_, i) => [`카드 ${i + 1}`, 3]), `${width}px: one fieldset with a legend per card`);
+    // A Service refusal names the card and field in Korean.
+    await ev(`window.__fail='skill_cards[1].prompt must not contain a link';document.getElementById('save').click();return 0`);
+    await until(`return !busy && /HTTP 400/.test(document.getElementById('status').textContent)`, 'the refused save');
+    const hinted = { refused: await ev(`return document.getElementById('status').textContent`) };
+    await ev(`window.__fail=null;return 0`);
+    assert.match(hinted.refused, /학생 스킬 카드 2번의 시작 프롬프트을\(를\) 확인하세요: 링크/, `${width}px: Korean hint for a Service refusal — got ${hinted.refused}`);
+    // The starters exemption: an untouched old link starter saves; a newly added one is refused.
+    await ev(`render({...content(),starters:['자료 https://old.example 보기']});return 0`);
+    const oldStarter = await trySave();
+    assert.ok(oldStarter.saved, `${width}px: an untouched old link starter saves — ${oldStarter.refused}`);
+    await ev(`${set('ai-starter-2', '새 www.new.example')}return 0`);
+    const newStarter = await trySave();
+    assert.match(newStarter.refused ?? '', /시작 문장 2번에는 링크/, `${width}px: a new link starter is refused`);
+    await ev(`${set('ai-starter-1', '')}${set('ai-starter-2', '')}return 0`);
+    // An imported course saves as a new course: its links are new, so the baseline is reset on import.
+    await ev(`setLinkBaseline({starters:['x'],skill_cards:[{name:'a',summary:'b',prompt:'c'}]});batch=[{course_id:'imp-1',content:{...content(),starters:['자료 https://imported.example']}}];document.getElementById('courses').replaceChildren(new Option('',''),new Option('imp','0'));document.getElementById('courses').value='0';window.confirm=()=>true;document.getElementById('courses').onchange();return 0`);
+    const imported = await trySave();
+    assert.match(imported.refused ?? '', /시작 문장 1번에는 링크/, `${width}px: an imported link starter is checked like a new one`);
+    await ev(`${set('ai-starter-1', '')}render({...content(),skill_cards:${JSON.stringify(expected)}});return 0`);
+    checks += 11;
 
     // 4. Rehearsal read, impact and the frozen summary.
     await ev(`readiness={version:'m1',state:'not_run',content:${JSON.stringify(FROZEN)}};candidateVersion='m1';renderReadiness();return 0`);
