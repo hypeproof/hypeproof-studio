@@ -422,8 +422,12 @@ drop of a stale message is a second layer.
 - **Put back:** an added file is quarantined; a changed file and a deleted file are put back; the turn's versions are kept.
   A second run finds nothing.
 - **Studio's own changes are kept:** `ActivityMemory` append and remove, and the learner's editor save.
-- **Bounds:** a file over the item size is never read or copied, and is reported (left in place). More than the entry
-  bound returns "too many" before reading anything.
+- **Bounds (fail closed):** a file over the item size is never read, is reported and is left in place. Past the read
+  bound, stray files are tracked by name only, a planted memory file is still moved out, and the turn says some contents
+  were not checked.
+- **Studio's last state:** a learner's editor save, then a shell overwrite in the same turn, ends with the learner's
+  save; the overwrite is quarantined. A BOM and CRLF file saved in the editor is journaled from disk and kept byte for
+  byte.
 - **Quarantine:** the seven-day retention, the per-activity count cap (oldest first), a task purge, a malformed key
   touching nothing, and modes 0700/0600.
 - **Provider:** a keep-off turn's shell write, through a path built at run time, is put back. The line names the count
@@ -440,7 +444,9 @@ Mutants each fail it:
 - the retention ignored;
 - the caps ignored;
 - the archive purge removed;
-- no entry bound.
+- the journal's state ignored (the pre-turn version restored);
+- new names past the bound not moved;
+- the editor save journaled from the editor's text.
 
 A real coach shell command and the packaged app are not run here.
 

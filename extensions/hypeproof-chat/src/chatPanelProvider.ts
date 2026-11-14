@@ -418,7 +418,7 @@ import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
 import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
 import { insideFolder } from "./memoryPathCheck";
-import { FOLDER_GUARD_COPY, TOO_MANY, noteStudioMemoryChange, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder, type Snapshot } from "./memoryFolderGuard";
+import { FOLDER_GUARD_COPY, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder, type Snapshot } from "./memoryFolderGuard";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
@@ -3644,7 +3644,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(document => {
       const file = document.uri.fsPath;
       if (document.uri.scheme !== "file" || path.basename(path.dirname(file)) !== "memory" || path.basename(path.dirname(path.dirname(file))) !== ".hypeproof") return;
-      void noteStudioMemoryChange(path.dirname(file), path.basename(file), Buffer.from(document.getText(), "utf8"));
+      // The bytes on disk, not the editor's text: a byte-order mark or line endings would make the save look foreign.
+      void noteStudioMemorySave(file);
     }));
     // The quarantine's retention and caps are applied at activation too (a window closed for a week starts clean).
     try { void pruneQuarantine(this.memoryQuarantineBase()).catch(() => undefined); } catch { /* no global storage yet: the next guard run prunes */ }
@@ -7771,7 +7772,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * activity's memory folder; at its end whatever it added, changed or deleted, except Studio's own changes, is put back
    * (`revertTurnChanges`), the turn's versions kept in the extension's global storage, and one line says so in that turn.
    */
-  private memoryFolderGuards?: Map<string, { root: string; scope: string; task: string | null; at: number; snap: Snapshot | typeof TOO_MANY }>;
+  private memoryFolderGuards?: Map<string, { root: string; scope: string; task: string | null; at: number; snap: Snapshot }>;
   private memoryQuarantineBase(): string {
     return path.join(this.context.globalStorageUri.fsPath, "memory-quarantine");
   }
@@ -7786,24 +7787,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const snap = await snapshotMemoryFolder(binding.root).catch(() => null);
     if (snap) (this.memoryFolderGuards ??= new Map()).set(streamId, { root: binding.root, scope: binding.scope, task, at, snap });
   }
-  async endMemoryFolderGuard(streamId: string): Promise<{ reverted: number; kept: number; failed: number } | typeof TOO_MANY | null> {
+  async endMemoryFolderGuard(streamId: string): Promise<{ reverted: number; kept: number; failed: number; unchecked: boolean } | null> {
     const guard = this.memoryFolderGuards?.get(streamId);
     if (!guard) return null;
     this.memoryFolderGuards!.delete(streamId);
     const lines: Array<[string, "done" | "error"]> = [];
-    let result: { reverted: number; kept: number; failed: number } | typeof TOO_MANY;
-    if (guard.snap === TOO_MANY) result = TOO_MANY;
-    else {
-      const base = this.memoryQuarantineBase();
-      const quarantine = path.join(base, this.memoryQuarantineScope(guard.scope), guard.task && /^[A-Za-z0-9_-]{1,128}$/.test(guard.task) ? guard.task : "no-task");
-      result = await revertTurnChanges(guard.root, guard.snap, guard.at, quarantine);
-      await pruneQuarantine(base).catch(() => undefined);
-    }
-    if (result === TOO_MANY) lines.push([FOLDER_GUARD_COPY.tooMany, "error"]);
-    else {
-      if (result.reverted) lines.push([FOLDER_GUARD_COPY.reverted(result.reverted), "done"]);
-      if (result.failed) lines.push([FOLDER_GUARD_COPY.failed(result.failed), "error"]);
-    }
+    const base = this.memoryQuarantineBase();
+    const quarantine = path.join(base, this.memoryQuarantineScope(guard.scope), guard.task && /^[A-Za-z0-9_-]{1,128}$/.test(guard.task) ? guard.task : "no-task");
+    const result = await revertTurnChanges(guard.root, guard.snap, guard.at, quarantine);
+    await pruneQuarantine(base).catch(() => undefined);
+    if (result.reverted) lines.push([FOLDER_GUARD_COPY.reverted(result.reverted), "done"]);
+    if (result.failed) lines.push([FOLDER_GUARD_COPY.failed(result.failed), "error"]);
+    if (result.unchecked) lines.push([FOLDER_GUARD_COPY.unchecked, "error"]);
     // Counts only, never content or file names. Shown in the turn and kept with it (its items were saved before this ran).
     for (const [label, state] of lines) {
       const id = randomId();

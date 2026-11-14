@@ -14,14 +14,15 @@
 import { createHash } from "node:crypto";
 import { constants, promises as fs } from "node:fs";
 import * as path from "node:path";
-import { MEMORY_FOLDER, MEMORY_LIMITS, observeMemoryChanges } from "./activityMemory.ts";
+import { MEMORY_FOLDER, MEMORY_LIMITS, memoryFileName, observeMemoryChanges } from "./activityMemory.ts";
 
 /**
- * Bounds of one snapshot, from the store's own limits: at most this many entries (the item count plus room for stray
- * files; more and the turn is not checked, and says so), and file bytes are read only up to the item size. A larger
- * file is compared by its size, change time and inode, never read.
+ * Bounds of one snapshot, from the store's own limits. Every entry's NAME is listed (up to NAMES_MAX), so anything new
+ * the turn adds is always found and moved out (fail closed). Contents are read for at most `files` entries, the
+ * store's memory-named files first, and only up to the item size; an entry past that is tracked by name only, and a
+ * change inside it cannot be seen (the turn says so). Past NAMES_MAX every entry is name-only.
  */
-export const SNAPSHOT_MAX = { files: MEMORY_LIMITS.items + 50, keepBytes: MEMORY_LIMITS.bytes } as const;
+export const SNAPSHOT_MAX = { files: MEMORY_LIMITS.items + 50, keepBytes: MEMORY_LIMITS.bytes, names: 10_000 } as const;
 /**
  * The quarantine of a keep-off turn's writes, bounded by the store's limits too: per seat activity at most the store's
  * item count and that many full items' bytes, oldest removed first, and nothing older than seven days. It lives in the
@@ -30,10 +31,10 @@ export const SNAPSHOT_MAX = { files: MEMORY_LIMITS.items + 50, keepBytes: MEMORY
  */
 export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000 } as const;
 
+/** `digest` NAME_ONLY: listed but not read (past the bounds); its content changes are not seen. */
 export interface SnapEntry { size: number; digest: string; bytes: Buffer | null }
-export type Snapshot = Map<string, SnapEntry>;
-/** More entries than SNAPSHOT_MAX.files: the turn is not checked (and the turn says so). */
-export const TOO_MANY = "too_many" as const;
+export const NAME_ONLY = "name-only";
+export type Snapshot = Map<string, SnapEntry> & { partial?: boolean };
 
 const digestOf = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
@@ -49,29 +50,34 @@ async function folderOf(root: string): Promise<string | null> {
   return dir;
 }
 
-/** The folder's regular files with size, digest and (up to the item size) bytes; TOO_MANY past the entry bound. */
-export async function snapshotMemoryFolder(root: string): Promise<Snapshot | typeof TOO_MANY> {
+/** One regular file's entry: digest and bytes up to the item size; a larger file by its stat. null: not a regular file. */
+async function readEntry(file: string): Promise<SnapEntry | null> {
+  const stat = await fs.lstat(file).catch(() => null);
+  if (!stat?.isFile()) return null;
+  if (stat.size > SNAPSHOT_MAX.keepBytes) return { size: stat.size, digest: `stat:${stat.size}:${stat.mtimeMs}:${stat.ino}`, bytes: null };
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
+  if (!handle) return null;
+  try {
+    const bytes = await handle.readFile();
+    if (bytes.length > SNAPSHOT_MAX.keepBytes) return { size: bytes.length, digest: `stat:${bytes.length}:${stat.mtimeMs}:${stat.ino}`, bytes: null };
+    return { size: bytes.length, digest: digestOf(bytes), bytes };
+  } finally { await handle.close(); }
+}
+
+/** Every entry by name; contents for the bounded set (memory-named files first). `partial` when some are name-only. */
+export async function snapshotMemoryFolder(root: string): Promise<Snapshot> {
   const dir = await folderOf(root);
-  const snap: Snapshot = new Map();
+  const snap = new Map<string, SnapEntry>() as Snapshot;
   if (!dir) return snap;
   const names = await fs.readdir(dir).catch(() => [] as string[]);
-  if (names.length > SNAPSHOT_MAX.files) return TOO_MANY;
-  for (const name of names) {
-    const file = path.join(dir, name);
-    const stat = await fs.lstat(file).catch(() => null);
-    if (!stat?.isFile()) continue;
-    if (stat.size > SNAPSHOT_MAX.keepBytes) {
-      // Never read: too large to be a memory item or to be kept. Compared by its stat only.
-      snap.set(name, { size: stat.size, digest: `stat:${stat.size}:${stat.mtimeMs}:${stat.ino}`, bytes: null });
-      continue;
-    }
-    const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
-    if (!handle) continue;
-    try {
-      const bytes = await handle.readFile();
-      if (bytes.length > SNAPSHOT_MAX.keepBytes) { snap.set(name, { size: bytes.length, digest: `stat:${bytes.length}:${stat.mtimeMs}:${stat.ino}`, bytes: null }); continue; }
-      snap.set(name, { size: bytes.length, digest: digestOf(bytes), bytes });
-    } finally { await handle.close(); }
+  const readable = names.length <= SNAPSHOT_MAX.names;
+  // Memory-named files first, then by name: deterministic, so the read set is the same at both ends of the turn.
+  const ordered = [...names].sort((a, b) => Number(memoryFileName(b)) - Number(memoryFileName(a)) || (a < b ? -1 : a > b ? 1 : 0));
+  let read = 0;
+  for (const name of ordered) {
+    if (!readable || read >= SNAPSHOT_MAX.files) { snap.set(name, { size: -1, digest: NAME_ONLY, bytes: null }); snap.partial = true; continue; }
+    const entry = await readEntry(path.join(dir, name));
+    if (entry) { snap.set(name, entry); read++; }
   }
   return snap;
 }
@@ -82,41 +88,58 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): SnapDiff {
   const added: string[] = [], changed: string[] = [], removed: string[] = [];
   for (const [name, entry] of after) {
     const old = before.get(name);
-    if (!old) added.push(name); else if (old.digest !== entry.digest) changed.push(name);
+    if (!old) added.push(name);
+    else if (old.digest !== NAME_ONLY && entry.digest !== NAME_ONLY && old.digest !== entry.digest) changed.push(name);
   }
   for (const name of before.keys()) if (!after.has(name)) removed.push(name);
   return { added: added.sort(), changed: changed.sort(), removed: removed.sort() };
 }
 
 // ---- The journal of Studio's own memory-folder changes ----
-type JournalEntry = { dir: string; name: string; digest: string | null; at: number };
+// Each entry keeps the file's state after Studio's change: its digest and (up to the item size) its bytes, or a removal.
+// At the turn end the last such state wins over the snapshot, so a learner's save during the turn is what is put back.
+type JournalEntry = { dir: string; name: string; digest: string | null; bytes: Buffer | null; at: number };
 const journal: JournalEntry[] = [];
-const JOURNAL_MAX = 500;
+const JOURNAL_MAX = 200;
 
-/**
- * Studio made this change to a memory file (its memory list, an undo, the learner's save in the editor).
- * `digest` is the file's content digest after the change, or null for a removal.
- */
-export async function noteStudioMemoryChange(dir: string, name: string, bytes: Buffer | null, at = Date.now()): Promise<void> {
-  const real = await fs.realpath(dir).catch(() => dir);
-  journal.push({ dir: real, name, digest: bytes ? digestOf(bytes) : null, at });
+function journalPush(dir: string, name: string, bytes: Buffer | null, at: number): void {
+  journal.push({ dir, name, digest: bytes ? digestOf(bytes) : null, bytes: bytes && bytes.length <= SNAPSHOT_MAX.keepBytes ? Buffer.from(bytes) : null, at });
   while (journal.length > JOURNAL_MAX) journal.shift();
 }
 
-function studioMade(dir: string, name: string, digest: string | null, since: number): boolean {
-  return journal.some((e) => e.at >= since && e.dir === dir && e.name === name && e.digest === digest);
+/**
+ * Studio made this change to a memory file (its memory list, an undo, the learner's save in the editor). `bytes` is
+ * the file as it now is on disk (read from disk for an editor save, so a byte-order mark or line endings count), or
+ * null for a removal.
+ */
+export async function noteStudioMemoryChange(dir: string, name: string, bytes: Buffer | null, at = Date.now()): Promise<void> {
+  journalPush(await fs.realpath(dir).catch(() => dir), name, bytes, at);
+}
+
+/** The editor saved this file: journal the bytes on disk now (not the editor's text, which drops a BOM). */
+export async function noteStudioMemorySave(file: string, at = Date.now()): Promise<void> {
+  const entry = await readEntry(file);
+  if (!entry || !entry.bytes) return;
+  journalPush(await fs.realpath(path.dirname(file)).catch(() => path.dirname(file)), path.basename(file), entry.bytes, at);
+}
+
+/** The last state Studio left this file in during the turn, or undefined when Studio did not touch it. */
+function studioState(dir: string, name: string, since: number): JournalEntry | undefined {
+  for (let i = journal.length - 1; i >= 0; i--) {
+    const e = journal[i];
+    if (e.at < since) break;
+    if (e.dir === dir && e.name === name) return e;
+  }
+  return undefined;
 }
 
 // Every change ActivityMemory makes is journaled synchronously (its folder path is already the real one).
-observeMemoryChanges((dir, name, bytes) => {
-  journal.push({ dir, name, digest: bytes ? digestOf(bytes) : null, at: Date.now() });
-  while (journal.length > JOURNAL_MAX) journal.shift();
-});
+observeMemoryChanges((dir, name, bytes) => journalPush(dir, name, bytes, Date.now()));
 
 /** For tests only: start from an empty journal. */
 export function clearStudioMemoryJournal(): void { journal.length = 0; }
 
-export interface RevertResult { reverted: number; kept: number; failed: number }
+export interface RevertResult { reverted: number; kept: number; failed: number; unchecked: boolean }
 
 /** Removes quarantined copies older than the retention, then the oldest past the per-activity count and byte caps. */
 export async function pruneQuarantine(base: string, now = Date.now()): Promise<void> {
@@ -152,63 +175,71 @@ export async function purgeTaskQuarantine(base: string, scopeKey: string, taskKe
 }
 
 /**
- * Puts the folder back to `before` for every change not recorded as Studio's own since `since`. Anything the turn
- * wrote is moved or copied into `quarantine` first, so nothing is lost. A file too large to have been kept in the
- * snapshot cannot be restored: its current version is still quarantined and it counts as failed.
+ * Puts each file back to what it should be after the turn: the last state Studio left it in during the turn (the
+ * learner's save, the memory list, an undo), else its state at turn start. Anything else the turn wrote is moved or
+ * copied into `quarantine` first, so nothing is lost. A new name is always moved out, whatever the bounds (fail
+ * closed). A file whose target bytes were not kept (past the item size) counts as failed. `unchecked`: some entries
+ * were tracked by name only, so a change inside them could not be seen.
  */
-export async function revertTurnChanges(root: string, before: Snapshot, since: number, quarantine: string, now = Date.now()): Promise<RevertResult | typeof TOO_MANY> {
+export async function revertTurnChanges(root: string, before: Snapshot, since: number, quarantine: string, now = Date.now()): Promise<RevertResult> {
   const dir = await folderOf(root);
-  const result: RevertResult = { reverted: 0, kept: 0, failed: 0 };
+  const result: RevertResult = { reverted: 0, kept: 0, failed: 0, unchecked: !!before.partial };
   if (!dir) {
     // The whole folder was removed or replaced by something that is not a plain folder: nothing is touched.
     if (before.size) result.failed = before.size;
     return result;
   }
   const after = await snapshotMemoryFolder(root);
-  if (after === TOO_MANY) return TOO_MANY;
-  const diff = diffSnapshots(before, after);
-  if (!diff.added.length && !diff.changed.length && !diff.removed.length) return result;
-  await fs.mkdir(quarantine, { recursive: true, mode: 0o700 });
-  await fs.chmod(path.dirname(quarantine), 0o700).catch(() => undefined);
+  if (after.partial) result.unchecked = true;
   const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
+  let made = false;
+  const ensureQuarantine = async () => {
+    if (made) return;
+    await fs.mkdir(quarantine, { recursive: true, mode: 0o700 });
+    await fs.chmod(path.dirname(quarantine), 0o700).catch(() => undefined);
+    made = true;
+  };
+  let seq = 0;
   const keepCopy = async (name: string, bytes: Buffer) => {
-    const target = path.join(quarantine, `${stamp}-${path.basename(name)}`);
+    await ensureQuarantine();
+    const target = path.join(quarantine, `${stamp}-${++seq}-${path.basename(name)}`);
     const handle = await fs.open(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
   };
   const putBack = async (name: string, bytes: Buffer) => {
     // Written beside it under a temporary name and renamed over it: never a half-written memory file.
-    const tmp = path.join(dir, `.hps-restore-${stamp}-${path.basename(name)}`);
+    const tmp = path.join(dir, `.hps-restore-${stamp}-${++seq}-${path.basename(name)}`);
     const handle = await fs.open(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
     await fs.rename(tmp, path.join(dir, name));
   };
-  for (const name of diff.added) {
-    const entry = after.get(name)!;
-    if (studioMade(dir, name, entry.digest, since)) { result.kept++; continue; }
-    // Past the item size: never read as memory, and not copied into the quarantine; left in place and reported.
-    if (!entry.bytes) { result.failed++; continue; }
+  const names = new Set([...before.keys(), ...after.keys()]);
+  for (const name of [...names].sort()) {
+    const was = before.get(name), now_ = after.get(name), studio = studioState(dir, name, since);
+    // What the file should be: Studio's last state in the turn, else the state at turn start.
+    const target: { digest: string | null; bytes: Buffer | null } | null = studio ? { digest: studio.digest, bytes: studio.bytes } : was ? { digest: was.digest, bytes: was.bytes } : null;
+    const targetAbsent = studio ? studio.digest === null : !was;
+    // Read a name-only entry now when it matters (a new name, or one Studio changed).
+    let current = now_;
+    if (current?.digest === NAME_ONLY && (!was || studio)) current = (await readEntry(path.join(dir, name))) ?? current;
+    if (!current && targetAbsent) { if (studio) result.kept++; continue; }
+    if (current && target && !targetAbsent && current.digest === target.digest) { if (studio) result.kept++; continue; }
+    // Unseen inside a name-only entry that existed at turn start and Studio did not touch: nothing to compare.
+    if (current?.digest === NAME_ONLY && was && !studio) continue;
     try {
-      await keepCopy(name, entry.bytes);
-      await fs.unlink(path.join(dir, name));
+      if (current) {
+        if (current.bytes) await keepCopy(name, current.bytes);
+        else if (!targetAbsent) { result.failed++; continue; }   // past the item size: cannot be copied, left as it is
+      }
+      if (targetAbsent) {
+        if (current && current.bytes) await fs.unlink(path.join(dir, name));
+        else if (current) { result.failed++; continue; }        // a new file past the item size: left, reported
+      } else {
+        if (!target!.bytes) { result.failed++; continue; }
+        await putBack(name, target!.bytes);
+      }
       result.reverted++;
     } catch { result.failed++; }
-  }
-  for (const name of diff.changed) {
-    const entry = after.get(name)!, old = before.get(name)!;
-    if (studioMade(dir, name, entry.digest, since)) { result.kept++; continue; }
-    if (!entry.bytes || !old.bytes) { result.failed++; continue; }
-    try {
-      await keepCopy(name, entry.bytes);
-      await putBack(name, old.bytes);
-      result.reverted++;
-    } catch { result.failed++; }
-  }
-  for (const name of diff.removed) {
-    const old = before.get(name)!;
-    if (studioMade(dir, name, null, since)) { result.kept++; continue; }
-    if (!old.bytes) { result.failed++; continue; }
-    try { await putBack(name, old.bytes); result.reverted++; } catch { result.failed++; }
   }
   return result;
 }
@@ -217,5 +248,5 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
 export const FOLDER_GUARD_COPY = {
   reverted: (n: number) => `이 작업에서 기억에 쓴 내용 ${n}개를 되돌렸어요.`,
   failed: (n: number) => `기억 파일 ${n}개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`,
-  tooMany: "기억 폴더에 파일이 너무 많아서 이번에는 바뀐 내용을 확인하지 못했어요. 기억 목록에서 확인해 주세요.",
+  unchecked: "기억 폴더에 파일이 많아서 일부 파일의 바뀐 내용은 확인하지 못했어요. 새로 생긴 파일은 모두 옮겼어요. 기억 목록에서 확인해 주세요.",
 } as const;

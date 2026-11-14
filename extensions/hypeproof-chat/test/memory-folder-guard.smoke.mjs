@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { ActivityMemory, MEMORY_LIMITS } from '../src/activityMemory.ts';
-import { FOLDER_GUARD_COPY, QUARANTINE_LIMITS, SNAPSHOT_MAX, TOO_MANY, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
+import { FOLDER_GUARD_COPY, NAME_ONLY, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'memory-guard-')));
 let passed = 0;
@@ -38,13 +38,13 @@ try {
     assert.deepEqual(diffSnapshots(before, await snapshotMemoryFolder(root)), { added: ['xy.md'], changed: ['a.md'], removed: ['b.md'] });
     const q = path.join(top, 'q-pure');
     const r = await revertTurnChanges(root, before, since, q);
-    assert.deepEqual(r, { reverted: 3, kept: 0, failed: 0 });
+    assert.deepEqual(r, { reverted: 3, kept: 0, failed: 0, unchecked: false });
     assert.deepEqual(ls(memDir(root)), ['a.md', 'b.md'], 'the folder is as it was');
     assert.equal(read(root, 'a.md'), '원래 a\n');
     assert.equal(read(root, 'b.md'), '원래 b\n');
     const kept = ls(q).map(n => fs.readFileSync(path.join(q, n), 'utf8')).sort();
     assert.deepEqual(kept, ['몰래 남긴 기억\n', '바뀐 a\n'], 'nothing the turn wrote is lost');
-    assert.deepEqual(await revertTurnChanges(root, before, since, q), { reverted: 0, kept: 0, failed: 0 }, 'a second run finds nothing');
+    assert.deepEqual(await revertTurnChanges(root, before, since, q), { reverted: 0, kept: 0, failed: 0, unchecked: false }, 'a second run finds nothing');
   });
 
   await t("negative control: Studio's own changes during the turn (append, remove, the learner's editor save) are kept", async () => {
@@ -60,12 +60,12 @@ try {
     fs.writeFileSync(path.join(memDir(root), 'edit.md'), '학습자가 편집기에서 고쳤어요\n');
     await noteStudioMemoryChange(memDir(root), 'edit.md', Buffer.from('학습자가 편집기에서 고쳤어요\n'));
     const r = await revertTurnChanges(root, before, since, path.join(top, 'q-studio'));
-    assert.deepEqual(r, { reverted: 0, kept: 3, failed: 0 });
+    assert.deepEqual(r, { reverted: 0, kept: 3, failed: 0, unchecked: false });
     assert.deepEqual(ls(memDir(root)), [added, 'edit.md'].sort());
     assert.equal(read(root, 'edit.md'), '학습자가 편집기에서 고쳤어요\n');
   });
 
-  await t('bounds: a file past the item size is never read or copied and is reported; too many entries is not checked', async () => {
+  await t('bounds: a file past the item size is never read or copied and is reported; past the read bound new names are still moved out', async () => {
     clearStudioMemoryJournal();
     const root = path.join(top, 'big'); fs.mkdirSync(memDir(root), { recursive: true });
     fs.writeFileSync(path.join(memDir(root), 'big.md'), 'ㄱ'.repeat(MEMORY_LIMITS.bytes));
@@ -76,12 +76,61 @@ try {
     fs.writeFileSync(path.join(memDir(root), 'big.md'), 'small now\n');
     fs.writeFileSync(path.join(memDir(root), 'huge-new.md'), 'x'.repeat(MEMORY_LIMITS.bytes + 1));
     const q = path.join(top, 'q-big');
-    assert.deepEqual(await revertTurnChanges(root, before, since, q), { reverted: 0, kept: 0, failed: 2 });
-    assert.deepEqual(ls(q), [], 'nothing past the item size enters the quarantine');
+    assert.deepEqual(await revertTurnChanges(root, before, since, q), { reverted: 0, kept: 0, failed: 2, unchecked: false });
+    assert.deepEqual(ls(q).map(n => fs.readFileSync(path.join(q, n), 'utf8')), ['small now\n'], 'only the copy within the item size is kept aside; nothing past it is read or copied');
     assert.ok(fs.existsSync(path.join(memDir(root), 'huge-new.md')), 'left in place (it is never read as memory), reported');
+    // Past the read bound, fail closed: a crowd of stray files cannot hide a planted item.
     const crowd = path.join(top, 'crowd'); fs.mkdirSync(memDir(crowd), { recursive: true });
-    for (let i = 0; i <= SNAPSHOT_MAX.files; i++) fs.writeFileSync(path.join(memDir(crowd), `${i}.md`), 'x');
-    assert.equal(await snapshotMemoryFolder(crowd), TOO_MANY, 'past the entry bound the snapshot stops before reading');
+    for (let i = 0; i <= SNAPSHOT_MAX.files + 5; i++) fs.writeFileSync(path.join(memDir(crowd), `.stray-${i}`), 'x');
+    const crowdSince = Date.now();
+    const crowdBefore = await snapshotMemoryFolder(crowd);
+    assert.equal(crowdBefore.partial, true, 'some entries are tracked by name only');
+    assert.ok([...crowdBefore.values()].some(e => e.digest === NAME_ONLY));
+    fs.writeFileSync(path.join(memDir(crowd), 'planted.md'), '심어 둔 기억\n');
+    let cr = await revertTurnChanges(crowd, crowdBefore, crowdSince, path.join(top, 'q-crowd'));
+    assert.equal(fs.existsSync(path.join(memDir(crowd), 'planted.md')), false, 'a new name is always moved out');
+    assert.equal(cr.reverted, 1);
+    // And when the planted item itself sorts past the read bound (memory-named fillers fill the read set first).
+    const full = path.join(top, 'crowd-full'); fs.mkdirSync(memDir(full), { recursive: true });
+    for (let i = 0; i <= SNAPSHOT_MAX.files + 5; i++) fs.writeFileSync(path.join(memDir(full), `a-${String(i).padStart(4, '0')}.md`), 'x');
+    const fullSince = Date.now();
+    const fullBefore = await snapshotMemoryFolder(full);
+    fs.writeFileSync(path.join(memDir(full), 'zz-planted.md'), '심어 둔 기억\n');
+    const fullAfter = await snapshotMemoryFolder(full);
+    assert.equal(fullAfter.get('zz-planted.md').digest, NAME_ONLY, 'the planted item is past the read bound');
+    cr = await revertTurnChanges(full, fullBefore, fullSince, path.join(top, 'q-full'));
+    assert.equal(fs.existsSync(path.join(memDir(full), 'zz-planted.md')), false, 'still moved out (fail closed)');
+    assert.equal(cr.unchecked, true);
+    assert.equal(cr.unchecked, true, 'and the turn says some contents could not be checked');
+  });
+
+  await t("the learner's save during the turn wins over the turn's later shell overwrite", async () => {
+    clearStudioMemoryJournal();
+    const root = path.join(top, 'save-then-shell'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'e.md'), 'v0 원래\n');
+    const since = Date.now();
+    const before = await snapshotMemoryFolder(root);
+    fs.writeFileSync(path.join(memDir(root), 'e.md'), 'v1 학습자가 저장\n');
+    await noteStudioMemorySave(path.join(memDir(root), 'e.md'));
+    fs.writeFileSync(path.join(memDir(root), 'e.md'), 'v2 셸이 덮어씀\n');
+    const q = path.join(top, 'q-save');
+    const r = await revertTurnChanges(root, before, since, q);
+    assert.equal(read(root, 'e.md'), 'v1 학습자가 저장\n', "the learner's save, not the pre-turn version");
+    assert.equal(r.reverted, 1);
+    assert.deepEqual(ls(q).map(n => fs.readFileSync(path.join(q, n), 'utf8')), ['v2 셸이 덮어씀\n'], 'the overwrite is kept aside');
+  });
+
+  await t("a BOM file's editor save is journaled from disk and kept", async () => {
+    clearStudioMemoryJournal();
+    const root = path.join(top, 'bom'); fs.mkdirSync(memDir(root), { recursive: true });
+    const since = Date.now();
+    const before = await snapshotMemoryFolder(root);
+    const bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('BOM으로 저장한 기억\r\n')]);
+    fs.writeFileSync(path.join(memDir(root), 'bom.md'), bom);
+    await noteStudioMemorySave(path.join(memDir(root), 'bom.md'));
+    const r = await revertTurnChanges(root, before, since, path.join(top, 'q-bom'));
+    assert.deepEqual(r, { reverted: 0, kept: 1, failed: 0, unchecked: false });
+    assert.deepEqual(fs.readFileSync(path.join(memDir(root), 'bom.md')), bom, 'byte for byte');
   });
 
   await t('quarantine: retention of seven days, per-activity count and byte caps, a task purge; owner-only modes', async () => {
@@ -150,7 +199,7 @@ try {
     try { r = await h.endMemoryFolderGuard('turn-1'); } finally { globalThis.fetch = realFetch; Object.assign(console, realLog); }
     assert.deepEqual(sent, [], 'nothing is uploaded');
     assert.ok(!logged.join('\n').includes('남기면 안 되는 기억'), 'nothing of the content is logged');
-    same(r, { reverted: 1, kept: 0, failed: 0 });
+    same(r, { reverted: 1, kept: 0, failed: 0, unchecked: false });
     assert.deepEqual(ls(memDir(root)), ['keep.md']);
     same(lines('turn-1'), [FOLDER_GUARD_COPY.reverted(1)]);
     assert.equal(FOLDER_GUARD_COPY.reverted(1), '이 작업에서 기억에 쓴 내용 1개를 되돌렸어요.');
@@ -179,7 +228,7 @@ try {
     await set({ keep: false });
     h.taskMemoryStreams.set('turn-3', taskId);
     await h.startMemoryFolderGuard('turn-3');
-    same(await h.endMemoryFolderGuard('turn-3'), { reverted: 0, kept: 0, failed: 0 });
+    same(await h.endMemoryFolderGuard('turn-3'), { reverted: 0, kept: 0, failed: 0, unchecked: false });
     same(lines('turn-3'), []);
     await set({ keep: true });
   });
@@ -196,6 +245,7 @@ try {
     assert.match(src, /msg\.type === 'taskArchive'\) \{ await store\.archiveTask\(msg\.taskId, expected\); await this\.purgeTaskMemoryQuarantine\(msg\.taskId\); \}/, 'an archived task loses its quarantine');
     assert.match(src, /msg\.type === 'taskMove'\) \{ moved = await this\.moveTask\(store, msg\.id, msg\.destination, expected\); await this\.purgeTaskMemoryQuarantine\(msg\.id\); \}/, 'a moved task too');
     assert.ok(src.includes('void pruneQuarantine(this.memoryQuarantineBase())'), 'retention applied at activation');
+    assert.ok(src.includes('void noteStudioMemorySave(file);') && !src.includes('Buffer.from(document.getText()'), "the editor save is journaled from disk, not from the editor's text");
     for (const runtime of ['runLocalCoach({', 'runSdkCoach({']) assert.ok(send.indexOf(runtime) > start && send.indexOf(runtime) < end, `${runtime} runs inside the guarded turn`);
   });
 

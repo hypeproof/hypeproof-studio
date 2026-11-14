@@ -9375,11 +9375,16 @@ catches what the checks above cannot see: a shell command that builds the path a
     and the learner's own save of a memory file in the editor.
   - **The line.** One line in that turn, kept with it, names only the count: `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`.
     It never shows memory content or a file name.
-  - **Snapshot bounds (the store's own limits).** At most the item count plus 50 entries. Bytes are read only up to the
-    16 KiB item size; a larger file is compared by its size, change time and inode and is never read. Past the entry bound
-    the turn is not checked, and it says `기억 폴더에 파일이 너무 많아서 이번에는 바뀐 내용을 확인하지 못했어요. 기억 목록에서 확인해 주세요.`.
-    A file past the item size cannot be put back or copied. It is left in place (it is never read as memory either), and
-    the turn says `기억 파일 N개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`.
+  - **Snapshot bounds (the store's own limits). Fail closed.** Every entry's name is listed, up to 10,000, so anything
+    new the turn adds is always found and moved out. Contents are read for at most 250 entries, the store's memory-named
+    files first, and only up to the 16 KiB item size. An entry past that is tracked by name only: a change inside it
+    cannot be seen, and the turn says `기억 폴더에 파일이 많아서 일부 파일의 바뀐 내용은 확인하지 못했어요. 새로 생긴 파일은 모두 옮겼어요. 기억 목록에서 확인해 주세요.`.
+    A file past the item size cannot be put back. It is left in place (it is never read as memory either), and the turn
+    says `기억 파일 N개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`.
+  - **Studio's own changes during the turn win.** The journal keeps the state Studio left each file in, with its bytes up
+    to the item size. A learner's save followed by a shell overwrite in the same turn puts back the learner's save, not
+    the pre-turn version. An editor save is journaled from the bytes on disk, so a byte-order mark or CRLF line endings
+    are not mistaken for a foreign write.
   - **Quarantine bounds.**
     - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
       with one folder per seat activity (a keyed hash of its scope) and per task.
@@ -9388,9 +9393,13 @@ catches what the checks above cannot see: a shell command that builds the path a
     - A task's folder is removed when the task is archived or moved.
     - Nothing reads it back into memory, uploads it or logs it (tested).
     - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
-  - **Write side, with this check.** No memory write from a keep-off turn survives the turn, whatever form the shell
-    command took. The two edges are told in the turn, not silent: more than 250 entries in the folder, and a file past the
-    item size.
+  - **Write side, with this check.** A new or deleted memory file, or a changed one among the read entries, does not
+    survive a keep-off turn, in either runtime. The shell form does not matter. What remains, and is told or named:
+    - a change inside an entry past the read bound (told in the turn);
+    - a file past the item size (told);
+    - a write by a process the turn started in the background that lands after the turn ended (for example
+      `nohup sh -c 'sleep 30; …' &`). The next keep-off turn's snapshot already includes it, so it is not put back. This
+      one is not told.
   - **A turn that began with keep on is not checked.** If keep is turned on during a keep-off turn, a shell write after
     that is still put back.
 

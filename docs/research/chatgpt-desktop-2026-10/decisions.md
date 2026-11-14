@@ -2333,8 +2333,12 @@ Closes the shell gap left by CGP-KNOW-R-028 without a policy change. It is host-
 - **Whose change (agent choice).** Every `ActivityMemory` change is journaled synchronously, and so is the learner's
   editor save of a memory file. Those are left alone; everything else in a keep-off turn is attributed to the turn.
   No question is asked, because the journal already covers every path Studio itself writes through.
-- **Snapshot bounds.** At most the item count plus 50 entries (more: not checked, told in the turn). Bytes are read only
-  up to the 16 KiB item size; a larger file is compared by stat, never read, never copied, and reported if changed.
+- **Snapshot bounds (verifier should-fix: fail closed).** Every name is listed, up to 10,000, so new names are always
+  moved out. Contents are read for 250 entries, memory-named first, up to the item size; the rest are tracked by name
+  only (told in the turn).
+- **Studio's last state wins (verifier should-fix).** The journal keeps bytes, so a learner's save survives a later
+  shell overwrite in the same turn. Editor saves are journaled from disk (BOM and CRLF safe).
+- **Not covered, named:** background processes the turn started that write after it ended.
 - **Quarantine bounds (agent choice, coordinator's privacy constraint).**
   - It is scoped per OS account (global storage), per seat activity (a keyed hash of its scope) and per task, with modes
     0700/0600.
