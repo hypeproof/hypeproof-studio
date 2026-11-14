@@ -19,7 +19,7 @@ const dir = fileURLToPath(new URL('../webview-ui/', import.meta.url));
 const app = await build({ entryPoints: [dir + 'src/main.tsx'], bundle: true, platform: 'browser', format: 'iife', outdir: 'start-assets', write: false, loader: { '.svg': 'dataurl', '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl' }, logLevel: 'silent' });
 const css = app.outputFiles.find((f) => f.path.endsWith('.css')).text, js = app.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const shots = process.env.HPS_SHOTS; if (shots) fs.mkdirSync(shots, { recursive: true });
-const adultView = { rows: ['textSize', 'reduceMotion', 'notices', 'export'], textSize: 'base', reduceMotion: 'auto', notices: false, advanced: true };
+const adultView = { rows: ['textSize', 'theme', 'reduceMotion', 'notices', 'export'], textSize: 'base', theme: 'dark', reduceMotion: 'auto', notices: false, advanced: true };
 const until = async (b, expr, what) => { for (let n = 0; n < 100; n++) { const v = await b.evaluate(expr); if (v) return v; await new Promise((r) => setTimeout(r, 20)); } throw Error('timed out: ' + what); };
 const b = await launch(bin);
 try {
@@ -49,7 +49,7 @@ try {
     if (!forced) assert.ok(m.colors.every((c) => c === m.primary), 'title, row names and choices use the start page text colour: ' + L);
     assert.ok(!m.sent.some((t) => /Settings$/.test(t)), 'opening the sheet posts no settings-editor request: ' + L);
     assert.ok(m.rows.length <= 6, 'at most six rows: ' + L);
-    assert.deepEqual(m.rows, ['글자 크기', '움직임 줄이기', '알림'], 'the host-named rows in requirement order: ' + L);
+    assert.deepEqual(m.rows, ['글자 크기', '화면 밝기', '움직임 줄이기', '알림'], 'the host-named rows in requirement order: ' + L);
     assert.equal(m.advanced, seat === 'adult' ? 1 : 0, '고급 설정 only when the host allows it: ' + L);
     assert.equal(m.focus, '설정 닫기', 'focus moves into the sheet: ' + L);
     for (const t of m.targets) { assert.ok(t.h >= 44, `44px target ${t.t}: ` + L); assert.ok(t.inside, `target inside the sheet ${t.t}: ` + L); }

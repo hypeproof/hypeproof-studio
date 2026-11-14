@@ -749,12 +749,19 @@
         "label": "HypeProof Studio",
         "uiTheme": "vs-dark",
         "path": "./media/hypeproof-theme.json"
+      },
+      {
+        "label": "HypeProof Studio Light",
+        "uiTheme": "vs",
+        "path": "./media/hypeproof-light-theme.json"
       }
     ],
     "configurationDefaults": {
       "update.showReleaseNotes": false,
       "chat.disableAIFeatures": true,
       "workbench.colorTheme": "HypeProof Studio",
+      "workbench.preferredDarkColorTheme": "HypeProof Studio",
+      "workbench.preferredLightColorTheme": "HypeProof Studio Light",
       "workbench.activityBar.location": "hidden",
       "window.commandCenter": false,
       "workbench.layoutControl.enabled": false,
