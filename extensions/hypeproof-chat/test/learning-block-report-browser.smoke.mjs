@@ -30,7 +30,7 @@ window.mount=(config)=>root.render(<ChatPanel {...${JSON.stringify(data)}} {...{
 // Week 3: expect = criterion_form.
 const config = (() => { const base = chatConfig(3); return { ...base, profile: { ...base.profile, lesson: { ...base.profile.lesson, content: weekFixture(3) } } }; })();
 const lesson = config.profile.lesson;
-const inbox = (over) => ({ type: 'inboxState', inbox: { run: 'run-1', student: 'student-a', generation: 1, ended: false, offline: false, cards: [], unread: 0, ...over } });
+const inbox = (over) => ({ type: 'inboxState', inbox: { run: 'run-1', student: 'student-a', generation: 1, ended: false, offline: false, cards: [], unread: 0, reports: true, ...over } });
 
 const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN: learning-block-report browser unavailable'); process.exit(0); }
@@ -69,11 +69,12 @@ try {
     await ev('openMenu()'); await settle();
     await ev(`card().querySelector('[data-block-menu-toggle]').click()`); await settle();
     assert.deepEqual(await ev('items()'), ['접기'], `${tag}: no connection, no report item`);
-    for (const over of [{ offline: true }, { ended: true }, { run: '' }]) {
+    // An older Service that does not store the kind (no `reports` in the view) is not one either.
+    for (const over of [{ offline: true }, { ended: true }, { run: '' }, { reports: undefined }]) {
       await ev(`host(${JSON.stringify(inbox(over))})`); await settle();
       assert.deepEqual(await ev('items()'), ['접기'], `${tag}: ${JSON.stringify(over)} is not a live class connection`);
     }
-    checks += 4;
+    checks += 5;
 
     // A live class connection: the report item comes first.
     await ev(`host(${JSON.stringify(inbox({}))})`); await settle();
@@ -119,13 +120,27 @@ try {
     assert.deepEqual(await ev(`[!!card().querySelector('[data-block-report-panel]'), card().querySelector('[data-report-result="not_sent"]')?.textContent, card().querySelector('[data-report-send]').disabled]`), [true, '수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요.', false], `${tag}: not sent is said`);
     checks += 2;
 
+    // "capped" and "unconfirmed" keep the row open, say so, and never show the toast.
+    for (const [state, words] of [['capped', '오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요.'], ['unconfirmed', '선생님께 전달됐는지 아직 확인하지 못했어요. 잠시 뒤 다시 보내 보세요.']]) {
+      await ev(`card().querySelector('[data-report-send]').click()`); await settle();
+      await ev(`host({type:'materialReportResult',sha256:${JSON.stringify(lesson.sha256)},stepId:${JSON.stringify(stepId)},state:'${state}'})`); await settle();
+      assert.deepEqual(await ev(`[!!card().querySelector('[data-block-report-panel]'), card().querySelector('[data-report-result]')?.textContent, (document.querySelector('.hps-copy-toasts')?.textContent ?? '')]`), [true, words, ''], `${tag}: ${state} is said, no toast`);
+    }
+    checks += 2;
     // Send again; "sent" closes it, the toast is announced politely, focus returns to the menu button.
     await ev(`card().querySelector('[data-report-send]').click()`); await settle();
     await ev(`host({type:'materialReportResult',sha256:${JSON.stringify(lesson.sha256)},stepId:${JSON.stringify(stepId)},state:'sent'})`); await settle();
     const done = await ev(`[!!card().querySelector('[data-block-report-panel]'), document.activeElement.dataset.blockMenuToggle!==undefined, [...document.querySelectorAll('.hps-copy-live[role="status"]')].map(n=>n.textContent).join('|'), document.querySelector('.hps-copy-toasts')?.textContent ?? '']`);
     assert.deepEqual(done, [false, true, '선생님께 전달했어요', '선생님께 전달했어요'], `${tag}: sent`);
-    assert.equal(await ev(`posted.filter(m=>m.type==='materialReport').length`), 2, `${tag}: two reports in all`);
-    checks += 2;
+    assert.equal(await ev(`posted.filter(m=>m.type==='materialReport').length`), 4, `${tag}: four reports in all`);
+    // "already": the Service already holds this learner's report of the block. It closes, and the toast says so.
+    await new Promise((r) => setTimeout(r, 4200));
+    await ev(`card().querySelector('[data-block-menu-toggle]').click()`); await settle();
+    await ev(`card().querySelector('[data-block-report-open]').click()`); await settle();
+    await ev(`card().querySelector('[data-report-reason="wrong"]').click()`); await ev(`card().querySelector('[data-report-send]').click()`); await settle();
+    await ev(`host({type:'materialReportResult',sha256:${JSON.stringify(lesson.sha256)},stepId:${JSON.stringify(stepId)},state:'already'})`); await settle();
+    assert.deepEqual(await ev(`[!!card().querySelector('[data-block-report-panel]'), [...document.querySelectorAll('.hps-copy-live[role="status"]')].map(n=>n.textContent).join('|')]`), [false, '이미 선생님께 전달한 자료예요'], `${tag}: already`);
+    checks += 3;
 
     // Escape closes an open report; focus returns to the menu button. Nothing is posted.
     await ev(`card().querySelector('[data-block-menu-toggle]').click()`); await settle();

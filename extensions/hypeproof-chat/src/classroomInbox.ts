@@ -298,7 +298,7 @@ export interface InboxCard { object_id: string; kind: string; title: string; bod
   /** CGP-ART-R-005: the anchor, and (set by the host) whether the learner's page is still that version. A comment without `version` is not shown. */
   anchor?: CommentAnchor; version?: "current" | "previous" }
 /** `ended` = this device KNOWS the class is over (normal expiry, or its end time passed). `offline` = no valid connection right now and no such knowledge: the class may well be running. */
-export interface InboxView { run: string; student: string; generation: number; ended: boolean; offline: boolean; cards: InboxCard[]; unread: number }
+export interface InboxView { run: string; student: string; generation: number; ended: boolean; offline: boolean; cards: InboxCard[]; unread: number; /** CGP-LEARN-R-011 — this window's live connection reaches a Service that stores material reports. */ reports?: true }
 export const emptyView = (generation = 0): InboxView => ({ run: "", student: "", generation, ended: false, offline: false, cards: [], unread: 0 });
 /** Not being connected is not evidence that a class ended (an app restart looks exactly like this). Only a normal expiry or the run's own end time is. */
 export function inboxPresence(o: { connected: boolean; expired: boolean; ends_at: number; now: number }): { ended: boolean; offline: boolean } {
