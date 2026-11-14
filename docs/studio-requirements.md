@@ -5093,6 +5093,11 @@ successful sibling attachments and the existing per-item retry/remove semantics
 remain intact. Batch attachment-count limits remain picker policy notices.
 Behavioral check: `test/attachment-error-design.test.tsx` mounts personal and classroom
 ChatPanel, diagnoses causes and checks actual host/retry/preparation events.
+The chip's remove × (2026-11-14, a #4053 follow-up) reaches 4.5:1 against what is painted behind it in every theme.
+- On the refused chip, the button stays positioned (`relative`), so its dark dot stays under the white ×.
+- The personal seat's × is a transparent square with a foreground ×, so it draws no dot.
+- Check: `test/attachment-remove-contrast-computed.smoke.mjs` runs the real ChatPanel with every bundled theme, for the
+  classroom and personal seats and a refused chip.
 
 ## Semantic colour roles and token order (CGP-DS-D-001)
 
