@@ -18,7 +18,7 @@ const app = read('webview-ui/src/App.tsx');
 const pkg = JSON.parse(read('package.json'));
 
 await t('the config carries rehearsalSeat only in a rehearsal seat (absent otherwise)', () => {
-  assert.match(provider, /\.\.\.\(seatBand \? \{ rehearsalSeat: true \} : \{\}\)/);
+  assert.match(provider, /\.\.\.\(seatBand \? \{ rehearsalSeat: true, rehearsalPanel: await this\.rehearsalPanelFor\(profile, local\?\.model\) \} : \{\}\)/);
   assert.match(provider, /const seatBand = await this\.rehearsalSeatBand\(\);/);
 });
 
@@ -47,13 +47,13 @@ await t('the palette item is hidden outside the seat by its when clause and list
 
 await t('the webview band is drawn only from the config flag and calls the host on its button', () => {
   // The band rides in the banner slot, and only a rehearsal signal puts it there (no new sibling without the signal).
-  assert.match(panel, /const updateBanner = config\?\.rehearsalSeat \? \(\n\s*<>\{updateBannerCore\}<RehearsalSeatBand visible onEnd=\{props\.onEndRehearsalSeat \?\? \(\(\) => undefined\)\} \/><\/>\n\s*\) : updateBannerCore;/);
+  assert.match(panel, /const updateBanner = config\?\.rehearsalSeat \? \(\n\s*<>\{updateBannerCore\}<RehearsalSeatBand visible onEnd=\{props\.onEndRehearsalSeat \?\? \(\(\) => undefined\)\} panel=\{config\.rehearsalPanel\} onInsertExpected=\{insertExpected\} \/><\/>\n\s*\) : updateBannerCore;/);
   assert.doesNotMatch(panel, /<RehearsalSeatBand visible=\{!!config/, 'no separate sibling band');
   assert.match(app, /onEndRehearsalSeat=\{\(\) => postToHost\(\{ type: "rehearsalSeatEnd" \}\)\}/);
 });
 
 await t('the approved band texts are in the component', () => {
-  assert.match(panel, /<span>리허설 중<\/span>/);
+  assert.match(panel, /<span className="hps-rehearsal-seat-label">리허설 중<\/span>/);
   assert.match(panel, /끝내고 돌아가기/);
 });
 

@@ -279,11 +279,12 @@ export function boundMission(m: unknown): RenderedMission | undefined {
  * webview), plus the App identity. The host only drops entries for steps this lesson does not have; it never fills in
  * what was not drawn.
  */
-export function rehearsalReport(lesson: Lesson, rendered: RenderedStep[], app: { extension_version: string; host: string; runtime: string; sdk?: string; os: string; arch: string }, mission?: unknown) {
+export function rehearsalReport(lesson: Lesson, rendered: RenderedStep[], app: { extension_version: string; host: string; runtime: string; sdk?: string; os: string; arch: string }, mission?: unknown, checklist?: { schema: "hps-rehearsal-checklist/1"; items: { id: string; verdict: "fits" | "fix"; note?: string }[] }) {
   const byId = new Map(rendered.map((r) => [r.id, r]));
   const drawn = boundMission(mission);
   return {
     ...(drawn ? { mission: drawn } : {}),
+    ...(checklist ? { checklist } : {}),
     schema: "hps-rehearsal-report/1" as const,
     app,
     steps: lesson.content.steps.map((s) => {

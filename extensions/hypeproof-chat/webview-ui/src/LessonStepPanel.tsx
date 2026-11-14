@@ -4,6 +4,7 @@ import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
 import { ChatIcon, type IconKind } from "./ChatDetails";
 import { imeComposing } from "./imeGuard";
 import { patchWebviewState, readWebviewState } from "./vscode";
+import { checklistSnapshot } from "./rehearsalChecklist";
 import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
@@ -217,7 +218,7 @@ export function LessonStepPanel(props: {
         <section className="hp-rehearsal" aria-label="강사 리허설">
           <p><strong>강사 리허설</strong> — 이 수업 후보(버전 {r.version})를 학생 조건으로 시험하고 있습니다. 단계마다 열어 보고 AI에게 한 번 이상 물어본 뒤 결과를 보내세요. 실제 학생 기록이 아닙니다.</p>
           <button type="button" className="hp-cta-quiet" data-rehearsal-send="" disabled={props.busy || r.judged || rs?.state === "sending" || rs?.state === "sent"}
-            onClick={() => post({ type: "rehearsalSend", steps: Object.values(drawn.current.sha === lesson.sha256 ? drawn.current.steps : {}), mission: drawnMission() })}>
+            onClick={() => post({ type: "rehearsalSend", steps: Object.values(drawn.current.sha === lesson.sha256 ? drawn.current.steps : {}), mission: drawnMission(), checklist: checklistSnapshot() })}>
             {rs?.state === "sending" ? "보내는 중…" : "리허설 결과 보내기"}
           </button>
           {rs && rs.state !== "sending" && <p role="status" data-rehearsal-result={rs.verdict ?? rs.state}>

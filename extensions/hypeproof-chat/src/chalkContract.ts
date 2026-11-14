@@ -1,5 +1,5 @@
 import { createContractWaits, type ContractWaits, type HumanWait, type WaitSignalResult } from "./localRuntime/humanWait.ts";
-import { ENTER_OPEN_FAILED } from "./rehearsalSeat.ts";
+import { ENTER_OPEN_FAILED, sanitizeStucks } from "./rehearsalSeat.ts";
 // Studio side of the Chalk command contract v0 (docs/contract/studio-chalk.md).
 // Kept free of the vscode module: the command bus, the local runner and the studio
 // operations are injected, so the contract is testable with stubs. The extension wires
@@ -90,7 +90,7 @@ export interface ContractOps {
   inboxLink(objectId: string, url: string, generation: number, action: "open" | "copy"): Promise<{ ok: boolean }>;
   reviewPrepare(week: number | undefined): Promise<{ ok: boolean; message?: string }>;
   /** #4048 — start a same-window rehearsal in this window. Absent on a host without the seat. */
-  enterRehearsalSeat?(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void>;
+  enterRehearsalSeat?(input: { token: string; expiresAt: number; rehearsalId: string; stucks: { id: string; expected_stuck: string }[] }): Promise<void>;
   /** #4048 — show one approved sentence to the instructor on a failed entry. */
   notify?(message: string): void;
 }
@@ -193,7 +193,8 @@ export class ChalkContractHost {
     const expiresAt = a.expiresAt === null ? 0 : a.expiresAt;
     if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return refuse("invalidArgs");
     try {
-      await enter.call(this.ops, { token, expiresAt, rehearsalId });
+      // #4102 — the optional stuck list: sanitised here; a missing or bad list is empty.
+      await enter.call(this.ops, { token, expiresAt, rehearsalId, stucks: sanitizeStucks(a.stucks) });
       return { ok: true };
     } catch {
       // The host's message stays out of the result: the reason is only a code.

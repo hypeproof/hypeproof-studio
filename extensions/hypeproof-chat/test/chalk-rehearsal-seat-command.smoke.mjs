@@ -46,6 +46,21 @@ async function activated({ enter } = {}) {
   assert.equal(r.ok, true, "activation");
   return { bus, calls };
 }
+async function activatedWithCalls() {
+  const bus = makeBus();
+  const calls = [];
+  const ops = {
+    openExternal: async () => ({ ok: true }), openReport: async () => ({ ok: true }),
+    inboxView: async () => null, inboxOpened: async () => {}, inboxLink: async () => ({ ok: true }),
+    reviewPrepare: async () => ({ ok: true }),
+    enterRehearsalSeat: async (input) => { calls.push(input); },
+  };
+  let n = 0;
+  const host = new ChalkContractHost(bus, runner(), ops, () => `nonce-${++n}`);
+  host.register();
+  const activate = () => host.activate({ issuerToken: "tok-value", verifiedServerUrl: "https://api.example/v1", connection: "server" });
+  return { bus, calls, activate };
+}
 const enterCall = (bus, args) => bus.call("hypeproof.runtime.enterRehearsalSeat", { contractVersion: CONTRACT_VERSION, sessionNonce: "nonce-1", ...args });
 
 await t("the command is on the bus under the agreed id", async () => {
@@ -76,7 +91,7 @@ await t("a good call enters the seat exactly once and returns ok", async () => {
   const r = await enterCall(bus, REHEARSAL);
   assert.deepEqual(r, { ok: true });
   assert.equal(calls.length, 1, "enter is called once");
-  assert.deepEqual(calls[0], REHEARSAL);
+  assert.deepEqual(calls[0], { ...REHEARSAL, stucks: [] });
 });
 
 await t("a null expiry is passed as 0, which the seat treats as already expired on restart", async () => {
@@ -186,6 +201,17 @@ for (const [label, make, call, reason] of failureCases) {
     assert.ok(!JSON.stringify(r).includes(TOKEN), "no token in the result");
   });
 }
+
+// #4102 — the optional stucks field: sanitised, passed through; a missing or bad list is empty; the seat still enters.
+await t("the stucks field is passed to the seat entry sanitised (bad items dropped, missing list empty)", async () => {
+  const { bus, calls, activate } = await activatedWithCalls();
+  await activate();
+  const good = { id: "stuck-1", expected_stuck: "이 답이 맞는지 모르겠어요." };
+  assert.deepEqual(await enterCall(bus, { ...REHEARSAL, stucks: [good, { id: "", expected_stuck: "x" }, "bad"] }), { ok: true });
+  assert.deepEqual(calls[0].stucks, [good]);
+  assert.deepEqual(await enterCall(bus, { ...REHEARSAL }), { ok: true });
+  assert.deepEqual(calls[1].stucks, []);
+});
 
 await t("hasRehearsalReturn and endRehearsalSeat are not on the bus", async () => {
   const { bus } = await activated();

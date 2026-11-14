@@ -14,7 +14,11 @@ export const ISSUER_REPLACE_BLOCKED = "리허설을 끝낸 뒤에 강사 토큰�
 export const MINT_BLOCKED = "리허설을 끝낸 뒤에 학생 토큰을 발급하세요.";
 
 export type SeatPhase = "entering" | "inside" | "returning";
+/** #4102 — one expected stuck from the Chalk plan (service checklist id + the text the learner would say). */
+export interface SeatStuck { id: string; expected_stuck: string }
 export interface SeatRecord {
+  /** The expected stucks for the rehearsal checklist. Kept with the seat (not a secret), removed when the seat ends. */
+  stucks?: SeatStuck[];
   phase: SeatPhase;
   rehearsalId: string;
   /** Epoch milliseconds when the student token expires. */
@@ -72,7 +76,7 @@ async function restoreIssuer(h: SeatHost): Promise<void> {
 }
 
 /** Start a rehearsal in this window: move the credential aside, then open the dedicated folder. */
-export async function enterRehearsal(h: SeatHost, input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void> {
+export async function enterRehearsal(h: SeatHost, input: { token: string; expiresAt: number; rehearsalId: string; stucks?: unknown }): Promise<void> {
   if (!input.token || !input.rehearsalId || !Number.isFinite(input.expiresAt))
     throw new RehearsalSeatError("리허설 정보를 확인해 주세요.");
   const issuer = await h.secrets.get(ISSUER_TOKEN_KEY);
@@ -82,7 +86,8 @@ export async function enterRehearsal(h: SeatHost, input: { token: string; expire
   if (!home) throw new RehearsalSeatError("작업 폴더를 먼저 열어 주세요.");
   const folder = h.rehearsalFolderFor(input.rehearsalId);
   await h.secrets.store(REHEARSAL_RETURN_KEY, issuer);
-  await writeSeat(h, { phase: "entering", rehearsalId: input.rehearsalId, expiresAt: input.expiresAt, homeFolder: home, rehearsalFolder: folder, pendingToken: input.token });
+  const stucks = sanitizeStucks(input.stucks);
+  await writeSeat(h, { phase: "entering", rehearsalId: input.rehearsalId, expiresAt: input.expiresAt, homeFolder: home, rehearsalFolder: folder, pendingToken: input.token, stucks });
   // #4048 Dev 3차 — the issuer is removed only after the return key and the seat read back as written.
   const readBack = await h.secrets.get(REHEARSAL_RETURN_KEY);
   const seatBack = await readSeat(h);
@@ -207,6 +212,56 @@ export async function storeDevSeed(secrets: SeatSecrets, key: string, value: str
   if (await returnHeld(secrets)) return false;
   await secrets.store(key, value);
   return true;
+}
+
+/**
+ * #4102 — the stuck list from Chalk's entry call. Anything that is not an object with a usable id (1..64 characters) and
+ * expected text (1..2000 characters) is dropped; a missing or malformed list is empty.
+ */
+export function sanitizeStucks(raw: unknown): SeatStuck[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SeatStuck[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const { id, expected_stuck: text } = x as { id?: unknown; expected_stuck?: unknown };
+    if (typeof id !== "string" || id.length < 1 || id.length > 64) continue;
+    if (typeof text !== "string" || text.length < 1 || text.length > 2000) continue;
+    out.push({ id, expected_stuck: text });
+  }
+  return out;
+}
+
+/** The expected stucks of the running seat, for the panel. Empty when there is no seat. */
+export async function rehearsalChecklistFor(h: SeatHost): Promise<SeatStuck[]> {
+  const seat = await readSeat(h);
+  return seat?.stucks ?? [];
+}
+
+/** #4102 — the expected stucks for the panel, only while the window is the rehearsal seat (no seat: empty). */
+export async function rehearsalStucksAt(secrets: SeatSecrets, root: string | undefined): Promise<SeatStuck[]> {
+  if (!(await rehearsalSeatActiveFor(secrets, root))) return [];
+  const seat = parseSeat(await secrets.get(REHEARSAL_SEAT_KEY));
+  return seat?.stucks ?? [];
+}
+
+/**
+ * #4102 — the checklist for the rehearsal report: only the items the person marked, only ids of the seat's stucks,
+ * verdicts fits or fix. Nothing marked means no checklist field at all (the report is then as before).
+ */
+export function checklistForReport(raw: unknown, stucks: readonly SeatStuck[]): { schema: "hps-rehearsal-checklist/1"; items: { id: string; verdict: "fits" | "fix"; note?: string }[] } | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const known = new Set(stucks.map((x) => x.id));
+  const seen = new Set<string>();
+  const items: { id: string; verdict: "fits" | "fix"; note?: string }[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const { id, verdict, note } = x as { id?: unknown; verdict?: unknown; note?: unknown };
+    if (typeof id !== "string" || !known.has(id) || seen.has(id)) continue;
+    if (verdict !== "fits" && verdict !== "fix") continue;
+    seen.add(id);
+    items.push(typeof note === "string" && note.length > 0 ? { id, verdict, note: note.slice(0, 2000) } : { id, verdict });
+  }
+  return items.length > 0 ? { schema: "hps-rehearsal-checklist/1", items } : undefined;
 }
 
 /** A return is held: the instructor credential sits aside, so no new credential may take its slot. */

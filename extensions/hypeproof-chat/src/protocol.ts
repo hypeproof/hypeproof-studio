@@ -157,6 +157,11 @@ export interface ChatConfig {
   chalkInstructorTab?: true;
   /** #4048 — true only in a rehearsal seat (a return is held and this window is the rehearsal folder). Absent otherwise. */
   rehearsalSeat?: true;
+  /** #4102 — the rehearsal panel's content, only with the rehearsal signal: the seat's expected stucks and the route values. */
+  rehearsalPanel?: {
+    stucks: { id: string; expected_stuck: string }[];
+    route: { rehearsalModel: string | null; lessonModel: string | null; minor: boolean };
+  };
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -861,7 +866,7 @@ export type WebviewMessage = (
   // #751 G2 — a work-surface save (criterion_form → criterion, decision_form → decision) for one step of the current lesson.
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
-  | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission; checklist?: unknown }
   | { type: "rehearsalSeatEnd" }
   // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
   // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the

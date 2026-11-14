@@ -109,7 +109,7 @@ import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
 import { ChalkInstructorNotice } from "./ChalkInstructorNotice";
-import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
 import { MyQuestions } from "./MyQuestions";
@@ -130,6 +130,8 @@ import { DataDeletionRequest } from "./DataDeletionRequest";
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { CHECKLIST_EMPTY, CHECKLIST_TITLE, INSERT_BUTTON, NOTE_HINT, ROUTE_TITLE, VERDICT_FITS, VERDICT_FIX, checklistVersion, getChecklistEntry, routeLines, setChecklistNote, setChecklistVerdict, subscribeChecklist } from "./rehearsalChecklist";
+export type RehearsalPanel = NonNullable<import("../../src/protocol").ChatConfig["rehearsalPanel"]>;
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
@@ -1480,13 +1482,18 @@ export function ChatPanel(props: Props) {
   //
   // If you need a new hook, add it **above** this block.
   // ─────────────────────────────────────────────────────────────────────────
+  // #4102 — "학생 말 넣기" puts the learner's sentence into the composer; it never sends.
+  const insertExpected = (text: string) => {
+    setDraft(current => prefillWithTip(current, text));
+    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+  };
   const updateBannerCore = config?.update ? (
     <UpdateBanner offer={config.update} onInstall={props.onInstallUpdate} onDismiss={props.onDismissUpdate} />
   ) : null;
   // #4052 — the rehearsal band rides in the same slot as the update banner. Without the signal that slot is exactly the
   // one main renders, so no sibling's tree position (and no React useId) moves. A new sibling would shift them.
   const updateBanner = config?.rehearsalSeat ? (
-    <>{updateBannerCore}<RehearsalSeatBand visible onEnd={props.onEndRehearsalSeat ?? (() => undefined)} /></>
+    <>{updateBannerCore}<RehearsalSeatBand visible onEnd={props.onEndRehearsalSeat ?? (() => undefined)} panel={config.rehearsalPanel} onInsertExpected={insertExpected} /></>
   ) : updateBannerCore;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
@@ -3224,12 +3231,62 @@ function ContextNote({ text }: { text: string }) {
 }
 
 /** #4048 — the band in a rehearsal seat. Drawn only when the host sent the rehearsal signal; otherwise nothing. */
-export function RehearsalSeatBand({ visible, onEnd }: { visible: boolean; onEnd: () => void }) {
+export function RehearsalSeatBand({ visible, onEnd, panel, onInsertExpected }: { visible: boolean; onEnd: () => void; panel?: RehearsalPanel; onInsertExpected?: (text: string) => void }) {
+  // Hooks run before the early return so the render stays the same without the signal.
+  useSyncExternalStore(subscribeChecklist, checklistVersion, checklistVersion);
   if (!visible) return null;
   return (
-    <div className="hps-rehearsal-seat" role="status">
-      <span>리허설 중</span>{" "}
-      <button type="button" onClick={onEnd}>끝내고 돌아가기</button>
+    <>
+      <div className="hps-rehearsal-seat" role="status">
+        <span className="hps-rehearsal-seat-label">리허설 중</span>
+        <button type="button" className="hp-cta-quiet" onClick={onEnd}>끝내고 돌아가기</button>
+      </div>
+      {panel ? <RehearsalRoute route={panel.route} /> : null}
+      {panel ? <RehearsalChecklist stucks={panel.stucks} onInsert={onInsertExpected} /> : null}
+    </>
+  );
+}
+
+/** #4102 — 리허설과 수업의 차이: the two model lines, the difference (if any), the minor lines, and the record line. */
+function RehearsalRoute({ route }: { route: RehearsalPanel["route"] }) {
+  const lines = routeLines(route);
+  return (
+    <div className="hps-rehearsal-route">
+      <p className="hps-rehearsal-route-title">{ROUTE_TITLE}</p>
+      <p>{lines.rehearsal}</p>
+      <p>{lines.lesson}</p>
+      {lines.difference ? <p role="status">{lines.difference}</p> : null}
+      {lines.minor.map((line) => <p key={line}>{line}</p>)}
+      <p>{lines.record}</p>
+    </div>
+  );
+}
+
+/** #4102 — 예상 막힘 점검: one row per expected stuck; 학생 말 넣기 only fills the composer. */
+function RehearsalChecklist({ stucks, onInsert }: { stucks: RehearsalPanel["stucks"]; onInsert?: (text: string) => void }) {
+  if (stucks.length === 0) return <div className="hps-rehearsal-checklist"><p>{CHECKLIST_EMPTY}</p></div>;
+  return (
+    <div className="hps-rehearsal-checklist">
+      <p className="hps-rehearsal-checklist-title">{CHECKLIST_TITLE}</p>
+      {stucks.map((stuck) => <RehearsalCheckRow key={stuck.id} stuck={stuck} onInsert={onInsert} />)}
+    </div>
+  );
+}
+
+function RehearsalCheckRow({ stuck, onInsert }: { stuck: RehearsalPanel["stucks"][number]; onInsert?: (text: string) => void }) {
+  const entry = getChecklistEntry(stuck.id);
+  return (
+    <div className="hps-rehearsal-check-row">
+      <p>{stuck.expected_stuck}</p>
+      <button type="button" className="hp-cta-quiet" onClick={() => onInsert?.(stuck.expected_stuck)}>{INSERT_BUTTON}</button>
+      <button type="button" className="hp-cta-quiet" aria-pressed={entry?.verdict === "fits"}
+        onClick={() => setChecklistVerdict(stuck.id, entry?.verdict === "fits" ? undefined : "fits")}>{VERDICT_FITS}</button>
+      <button type="button" className="hp-cta-quiet" aria-pressed={entry?.verdict === "fix"}
+        onClick={() => setChecklistVerdict(stuck.id, entry?.verdict === "fix" ? undefined : "fix")}>{VERDICT_FIX}</button>
+      {entry?.verdict === "fix" ? (
+        <textarea aria-label={NOTE_HINT} placeholder={NOTE_HINT} rows={2} value={entry.note ?? ""}
+          onChange={(e) => setChecklistNote(stuck.id, e.target.value)} />
+      ) : null}
     </div>
   );
 }

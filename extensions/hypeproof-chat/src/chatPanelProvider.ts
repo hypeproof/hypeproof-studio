@@ -136,7 +136,7 @@ import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} 
 import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot, leaveRehearsalAfterReport, leaveRehearsalWithoutReport } from "./extension";
-import { rehearsalSeatActiveFor } from "./rehearsalSeat";
+import { rehearsalSeatActiveFor, rehearsalStucksAt, checklistForReport } from "./rehearsalSeat";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY } from "./rehearsalSeat";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
@@ -9413,7 +9413,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       // #751 G2 — rehearsal only: send what the panel drew, with this App's identity, under the rehearsal code.
       case "rehearsalSend": {
-        await this.sendRehearsalReport(msg.steps, msg.mission);
+        await this.sendRehearsalReport(msg.steps, msg.mission, msg.checklist);
         return;
       }
 
@@ -11800,16 +11800,37 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try { return await rehearsalSeatActiveFor(this.context.secrets, folder); } catch { return false; }
   }
 
-  private async sendRehearsalReport(steps: import("./lessonFocus").RenderedStep[], mission?: unknown): Promise<void> {
+  /**
+   * #4102 — what the rehearsal panel shows: the expected stucks of this seat, and the route difference. The rehearsal model
+   * name is known only from the local subscription runner; otherwise null (the panel says 알 수 없음). Nothing is secret here.
+   */
+  private async rehearsalPanelFor(profile: ResolvedProfile | null, localModel: string | undefined): Promise<{ stucks: { id: string; expected_stuck: string }[]; route: { rehearsalModel: string | null; lessonModel: string | null; minor: boolean } }> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let folder = root;
+    try { if (root) folder = canonicalRoot(root); } catch { folder = root; }
+    const stucks = await rehearsalStucksAt(this.context.secrets, folder).catch(() => []);
+    const lessonModel = profile?.model_selection?.default ?? null;
+    return {
+      stucks: stucks.map((s) => ({ id: s.id, expected_stuck: s.expected_stuck })),
+      route: { rehearsalModel: localModel && localModel !== "default" ? localModel : null, lessonModel, minor: profile?.minor_cohort === true },
+    };
+  }
+
+  private async sendRehearsalReport(steps: import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
     const profile = this.cachedProfile, lesson = profile?.lesson, token = await this.context.secrets.get(TOKEN_KEY);
     if (!profile?.rehearsal || !lesson || !token) { await this.post({ type: "rehearsalState", state: "error", message: "리허설 코드로 연 수업이 아닙니다." }); return; }
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const pkg = this.context.extension.packageJSON as { version?: string; devDependencies?: Record<string, string> };
+    // #4102 — the checklist is kept only for the stucks of this seat, and only what the person marked (nothing marked: no field).
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let folder = root;
+    try { if (root) folder = canonicalRoot(root); } catch { folder = root; }
+    const marked = checklistForReport(checklist, await rehearsalStucksAt(this.context.secrets, folder).catch(() => []));
     const report = rehearsalReport(lesson, Array.isArray(steps) ? steps : [], {
       extension_version: String(pkg.version ?? "unknown"), host: `${vscode.env.appName} ${vscode.version}`.slice(0, 120),
       runtime: cfg.get<string>("coachRuntime", "proxy"), sdk: String(pkg.devDependencies?.["@anthropic-ai/claude-agent-sdk"] ?? "none").slice(0, 120),
       os: process.platform, arch: process.arch,
-    }, mission);
+    }, mission, marked);
     await this.post({ type: "rehearsalState", state: "sending" });
     try {
       const base = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1").replace(/\/$/, "");
@@ -12016,7 +12037,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
         ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
-        ...(seatBand ? { rehearsalSeat: true } : {}),
+        ...(seatBand ? { rehearsalSeat: true, rehearsalPanel: await this.rehearsalPanelFor(profile, local?.model) } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
