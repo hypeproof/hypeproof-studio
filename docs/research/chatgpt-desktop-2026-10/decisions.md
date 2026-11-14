@@ -2289,3 +2289,14 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-ART-R-023 gap: 폴더에서 보기 on the deck PDF result (2026-11-14, #4057 §7.2)
+
+Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 on the PDF result, reveal the exported file inside the seat's served root, reuse the existing reveal path and its path-safety checks, and never reveal anything outside the root. The choices below are the agent's.
+
+- **Where (agent choice).** One quiet button under the saved notice, outside its polite region, so the region still reads only the sentence. It is the page notice's single optional action. There is no new card, and the other notices are unchanged.
+- **What is revealed.** `deck.pdf` itself, selected in its folder by `revealFileInOS`. The record is the served root the export used (canonical) and the file's path under it, so the file reveal always stays inside that root.
+- **Path safety (reuse).** The page card's walk is now `resolveFileInFolder` and `recheckFileInFolder`. The page variants keep their page-type check and their behaviour. The webview sends no path.
+- **Refusal copy (agent wording).** "저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요." is used for every refusal, because the fix is the same each time.
+- **Not changed.** The page card's own 폴더에서 보기: a nested page still reveals its own folder.
+- **Not covered:** the installed App's OS file manager. `revealFileInOS` is a fixture in the host test.

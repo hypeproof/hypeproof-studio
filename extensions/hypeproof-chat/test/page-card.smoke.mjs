@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isPagePath, pageCardRows, PAGE_CARD_COPY, PAGE_CARD_MAX_ROWS } from "../src/pageCard.ts";
-import { buildPageCard, handlePageCardAction, pageCardSeam, PageCardRegistry, readPageInFolder, recheckPageInFolder, resolvePageInFolder } from "../src/pageCardHost.ts";
+import { buildPageCard, handlePageCardAction, pageCardSeam, PageCardRegistry, readPageInFolder, recheckFileInFolder, recheckPageInFolder, resolveFileInFolder, resolvePageInFolder } from "../src/pageCardHost.ts";
 
 let fail = 0;
 const t = async (label, fn) => { try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${e.message}`); fail++; } };
@@ -172,6 +172,18 @@ await t("F1: 폴더에서 보기 walks again right before the OS call and refuse
   assert.equal(withSeam((abs) => swapFile(abs), () => recheckPageInFolder(race, "page.html")).ok, false);
   resetRace();
   assert.equal(withSeam(() => swapDir(), () => recheckPageInFolder(race, "sub/deep.html")).ok, false);
+});
+await t("CGP-ART-R-023: the same walk for any file (deck.pdf) — inside, no link, no climb, swapped file or directory refused", () => {
+  resetRace();
+  fs.writeFileSync(path.join(race, "deck.pdf"), "%PDF");
+  assert.equal(resolveFileInFolder(race, "deck.pdf").ok, true, "positive control: a non-page file inside the root");
+  assert.equal(resolvePageInFolder(race, "deck.pdf").ok, false, "the page walk still refuses a non-page");
+  for (const rel of ["../deck.pdf", "/etc/passwd", "a//deck.pdf", "", "sub/../deck.pdf"]) assert.equal(resolveFileInFolder(race, rel).cause, "outside", rel);
+  assert.equal(recheckFileInFolder(race, "deck.pdf").ok, true);
+  assert.equal(withSeam((abs) => swapFile(abs), () => recheckFileInFolder(race, "deck.pdf")).ok, false, "swapped for a link at the seam");
+  resetRace();
+  fs.writeFileSync(path.join(race, "sub", "deck.pdf"), "%PDF");
+  assert.equal(withSeam(() => swapDir(), () => recheckFileInFolder(race, "sub/deck.pdf")).ok, false, "a directory on the path swapped at the seam");
 });
 await t("F1: through the gate, a swap at the seam reaches neither open nor reveal, and reload re-checks", async () => {
   resetRace();

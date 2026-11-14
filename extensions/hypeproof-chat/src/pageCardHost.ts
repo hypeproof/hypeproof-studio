@@ -33,6 +33,20 @@ export const pageCardSeam: { afterCheck: ((abs: string) => void) | null } = { af
 /** Resolve a card row to the real file inside `root`, refusing links, climbs and non-files. */
 export function resolvePageInFolder(root: string, rel: string): PageResolve {
   if (!isPagePath(rel)) return { ok: false, cause: path.isAbsolute(rel) || rel.split(/[\\/]/).includes("..") ? "outside" : "not-page" };
+  return walkInFolder(root, rel);
+}
+
+/**
+ * The same walk for any file (CGP-ART-R-023: the exported deck.pdf): every segment lstat-checked under the canonical
+ * root, no link, a regular file, inside the root. A rooted or climbing path is refused before any filesystem call.
+ */
+export function resolveFileInFolder(root: string, rel: string): PageResolve {
+  if (typeof rel !== "string" || !rel || path.isAbsolute(rel) || rel.split(/[\\/]/).some((part) => part === ".." || part === "")) return { ok: false, cause: "outside" };
+  return walkInFolder(root, rel);
+}
+
+/** The walk both share (unchanged from the page card's): canonical root, every segment lstat-checked, a file inside it. */
+function walkInFolder(root: string, rel: string): PageResolve {
   let base: string;
   try { base = canonicalFolder(root); } catch { return { ok: false, cause: "outside" }; }
   let cur = base;
@@ -76,10 +90,17 @@ export function readPageInFolder(root: string, rel: string): { ok: true; abs: st
 
 /** For 폴더에서 보기: the path is walked again right before the OS call and must still be the checked inode. */
 export function recheckPageInFolder(root: string, rel: string): PageResolve {
-  const first = resolvePageInFolder(root, rel);
+  return recheckIn(resolvePageInFolder, root, rel);
+}
+/** recheckPageInFolder for any file (the exported deck.pdf). */
+export function recheckFileInFolder(root: string, rel: string): PageResolve {
+  return recheckIn(resolveFileInFolder, root, rel);
+}
+function recheckIn(resolve: (root: string, rel: string) => PageResolve, root: string, rel: string): PageResolve {
+  const first = resolve(root, rel);
   if (!first.ok) return first;
   pageCardSeam.afterCheck?.(first.abs);
-  const again = resolvePageInFolder(root, rel);
+  const again = resolve(root, rel);
   if (!again.ok) return again;
   return again.dev === first.dev && again.ino === first.ino ? again : { ok: false, cause: "changed" };
 }

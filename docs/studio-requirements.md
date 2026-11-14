@@ -7929,9 +7929,26 @@ skill's menu) saves the deck skill's `deck.html` as `deck.pdf` in the same folde
 - **Progress.** The first in-chat notice ("덱을 PDF로 저장하고 있어요 (0 / N장)") is posted before
   anything is awaited (DES-ART-23: within 300 ms), then one per slide, then "덱을 PDF로 저장했어요:
   <path> (N장, 발표자 노트 없이)". One export at a time; a second press while one runs is refused.
-- **Folder.** REQ-ART-23 (2), **폴더에서 보기** from the result card, is the page card's action
-  (REQ-STUDIO-PAGE-CARD): for the learner's page in the served root it reveals that root with the page
-  selected; a nested page reveals its own folder inside the root (kept from CGP-ART-R-010).
+- **Folder.** REQ-ART-23 (2), **폴더에서 보기** from the result (2026-11-14, the #4057 §7.2 gap).
+  - The saved notice carries one quiet 44px button, "폴더에서 보기" (accessible name "폴더에서 보기: <path>").
+    It sits under the notice, outside its polite region.
+  - A press posts `deckPdfReveal` with no path. The host keeps the last export in memory only: the task,
+    the canonical served root it was written in, and `deck.pdf` relative to that root.
+  - Right before the OS call, the host walks that path again under the served root with the page card's
+    checks: every segment lstat-checked, no link, a regular file, inside the root, the same inode on two
+    walks (`resolveFileInFolder` / `recheckFileInFolder`, the page card's walk). Only then does it call
+    `revealFileInOS`, which shows `deck.pdf` selected in its folder.
+  - Refusals ("저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요.") make no OS call. They cover: another
+    task, nothing exported yet, the file deleted, replaced by a link, a linked folder on its path, a
+    climbing or rooted path, or swapped between the two walks. Nothing outside the served root is ever
+    revealed.
+  - The page card's own 폴더에서 보기 is unchanged: for the learner's page in the served root it reveals that
+    root with the page selected, and a nested page reveals its own folder inside the root
+    (CGP-ART-R-010).
+  - Evidence: `test/deck-pdf-host.test.mjs` (the real export's notice and press, and every refusal) and
+    `test/page-card.smoke.mjs` (the shared walk for a non-page file, including the seam swaps).
+    `test/page-notice-action-browser.smoke.mjs` covers the button: 44px, 14px, name, focus ring, outside
+    the live region, and a press posting only `deckPdfReveal`.
 
 Tests: `test/deck-pdf.smoke.mjs` (PDF structure; the real `renderDeck` deck in headless Chromium with
 the notes painted red over every slide and the switch on: three pages at 1280x720 and no red pixel on

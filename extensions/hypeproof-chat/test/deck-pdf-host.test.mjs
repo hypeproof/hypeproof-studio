@@ -121,6 +121,14 @@ test('export: background tab on the served deck, deck.pdf with one page per draf
     assert.ok(n.includes('이미 덱을 PDF로 저장하고 있어요. 끝난 뒤 다시 눌러 주세요.'), 'the second press was refused');
     assert.ok(n.includes('덱을 PDF로 저장하고 있어요 (3 / 3장)'));
     assert.equal(n.at(-1), '덱을 PDF로 저장했어요: venture/deck.pdf (3장, 발표자 노트 없이)');
+    // CGP-ART-R-023 (REQ-ART-23 (2)) — the saved notice carries 폴더에서 보기, and the press reveals the written file, inside
+    // the served root, once.
+    const saved = s.f.posts.filter((m) => m.type === 'pageAttached').at(-1);
+    assert.deepEqual(saved.action, { kind: 'deckPdfReveal', label: '폴더에서 보기', name: 'venture/deck.pdf' });
+    const revealed = [];
+    s.f.h.deckPdfRevealInOS = async (abs) => { revealed.push(abs); };
+    await s.f.handle(s.f.scoped({ type: 'deckPdfReveal' }));
+    assert.deepEqual(revealed, [fs.realpathSync(path.join(s.work, 'venture', 'deck.pdf'))], 'the exported file itself, inside the served root');
     assert.deepEqual(fs.readdirSync(path.join(s.work, 'venture')).filter((x) => x.endsWith('.tmp')), [], 'no temp file left');
     // After the run the command is free again.
     assert.equal(s.f.h.deckPdfBusy, false);
@@ -200,5 +208,53 @@ test('DES-ART-23: progress within 300 ms while the preview server has not answer
     await run2;
     assert.equal(s.notices().at(-1), '덱을 그릴 창을 열지 못해 PDF를 만들지 못했어요. 잠시 뒤 다시 해 주세요.');
     assert.equal(fs.existsSync(path.join(s.work, 'venture', 'deck.pdf')), false);
+  } finally { await s.done(); }
+});
+
+// CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 re-walks the saved file under the served root with the page card's checks right
+// before the OS call. Each refusal is the revealGone line and no OS call. No browser: the saved record is the export's.
+test('폴더에서 보기 on the deck PDF: the saved file inside the served root, or a refusal and no OS call', async () => {
+  const s = await setup();
+  try {
+    const gone = '저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요.';
+    const pdf = path.join(s.work, 'venture', 'deck.pdf');
+    const revealed = [];
+    s.f.h.deckPdfRevealInOS = async (abs) => { revealed.push(abs); };
+    const press = async () => { const before = s.notices().length; await s.f.handle(s.f.scoped({ type: 'deckPdfReveal' })); await new Promise((r) => setTimeout(r, 20)); return s.notices().slice(before); };
+    // Nothing saved yet.
+    assert.deepEqual(await press(), [gone]); assert.deepEqual(revealed, []);
+    const record = (rel = 'venture/deck.pdf') => { s.f.h.deckPdfSaved = { taskKey: s.f.h.turnRestoreTaskKey(), root: fs.realpathSync(s.work), rel }; };
+    fs.writeFileSync(pdf, '%PDF-1.4 saved');
+    record();
+    // Positive control: the file as saved is revealed.
+    assert.deepEqual(await press(), []); assert.deepEqual(revealed, [fs.realpathSync(pdf)]);
+    revealed.length = 0;
+    // Another task: refused.
+    s.f.h.deckPdfSaved = { ...s.f.h.deckPdfSaved, taskKey: 'another-task' };
+    assert.deepEqual(await press(), [gone]); assert.deepEqual(revealed, []);
+    record();
+    // deck.pdf replaced by a link to a file outside the root: refused, the outside file is never revealed.
+    const outside = path.join(s.root, 'outside.pdf'); fs.writeFileSync(outside, 'x');
+    fs.rmSync(pdf); fs.symlinkSync(outside, pdf);
+    assert.deepEqual(await press(), [gone]); assert.deepEqual(revealed, []);
+    // A linked folder on the way: refused.
+    fs.rmSync(pdf); fs.writeFileSync(pdf, '%PDF-1.4');
+    const realVenture = path.join(s.work, 'venture'), moved = path.join(s.root, 'venture-real');
+    fs.renameSync(realVenture, moved); fs.symlinkSync(moved, realVenture);
+    assert.deepEqual(await press(), [gone]); assert.deepEqual(revealed, []);
+    fs.rmSync(realVenture); fs.renameSync(moved, realVenture);
+    // Deleted: refused.
+    fs.rmSync(pdf);
+    assert.deepEqual(await press(), [gone]); assert.deepEqual(revealed, []);
+    // A climbing or rooted record is refused before any filesystem call.
+    fs.writeFileSync(pdf, '%PDF-1.4');
+    for (const rel of ['../outside.pdf', 'venture/../../outside.pdf', path.join(s.root, 'outside.pdf'), '']) {
+      record(rel); assert.deepEqual(await press(), [gone], rel); assert.deepEqual(revealed, [], rel);
+    }
+    // The swap between the check and the use (same inode twice) is checked on recheckFileInFolder itself in page-card.smoke:
+    // the provider here is a bundle with its own copy of the seam.
+    // And the positive control again after all that.
+    record();
+    assert.deepEqual(await press(), []); assert.deepEqual(revealed, [fs.realpathSync(pdf)]);
   } finally { await s.done(); }
 });

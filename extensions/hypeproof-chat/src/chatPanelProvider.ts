@@ -292,7 +292,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, recheckFileInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -2799,6 +2799,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * unless every slide was captured and deck.html is byte-identical before and after.
    */
   private deckPdfBusy = false;
+  /** CGP-ART-R-023 — the last saved deck PDF (memory only): the served root it was written in and its path there. */
+  private deckPdfSaved: { taskKey: string; root: string; rel: string } | null = null;
+  /** Test seam: the OS reveal. */
+  deckPdfRevealInOS: (abs: string) => Promise<unknown> = async (abs) => vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs));
+  /**
+   * 폴더에서 보기 on the saved notice. The file is walked again under the served root with the page card's checks (every
+   * segment lstat-checked, no link, a regular file, inside the root, the same inode twice) right before the OS call; any
+   * other task, a missing record or a failed walk is a refusal line and no OS call.
+   */
+  async deckPdfReveal(): Promise<void> {
+    const saved = this.deckPdfSaved;
+    if (!saved || saved.taskKey !== this.turnRestoreTaskKey()) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    const checked = recheckFileInFolder(saved.root, saved.rel);
+    if (!checked.ok) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    try { await this.deckPdfRevealInOS(checked.abs); } catch { /* the press passed the gate; a failed OS call adds no claim */ }
+  }
   /** Test seam: the CDP channel to a tab. Production attaches a CdpSession. */
   deckPdfAttach: (tab: vscode.BrowserTab) => Promise<{ send: CdpSend; close(): Promise<void> }> = async (tab) => {
     const session = await CdpSession.attach(tab);
@@ -2866,7 +2882,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       noteHostWrite([{ absPath: target, data: result.pdf }], "studio");
-      this.postPageNotice(DECK_PDF_COPY.saved(path.relative(workRoot, target).split(path.sep).join("/"), result.pages));
+      // CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 on the result: the file as written, inside the served root.
+      const pdfRel = path.relative(canonicalFolder(root), target).split(path.sep).join("/");
+      const shown = path.relative(workRoot, target).split(path.sep).join("/");
+      this.deckPdfSaved = { taskKey: this.turnRestoreTaskKey(), root: canonicalFolder(root), rel: pdfRel };
+      this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown });
     } catch {
       this.postPageNotice(DECK_PDF_COPY.notLoaded);
     } finally {
@@ -4521,7 +4541,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!this.pendingPageAttachment) return;
     this.pendingPageContext = null;
     this.pendingPageImage = null;
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     void this.post({ type: "pageAttached", label: "" });
     this.dropPageAttachment();
   }
@@ -4584,11 +4604,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * be recreated later (WebviewView has no retainContextWhenHidden). Posting
    * is idempotent: the webview reducer replaces pageNotice, never appends.
    */
-  postPageNotice(label: string, source?: import("./denialSource").DenialSource): void {
+  postPageNotice(label: string, source?: import("./denialSource").DenialSource, action?: import("./protocol").PageNoticeAction): void {
     if (source) { void this.postDenialNotice(source); return; }
     this.pendingPageNotice = label;
-    void this.post({ type: "pageAttached", label });
+    this.pendingPageNoticeAction = action;
+    void this.post(action ? { type: "pageAttached", label, action } : { type: "pageAttached", label });
   }
+  private pendingPageNoticeAction: import("./protocol").PageNoticeAction | undefined;
 
   private denialWrites?: Promise<void>;
 
@@ -8724,6 +8746,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
+      case "deckPdfReveal": await this.deckPdfReveal(); return;
       case "pageCardOpen":
       case "pageCardReveal":
         await this.handlePageCardMessage(msg);
@@ -8804,7 +8827,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // for WebviewView → React state reset). Re-posting is idempotent: the
         // reducer replaces pageNotice rather than appending.
         if (this.pendingPageNotice) {
-          void this.post({ type: "pageAttached", label: this.pendingPageNotice });
+          const action = this.pendingPageNoticeAction;
+          void this.post(action ? { type: "pageAttached", label: this.pendingPageNotice, action } : { type: "pageAttached", label: this.pendingPageNotice });
         }
         // CR-09 — a remount must still show the picked element that is queued to go.
         this.postAnnotations();
@@ -9700,7 +9724,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.dropPageAttachment();
     // #308 — the notice describes the queued context; once consumed, stop
     // resurrecting it on webview remounts (webview clears its copy on userSent).
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     this.finishAnnotationSend(annotations);
     // CGP-ART-R-006 — the preview was only for choosing; it leaves the page as the request goes.
