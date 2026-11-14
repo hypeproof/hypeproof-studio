@@ -7485,9 +7485,15 @@ streams, and only when all of these hold:
 - the Escape has no modifier, is not a repeat and is not part of an IME composition;
 - it starts in the composer's text box or in a non-text place in the chat, not in another text field, the find bar, the
   voice panel, a dialog, a menu or a list;
-- no dialog, open menu or list, dictation recording or microphone card is on screen;
+- no dialog, open menu or list, dictation recording or microphone card (`.hps-voice-card`: mic denied, recovered
+  text) is on screen;
 - no other listener handled it. The stop decision waits until the whole dispatch has finished, so an owner that calls
-  `preventDefault` after the chat's own listener still keeps its Escape.
+  `preventDefault` after the chat's own listener still keeps its Escape. An Escape that closes a visible tooltip is one
+  of these: `tooltips.ts` marks it handled, so the answer keeps running.
+
+Tests: `test/chat-keys.test.tsx` (the guard on the real `DictationNoticeView` markup), `test/tooltip.test.mjs` (the
+tooltip's Escape is handled only when a tooltip was shown) and `test/shortcut-sheet-browser.smoke.mjs` (on the real App:
+a message parked during the stream is back in the composer after Esc, and not sent).
 
 Alt+Shift+K has no VS Code default and no OS default on macOS or Windows, and sits beside the chat's Alt+Shift+J and
 Alt+Shift+M. Cmd/Ctrl+Z in the sketch dialog is that dialog's own key and is not

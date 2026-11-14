@@ -2,7 +2,8 @@
 // in the message box. In-app only (bound while this webview has focus), never global.
 //
 // Esc belongs to many owners before it belongs to "stop": an IME composition, a modal, a menu or list, the find bar,
-// the voice panel and voice conversation, dictation, the quote action, a text field's own Escape. So the stop runs
+// the voice panel and voice conversation, dictation and the microphone cards, a visible tooltip (tooltips.ts marks
+// that Escape handled), the quote action, a text field's own Escape. So the stop runs
 // only while an answer streams, only for an unhandled Escape with no modifier, only from the composer's text box or
 // a non-text place in the chat, and the decision waits until every other listener has had the event: a listener
 // that handles Escape calls preventDefault, and then nothing is stopped.
@@ -29,8 +30,9 @@ export function mayStopAnswer(event: KeyLike, doc: Document, streaming: boolean)
   if (target?.closest(TEXT_ENTRY) && !target.closest(COMPOSER)) return false;
   // Anything modal or menu-like open elsewhere (focus may sit on <body> under it) keeps the keyboard.
   if (doc.querySelector('dialog[open], [aria-modal="true"], [role="menu"]:not([hidden]), [role="listbox"]:not([hidden])')) return false;
-  // Dictation recording or the microphone explainer card own Escape while they are drawn.
-  if (doc.querySelector('.hps-voice-recording, .hps-voice-explain')) return false;
+  // Dictation recording or a microphone card (permission denied, recovered text) keeps Escape while it is drawn:
+  // the learner is dealing with the microphone, not with the answer. Selectors are DictationNoticeView's own classes.
+  if (doc.querySelector('.hps-voice-recording, .hps-voice-card')) return false;
   return true;
 }
 

@@ -8,7 +8,9 @@ import React from 'react';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const { JSDOM } = createRequire(process.cwd() + '/package.json')('jsdom');
+import { renderToStaticMarkup } from 'react-dom/server';
 import { focusesComposer, mayStopAnswer } from '../webview-ui/src/chatKeys';
+import { DictationNoticeView, type DictationController, type DictationView } from '../webview-ui/src/DictationControl';
 
 void React;
 const dom = new JSDOM(`<body><div class="hps-shell"><div class="hps-messages" tabindex="-1"><p id="msg">답</p></div>
@@ -40,12 +42,32 @@ t('negative controls: every other Escape owner keeps it', () => {
   for (const id of ['rename', 'find', 'voice', 'menuitem']) assert.equal(mayStopAnswer(esc(el(id)), doc, true), false, id);
   // A closed menu left in the page (hidden) does not block; an open one does.
   assert.equal(mayStopAnswer(esc(el('box')), doc, true), true, 'a hidden menu is not open');
-  for (const html of ['<dialog open></dialog>', '<div aria-modal="true"></div>', '<div role="listbox"></div>', '<div role="menu"></div>', '<div class="hps-voice-recording"></div>', '<div class="hps-voice-explain"></div>']) {
+  for (const html of ['<dialog open></dialog>', '<div aria-modal="true"></div>', '<div role="listbox"></div>', '<div role="menu"></div>', ]) {
     const holder = doc.createElement('div'); holder.innerHTML = html; doc.body.append(holder);
     assert.equal(mayStopAnswer(esc(el('box')), doc, true), false, html);
     holder.remove();
   }
   assert.equal(mayStopAnswer(esc(el('box')), doc, true), true, 'and stops again once they are gone');
+});
+
+// The microphone cards and the recording line, from the real component's markup (verify-3956: the guard once named a
+// class no element had, and this test had built that element itself).
+const noop = () => {};
+const controller = (view: DictationView) => ({ view, toggle: noop, cancel: noop, retry: noop, dismiss: noop, insertRecovered: noop, copyRecovered: noop, openSettings: noop, busy: false, disabled: false }) as DictationController;
+const drawn = (view: DictationView) => renderToStaticMarkup(<DictationNoticeView view={view} controller={controller(view)} />);
+t('the drawn microphone cards and the recording line keep Escape; other dictation notes do not', () => {
+  for (const view of [{ kind: 'denied', settingsFailed: false }, { kind: 'recovered', text: '받아 적은 말', copied: false }, { kind: 'recording', seconds: 3 }] as DictationView[]) {
+    const html = drawn(view);
+    assert.ok(html.length > 0, `${view.kind} draws something`);
+    const holder = doc.createElement('div'); holder.innerHTML = html; doc.body.append(holder);
+    assert.equal(mayStopAnswer(esc(el('box')), doc, true), false, `${view.kind}: ${html.slice(0, 80)}`);
+    holder.remove();
+  }
+  for (const view of [{ kind: 'done' }, { kind: 'working' }, { kind: 'notice', text: '다시 해 볼까요', retry: true }] as DictationView[]) {
+    const holder = doc.createElement('div'); holder.innerHTML = drawn(view); doc.body.append(holder);
+    assert.equal(mayStopAnswer(esc(el('box')), doc, true), true, `${view.kind} is a status line, not a card`);
+    holder.remove();
+  }
 });
 
 t('Alt+Shift+K by physical key; not with other modifiers, in IME, or under a dialog', () => {

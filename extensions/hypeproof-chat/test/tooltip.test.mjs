@@ -39,8 +39,14 @@ event(b, 'mouseout'); check('leaving hover returns to focus', () => assert.equal
 event(b, 'mouseover'); tick(500); event(b, 'mouseout'); event(doc.body, 'mouseover'); check('pointer onto plain content keeps the focused hint', () => { assert.equal(tip.hidden, false); assert.equal(tip.textContent, '답변을 복사해요 (Control+C)'); });
 doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true }));
 check('IME Escape ignored', () => assert.equal(tip.hidden, false));
-doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+const escClosing = new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+doc.dispatchEvent(escClosing);
 check('Escape hides without moving focus', () => { assert.equal(tip.hidden, true); assert.equal(doc.activeElement, a); });
+// CGP-CHAT-R-030: the Escape that closed a visible tooltip is handled, so the chat does not also stop an answer with it.
+check('Escape that closes a tooltip is marked handled', () => assert.equal(escClosing.defaultPrevented, true));
+const escIdle = new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+doc.dispatchEvent(escIdle);
+check('Escape with no tooltip shown is left alone (negative control)', () => assert.equal(escIdle.defaultPrevented, false));
 a.blur(); a.focus(); a.setAttribute('data-hp-tooltip', '<img src=x onerror=alert(1)>'); await flush();
 check('changed hint is escaped text', () => { assert.equal(tip.textContent, '<img src=x onerror=alert(1)> (Control+C)'); assert.equal(tip.children.length, 0); });
 a.removeAttribute('data-hp-tooltip'); await flush(); check('removed hint hides', () => assert.equal(tip.hidden, true));

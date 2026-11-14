@@ -92,7 +92,9 @@ export function installTooltips(doc: Document): () => void {
   const dismiss = () => { hovered = null; focused = null; hide(); };
   const key = (event: Event) => {
     const e = event as KeyboardEvent;
-    if (e.key === 'Escape' && !e.isComposing) dismiss();
+    // An Escape that closes a visible tooltip is handled here (preventDefault), so no later Escape owner acts on the
+    // same press: in the chat it does not also stop a streaming answer (CGP-CHAT-R-030, chatKeys.ts).
+    if (e.key === 'Escape' && !e.isComposing) { if (!tip.hidden) e.preventDefault(); dismiss(); }
     else if (e.key !== 'Tab' && e.key !== 'Shift') userScroll();
   };
   const handlers: [string, EventListener][] = [

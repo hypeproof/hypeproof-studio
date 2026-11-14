@@ -183,8 +183,16 @@ try {
     await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(80);
     assert.equal(await cancels(), 0, 'an Escape handled by a later listener does not stop the answer');
     await b.evaluate(`window.removeEventListener('keydown',window.__late)`);
-    await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(120);
+    // A message parked during the stream (Enter while it runs clears the composer) goes back into the composer on the
+    // stop, the same as the stop button, and is not sent (verify-3956 K7).
+    await typeDraft('PARKED-DRAFT');
+    await press(composer, { key: 'Enter', code: 'Enter', vk: 13, text: '\r' }); await settle(120);
+    assert.equal(await b.evaluate(`${composer}.value`), '', `Enter during the stream parks the message (${label})`);
+    await b.evaluate(`${composer}.focus()`);
+    await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(160);
     assert.equal(await cancels(), 1, `Esc in the composer stops the answer (${label})`);
+    assert.equal(await b.evaluate(`${composer}.value`), 'PARKED-DRAFT', `the stop puts the parked message back in the composer (${label})`);
+    assert.equal(await b.evaluate(`window.__posts.filter(m=>m.type==='sendMessage'&&String(m.text).includes('PARKED-DRAFT')).length`), 0, 'the parked message is not sent');
     await send({ type: 'streamEnd', streamId: 'shortcut-stream' });
     // `conversation`: Alt+Shift+J moves focus to the conversation (personal task layout only).
     if (seat === 'personal') {
