@@ -35,6 +35,11 @@ export interface InstructorRunnerConfig {
 
 const PROVIDER_LABEL: Record<InstructorProvider, string> = { claude: "Claude Code", codex: "Codex" };
 
+/** The name a person sees. The codex sentinel "default" is shown as 기본 모델; the id itself is unchanged. */
+function displayModel(id: string): string {
+  return id === "default" ? "기본 모델" : id;
+}
+
 function allowedIds(config: { provider: InstructorProvider; model: string }): string[] {
   // The default is always selectable, even when it is not in the allowlist (a development model from the environment).
   return [...new Set([config.model, ...INSTRUCTOR_MODEL_ALLOWLIST[config.provider]])];
@@ -47,7 +52,7 @@ export function instructorModelChoices(config: { provider: InstructorProvider; m
     choices: allowedIds(config).map((id) => ({
       alias: id,
       id,
-      label: `${PROVIDER_LABEL[config.provider]} · 로컬 구독 · ${id}`,
+      label: `${PROVIDER_LABEL[config.provider]} · 로컬 구독 · ${displayModel(id)}`,
     })),
   };
 }
@@ -65,5 +70,5 @@ export function executorModelFor(config: { provider: InstructorProvider; model: 
 export function withTurnModel<T extends InstructorRunnerConfig>(config: T, requested?: string): T {
   const model = executorModelFor(config, requested);
   if (model === config.model) return config;
-  return { ...config, model, label: `${PROVIDER_LABEL[config.provider]} · 로컬 구독 · ${model}` };
+  return { ...config, model, label: `${PROVIDER_LABEL[config.provider]} · 로컬 구독 · ${displayModel(model)}` };
 }
