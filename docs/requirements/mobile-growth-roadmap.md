@@ -65,6 +65,11 @@ chosen idea needs files, tools and a software outcome. Quiet cached-history refr
 reconciliation without transient progress in an already ready conversation; initial/manual loading
 and errors remain visible. This does not change send authority, request IDs or polling.
 
+The client requires Service `team-product-api` line `1` in the shared release
+dependency ledger. That line proves compatible source, not enabled operation:
+0091/0092 schema, team-event/push flags, verified membership and provider readiness
+must be checked separately before activating the corresponding experience.
+
 The existing Mac desktop is the sole desktop product. The previous Catalyst preview is superseded and no longer built or uploaded; its local data is preserved. Mobile parity means the essential user outcomes, not replicating a desktop IDE on a phone. Foundry owns versioned execution and verification; existing platform CI and release engines remain the executors. Keep Foundry/policy/adapter/product versions distinct. READY, merged, signed, uploaded, available to testers, installed and user-accepted are separate states.
 
 Foundry's active Ubuntu control plane and registered desktop runner are owned by another session. Do not take over that session, change its pins or relabel its runs as mobile development. Mobile registration/adapter admission is a tracked prerequisite. Signing keys remain in the release environment, outside model workspaces.
