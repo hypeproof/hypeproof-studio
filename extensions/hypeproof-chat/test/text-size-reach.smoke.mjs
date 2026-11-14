@@ -19,6 +19,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { THEMES, KIND_CLASS } from './lib/vscode-default-themes.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
+import { chatConfig as lessonConfig } from './sx-screen-fixtures.mjs';
 
 const bin = findChromium();
 if (!bin) {
@@ -48,7 +49,7 @@ const HELP = { generation: 1, draft_key: null, availability: { state: 'unknown' 
   turns: [], envelope: null, current: [], history: [], refresh: { state: 'never', at: null }, note: null };
 const MESSAGE = '글자 크기를 바꾸어도 긴 한국어 문장을 편안하게 읽고 다음 질문을 보낼 수 있어요.';
 // REACH_ONLY=<surface>[,…] narrows a local rerun; CI runs every surface.
-const SURFACES = ['start', 'start-settings', 'classroom', 'classroom-shortcuts', 'personal', 'personal-shortcuts'].filter((x) => !process.env.REACH_ONLY || process.env.REACH_ONLY.split(',').includes(x));
+const SURFACES = ['start', 'start-settings', 'classroom', 'classroom-lesson', 'classroom-shortcuts', 'personal', 'personal-shortcuts'].filter((x) => !process.env.REACH_ONLY || process.env.REACH_ONLY.split(',').includes(x));
 
 // Panes: [pane px, zoom]. CSS width = pane / zoom.
 const PANES = [[320, 1], [800, 1], [640, 2], [320, 2]];
@@ -78,10 +79,12 @@ const MEASURE = `(()=>{
       clipped:!scrolls&&!ellipsis&&(e.scrollWidth>e.clientWidth+1||(s.overflowY!=='visible'&&e.scrollHeight>e.clientHeight+1))});}
   const shell=document.querySelector('.hps-shell');
   // The widest elements past the right edge name what makes the page scroll.
-  const wide=[...document.body.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth+0.5).map(e=>({e,r:e.getBoundingClientRect().right})).filter(({e})=>![...e.children].some(c=>c.getBoundingClientRect().right>innerWidth+0.5)).slice(0,3).map(({e,r})=>(e.className&&String(e.className).slice(0,40)||e.tagName)+'@'+Math.round(r)).join(', ');
+  const sh=document.querySelector('.hps-shell');const edge=sh?sh.getBoundingClientRect().left+sh.clientWidth:innerWidth;
+  const wide=[...document.body.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>Math.min(innerWidth,edge)+0.5).map(e=>({e,r:e.getBoundingClientRect().right})).filter(({e})=>![...e.children].some(c=>c.getBoundingClientRect().right>Math.min(innerWidth,edge)+0.5)).slice(0,3).map(({e,r})=>(e.className&&String(e.className).slice(0,40)||e.tagName)+'@'+Math.round(r)).join(', ');
   return {text,controls,wide,width:innerWidth,page:document.documentElement.scrollWidth>innerWidth+0.5,
     shell:!!shell&&shell.scrollWidth>shell.clientWidth+0.5,shellSize:shell?.dataset.textSize||null,startSize:document.querySelector('.studio-start')?.dataset.textSize||null,
     body:(e=>e&&getComputedStyle(e).fontSize)(document.querySelector('.hps-msg-body')),composer:(e=>e&&getComputedStyle(e).fontSize)(document.querySelector('.hps-input textarea')),
+    mission:(e=>e&&parseFloat(getComputedStyle(e).fontSize))(document.querySelector('.hp-mission-sentence')),
     sheet:!!document.querySelector('.studio-settings'),shortcuts:!!document.querySelector('.hps-shortcut-list'),help:!!document.querySelector('details.hp-help[open]')};})()`;
 
 const b = await launch(bin);
@@ -106,11 +109,13 @@ async function render({ surface, theme, pane, zoom, size, inject }) {
     }
   } else {
     const seat = surface.split('-')[0];
-    await ev(`window.dispatchEvent(new MessageEvent('message',{data:{type:'config',config:${JSON.stringify(chatConfig(seat, size))}}}))`);
+    // A classroom seat with a lesson draws the mission header (its sentence is the line the learner reads first).
+    const cfg = surface === 'classroom-lesson' ? lessonConfig(3, { textSize: size }) : chatConfig(seat, size);
+    await ev(`window.dispatchEvent(new MessageEvent('message',{data:{type:'config',config:${JSON.stringify(cfg)}}}))`);
     await sleep(80);
     await ev(`window.dispatchEvent(new MessageEvent('message',{data:{type:'history',messages:[{id:'answer',role:'assistant',content:${JSON.stringify(MESSAGE)},createdAt:1}]}}))`);
     await waitFor(`!!document.querySelector('.hps-msg-body')`, 'the answer');
-    if (seat === 'classroom') {
+    if (seat === 'classroom' && surface !== 'classroom-lesson') {
       // The classroom help request (a help panel in the seat): drawn from the host's help view, opened so its notes are read too.
       await ev(`window.dispatchEvent(new MessageEvent('message',{data:{type:'helpState',help:${JSON.stringify(HELP)}}}))`);
       await waitFor(`!!document.querySelector('details.hp-help')`, 'the help request');
@@ -140,6 +145,10 @@ function problems(r, base, { surface, size, absolute }) {
   if (surface === 'start-settings' && !r.sheet) outList.push('settings sheet not open');
   if (surface.endsWith('shortcuts') && !r.shortcuts) outList.push('shortcut sheet not open');
   if (surface === 'classroom' && !r.help) outList.push('classroom help request not drawn');
+  if (surface === 'classroom-lesson') {
+    if (!r.mission) outList.push('mission sentence not drawn');
+    else if (Math.abs(r.mission - (base.mission + step)) > 0.05) outList.push(`mission sentence is ${r.mission}px, want ${base.mission}+${step}px`);
+  }
   // Every line grows by the step.
   let lines = 0;
   for (const [k, v] of Object.entries(r.text)) {
@@ -152,7 +161,7 @@ function problems(r, base, { surface, size, absolute }) {
   const issues = (x) => {
     const list = [];
     if (x.page) list.push(`page scrolls horizontally [${x.wide}]`);
-    if (x.shell) list.push('shell scrolls horizontally');
+    if (x.shell) list.push(`shell scrolls horizontally [${x.wide}]`);
     for (const c of x.controls) {
       if (c.left < -0.5 || c.right > x.width + 0.5) list.push(`control "${c.label}" outside the viewport (${Math.round(c.left)}..${Math.round(c.right)} of ${x.width})`);
       if (c.clipped) list.push(`control "${c.label}" clips its label`);
@@ -192,6 +201,7 @@ try {
     ['start', 'the start page is wider than the pane', '.studio-start{min-width:520px}', /page scrolls horizontally|outside the viewport/],
     ['start-settings', 'a settings button clips its label', '.studio-settings-advanced{width:40px !important;min-width:0 !important;overflow:hidden;white-space:nowrap}', /clips its label/],
     ['classroom', 'the classroom shell ignores the step', '.hps-shell{--hp-font-step:0px !important}', /message body 16px/],
+    ['classroom-lesson', 'the mission sentence keeps a fixed size', '.hp-mission-sentence{font-size:22px !important}', /mission sentence is 22px/],
     ['classroom-shortcuts', 'the help sheet keeps its base size', '.hps-shortcut-list td{font-size:14px !important}', /is 14px, want/],
     ['personal', 'a control target shrinks', '.hps-btn-send{height:20px !important;min-height:0 !important}', /shrank/],
   ];

@@ -47,6 +47,8 @@
   cursor: pointer;
 }
 .hps-lesson-tip .hps-lesson-tip-use { padding-inline: var(--hp-space-3); text-decoration: underline; }
+/* CGP-SHELL-R-017: at 아주 크게 in a very narrow pane (a 320px pane at 200%) the action may wrap instead of running past the tip. */
+.hps-lesson-tip .hps-lesson-tip-use { flex-shrink: 1; max-inline-size: 100%; white-space: normal; }
 .hps-lesson-tip button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
 .hps-lesson-tip button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-lesson-tip button:disabled { cursor: default; color: var(--hp-text-muted-default); }
