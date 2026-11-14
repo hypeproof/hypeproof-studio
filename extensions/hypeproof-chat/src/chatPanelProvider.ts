@@ -5544,6 +5544,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
   }
 
+  /**
+   * CGP-SHELL-R-019 — the 팁 보기 choice of the seat the chat currently belongs to, for the start page's
+   * settings row (CGP-SHELL-R-014), which has no lesson context of its own. One seat derivation, here.
+   */
+  lessonTipsState(): { on: boolean; seat: string } {
+    return { on: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)), seat: this.lessonTips.currentSeat };
+  }
+
+  /** CGP-SHELL-R-019 — turn this seat's tips on or off (memory only for an empty seat) and refresh the chat. */
+  async setLessonTips(on: boolean): Promise<void> {
+    const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), on === true);
+    if (next) await this.context.globalState.update(LESSON_TIPS_KEY, next);
+    await this.postConfig();
+  }
+
   refreshConfig(): Promise<void> {
     return (async () => {
       await this.postConfig();
@@ -9081,11 +9096,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-SHELL-R-019 — one learner's choice, kept per seat on this computer (shared classroom PCs); an
         // empty seat keeps it in memory only. Written only from a boolean; nothing leaves this computer.
         if (typeof msg.on !== "boolean") return;
-        {
-          const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), msg.on);
-          if (next) await this.context.globalState.update(LESSON_TIPS_KEY, next);
-        }
-        await this.postConfig();
+        await this.setLessonTips(msg.on);
         return;
       case "setLearnerNickname": {
         // CGP-KNOW-R-032 — the host's check is the authoritative one: the seat must offer the field

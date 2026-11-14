@@ -54,8 +54,13 @@ const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url)
 const at = src.indexOf('case "setLessonTips":');
 const body = src.slice(at, src.indexOf('return;', src.indexOf('postConfig', at)) + 7);
 assert.match(body, /if \(typeof msg\.on !== "boolean"\) return;/, 'a non-boolean write is refused');
-assert.match(body, /this\.lessonTips\.write\(this\.context\.globalState\.get\(LESSON_TIPS_KEY\), msg\.on\)/, 'the press goes through the class');
-assert.match(body, /if \(next\) await this\.context\.globalState\.update\(LESSON_TIPS_KEY, next\)/, 'only a seat stores anything');
+assert.match(body, /await this\.setLessonTips\(msg\.on\);/, 'the press goes through setLessonTips');
+const setAt = src.indexOf('async setLessonTips(on: boolean)');
+const setBody = src.slice(setAt, src.indexOf('\n  }', setAt));
+assert.match(setBody, /this\.lessonTips\.write\(this\.context\.globalState\.get\(LESSON_TIPS_KEY\), on === true\)/, 'through the class');
+assert.match(setBody, /if \(next\) await this\.context\.globalState\.update\(LESSON_TIPS_KEY, next\)/, 'only a seat stores anything');
+assert.match(src, /lessonTipsState\(\): \{ on: boolean; seat: string \} \{\s*return \{ on: this\.lessonTips\.on\(this\.context\.globalState\?\.get\(LESSON_TIPS_KEY\)\), seat: this\.lessonTips\.currentSeat \};/, 'the start page reads the same seat and state');
+{ const p = new LessonTipsPreference(); p.forSeat(A); assert.equal(p.currentSeat, A, 'currentSeat is the seat of the last config'); }
 assert.match(src, /const tipsSeat = collapseSeat\(\{ activityId: profile\?\.activity_id, entryId, localActivityId: activity\?\.id \}\);\s*this\.lessonTips\.forSeat\(tipsSeat\);/, 'the seat is the collapsed-blocks seat, set on every config build');
 assert.match(src, /lessonTips: this\.lessonTips\.on\(this\.context\.globalState\?\.get\(LESSON_TIPS_KEY\)\)/, 'config reads the seat\'s choice');
 assert.ok(!/setKeysForSync\([^)]*LESSON_TIPS_KEY/.test(src), 'never synced');

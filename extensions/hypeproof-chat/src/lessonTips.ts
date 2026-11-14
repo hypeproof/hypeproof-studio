@@ -45,6 +45,8 @@ export function withLessonTips(stored: unknown, seat: string, on: boolean): Less
 export class LessonTipsPreference {
   private seat = "";
   private memoryOff = false;
+  /** The seat the last config was built for ("" when none is known). */
+  get currentSeat(): string { return this.seat; }
   /** A different seat starts with its own stored choice; an in-memory choice never carries over. */
   forSeat(seat: string): void {
     if (seat !== this.seat) { this.seat = seat; this.memoryOff = false; }
