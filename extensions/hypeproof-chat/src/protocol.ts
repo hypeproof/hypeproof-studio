@@ -171,6 +171,8 @@ export interface ChatConfig {
   lessonSettingsChanges?: import('./lessonSettingsChange').LessonSettingsNotice[];
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
+  /** CGP-SHELL-R-019: lesson tips are shown on this device (false only after 팁 그만 보기). */
+  lessonTips?: boolean;
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
   /**
@@ -223,6 +225,8 @@ export interface ChatConfig {
   update?: UpdateOffer | null;             // #72 — auto-update banner state
   /** CGP-SHELL-R-003 — the cohort's update freeze is active on this classroom seat (last frozen day, YYYY-MM-DD). */
   updateFreeze?: { until: string };
+  /** CGP-KNOW-R-028 — the open task's two memory switches (host-computed; the lock comes from the task's messages). */
+  taskMemory?: import('./taskMemorySwitches').TaskMemoryView;
   /** CGP-SHELL-R-027 — host-checked: the settings dialog shows the deletion request row. */
   dataDeletion?: true;
   /**
@@ -593,6 +597,12 @@ export interface UxConfig {
     show_counter: boolean;
     counter_toast_md?: string;
   };
+  /**
+   * Opt-in compact coach layout, served per cohort. `'compact'` turns on the slimmer chrome, the
+   * one-row running-process card, "AI가 할 수 있는 일" in settings, materials in the "+" menu and
+   * the coach-driven next-step chips. Absent or any other value is the standard layout.
+   */
+  coach_layout?: "compact";
 }
 
 export interface SuggestionChip {
@@ -652,6 +662,8 @@ export type WebviewMessage = (
   | {type:'workTakeaway'}
   /** CGP-SHELL-R-028 — 내 작업 내보내기 from the settings dialog. */
   | {type:'exportMyWork'}
+  /** CGP-KNOW-R-028 — one of the open task's memory switches changed in the settings dialog. The host re-checks the task and the lock. */
+  | {type:'taskMemorySet'; taskId:string; use?:boolean; keep?:boolean}
   /** CGP-SHELL-R-027 — read the seat's deletion request (`load`) or send one after the in-dialog confirm (`submit`). */
   | {type:'dataDeletion'; action:'load'|'submit'}
   | {type:'activityLocalFile'; action:'open'|'export'}
@@ -806,6 +818,8 @@ export type WebviewMessage = (
   | { type: "openChalkInstructorPanel" } // #3563 — the Chalk tab button in the instructor notice; the host runs the Chalk command
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
   | { type: "setTextSize"; size: string }
+  /** CGP-SHELL-R-019: the learner turned lesson tips off (팁 그만 보기) or back on. */
+  | { type: "setLessonTips"; on: boolean }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }

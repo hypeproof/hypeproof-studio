@@ -39,7 +39,10 @@ Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{speak:u
 // The VS Code webview is a secure context and has mediaDevices; a page loaded into about:blank may not.
 if(!navigator.mediaDevices)Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{}});
 navigator.mediaDevices.getUserMedia=async()=>{window.__media++;if(window.__mic==='denied'){const e=new Error('denied');e.name='NotAllowedError';throw e;}
- const ctx=new AudioContext();const osc=ctx.createOscillator();const dest=ctx.createMediaStreamDestination();osc.connect(dest);osc.start();return dest.stream;};`;
+ const ctx=new AudioContext();const osc=ctx.createOscillator();const dest=ctx.createMediaStreamDestination();osc.connect(dest);osc.start();return dest.stream;};
+// CGP-SHELL-R-010: the permission state the explainer reads. 'ok' is an already granted microphone, so the
+// existing flows run unchanged; 'prompt' is a first use, where Studio's card comes before the OS prompt.
+Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:window.__mic==='denied'?'denied':window.__mic==='prompt'?'prompt':'granted'})}});`;
 const page = (vars, dark, mic) => `<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>${host(mic)}</script><script>${script}</script></body></html>`;
 const MODS = { altKey: 1, ctrlKey: 2, metaKey: 4, shiftKey: 8 };
 const press = async (focus, { key, code, vk, ...mods }) => {
@@ -174,6 +177,24 @@ try {
       const handoff = await b.evaluate(`window.__posts.filter(m=>m.type==='voiceOpenMicSettings').map(m=>Object.keys(m).filter(k=>!['activityId','taskId'].includes(k)))`);
       assert.deepEqual(handoff, [['type']], `${label}: settings handoff is one message that names no URL`);
       await shot(`${label.replaceAll(' ', '-')}-denied`);
+
+      // CGP-SHELL-R-010 / DES-SHELL-09: a first use shows Studio's own card before the OS prompt, inline, at 320 and 480.
+      await load('prompt');
+      await send({ type: 'config', config: configFor(seat, VOICE) }); await send({ type: 'history', messages: MESSAGES });
+      await send({ type: 'voiceDisclosureState', acknowledged: [V1] });
+      await click('.hps-voice-mic'); await settle(150);
+      const explain = await measure({ card: '.hps-voice-explain', input: '.hps-input', allow: '.hps-voice-explain .hps-voice-primary', later: '.hps-voice-explain .hps-voice-link' });
+      assert.ok(explain.items.card, `${label}: microphone explainer shown`);
+      assert.equal(await b.evaluate(`window.__media`), 0, `${label}: no microphone request before the explainer is answered`);
+      assert.equal(await b.evaluate(`document.querySelectorAll('dialog[open]').length`), 0, `${label}: the explainer is not a modal`);
+      assert.ok(inside(explain.items.card, explain.vw) && !explain.scrollX && !overlap(explain.items.card, explain.items.input), `${label}: explainer inside the viewport and clear of the composer`);
+      assert.ok(explain.items.allow.h >= 43.5 && explain.items.later.h >= 43.5, `${label}: explainer buttons are 44px targets`);
+      assert.ok(explain.items.card.fs >= 13.99, `${label}: explainer text ${explain.items.card.fs}px`);
+      assert.equal(await b.evaluate(`document.activeElement && document.activeElement.textContent.trim()`), '허용하기', `${label}: 허용하기 has focus`);
+      await shot(`${label.replaceAll(' ', '-')}-mic-explainer`);
+      await clickText('허용하기'); await settle(300);
+      assert.equal(await b.evaluate(`window.__media`), 1, `${label}: 허용하기 asks for the microphone once`);
+      assert.ok(await b.evaluate(`!!document.querySelector('.hps-voice-recording')`), `${label}: recording after 허용하기`);
 
       await load('ok');
       await send({ type: 'config', config: configFor(seat, VOICE) }); await send({ type: 'history', messages: MESSAGES });
