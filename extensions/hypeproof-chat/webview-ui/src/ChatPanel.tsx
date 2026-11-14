@@ -130,6 +130,7 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
 import { DataDeletionRequest } from "./DataDeletionRequest";
+import { TaskMemorySwitches } from "./TaskMemorySwitches";
 import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
@@ -2817,6 +2818,8 @@ export function ChatPanel(props: Props) {
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
             Mounted while the dialog is open, so each opening reads the store fresh; nothing on a seat without the store. */}
         {preferencesOpen && <MemorySettingsList onOpenTask={taskId => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'taskSelect', id: taskId }); }} />}
+        {/* CGP-KNOW-R-028 — the open task's two memory switches (host-computed; absent without the store or in a temporary task). */}
+        {config.taskMemory && <TaskMemorySwitches view={config.taskMemory} post={postToHost} />}
         {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         {compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
