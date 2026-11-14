@@ -31,7 +31,7 @@ bash scripts/review-pr.sh <PR번호-또는-브랜치> [--provider claude|codex|s
 
 **Ctrl+C** 를 누르면 앱·서버·worktree를 자동 정리합니다.
 
-The review app runs with the in-memory secret store (`--inmemory-secrets`), so macOS shows no keychain prompt. The store is emptied when the app closes, and each review launches a fresh app.
+The review app runs with the in-memory secret store (`--inmemory-secrets`), so macOS shows no keychain prompt. The store is emptied when the app closes, and each review launches a fresh app. To keep the Dev copy's secrets on disk across window reopen (for flows that restart the app), set `HPS_REVIEW_PERSIST_SECRETS=1`; the Dev copy then uses its own keychain item, and macOS may ask for the login keychain password, which a person enters.
 
 ## 사전 조건
 
