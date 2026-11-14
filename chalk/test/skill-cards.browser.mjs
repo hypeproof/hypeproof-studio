@@ -44,7 +44,7 @@ const LINK_CASES = JSON.parse(readFileSync(new URL('./fixtures/link-cases.json',
 assert.ok(LINK_CASES.not_links.length >= 20 && LINK_CASES.links.length >= 40, 'the shared link case list is complete');
 // Byte-equality pin: hypeproof-service worker/test/fixtures/link-cases.json must hash to the same value (follow-up), so a
 // rule change on either side that is not mirrored fails a test instead of depending on someone remembering.
-export const LINK_CASES_SHA256 = 'c888f5e802881a3d0e7131e2163c23632477ef0b5a088344bcb5cc6aaae06a6c';
+export const LINK_CASES_SHA256 = '468e9233e1a2a81e471e8a38b8a41d533256fe017cb01a6516506714fe9c19d1';
 assert.equal((await import('node:crypto')).createHash('sha256').update(readFileSync(new URL('./fixtures/link-cases.json', import.meta.url))).digest('hex'), LINK_CASES_SHA256, 'link-cases.json changed: update the pin here and the Service copy together');
 const SAFE_CASES = JSON.parse(readFileSync(new URL('./fixtures/safe-text-cases.json', import.meta.url), 'utf8')).cases;
 const FROZEN_CARDS = [{ name: '고정 카드', summary: '고정 설명', prompt: '고정 프롬프트' }];
@@ -132,6 +132,9 @@ try {
       [card(3, '질문 만들기', '', '프롬프트'), /카드 3번의 한 줄 설명을 적어 주세요/],
       [card(3, '질문 만들기', '설명', '자세한 건 https://example.com 참고'), /카드 3번의 시작 프롬프트에는 링크/],
       [card(3, 'javascript:x', '설명', '프롬프트'), /카드 3번의 이름에는 링크/],
+      // Q6: a name with no readable glyph once quotes are removed is refused at save (the Service's needReadable).
+      [card(3, '"\'"', '설명', '프롬프트'), /카드 3번의 이름은/],
+      [card(3, '이름', '""', '프롬프트'), /카드 3번의 한 줄 설명은/],
       [card(3, '질문 만들기', 'ｈｔｔｐｓ://x 참고', '프롬프트'), /카드 3번의 한 줄 설명에는 링크/],
       [card(3, '질문 만들기', '설명', 'һttps://x 보기'), /카드 3번의 시작 프롬프트에는 링크/],
       [card(3, '질문 만들기', '설명', 'www.example.com 보기'), /카드 3번의 시작 프롬프트에는 링크/],
