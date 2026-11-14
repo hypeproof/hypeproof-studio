@@ -73,6 +73,8 @@ assert.match(src, /const tipsSeat = collapseSeat\(\{ activityId: profile\?\.acti
   assert.ok(stale > 0 && set > stale && set - stale < 400, `forSeat runs after the staleness return (${stale}, ${set})`); }
 assert.match(src, /lessonTips: this\.lessonTips\.on\(this\.context\.globalState\?\.get\(LESSON_TIPS_KEY\)\)/, 'config reads the seat\'s choice');
 assert.ok(!/setKeysForSync\([^)]*LESSON_TIPS_KEY/.test(src), 'never synced');
+// Host harnesses build a provider with Object.create (no field initialisers): the preference is created on first use.
+assert.match(src, /private get lessonTips\(\): LessonTipsPreference \{ return this\.lessonTipsPref \?\?= new LessonTipsPreference\(\); \}/, 'lazy default, so postConfig never throws on a harness-built provider');
 // Negative control: a preference that ignores the seat (the device-wide design this replaced) fails the A/B check.
 class DeviceWide extends LessonTipsPreference { forSeat() { super.forSeat('device'); } }
 {

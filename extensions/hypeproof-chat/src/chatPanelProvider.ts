@@ -11899,8 +11899,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     for (const id of ids) await this.lessonChanges?.seen(id).catch(() => false);
   }
 
-  /** CGP-SHELL-R-019 — the 팁 보기 choice of the seat the current config was built for. */
-  private readonly lessonTips = new LessonTipsPreference();
+  /**
+   * CGP-SHELL-R-019 — the 팁 보기 choice of the seat the current config was built for. Created on first use, so a
+   * provider made without the constructor (host test harnesses build one with Object.create) never throws in postConfig.
+   */
+  private lessonTipsPref: LessonTipsPreference | undefined;
+  private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
 
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
