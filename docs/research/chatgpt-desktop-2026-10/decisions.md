@@ -2309,7 +2309,7 @@ Requirement: `docs/studio-requirements.md` "Keyboard shortcut sheet (CGP-CHAT-R-
 - **Esc (agent choice).** It stops only while an answer streams, through the same path as the stop button.
   - Every other Escape owner comes first: an IME composition, dialogs, open menus and lists, the find bar, the voice
     panel and voice conversation, dictation recording, the microphone cards (`.hps-voice-card`: mic denied, recovered
-    text), a visible tooltip (its Escape is marked handled), and another text field's own Escape. A message parked
+    text), a visible tooltip (that press closes the tooltip only; the chat notes it in window capture, before tooltips.ts hides it, and no other Escape owner changes), and another text field's own Escape. A message parked
     during the stream goes back into the composer, as with the stop button.
   - The decision waits until the event's dispatch has finished, so a listener that handles Escape later still wins.
 - **Focus key (agent choice): Alt+Shift+K (⌥ Option+⇧ Shift+K).** It is matched by the physical key, so macOS Option

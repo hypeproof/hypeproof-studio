@@ -2,8 +2,8 @@
 // in the message box. In-app only (bound while this webview has focus), never global.
 //
 // Esc belongs to many owners before it belongs to "stop": an IME composition, a modal, a menu or list, the find bar,
-// the voice panel and voice conversation, dictation and the microphone cards, a visible tooltip (tooltips.ts marks
-// that Escape handled), the quote action, a text field's own Escape. So the stop runs
+// the voice panel and voice conversation, dictation and the microphone cards, a visible tooltip, the quote action,
+// a text field's own Escape. So the stop runs
 // only while an answer streams, only for an unhandled Escape with no modifier, only from the composer's text box or
 // a non-text place in the chat, and the decision waits until every other listener has had the event: a listener
 // that handles Escape calls preventDefault, and then nothing is stopped.
@@ -36,6 +36,20 @@ export function mayStopAnswer(event: KeyLike, doc: Document, streaming: boolean)
   return true;
 }
 
+/**
+ * A tooltip that was on screen when this Escape was pressed. tooltips.ts hides it in its document-capture listener, which
+ * runs before the chat's own listener, so the chat looks earlier: a window-capture listener (the first one to see the
+ * event) notes the presses that met a visible tooltip. That Escape closes the tooltip only; the answer keeps running.
+ * Nothing else changes: tooltips.ts and every other Escape owner see the event as before.
+ */
+const OPEN_TOOLTIP = '.hp-tooltip:not([hidden])';
+export function watchTooltipEscape(win: Window): { metTooltip(event: Event): boolean; dispose(): void } {
+  const met = new WeakSet<Event>();
+  const note = (event: Event) => { if ((event as KeyboardEvent).key === 'Escape' && win.document.querySelector(OPEN_TOOLTIP)) met.add(event); };
+  win.addEventListener('keydown', note, true);
+  return { metTooltip: (event) => met.has(event), dispose: () => win.removeEventListener('keydown', note, true) };
+}
+
 /** Alt+Shift+K, outside an IME composition and any open dialog. */
 export function focusesComposer(event: KeyLike, doc: Document): boolean {
   if (event.code !== 'KeyK' || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.repeat || event.defaultPrevented) return false;
@@ -52,18 +66,19 @@ export function useChatKeys(opts: { streaming: boolean; stop: () => void; focusC
   const latest = useRef(opts);
   latest.current = opts;
   useEffect(() => {
+    const tooltip = watchTooltipEscape(window);
     const onKey = (event: KeyboardEvent) => {
       if (focusesComposer(event, document)) {
         if (latest.current.focusComposer()) event.preventDefault();
         return;
       }
-      if (!mayStopAnswer(event, document, latest.current.streaming)) return;
+      if (tooltip.metTooltip(event) || !mayStopAnswer(event, document, latest.current.streaming)) return;
       setTimeout(() => {
         if (event.defaultPrevented || !latest.current.streaming) return;
         latest.current.stop();
       }, 0);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); tooltip.dispose(); };
   }, []);
 }

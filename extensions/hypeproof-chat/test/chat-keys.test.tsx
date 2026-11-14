@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const { JSDOM } = createRequire(process.cwd() + '/package.json')('jsdom');
 import { renderToStaticMarkup } from 'react-dom/server';
-import { focusesComposer, mayStopAnswer } from '../webview-ui/src/chatKeys';
+import { focusesComposer, mayStopAnswer, watchTooltipEscape } from '../webview-ui/src/chatKeys';
+import { installTooltips } from '../webview-ui/src/tooltips';
 import { DictationNoticeView, type DictationController, type DictationView } from '../webview-ui/src/DictationControl';
 
 void React;
@@ -78,6 +79,29 @@ t('Alt+Shift+K by physical key; not with other modifiers, in IME, or under a dia
   const d = doc.createElement('dialog'); d.setAttribute('open', ''); doc.body.append(d);
   assert.equal(focusesComposer(altK(el('msg')), doc), false, 'a dialog keeps the keyboard');
   d.remove();
+});
+
+// A visible tooltip: tooltips.ts (document capture) hides it before the chat's window listener runs, so the chat notes
+// the press in window capture, which comes first. The tooltip's own listener is the real one, and it is not changed:
+// the event is not default-prevented, so every other Escape owner still sees a fresh Escape.
+t('an Escape that met a visible tooltip is noted (it closes the tooltip; the answer keeps running)', () => {
+  const win = dom.window as unknown as Window;
+  const g = globalThis as unknown as Record<string, unknown>;
+  for (const k of ['MutationObserver', 'HTMLElement', 'KeyboardEvent']) g[k] ??= (dom.window as unknown as Record<string, unknown>)[k];
+  const removeTips = installTooltips(doc);
+  const probe = watchTooltipEscape(win);
+  const tip = doc.querySelector('.hp-tooltip') as HTMLElement;
+  assert.ok(tip, 'the real tooltip element');
+  const press = () => { const e = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); el('box').dispatchEvent(e); return e; };
+  tip.hidden = false;
+  const closing = press();
+  assert.equal(tip.hidden, true, 'the tooltip listener closed it during the same press');
+  assert.equal(probe.metTooltip(closing), true, 'the chat saw it open before it closed');
+  assert.equal(closing.defaultPrevented, false, 'the event is not consumed: other Escape owners are unchanged');
+  const plain = press();
+  assert.equal(probe.metTooltip(plain), false, 'negative control: no tooltip on screen, the press can stop the answer');
+  probe.dispose(); removeTips();
+  tip.remove();
 });
 
 console.log(`chat keys: ${n} passed`);

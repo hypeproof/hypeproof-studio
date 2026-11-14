@@ -183,6 +183,11 @@ try {
     await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(80);
     assert.equal(await cancels(), 0, 'an Escape handled by a later listener does not stop the answer');
     await b.evaluate(`window.removeEventListener('keydown',window.__late)`);
+    // A tooltip on screen (focus or hover on a tooltipped control): that Esc closes the tooltip only.
+    await b.evaluate(`(()=>{const t=document.querySelector('.hp-tooltip');t.textContent='도움말';t.hidden=false})()`);
+    await press(composer, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(80);
+    assert.equal(await b.evaluate(`document.querySelector('.hp-tooltip').hidden`), true, 'the Escape closed the tooltip');
+    assert.equal(await cancels(), 0, `an Escape that closes a tooltip does not stop the answer (${label})`);
     // A message parked during the stream (Enter while it runs clears the composer) goes back into the composer on the
     // stop, the same as the stop button, and is not sent (verify-3956 K7).
     await typeDraft('PARKED-DRAFT');
