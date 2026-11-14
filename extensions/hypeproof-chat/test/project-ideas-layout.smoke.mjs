@@ -22,7 +22,7 @@ const configFor=(seat,greeting='',followUp=[])=>({hasToken:true,coach:{name:'코
 const msg=(id,role,content)=>({id,role,content,createdAt:1});
 const Q=msg('a0','assistant','안녕하세요! 오늘은 무엇을 만들어 보고 싶어요?'),A=msg('u1','user','잘 모르겠어요'),R=msg('a1','assistant','괜찮아요. 같이 찾아봐요.');
 const send=async(m)=>{await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(m)}}))`);await new Promise(r=>setTimeout(r,120));};
-const open=async(theme,width,{seat='personal',history=[Q,A,R],state=null,greeting='',config,forcedColors=false,height=900}={})=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme,state),{width,height,dark:theme.kind==='dark',forcedColors});await send({type:'config',config:config??configFor(seat,greeting)});if(history.length)await send({type:'history',messages:history});};
+const open=async(theme,width,{seat='personal',history=[Q,A,R],state=null,greeting='',config,forcedColors=false,height=900}={})=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme,state),{width,height,dark:theme.kind==='dark',forcedColors,appReady:true});await send({type:'config',config:config??configFor(seat,greeting)});if(history.length)await send({type:'history',messages:history});};
 const ideas=()=>browser.evaluate(`[...document.querySelectorAll('[data-project-ideas] .hps-project-idea')].map(b=>({id:b.dataset.idea,text:b.textContent,pressed:b.getAttribute('aria-pressed')}))`);
 const has=()=>browser.evaluate(`!!document.querySelector('[data-project-ideas]')`);
 const value=()=>browser.evaluate(`document.querySelector('.hps-input textarea').value`);
