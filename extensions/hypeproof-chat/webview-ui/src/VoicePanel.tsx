@@ -12,6 +12,9 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type Keyboard
 import { ChatIcon } from "./ChatDetails";
 import { MIC_MUTE_LABEL, MIC_OFF, MIC_ON, OUTPUT_MUTE_LABEL, OUTPUT_OFF, OUTPUT_ON } from "../../src/voiceCopy";
 import { type OutputMute, windowOutputMute } from "../../src/voiceOutputMute";
+import type { AgentStatusLine } from "../../src/voiceAgentStatus";
+import type { ReadAloud } from "../../src/voiceReadAloud";
+import { type AgentEventSource, hostAgentEvents, useAgentStatus, useAgentStatusVoice, VoiceAgentStatusAnnouncer, VoiceAgentStatusLine } from "./VoiceAgentStatus";
 
 import {
   COMPACT_CONTROLS,
@@ -68,6 +71,18 @@ export interface VoicePanelProps {
    * window's webview sessionStorage; tests inject their own. Read and write may throw.
    */
   cornerStore?: CornerStore;
+  /**
+   * CGP-VOICE-R-007: where the agent-status line reads host events. Defaults to the chat channel the
+   * host posts on (toolLog, approvalWait, stream start/stop/end/error); tests inject their own.
+   */
+  agentEvents?: AgentEventSource;
+  /** The status line changes at most once per this many ms (DES-CGPV-08: 1 s). Tests shorten it. */
+  agentStatusIntervalMs?: number;
+  /**
+   * The window's read-aloud hub when the Service serves read-aloud (`useServedReadAloud()`), else
+   * absent: the status is then shown and announced but never read aloud.
+   */
+  statusSpeech?: ReadAloud | null;
   /**
    * CGP-VOICE-R-009 — "보여주기". Absent = no menu. `items` is what the host last answered for this
    * open (null while it is being checked); it is re-read on every open. Each click on an enabled
@@ -220,12 +235,14 @@ function Meter({ meter }: { meter: MeterView }) {
   );
 }
 
-function StatusBlock({ meter, failure }: { meter: MeterView; failure: FailureView | null }) {
+function StatusBlock({ meter, failure, agent }: { meter: MeterView; failure: FailureView | null; agent: AgentStatusLine | null }) {
   return (
     <div className="hps-voice-status">
       <Meter meter={meter} />
       {/* 상태는 **문구로도** 있어야 한다 — 색과 모션만으로 구분하지 않는다 (VO-38/47). */}
       <p className="hps-voice-status-text">{failure ? failure.text : meter.statusText}</p>
+      {/* CGP-VOICE-R-007: one line under the state label, only from host events. */}
+      <VoiceAgentStatusLine line={agent} />
       {meter.progress && !failure && <p className="hps-voice-progress" role="status">잠시만 기다려 주세요</p>}
     </div>
   );
@@ -245,6 +262,8 @@ export function VoicePanel(props: VoicePanelProps) {
   useEffect(() => () => output.set(false), [output]);
   const dismiss = (kind: DismissKind) => { output.set(false); props.onDismiss(kind); };
   const toggleOutput = () => { output.toggle(); };
+  const agentLine = useAgentStatus(props.agentEvents ?? hostAgentEvents, props.agentStatusIntervalMs ?? 1000);
+  const agentVoice = useAgentStatusVoice(popup.presentation === "hidden" ? null : agentLine, output, props.statusSpeech ?? null);
   const [corner, setCorner] = useState<CompactCorner>(() => readCorner(store));
   const [moved, setMoved] = useState<string>("");
   const helpId = useId();
@@ -315,6 +334,7 @@ export function VoicePanel(props: VoicePanelProps) {
         <span id={helpId} className="hps-sr-only">{COMPACT_MOVE_HELP}</span>
         <span className="hps-sr-only" role="status">{moved}</span>
         <span className="hps-sr-only" role="status">{muteSaid}</span>
+        <VoiceAgentStatusAnnouncer {...agentVoice} />
       </div>
     );
   }
@@ -338,7 +358,7 @@ export function VoicePanel(props: VoicePanelProps) {
         </div>
       </header>
 
-      <StatusBlock meter={meter} failure={props.failure} />
+      <StatusBlock meter={meter} failure={props.failure} agent={agentLine} />
 
       <div className="hps-voice-body" tabIndex={0} aria-label="대화 전사와 세션 정보">
         {popup.awaitingResume && (
@@ -394,6 +414,7 @@ export function VoicePanel(props: VoicePanelProps) {
           텍스트로 전환
         </button>
         <span className="hps-sr-only" role="status">{muteSaid}</span>
+        <VoiceAgentStatusAnnouncer {...agentVoice} />
       </div>
     </div>
   );

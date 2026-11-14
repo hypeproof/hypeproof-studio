@@ -634,6 +634,7 @@ export function App() {
     settleUndo(); // CGP-CHAT-R-029 — a send makes every earlier removal final.
     dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
+    return userMessageId;
   };
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes
@@ -676,6 +677,7 @@ export function App() {
       onSubmit={(form) => postToHost({ type: "publishSubmit", form })}
       onLink={(experimentId, channel, expiresInDays, noticeVersion) => postToHost({ type: "publishLink", experimentId, channel, expiresInDays, ...(noticeVersion ? { noticeVersion } : {}) })}
       onRevoke={(linkId) => postToHost({ type: "publishRevoke", linkId })}
+      onOpenEvidence={(experimentId) => postToHost({ type: "evidenceOpen", experimentId })}
       onClose={() => { postToHost({ type: "publishClose" }); dispatch({ type: "testPublishClose" }); }}
     /></PanelBoundary>
   ) : null;
@@ -840,7 +842,7 @@ export function App() {
       {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}} onDiff={(id,index)=>postToHost({type:'writeApprovalDiff',id,index})}/>}
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor} activityTitle={homeTitle(state.config?.activity)} personalReflection={state.config?.activity?.kind === "personal" && !state.config?.isInstructor}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor} activityTitle={homeTitle(state.config?.activity)} personalReflection={state.config?.activity?.kind === "personal" && !state.config?.isInstructor} personalMaking={state.config?.personalMaking}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel

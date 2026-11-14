@@ -106,7 +106,7 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 필수 목록에 섞이지 않는다. 선택기와 `publish-gate` 는 같은 대상 판정을 사용한다.
 `android` 는 허용된 대상 이름일 뿐, iPhone 케이스가 Android 수용 증거가 되는 것은 아니다.
 
-자동 검사는 기존 네이티브 경로에 연결한다. 아래 여덟 검사는
+자동 검사는 기존 네이티브 경로에 연결한다. 아래 필수 검사는
 [`StudioJourneyTests`](../../../apps/studio-native/ios/UITests/StudioShellTests.swift)에 있으며,
 [`collect-native-journeys.py`](../../../apps/studio-native/scripts/collect-native-journeys.py)가 실제
 실행 로그에서 이름별 실행·통과를 확인한다. 하나라도 누락·건너뜀·실패하면 시뮬레이터 여정 통과로
@@ -116,12 +116,21 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 |---|---|
 | BB-033 | `testFirstInstallSignInToFirstAnswerWithoutDesktop` |
 | BB-033 | `testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking` |
+| BB-033 | `testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend` |
+| BB-033 | `testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice` |
+| BB-033 | `testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable` |
 | BB-034 | `testDictationEditsDraftThenSendGetsReplyWithoutDesktop` |
 | BB-034 | `testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening` |
 | BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-035 | `testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch` |
 | BB-036 | `testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch` |
 | BB-036 | `testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch` |
+| BB-036 | `testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID` |
+| BB-036 | `testRecordedFailureCannotReplaceExistingDraft` |
+| BB-036 | `testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch` |
+| BB-036 | `testEightyMessageWindowFollowsNewTailWithoutInterruptingReading` |
 | BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
+| BB-037 | `testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch` |
 
 `hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
 상태·저장 경로를 사용하지만 인증 서버·HTTP·음성 이벤트는 합성이다. 실기기, 실제 브라우저 로그인,

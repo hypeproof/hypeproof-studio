@@ -178,3 +178,14 @@ A member-only inbox in HP Studio can show the same cards and take answers in Ask
 3. **The person's own GitHub authorization**: choosing `approve` or `question` becomes that member's own GitHub review on the exact head. Use the inbox's exact-head review path with a credential the member granted (GitHub OAuth for their account). The bot never approves for a human, and a Studio session alone is not a GitHub identity.
 4. **Signed decisions**: Studio is a registered inbox adapter. Its answer is the signed decision envelope from `docs/AGENT-APPROVAL-INBOX.ko.md`, carrying an actor, a nonce, an expiry and a one-time receipt. `hold` is recorded and changes nothing on GitHub.
 5. **Escalation stops**: an inbox answer counts as a response, and `stakeholders.py tick` closes the request the same way a GitHub review does.
+
+## Delivery evidence
+
+Stakeholder GitHub text confirms Discord delivery only when the local ledger contains
+a successful transport receipt for the same repository, PR, head and recipient.
+A plan, configured channel, skipped attempt or failed attempt is not delivery.
+Historical cached plans are rendered again at send time. Duplicate successful sends
+report `already_sent`; skipped/failed attempts report `already_attempted` with their
+`original_status`. Neither result replays the transport. Unknown remote effects still
+require reconciliation, not automatic retries. These receipts prove transport
+acceptance only, not that a person read or approved the request.

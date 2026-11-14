@@ -11,11 +11,20 @@ REQUIRED = {
     'MFR-T01': 'testFirstInstallSignInToFirstAnswerWithoutDesktop',
     'MFR-T02': 'testDictationEditsDraftThenSendGetsReplyWithoutDesktop',
     'MFR-T03': 'testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend',
+    'MFR-T03-stop-denial': 'testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch',
+    'MFR-T03-response-stop': 'testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch',
     'MFR-T03-queued': 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening',
     'MFR-T04': 'testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch',
     'MFR-T05': 'testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch',
+    'MFR-T05-recorded': 'testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID',
+    'MFR-T05-collision': 'testRecordedFailureCannotReplaceExistingDraft',
+    'MPER-T03-history': 'testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch',
+    'MPER-T03-following': 'testEightyMessageWindowFollowsNewTailWithoutInterruptingReading',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',
     'MFR-T01-failure': 'testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking',
+    'MPER-T01-cancel': 'testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend',
+    'MPER-T03-collision': 'testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice',
+    'MPER-T01-layout': 'testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable',
 }
 # This is Xcode 26's XCTest output, not app stdout or a test-name substring.
 CASE = re.compile(r"^Test Case '-\[[A-Za-z0-9_.]*StudioJourneyTests (test[A-Za-z0-9_]+)\]' (started\.|(passed|failed|skipped)(?: \([0-9.]+ seconds\))?\.)$")

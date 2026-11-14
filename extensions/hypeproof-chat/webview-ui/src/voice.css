@@ -65,6 +65,10 @@
 .hps-msg-role .hps-voice-listen[aria-pressed="true"] { color: var(--hp-text-primary-default); background-color: var(--hp-bg-control-pressed); }
 .hps-voice-listen[aria-pressed="true"] .hps-icon { animation: none; transition: none; }
 .hps-voice-skipped { color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+/* CGP-VOICE-R-028 / DES-CGPV-41: the autoplay-blocked notice. One sentence + one action inline in the
+   answer row, wrapping at 320px; the caption step (>=14px); the action keeps the 44px answer-action
+   target and its focus ring; no animation or transition at all, so reduced motion has nothing to stop. */
+.hps-voice-blocked { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; animation: none; transition: none; }
 
 /* ---- the disclosure sheet (inside the shared modal surface) ---- */
 .hps-voice-disclosure-body { display: flex; flex-direction: column; gap: var(--hp-space-3); font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }
@@ -80,3 +84,21 @@
   .hps-input .hps-voice-mic, .hps-voice-note { border-color: ButtonText; }
   .hps-voice-primary, .hps-voice-disclosure-start { border: var(--ds-c-studio-styles-size-3) solid ButtonText; }
 }
+
+/* ---- the agent-status line under the voice panel's state label (CGP-VOICE-D-006) ----
+   At most two lines; the whole text is in the DOM and the tooltip. The icon never moves, in any motion
+   mode: there is no spinner to turn off under reduced motion. */
+.hps-voice-agent-status {
+  display: flex; align-items: flex-start; gap: var(--hp-space-2);
+  box-sizing: border-box; max-inline-size: 100%; min-inline-size: 0; margin: 0;
+  color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+}
+.hps-voice-agent-status > .hps-icon { flex: 0 0 auto; margin-block-start: var(--hp-space-1); animation: none; transition: none; }
+.hps-voice-agent-status-text {
+  min-inline-size: 0; overflow-wrap: anywhere; word-break: keep-all;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.hps-voice-agent-status[data-agent-status="approval"], .hps-voice-agent-status[data-agent-status="error"] { color: var(--hp-text-primary-default); }
+.hps-voice-agent-status[data-agent-status="approval"] > .hps-icon { color: var(--hp-text-accent-default); }
+.hps-voice-agent-status[data-agent-status="error"] > .hps-icon { color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); }
+.hps-voice-agent-speech-failed { margin: 0; color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }

@@ -21,7 +21,7 @@ export const HELP_MODE_LABELS: Record<HelpMode, string> = {
 export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form"] as const;
 export const WORK_TEXT_MAX = 1000;
 
-type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string };
+type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string; ui_version?: unknown };
 type Lesson = { sha256: string; version: string; content: { steps: Step[] } };
 export interface LessonFocus { sha256: string; stepId: string; helpMode: HelpMode | null }
 
@@ -30,7 +30,23 @@ const isMode = (x: unknown): x is HelpMode => typeof x === "string" && (HELP_MOD
 /** The surface this App draws for a step: its own kind, or `unsupported:<kind>` (drawn as a notice, never faked). */
 export function surfaceOf(step: Step): string {
   const kind = typeof step.ui === "string" ? step.ui : "chat";
+  if (kind !== "chat" && !rendersPin(kind, step.ui_version)) return "unsupported:" + kind;
   return (SUPPORTED_SURFACES as readonly string[]).includes(kind) ? kind : "unsupported:" + kind;
+}
+
+/**
+ * CGP-LEARN-R-004 — the catalog versions of each block this App draws. A confirmed lesson pins `ui_version` (Service
+ * step-ui-catalog); a lesson frozen before pinning has none and means v1. A version this App does not know is drawn as
+ * the unsupported notice, never as another version's behaviour. Add a version here only together with its rendering.
+ */
+export const RENDERED_UI_VERSIONS: Readonly<Record<string, readonly number[]>> = {
+  canvas_editor: [1], canvas_preview: [1], criterion_form: [1], evidence_note: [1], coach_request: [1], decision_form: [1], metric_board: [1],
+};
+export function rendersPin(kind: string, uiVersion: unknown): boolean {
+  const version = uiVersion === undefined ? 1 : uiVersion;
+  // Own keys only: a lesson's `ui` is data, and "constructor" or "toString" must not resolve through Object.prototype.
+  const drawn = Object.prototype.hasOwnProperty.call(RENDERED_UI_VERSIONS, kind) ? RENDERED_UI_VERSIONS[kind] : undefined;
+  return Number.isSafeInteger(version) && !!drawn && drawn.includes(version as number);
 }
 
 /**
@@ -39,7 +55,7 @@ export function surfaceOf(step: Step): string {
  */
 export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board"] as const;
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
-export interface StepMaterial { kind: MaterialKind; stepId: string; version: string; sha256: string }
+export interface StepMaterial { kind: MaterialKind; stepId: string; version: string; sha256: string; uiVersion: number }
 
 /**
  * The block the confirmed lesson version attaches to ONE step, or null. The only source is the served lesson (pinned by its
@@ -50,7 +66,9 @@ export function stepMaterial(lesson: Lesson | null | undefined, stepId: string):
   const step = lesson?.content.steps.find((s) => s.id === stepId);
   const kind = step?.ui;
   if (!lesson || !step || typeof kind !== "string" || !(MATERIAL_KINDS as readonly string[]).includes(kind)) return null;
-  return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256 };
+  // CGP-LEARN-R-004 — only a pinned version this App renders; otherwise no block (the step shows the unsupported notice).
+  if (!rendersPin(kind, step.ui_version)) return null;
+  return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256, uiVersion: (step.ui_version as number | undefined) ?? 1 };
 }
 
 /** What a block's state sentence is computed from: the fields as the learner has them now, and the last save, if any. */
@@ -73,7 +91,7 @@ const UNDRAWN = (title: string): MaterialText => ({
 export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   criterion_form: {
     title: "확인 기준 적기",
-    controlsHelp: "아래 칸에 무엇이 되면 잘 된 것인지 한 줄로 적고 '기준 저장'을 누르세요. 저장한 기준은 다음 질문에 함께 보내요.",
+    controlsHelp: "아래 칸에 무엇이 되면 잘 된 것인지 한 줄로 적고 '기준 저장'을 누르세요. 저장한 기준은 다음 질문에 함께 보내요. '처음으로'는 칸을 비우고, '되돌리기'는 바로 전에 고친 것을 되돌려요.",
     state: ({ text, saved }) => {
       const t = text.trim();
       if (saved && t === saved.text) return { key: "saved", sentence: "기준을 저장했어요. 다음 질문에 함께 보내요." };
@@ -87,7 +105,7 @@ export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   },
   decision_form: {
     title: "결정과 이유 적기",
-    controlsHelp: "첫 칸에 무엇을 바꾸기로 했는지, 둘째 칸에 그 이유를 적고 '결정 저장'을 누르세요. 두 칸을 모두 적어야 저장할 수 있어요.",
+    controlsHelp: "첫 칸에 무엇을 바꾸기로 했는지, 둘째 칸에 그 이유를 적고 '결정 저장'을 누르세요. 두 칸을 모두 적어야 저장할 수 있어요. '처음으로'는 두 칸을 비우고, '되돌리기'는 바로 전에 고친 것을 되돌려요.",
     state: ({ text, reason, saved }) => {
       const t = text.trim(), r = reason.trim();
       if (saved && t === saved.text && r === (saved.reason ?? "")) return { key: "saved", sentence: "결정과 이유를 저장했어요. 다음 질문에 함께 보내요." };
@@ -104,6 +122,54 @@ export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   coach_request: UNDRAWN("코치에게 부탁하기"),
   metric_board: UNDRAWN("수치 살펴보기"),
 };
+
+/**
+ * CGP-LEARN-R-010 — reset and undo for a block's fields. The preset of every block this App draws (catalog v1, no params)
+ * is empty fields, so "처음으로" empties them; the learner's saved work is the host's and stays until a new save. Undo
+ * steps back one change, where a change is one burst of typing (it ends on blur, after a pause, on reset or on undo) or
+ * one reset. Neither sends anything to the host: no save, no observation event.
+ */
+export interface BlockFields { text: string; reason: string }
+export interface BlockHistory { past: BlockFields[]; burst: boolean }
+export const BLOCK_PRESET: BlockFields = { text: "", reason: "" };
+export const BLOCK_HISTORY_MAX = 50;
+export const EMPTY_HISTORY: BlockHistory = { past: [], burst: false };
+const sameFields = (a: BlockFields, b: BlockFields) => a.text === b.text && a.reason === b.reason;
+/** Before a field edit: the first edit of a burst records the fields as they were. */
+export function historyEdit(h: BlockHistory, before: BlockFields): BlockHistory {
+  return h.burst ? h : { past: [...h.past, { ...before }].slice(-BLOCK_HISTORY_MAX), burst: true };
+}
+/** A burst ends (blur, pause): the next edit is a new change. */
+export const historyBoundary = (h: BlockHistory): BlockHistory => (h.burst ? { ...h, burst: false } : h);
+/** "처음으로": the preset, recorded as one change. Null when the fields already are the preset (the button is disabled). */
+export function historyReset(h: BlockHistory, current: BlockFields): { history: BlockHistory; fields: BlockFields } | null {
+  if (sameFields(current, BLOCK_PRESET)) return null;
+  return { history: { past: [...h.past, { ...current }].slice(-BLOCK_HISTORY_MAX), burst: false }, fields: { ...BLOCK_PRESET } };
+}
+/** "되돌리기": the fields before the last change. Null when there is nothing to undo (the button is disabled). */
+export function historyUndo(h: BlockHistory): { history: BlockHistory; fields: BlockFields } | null {
+  const last = h.past[h.past.length - 1];
+  return last ? { history: { past: h.past.slice(0, -1), burst: false }, fields: { ...last } } : null;
+}
+
+/**
+ * CGP-LEARN-R-011 (c) — "접기": a learner puts away a block they do not want. The collapsed set is the learner's own view state for
+ * this session, kept in the webview's state and never posted: it is not work, not a report and not an observation event. Keys
+ * are the block's lesson version and step (the open/closed key), so a new lesson version starts with every block shown.
+ */
+export const COLLAPSED_BLOCKS_MAX = 50;
+const COLLAPSED_KEY_MAX = 512;
+/** The collapsed keys read back from webview state; anything malformed is dropped. */
+export function collapsedBlocksFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const keys = value.filter((k): k is string => typeof k === "string" && k.length > 0 && k.length <= COLLAPSED_KEY_MAX);
+  return [...new Set(keys)].slice(-COLLAPSED_BLOCKS_MAX);
+}
+/** The set after 접기 (on) or 다시 보기 (off) for one block; newest last, bounded. */
+export function collapseBlock(keys: readonly string[], key: string, on: boolean): string[] {
+  const rest = keys.filter((k) => k !== key);
+  return on ? [...rest, key].slice(-COLLAPSED_BLOCKS_MAX) : rest;
+}
 
 /** Catalog check: every kind needs a title, a controls help sentence and a state sentence in Korean. Returns the gaps. */
 export function materialTextGaps(catalog: Record<string, MaterialText | undefined> = MATERIAL_TEXT): string[] {

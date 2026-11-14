@@ -267,6 +267,28 @@ REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/au
 | DES-CGP-LEARN-16 | Run state. | One 20 px icon + text label in the chat header, ≥ 14 px; state change announced via `aria-live`; no animated character; color only as reinforcement. |
 | DES-CGP-LEARN-17 | Keyboard triage. | Selected row has a 2 px focus outline at 3:1; shortcut sheet opens inline; all actions also reachable by mouse/touch at 44×44 px. |
 
+REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 status (2026-11-14, CGP-LEARN-R-004 / D-004). The Service contract is hypeproof-service#461 (versioned catalog `@hypeproof/service-contracts/step-ui-catalog`), and the Chalk chip is CH-12 in `docs/requirements/chalk-authoring.md`.
+- `ui` stays the type. `ui_version` and `ui_params` are pinned at confirm.
+- Draft save and confirm return field-path errors.
+- A v1 lesson keeps serving after v2 is published, because the catalog is append-only and the frozen bytes never change.
+- A different pin is a different sha256, so no rehearsal pass carries over.
+
+The Studio side is the next paragraph. No real type has params yet, so (a) is proved with a test-only catalog.
+
+REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 Studio side (2026-11-14): REQ-STUDIO-LEARNING-BLOCK-PIN in `docs/studio-requirements.md`. Studio draws a block only at a pinned version it renders (v1 today, with an unpinned lesson meaning v1). Any other version gets the unsupported notice, and the learner's text never shows a type id or a version.
+
+REQ-CGP-LEARN-11 / DES-CGP-LEARN-11 status (2026-11-14, CGP-LEARN-R-011 / D-011): **partial**. Only (c), "접기", is implemented, in Studio, as REQ-STUDIO-LEARNING-BLOCK-COLLAPSE (`docs/studio-requirements.md`).
+- The open card's 자료 메뉴, after 닫기, has "접기". Collapsed, the card is one row, "접은 자료: <title>" with "다시 보기", which restores it open.
+- The state is per lesson version and step, local to the webview, and kept across a re-mount. It is never posted to the host and is not an evidence event.
+- Open: (a) and (b), the "자료가 틀린 것 같아요" report and its arrival in the lesson instructor's Chalk view. The existing `/v1/report` reaches the operator, not the lesson's instructor, so this needs a Service and Chalk route.
+- Open: the optional 0–300 learner field. For a minor cohort it must not add a new free-text field beyond the existing report caps.
+
+REQ-CGP-LEARN-10 / DES-CGP-LEARN-10 status (2026-11-14, CGP-LEARN-R-010 / D-010): implemented in Studio as REQ-STUDIO-LEARNING-BLOCK-RESET-UNDO (`docs/studio-requirements.md`).
+- "처음으로" restores the preset, which is empty fields for every drawn block today.
+- "되돌리기" reverts one change: a typing burst or a reset. It is disabled when there is nothing to undo.
+- Neither posts anything to the host, so they create no observation event.
+- Both are quiet 44px buttons, and a disabled one reads differently in colour and boundary style.
+
 DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions.md`.
 
 Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px (28 rem) → diagram 50 % beside

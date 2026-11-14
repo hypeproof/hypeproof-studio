@@ -588,23 +588,26 @@ cases:
     journey: CUJ-8
     targets: [ios]
     priority: P0
-    title: iPhone 에서 로그인하고 첫 답변을 받으며 만료 시 다시 시작할 수 있다
+    title: iPhone 첫 화면에서 적은 생각이 로그인과 실패를 지나 첫 답변으로 이어진다
     requirements: [MFR-01, MFR-02, MFR-05]
     steps:
       - 테스트할 iPhone 앱 버전·빌드·소스와 iOS 버전을 기록한다. 기존 사용 기록은 지우지 말고 별도 테스트 계정의 첫 설치 상태를 준비한다. 컴퓨터의 Studio 는 꺼 둔다
-      - 질문 탭에서 내 계정으로 시작하기 를 눌러 같은 iPhone 의 인증 화면에서 로그인한다. AI 이용 권한이 있는 테스트 계정으로 나를 알아가는 대화 에 글을 적고 대화 보내기 를 누른다
-      - 별도 로그인 시도에서 인증을 취소한다. 만료된 로그인도 별도로 확인한다. 만료를 재현할 수 없으면 그 확인은 BLOCKED 로 기록한다
+      - 첫 화면의 메시지 입력창에 생각을 적은 뒤 로그인 을 누른다. 같은 iPhone 에서 인증하고 보존된 글을 직접 보낸다. AI 이용 권한이 있는 테스트 계정을 쓴다
+      - 별도 로그인 시도에서 인증을 취소하고 앱을 종료·다시 열어 글을 확인한다. 다른 시도에서는 로그인을 만료시켜 같은 보존을 확인한다. 만료를 재현할 수 없으면 그 확인은 BLOCKED 로 기록한다
+      - 이 iPhone 에서 로그인해 계정 초안을 적고 로그아웃한다. 다른 로그인 전 글을 적은 뒤 같은 계정으로 로그인한다. 기존 계정 글이 보이고 가져오기 가 비활성인지 확인한다. 재실행해도 두 글이 남아야 하며, 계정 글을 명시적으로 비운 뒤 가져오기 를 눌러도 자동 전송하지 않는다
+      - 다크 모드와 접근성 최대 글자 크기에서 다섯 줄을 입력한다. 키보드 위 입력창과 로그인 동작이 가려지지 않는지 실제 화면을 확인한다
+      - VoiceOver 로 내 메시지와 AI 답변을 차례로 읽어 작성자를 구분할 수 있는지 듣는다. 실행하지 못하면 이 항목은 NOT RUN 으로 남긴다
     expect:
-      - 내 계정으로 시작하기 와 함께 보낸 글과 AI 답변의 계정 저장·AI 제공자 전달 안내가 있다. 다른 기기에 코드를 옮겨 적지 않고 앱으로 돌아온다 (App/SharedConversationView.swift)
-      - 함께 생각하기 아래에 보낸 글에 대한 답변이 생긴다. 컴퓨터 실행은 요구하지 않는다. 로그인 성공만으로 AI 이용 권한이 있다고 간주하지 않는다
+      - 요즘 어떤 일에 시간을 많이 쓰세요? 와 입력창이 로그인 전에 보인다. 보내기 전에는 글이 기기에 남고, 보낸 대화의 계정 저장·AI 전달 안내가 있다. 다른 기기에 코드를 옮겨 적지 않고 앱으로 돌아온다 (App/SharedConversationView.swift)
+      - 로그인 직후에는 전송하지 않는다. 직접 보낸 뒤 내 말풍선과 구별되는 AI 본문 답변이 생긴다. VoiceOver 는 작성자를 구분한다. 컴퓨터 실행은 요구하지 않는다. 로그인 성공만으로 AI 이용 권한이 있다고 간주하지 않는다
       - 취소하면 대기가 끝나 다시 시작할 수 있다. 만료하면 로그인 시간이 지났어요. 다시 시작해 주세요. 가 보이고 무한 대기하거나 자동 재인증하지 않는다 (Sources/StudioCore/NativeAccountAuth.swift)
     origin:
       kind: escaped-bug
       date: "2026-11-12"
-      ref: "#3771, #3784"
+      ref: "#3771, #3784, #3937, #3941"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testFirstInstallSignInToFirstAnswerWithoutDesktop 와 testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking 이 합성 인증·HTTP 응답으로 같은 앱 경로를 검사한다. 실제 브라우저 로그인과 물리 기기의 첫 답변은 별도 증거가 필요하다. 이 케이스의 취소 확인은 두 시뮬레이터 검사의 통과만으로 대체하지 않는다.
+    notes: StudioJourneyTests.testFirstInstallSignInToFirstAnswerWithoutDesktop, testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking, testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend, testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice, testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable 가 실제 앱 저장·화면과 합성 인증·HTTP 경계를 검사한다. 실제 브라우저 로그인, 물리 기기의 첫 답변과 VoiceOver 수용은 별도 증거가 필요하다.
 
   - id: BB-034
     journey: CUJ-8
@@ -613,14 +616,14 @@ cases:
     title: 말로 적은 초안과 동기화 중 끝난 음성이 각각 한 번 전송된다
     requirements: [MFR-02, MFR-03, MFR-05]
     steps:
-      - 컴퓨터의 Studio 를 끈 상태로 질문 탭의 나를 알아가는 대화 를 연다. 기존 초안을 적고 말로 적기 로 한 문장을 덧붙인다
+      - 컴퓨터의 Studio 를 끈 상태로 나의 질문 화면을 연다. 기존 초안을 적고 말로 적기 로 한 문장을 덧붙인다
       - 인식이 끝나면 글을 확인·수정하고 대화 보내기 를 한 번 누른다
-      - 초안이 없는 상태에서 연동 설정 → 새로 고침 을 누른다. 대화 확인 중 이 보일 때 대화하기 를 눌러 말하고 기다린다. 동기화와 음성 종료의 겹침을 재현하지 못하면 이 확인은 BLOCKED 로 남긴다
-      - 기기 기록 탭으로 옮겨 저장 버튼과 안내를 확인한다
+      - 초안이 없는 상태에서 대화 설정 → 새로 고침 을 누른다. 대화 확인 중 이 보일 때 음성 대화 를 눌러 말하고 기다린다. 동기화와 음성 종료의 겹침을 재현하지 못하면 이 확인은 BLOCKED 로 남긴다
+      - 대화 설정 → 이 기기의 기록 으로 옮겨 저장 버튼과 안내를 확인한다
     expect:
-      - 말로 적기 는 기존 초안을 보존하고 인식한 글을 더한다. 대화 보내기 전에는 AI 요청을 보내지 않고, 보낸 뒤에는 함께 생각하기 에 답변이 한 번 생긴다 (App/SharedConversationView.swift)
+      - 말로 적기 는 기존 초안을 보존하고 인식한 글을 더한다. 대화 보내기 전에는 AI 요청을 보내지 않고, 보낸 뒤에는 AI 본문에 답변이 한 번 생긴다 (App/SharedConversationView.swift)
       - 동기화 중 전송이 대기하면 보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요. 가 보인다. 동기화 뒤 중복 없이 답변이 생기고 다음 말을 기다린다 (App/SharedConversationModel.swift)
-      - 기기 기록 의 버튼은 기록만 저장 이며, 여기는 이 기기의 보관함이에요. 답변을 받으려면 질문 탭에서 계정으로 시작해 주세요. 라고 안내한다. 보관만 하고 답변이 생성된 것처럼 표시하지 않는다 (App/HPStudioApp.swift)
+      - 기기 기록 의 버튼은 기록만 저장 이며, 이 기록은 이 기기에 보관돼요. 계정 대화는 ‘대화로 돌아가기’에서 이어갈 수 있어요. 라고 안내한다. 보관만 하고 답변이 생성된 것처럼 표시하지 않는다 (App/HPStudioApp.swift)
     origin:
       kind: escaped-bug
       date: "2026-11-12"
@@ -636,19 +639,21 @@ cases:
     title: 한 번 시작한 음성 대화가 답변 뒤 이어지고 음성 멈춤 으로 멈춘다
     requirements: [MFR-03, MFR-04]
     steps:
-      - 질문 탭에서 대화하기 를 누르고 처음 필요한 iOS 마이크·음성 인식 권한을 허용한다
+      - 나의 질문 화면에서 음성 대화 를 누르고 처음 필요한 iOS 마이크·음성 인식 권한을 허용한다
       - 자신의 고민을 말하고 잠시 쉰다. 답변 뒤 두 번째 말을 시작한다
       - 두 번째 말을 보내기 전에 음성 멈춤 을 누르고 기다린다. 앱을 다시 열어도 임의로 음성이 재시작하지 않는지 확인한다
+      - 별도 실행에서 첫 응답이 전송 중일 때 답변 중지 를 누른다. 별도 초안을 적고 앱을 다시 연다
     expect:
       - 듣고 있어요 가 보이고, 매 차례 앱의 별도 동의·말 끝내기·다음 차례 버튼 없이 첫 말의 답변 뒤 다음 말을 듣는다. 필요한 최초 OS 권한은 생략하지 않는다
       - 음성 멈춤 뒤에는 녹음·재생이 멈추고 두 번째 말이나 빈 말을 뒤늦게 전송하지 않는다. 아직 보내지 않은 인식 글은 초안에 남는다 (App/SharedConversationView.swift)
+      - 전송 중에도 44pt 이상의 중지 버튼을 사용할 수 있다. 같은 요청의 서버 확인 뒤에만 중지로 표시하며 원래 글과 별도 초안을 남긴다. 뒤늦은 응답이나 앱 재실행이 음성·전송을 재시작하지 않는다. 이미 실행된 AI 비용은 발생할 수 있다
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 다섯 차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
+    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 다섯 차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
 
   - id: BB-036
     journey: CUJ-8
@@ -657,19 +662,27 @@ cases:
     title: 앱을 나가거나 전송에 실패해도 초안과 다시 보낼 말이 남는다
     requirements: [MFR-02, MFR-04, MFR-05]
     steps:
-      - 질문 탭에서 말로 적기 를 시작해 글이 생긴 뒤 홈 화면으로 나간다. 돌아온 뒤 앱을 종료·다시 열어 초안을 확인한다
+      - 나의 질문 화면에서 말로 적기 를 시작해 글이 생긴 뒤 홈 화면으로 나간다. 돌아온 뒤 앱을 종료·다시 열어 초안을 확인한다
       - 별도 테스트 글을 준비하고 네트워크를 끊어 대화 보내기 를 누른다. 앱을 종료·다시 열고 네트워크를 복구한다
       - 실패한 글과 오류가 남아 있는지 확인하고 다시 보내기 를 한 번 누른다
+      - 별도 합성 실패 환경에서 서버에 글과 실패 상태가 기록된 요청을 준비한다. 앱을 다시 열고 입력란에 가져오기 를 누른 뒤 다시 종료·열어 가져온 글을 확인한다
+      - 가져오기와 앱 재시작만으로 요청이 생기지 않는지 확인한 뒤 보내기 를 한 번 누른다. 별도 실행에서는 실패 후 다른 초안을 쓰고 가져오기 가 비활성인지 확인한다
+      - 긴 대화를 저장한 계정으로 앱을 다시 연다. 같은 메시지 수의 다른 대화를 먼저 열어 위쪽 기록을 읽다가 원래 대화로 돌아온다. 별도 합성 계정으로 바꾼다
+      - 최근 80개가 표시된 대화의 끝에서 다른 기기의 새 답변을 확인한다. 위쪽 기록을 읽는 동안 다시 새 답변을 받되 읽던 위치가 유지되는지 확인한 뒤 최신 메시지 를 누른다. 작성·전송으로 다음 질문을 이어간다
     expect:
       - 배경 전환으로 녹음이 멈추며, 재시작 후 보내지 않은 초안이 남는다. 복귀만으로 자동 녹음·전송하지 않는다
       - 실패한 글과 다시 보내기 가 남는다. 이력 조회의 성공이나 앱 재시작만으로 실패가 사라지지 않는다. 명시적 재시도 뒤 원래 글에 답변이 한 번만 생긴다 (App/SharedConversationModel.swift)
+      - 기록된 실패는 같은 요청을 다시 실행하지 않는다. 명시적 가져오기는 원래 글·실패 이력을 보존하고 빈 입력란에만 글을 복사한다. 명시적 보내기 에서만 새 요청 ID 로 한 번 실행한다
+      - 다른 초안이 있으면 공백만 있어도 덮어쓰지 않는다. 완료 여부를 모르는 요청이나 진행 중 요청에는 새 요청 복구 동작을 제공하지 않는다
+      - 캐시 복원·계정 전환·같은 개수의 대화 전환에서는 해당 대화의 최신 답변이 보인다. 최근 80개 창의 끝 ID 가 바뀌어도 맨 아래를 보던 사람은 새 답변을 따라간다
+      - 이전 글을 읽는 동안 새 답변 때문에 화면을 강제로 옮기지 않는다. 최신 메시지 는 44pt 이상으로 누를 수 있고 입력란은 키보드 위에서 계속 사용할 수 있다. 기록 열기·동기화만으로 전송하지 않는다
     origin:
       kind: escaped-bug
       date: "2026-11-12"
-      ref: "#3771, #3784"
+      ref: "#3771, #3784, #3959, #3962"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch 와 testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch. 합성 실패·앱 재실행으로 초안과 같은 요청 ID 의 재시도를 검사한다. 실제 네트워크 단절·마이크 중단과 서버 중복 방지는 그 실행 환경의 별도 관측으로 기록한다.
+    notes: StudioJourneyTests.testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch 와 testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch. testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID 와 testRecordedFailureCannotReplaceExistingDraft 는 기록된 실패를 빈 초안으로 가져온 뒤 명시적으로 새 ID 를 보내는 흐름과 초안 충돌을 검사한다. 합성 전송 실패·앱 재실행의 같은 ID 재시도와 서버에 기록된 실패의 새 ID 재전송을 구분한다. testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch 와 testEightyMessageWindowFollowsNewTailWithoutInterruptingReading 은 실제 App 의 긴 기록·화면 위치·명시적 후속 질문을 합성 HTTP 로 검사한다. 실제 네트워크 단절·마이크 중단과 서버 중복 방지는 그 실행 환경의 별도 관측으로 기록한다.
 
   - id: BB-037
     journey: CUJ-8
@@ -678,15 +691,19 @@ cases:
     title: 로그인 후 AI 권한이 없어도 실패 이유와 보낸 말을 잃지 않는다
     requirements: [MFR-01, MFR-02, MFR-05]
     steps:
-      - 정상 로그인할 수 있지만 AI 이용 권한이 없는 별도 테스트 계정으로 질문 탭에서 글을 보낸다. 운영 계정의 권한을 테스트 목적으로 바꾸지 않는다
-      - 오류를 확인한 뒤 연동 설정 → 새로 고침 을 누르고 앱을 종료·다시 연다
+      - 정상 로그인할 수 있지만 AI 이용 권한이 없는 별도 테스트 계정으로 나의 질문 화면에서 글을 보낸다. 운영 계정의 권한을 테스트 목적으로 바꾸지 않는다
+      - 오류를 확인한 뒤 대화 설정 → 새로 고침 을 누르고 앱을 종료·다시 연다
+      - 서버에 기록된 실패의 입력란에 가져오기 를 명시적으로 누르고 다시 앱을 열어 같은 초안을 확인한다
+      - 별도 합성 실행에서 전송 중 답변 중지 와 이용 권한 거절 응답을 겹치게 한 뒤 앱을 다시 연다
     expect:
       - 이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요. 가 보인다 (Sources/StudioCore/ConversationSync.swift)
       - 이력 조회 성공과 앱 재시작 뒤에도 권한 오류와 원래 글이 남는다. 로그인을 무료 AI 승인으로 바꾸거나 임의의 다른 제공자로 우회하지 않는다
+      - 실패한 사용자 글과 요청 ID 는 계정 기록에 남는다. 다시 보내기 로 같은 실패 ID 를 실행하지 않는다. 초안 가져오기·재시작만으로 새 AI 요청이나 브라우저 로그인을 만들지 않는다
+      - 중지와 거절이 겹쳐도 같은 요청의 구체적인 이용 권한 오류가 남는다. 실패를 중지 완료로 바꾸거나 다른 요청·계정의 오류로 덮어쓰지 않는다
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch 는 POST 403 뒤 GET 성공을 재현한다. 실제 계정의 이용 자격과 운영 정책은 합성 응답 검사와 별개다. 적합한 테스트 계정이 없으면 BLOCKED 로 남긴다.
+    notes: StudioJourneyTests.testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch 는 중지와 실패 응답의 경합 이후 구체적 오류의 보존을 검사한다. StudioJourneyTests.testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch 는 POST 403 뒤 GET 성공을 재현한다. 실제 계정의 이용 자격과 운영 정책은 합성 응답 검사와 별개다. 적합한 테스트 계정이 없으면 BLOCKED 로 남긴다.

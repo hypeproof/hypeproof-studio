@@ -28,7 +28,9 @@ export interface ReleaseGateDeps {
   loginOk(executable: string, provider: CliProvider): Promise<boolean>;
 }
 
+// codex "default" is resolved against the catalog after connect() (codexClient resolveModel, #3939); the label shows a Korean name, not that sentinel.
 const MODEL: Record<CliProvider, string> = { claude: "sonnet", codex: "default" };
+const MODEL_LABEL: Record<CliProvider, string> = { claude: "sonnet", codex: "기본 모델" };
 const LABEL: Record<CliProvider, string> = { claude: "Claude Code", codex: "Codex" };
 const PROVIDER_ORDER: readonly CliProvider[] = ["claude", "codex"];
 
@@ -48,7 +50,7 @@ export async function releaseInstructorRuntime(
     const model = MODEL[provider];
     return {
       ok: true,
-      config: { provider, executable, model, label: `${LABEL[provider]} · 로컬 구독 · ${model}` },
+      config: { provider, executable, model, label: `${LABEL[provider]} · 로컬 구독 · ${MODEL_LABEL[provider]}` },
     };
   }
   return { ok: false, reason: "no_cli" };

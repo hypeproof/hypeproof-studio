@@ -24,6 +24,7 @@ import { runShowWhatIMade } from "./showWhatIMadeHost";
 import { captureShowPage } from "./showWhatIMade";
 import { runWorkExport } from "./workExportHost";
 import { heldSecretValues } from "./workExport";
+import { DATA_DELETION_COPY, dataDeletionOffered, readDeletionRequest, sendDeletionRequest } from "./dataDeletionRequest";
 import { ACCOUNT_SECRET_KEY } from "./accountSession";
 import { CREDENTIAL_KEY as CLASSROOM_OPS_CREDENTIAL_KEY } from "./classroomOpsHost";
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
@@ -34,7 +35,7 @@ import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, denialToolLine, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
 import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
@@ -403,6 +404,7 @@ import {
 } from "./sessionSpool";
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
 import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
+import { childGuardianNotice, isChildSeat } from "./childProfile";
 import type { PublishEndpoints } from "./publish/publishConfig";
 import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract";
 import { nextFreeFolder } from "./publish/githubContinue";
@@ -672,6 +674,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private mobileTurn?: { id: string; failed: boolean };
   private reflectionAccounts?: AccountSession;
   private reflectionRefreshing = false;
+  private reflectionRefresh?: Promise<void>;
+  private reflectionWrites: Promise<void> = Promise.resolve();
   private reflectionMaking = false;
   isPersonalReflection(): boolean { return !!this.reflectionBinding(); }
   setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
@@ -679,11 +683,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionBindings(): ReflectionBinding[] {
     return this.context.globalState.keys().filter(k=>k.startsWith(REFLECTION_BINDING_KEY+':')).map(k=>this.context.globalState.get<ReflectionBinding>(k)).filter((b):b is ReflectionBinding=>!!b);
   }
-  private async saveReflectionBinding(b:ReflectionBinding):Promise<void> {
+  private async saveReflectionBinding(b:ReflectionBinding, update?: (held: ReflectionBinding) => ReflectionBinding):Promise<void> {
     const key=REFLECTION_BINDING_KEY+':'+JSON.stringify([b.activity,b.workspace,b.task]);
-    const held=this.context.globalState.get<ReflectionBinding>(key);
-    if(held&&held.revision>b.revision)return;
-    await this.context.globalState.update(key,b);
+    const write=(this.reflectionWrites??Promise.resolve()).then(async()=>{
+      const held=this.context.globalState.get<ReflectionBinding>(key);
+      const next=update?update(held??b):b;
+      if(held&&held.revision>next.revision)return;
+      await this.context.globalState.update(key,next);
+    });
+    this.reflectionWrites=write.catch(()=>{});
+    await write;
   }
   private reflectionBinding(): ReflectionBinding | undefined {
     const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
@@ -703,8 +712,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!existing.size && !incoming.length) incoming.push({id:'reflection-opening',role:'assistant',content:value.opening,createdAt:Date.now()});
     // Write to the captured task. Navigation while disk IO runs cannot redirect these words.
     if (incoming.length) await store.append(b.task,incoming);
-    const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
-    await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
+    await this.saveReflectionBinding({...held,revision:value.state.revision},current=>{
+      if(current.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
+      const pending=current.pending;
+      const acknowledged=pending&&(value.acknowledged_id===pending.id||value.state.messages.some(m=>m.id===pending.id&&m.role==='user'&&m.content===pending.text));
+      return {...current,revision:value.state.revision,pending:acknowledged?undefined:pending};
+    });
     // An app exit between saving the outbox and dispatch must leave recoverable input.
     const pending=this.reflectionBinding()?.pending;
     if(stillHere()&&pending&&!this.hasActiveStream()){
@@ -747,13 +760,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
     }
     await this.applyReflectionSnapshot(b,value);
+    // A new reflection binding is saved after task creation; publish it to the visible action now.
+    await this.postConfig();
   }
   async refreshPersonalReflection(): Promise<void> {
     const b=this.reflectionBinding();
-    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)?.ready)return;
+    // Reading the bound conversation preserves its draft; execution/making still
+    // requires the stricter empty-draft readiness in mobileConversationScope.
+    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)
+      ||this.hasActiveStream()||this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory
+      ||this.verifySession?.running||this.opsHold||this.interruptedHistory)return;
     this.reflectionRefreshing=true;
-    try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
-    finally { this.reflectionRefreshing=false; }
+    const refresh=(async()=>{await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts!.reflectionRequest(b.session)));})();
+    this.reflectionRefresh=refresh;
+    try { await refresh; }
+    finally { if(this.reflectionRefresh===refresh)this.reflectionRefresh=undefined;this.reflectionRefreshing=false; }
   }
   /** Copy only the person's reviewed words into an ordinary, unsent desktop task. */
   async beginPersonalMaking(): Promise<void> {
@@ -797,22 +818,37 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async sendPersonalReflection(msg: Extract<WebviewMessage,{type:'sendMessage'}>): Promise<boolean> {
     const b=this.reflectionBinding();if(!b)return false;
     const accounts=this.reflectionAccounts;
-    if(!accounts||this.hasActiveStream()||this.reflectionRefreshing||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
-      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:this.reflectionRefreshing?'대화를 확인 중이에요. 잠시 뒤 다시 보내 주세요.':'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
+    if(!accounts||this.hasActiveStream()||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
     }
     if(b.pending&&b.pending.text!==msg.text){
       await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이전 전송 결과를 확인 중이에요. 같은 내용을 다시 보내면 중복 답변 없이 확인할 수 있어요.'});return true;
     }
     const store=this.currentTaskStore();
     const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
-    const pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision};
+    const refresh=this.reflectionRefresh;
+    let pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision,...(refresh?{awaitingRefresh:true}:{})};
     const id=pending.id,streamId=randomId(),controller=new AbortController();
     let streamStarted=false,terminal=false;
     // Hold task navigation before the first asynchronous outbox write.
     this.activeStreams.set(streamId,controller);this.reflectionStreams.set(streamId,{binding:b,id});
     try {
-      await this.saveReflectionBinding({...b,pending});
-      if(!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      await this.saveReflectionBinding({...b,pending},held=>{
+        if(held.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
+        return {...held,pending};
+      });
+      if(refresh)await refresh;
+      if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      if(this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory||this.verifySession?.running||this.opsHold||this.interruptedHistory)throw Error('현재 작업 상태를 확인한 뒤 다시 보내 주세요.');
+      // Only a never-dispatched request can take the refreshed revision. An
+      // uncertain previous POST keeps its original idempotency payload.
+      if(pending.awaitingRefresh){
+        const current=this.reflectionBinding()!;
+        if(!current.pending&&store?.getHistory(b.task).some(m=>m.id===id))return true;
+        pending={id:pending.id,text:pending.text,revision:current.revision};
+        await this.saveReflectionBinding({...current,pending});
+      }
+      if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
       await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});streamStarted=true;
       const value=readReflection(await accounts.reflectionRequest(b.session,'/turns',pending,controller.signal));
       if(!controller.signal.aborted&&stillHere()){await this.post({type:'streamEnd',streamId});terminal=true;}
@@ -825,8 +861,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         } else {
           void vscode.window.showWarningMessage('답변은 계정에 저장됐지만 이 기기에 기록하지 못했어요. 입력은 보관하고 대화를 다시 확인할게요.');
         }
-        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
-        try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
+        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding(b,current=>
+          current.session===b.session&&current.pending?.id===id?{...current,pending:undefined}:current);
+        if(streamStarted)try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
         if(stillHere()&&!store?.getHistory(b.task).some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
       }
     } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);if(streamStarted&&!terminal&&!controller.signal.aborted)await this.post({type:'streamStopped',streamId});}
@@ -1663,6 +1700,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.publishEndpoints = endpoints;
     this.sitePublisherInstance = null; // rebuilt with these endpoints on first use
     this.refreshSitePublishContext();
+  }
+
+  /** GRD-09/10/19 — the served profile the child-seat refusals read (childProfile.ts configureChildSeat). */
+  get childGateProfile(): ResolvedProfile | null {
+    return this.cachedProfile;
   }
 
   /** Mirror "may the publish button be shown here" (the served profile for this seat's token). */
@@ -2557,6 +2599,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     },
     defaultTitle: () => vscode.workspace.workspaceFolders?.[0]?.name ?? "내 제품",
     qr: qrDataUrl,
+    // CGP-ART-R-013: background counts arrived; redraw only while the panel is open (the read gate decides).
+    statsChanged: () => { if (this.isCurriculumRuntimeEnabled() && this.publishReadGate.canRefresh) void this.postPublishState(); },
   });
 
   private readonly publishReadGate = new PublishReadGate();
@@ -7514,6 +7558,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this._instructorMode?.isInstructor === false && this.activityMemoryBinding ? { folder: MEMORY_FOLDER_LABEL } : undefined;
   }
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
+    // GRD-19 / Q10 — no on-device memory on a child seat (no view, no recall into a turn).
+    if (isChildSeat(this.cachedProfile)) return undefined;
     if (!this.currentTaskStore() || !personalMemoryActivity(activityConnections(this.context)?.current, this.cachedProfile)) return undefined;
     return this.activityTrashBinding;
   }
@@ -8459,6 +8505,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
     if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
+    if (msg.type === 'beginPersonalMaking') {
+      try { await this.beginPersonalMaking(); }
+      catch (error) { await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '제작 초안을 열지 못했어요.' }); }
+      return;
+    }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
@@ -9049,6 +9100,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "trialEndCardClaude":
         await this.openPersonalClaude(msg.draft);
+        return;
+      case "dataDeletion":
+        // CGP-SHELL-R-027 — read or send the seat's deletion request. Recorded by the Service, never executed here.
+        void this.handleDataDeletion(msg.action);
         return;
       case "notifyOptinSubmit":
       case "notifyOptinWithdraw":
@@ -10022,7 +10077,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
         deniedCalls.set(a.id, denial);
         tracker.settle(a.id);
-        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
+        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial, kind: 'tool' });
       };
       // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
       const fileToolCalls = new Set<string>();
@@ -10103,9 +10158,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             }catch {if(observation){observation.batch.incomplete=true;this.persistObservation(observation);}this.nativeObservationError='산출물 사본을 확인하지 못했습니다.';}
           })());
         }
-        const log = (id: string, icon: string, label: string, state: "running" | "done" | "error") =>
+        const log = (id: string, icon: string, label: string, state: "running" | "done" | "error", kind?: "tool") =>
           // #503 — a.at: the SDK's own timestamp as it sent it. It becomes the persisted line's createdAt.
-          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}) });
+          // `kind: "tool"` only from the tool_use / tool_result cases below, never thinking (the status line reads it).
+          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}), ...(kind ? { kind } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
             if (work) {
@@ -10172,13 +10228,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (line.kind === "row") {
               const header = delegationHeader(a.input, this.resolveCoachCwd());
               tracker.setHeader(a.id, header);
-              log(line.lineId, DELEGATION_ICON, header, "running");
+              log(line.lineId, DELEGATION_ICON, header, "running", "tool");
               // REQ-STUDIO-LONG-STEP-HINT — no clock yet; it starts at the approval (case "approval").
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: DELEGATION_ICON, label: header, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             } else if (work && shell) {
               // REQ-CGP-AGENT-60 — a summary seat still shows each shell row (collapsed), with its purpose.
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, shell });
             } else if (work) {
@@ -10186,9 +10242,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               work.show(workPhrase(a.name, a.input));
             } else if (line.kind === "child") {
               // A helper's own call sits inside its row; the row is the step the hint times.
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
             } else {
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
               // The words come from the tool name (workPhrase), never from `label`.
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
@@ -10226,7 +10282,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 : denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom'));
               deniedCalls.set(a.id, denial);
               tracker.settle(a.id);
-              this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial });
+              this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial, kind: 'tool' });
               break;
             }
             // A backgrounded helper's result is the SDK's placeholder, never its answer: the row
@@ -10239,6 +10295,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   DELEGATION_ICON,
                   delegationResultLabel(tracker.header(a.id), a.content, { isError: a.isError, reason: a.reason, workspaceRoot: this.resolveCoachCwd() }),
                   a.isError ? "error" : "done",
+                  "tool",
                 );
               }
             }
@@ -10254,9 +10311,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 ? `${shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label} — 실패${a.reason ? `: ${a.reason}` : ""}`
                 : (shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label),
               a.isError ? "error" : "done",
+              "tool",
             );
             // REQ-CGP-AGENT-60 — a summary seat's shell row still settles (errors were settled above).
-            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done");
+            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done", "tool");
             // Only a **successful** write tool establishes the evidence for "it was
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".
@@ -11103,7 +11161,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             : await this.retargetLoopbackNavigation(call);
           const line = browserToolLogLine(fixed.call.name, fixed.call.input);
           if (!outsideBrowserIntent) this.noteTaskActivity(p.streamId, { kind: 'use', id: call.id, name: fixed.call.name, input: fixed.call.input });
-          this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });
+          this.postToolLog(p.streamId, { id: call.id, ...line, state: "running", kind: "tool" });
           // cr-verify — the verify tools go to the session (its runner drives the same control), switch on only.
           const tr = p.planGate
             ? (planFirstToolResult(p.planGate, call.name) as Awaited<ReturnType<typeof browser.execute>>)
@@ -11113,7 +11171,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             ? await this.runVerifyTool(fixed.call.name, (fixed.call.input ?? {}) as Record<string, unknown>)
             : await browser.execute(fixed.call);
           this.noteTaskActivity(p.streamId, { kind: 'result', id: call.id, isError: !!tr.isError });
-          this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done",
+          this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done", kind: "tool",
             ...(tr.isError ? { denial: denialNotice(taggedDenialSource(tr.content.find(c => c.type === 'text')?.text), this.getSeatAudience() === 'classroom') } : {}) });
           // If it was corrected, tell the model too — fix it silently and it guesses
           // again next turn. One mapping shared with the CR-T03 adapter parity check.
@@ -11129,6 +11187,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
     } finally {
       await turnBrowser.release();
+    }
+  }
+
+  private dataDeletionSending = false;
+
+  /**
+   * CGP-SHELL-R-027 — `load` reads the seat's latest deletion request, `submit` sends one (the
+   * webview has already shown its confirm step). Re-checks that the profile still advertises the
+   * request, then calls the Service with the seat's own credential. Nothing is deleted here: the
+   * Service records the request and an operator processes it. Local files are never touched.
+   * No seat id, request id or Service text reaches a log.
+   */
+  private async handleDataDeletion(action: "load" | "submit"): Promise<void> {
+    const reply = (state: import("./dataDeletionRequest").DataDeletionState) => void this.post({ type: "dataDeletionState", ...state });
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxy = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    if (!token || !proxy || !dataDeletionOffered(this.cachedProfile)) return reply({ state: "error", message: DATA_DELETION_COPY.failed });
+    if (action === "load") {
+      const r = await readDeletionRequest(proxy, token);
+      return reply(r.ok ? { state: "ready", request: r.request } : { state: "error", message: r.message });
+    }
+    if (this.dataDeletionSending) return;
+    this.dataDeletionSending = true;
+    try {
+      const r = await sendDeletionRequest(proxy, token);
+      reply(r.ok ? { state: "ready", request: r.request } : { state: "error", message: r.message });
+    } finally {
+      this.dataDeletionSending = false;
     }
   }
 
@@ -11879,6 +11965,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         model:local?.model??model,
         hasToken: !!token,
         workTakeawayEnabled: vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false),
+        // GRD-24 — the always-visible guardian notice on a child seat.
+        ...(childGuardianNotice(profile) ? { guardianNotice: childGuardianNotice(profile) } : {}),
         ...(taskView ? { taskWorkspace: taskView } : {}),
         // CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (fail closed: adult personal seats only).
         ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
@@ -11907,6 +11995,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
         update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
         ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
+        // CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it (default off).
+        ...(!local && !isInstructor && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -12335,16 +12425,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the window is reopened — the very symptom this issue is meant to catch.
    */
   private postToolLog(streamId: string, entry: ToolEntry): void {
-    if (entry.denial) {
-      const denial = denialNotice(entry.denial.source, entry.denial.classroom, entry.denial.detail);
-      entry = { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}) };
-    }
+    // The denial line keeps the call's `kind` marker: a refused or failed call still ends its running line.
+    if (entry.denial) entry = denialToolLine(entry);
     const t = this.turnTimelines.get(streamId);
-    if (t) this.turnTimelines.set(streamId, timelineTool(t, entry, Date.now()));
+    // `kind` is a live-channel marker only; the persisted line keeps its old shape.
+    const { kind: _kind, ...persisted } = entry;
+    if (t) this.turnTimelines.set(streamId, timelineTool(t, persisted, Date.now()));
     void this.post({ type: "toolLog", streamId, ...entry });
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if (msg.type === 'config') {
+      const binding = this.reflectionBinding();
+      const view = msg.config.taskWorkspace;
+      msg = { ...msg, config: { ...msg.config, personalMaking: binding && this.reflectionAccounts && !msg.config.isInstructor
+        && view && binding.workspace === view.scope && binding.task === view.activeTaskId
+        ? { scope: binding.workspace, taskId: binding.task } : undefined } };
+    }
     if(this.mobileTurn && (['inputRejected','streamError','streamStopped'].includes(msg.type)||(msg.type==='streamEnd'&&msg.failed)))this.mobileTurn.failed=true;
     try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
