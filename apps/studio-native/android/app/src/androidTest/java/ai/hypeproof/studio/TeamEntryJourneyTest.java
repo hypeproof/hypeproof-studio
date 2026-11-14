@@ -113,6 +113,8 @@ public class TeamEntryJourneyTest {
         onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private void selectMenu(String title)throws Exception {
+        boolean observe=Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("observeTeamMenu","false"));
+        if(observe){
         QuestionActivity.testMenuObservation=value->{if(menuObservations.length()<40)menuObservations.put(value);};
         onView(withContentDescription("메뉴")).perform(new androidx.test.espresso.ViewAction(){
             public org.hamcrest.Matcher<android.view.View> getConstraints(){return isDisplayed();}
@@ -122,9 +124,10 @@ public class TeamEntryJourneyTest {
                 click().perform(ui,view);view.setOnTouchListener(null);
             }
         });
+        }else onView(withContentDescription("메뉴")).perform(click());
         long deadline=System.currentTimeMillis()+5000;boolean visible=false;
         while(System.currentTimeMillis()<deadline){android.view.accessibility.AccessibilityNodeInfo root=InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null){visible=!root.findAccessibilityNodeInfosByText(title).isEmpty();root.recycle();}if(visible)break;Thread.sleep(25);}
-        writeMenuObservations();
+        if(observe)writeMenuObservations();
         if(!visible){screenshot("android-team-menu-missing");throw new AssertionError("One menu tap did not expose its actual dialog within 5 seconds: "+title);}
         onView(withText(title)).inRoot(isDialog()).perform(click());
     }
