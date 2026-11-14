@@ -319,8 +319,25 @@ final class StudioJourneyTests: XCTestCase {
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         app.buttons["conversationSettings"].tap(); enabled(close)
-        app.navigationBars["대화 설정"].swipeDown()
-        XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+        let header = app.navigationBars["대화 설정"]
+        guard header.isHittable else { XCTFail("The Settings header must be hittable before the single dismissal drag."); return }
+        let window = app.windows.firstMatch, windowFrame = window.frame
+        let start = header.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        let startPoint = start.screenPoint, endPoint = end.screenPoint
+        guard windowFrame.height > 0, windowFrame.contains(startPoint), windowFrame.contains(endPoint),
+              endPoint.y - startPoint.y >= windowFrame.height * 0.5 else {
+            XCTFail("The dismissal drag must travel downward through at least half of the visible window without leaving it."); return
+        }
+        let geometry = XCTAttachment(string: "window=\(windowFrame); header=\(header.frame); start=\(startPoint); end=\(endPoint)")
+        geometry.name = "journey-settings-dismiss-drag-geometry"; geometry.lifetime = .keepAlways; add(geometry)
+        let beforeDrag = XCTAttachment(screenshot: app.screenshot())
+        beforeDrag.name = "journey-settings-before-dismiss-drag"; beforeDrag.lifetime = .keepAlways; add(beforeDrag)
+        start.press(forDuration: 0.1, thenDragTo: end)
+        let dismissed = close.waitForNonExistence(timeout: 5)
+        let afterDrag = XCTAttachment(screenshot: app.screenshot())
+        afterDrag.name = "journey-settings-after-dismiss-drag"; afterDrag.lifetime = .keepAlways; add(afterDrag)
+        XCTAssertTrue(dismissed)
         XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
         deliverPlaybackCompletion(app)
         waitForVoiceEvent("playbackFinished", in: app)
