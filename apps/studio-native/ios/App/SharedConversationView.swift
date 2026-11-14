@@ -96,12 +96,18 @@ struct SharedConversationView: View {
                         Button("이 기기의 기록") { voice.stop(); focused = false; showNotebook = true }.accessibilityIdentifier("localNotebook")
                         Button("대화와 개인정보") { voice.stop(); focused = false; showPrivacy = true }
 #if DEBUG
+                        if NativeJourneyFixture.heldPlayback {
+                            Button("Deliver playback completion") { voice.finishFixturePlayback() }.accessibilityIdentifier("nativePlaybackFinish")
+                        }
                         if NativeJourneyFixture.longHistory {
                             Button("Simulate remote reply") { NativeJourneyFixture.advanceHistory() }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                         }
 #endif
                         Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
                         Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
+                        if !voice.timeline.entries.isEmpty {
+                            ShareLink(item: voice.timeline.export) { Label("음성 문제 확인 기록 공유", systemImage: "square.and.arrow.up") }
+                        }
                     } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
                         .accessibilityLabel("대화 설정").accessibilityIdentifier("conversationSettings")
                 }
@@ -114,17 +120,17 @@ struct SharedConversationView: View {
         .onDisappear { voice.stop(); model.setVisible(false) }
         .onChange(of: phase) { _, value in
             model.setVisible(value == .active)
-            if value == .background { voice.stop() }
-            else if value == .inactive, voice.turn.phase != .authorizing { voice.stop() }
+            if value == .background { voice.stop(reason: .background) }
+            else if value == .inactive, voice.turn.phase != .authorizing { voice.stop(reason: .background) }
             else if value == .active { voice.resumeIfActive() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: RunLoop.main)) { _ in voice.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: RunLoop.main)) { _ in voice.stop(reason: .interrupted) }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification).receive(on: RunLoop.main)) { notification in
             if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-               reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop() }
+               reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop(reason: .routeChanged) }
         }
-        .onChange(of: model.selected) { _, _ in voice.stop() }
-        .onChange(of: model.signedIn) { _, _ in voice.stop() }
+        .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
+        .onChange(of: model.signedIn) { _, _ in voice.stop(reason: .scopeChanged) }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -365,7 +371,7 @@ struct SharedConversationView: View {
                     .accessibilityLabel("메시지")
                 HStack(spacing: 4) {
                     if voice.isActive {
-                        Label(voice.isCapturing ? "듣고 있어요" : "대화 중", systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2").font(.callout)
+                        Label(voice.activityLabel, systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2").font(.callout)
                         Spacer()
                         Button("멈춤") { voice.stop() }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("음성 멈춤").accessibilityIdentifier("sharedVoiceStop")
                     } else {
@@ -409,7 +415,7 @@ struct SharedConversationView: View {
                     }.buttonStyle(.plain).accessibilityIdentifier("conversationPrivacy")
                 }
             }
-            if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary) }
+            if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedVoiceStatus") }
             if reviewRecording { Text("원음은 최대 30초만 메모리에 담아요. 파일이나 서버에 저장하지 않으며 화면을 나가거나 다음 녹음을 시작하면 지워요.").font(.caption2).foregroundStyle(.secondary) }
             if voice.canReplayOwnVoice {
                 HStack {
@@ -465,6 +471,7 @@ struct SharedConversationView: View {
                 } else {
                     journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
                 }
+                journeyDiagnostic("nativeVoiceTimeline", label: "Voice transition trace", value: voice.timeline.export)
                 journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
                 if NativeJourneyFixture.longHistory {
                     journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))
@@ -491,7 +498,15 @@ struct SharedConversationView: View {
         let id = selection ?? "local-first-thought"
         focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.draftText
         voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, nextTurn: {
-            guard phase == .active, model.selected == selection, model.signedIn == signedIn, model.canSend, model.draftText.isEmpty else { voice.stop(); return }
+            guard phase == .active else { voice.stop(reason: .background); return }
+            guard model.selected == selection, model.signedIn == signedIn else { voice.stop(reason: .scopeChanged); return }
+            guard model.draftText.isEmpty else {
+                voice.record(.draftPresent); voice.fail("입력 중인 글을 남겨 두었어요. 먼저 보내거나 정리한 뒤 음성 대화를 다시 시작해 주세요."); return
+            }
+            guard model.canSend else {
+                voice.record(model.cache.request?.outstanding == true ? .requestOutstanding : .notReady)
+                voice.fail("다음 말을 받을 준비가 되지 않았어요. 대화 상태를 확인한 뒤 음성 대화를 다시 시작해 주세요."); return
+            }
             beginVoice(.conversation)
         }, transcript: { text in
             guard model.selected == selection, model.signedIn == signedIn else { return }

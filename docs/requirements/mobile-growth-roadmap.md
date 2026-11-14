@@ -152,6 +152,15 @@ outside capture. A failed or cancelled service reply preserves the already saved
 human message; it is not automatically replayed. Silence without words cannot
 send a turn.
 
+For iPhone playback continuation (#4024), already granted OS permissions do not
+require another permission-request round trip. Show the active listening,
+finalizing, waiting or playback phase; if a concurrent draft or unavailable
+conversation blocks the next capture, explain it and preserve the words. A
+bounded memory-only enum/timing record can be deliberately shared for diagnosis;
+it contains no audio, conversation content, identity or credentials. Actual OS
+playback callbacks, synthetic next capture and physical Korean continuation are
+separate evidence; this hardening alone does not establish the incident's cause.
+
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
 No raw audio is written to files or uploaded by the app. Optional self-listening
 retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,

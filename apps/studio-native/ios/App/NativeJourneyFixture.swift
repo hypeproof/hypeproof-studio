@@ -9,6 +9,8 @@ import CryptoKit
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String { JourneyTransport.store.trace() }
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
+    static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
+    static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
@@ -75,7 +77,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -378,7 +380,7 @@ private final class JourneyStore: @unchecked Sendable {
             ]
             let assistantMessage: [String: Any] = [
                 "id": "answer-" + turn.id, "role": "assistant",
-                "content": JourneyConfiguration.scenario == "long-history" ? "Account \(historyAccount) answer \(index + 1). What would you like to try next? This saved reply stays with its own conversation." : "What small change would make tomorrow better?",
+                "content": JourneyConfiguration.scenario == "long-history" ? "Account \(historyAccount) answer \(index + 1). What would you like to try next? This saved reply stays with its own conversation." : (JourneyConfiguration.scenario == "voice-playback-real" ? "내일은 어떤 작은 일을 해 보고 싶나요?" : "What small change would make tomorrow better?"),
                 "created_at": (index * 2 + 2 + failureOffset) * 1000,
             ]
             messages.append(userMessage)

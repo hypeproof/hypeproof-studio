@@ -35,6 +35,41 @@ actual source/package, command, OS/device and whether recognizer/service data wa
 injected. Preserve failed attempts. A state machine simulating five turns is not
 a five-turn spoken conversation or evidence of reply quality.
 
+### iPhone playback-to-listening boundary — Studio #4024
+
+MVOICE-T03/T04 and MFR-T03 keep three different proofs separate. The existing
+hands-free fixture still substitutes a 400 ms completion. The condition-driven
+`testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop` instead
+enters the actual synthesizer delegate with a retained utterance, then checks
+exactly one next capture and refusal of a late completion after Stop.
+`testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped` checks that
+writing during playback prevents another capture, retains the draft and explains
+why the automatic continuation stopped. These use synthetic playback/capture.
+
+`testRealKoreanPlaybackCompletionReachesNextCaptureBoundary` opts into a real
+Korean `AVSpeechSynthesizer` utterance and its OS start/finish callbacks. It has no
+400 ms or English-voice fallback. Missing Korean voice or completion fails the
+case; it cannot become a skipped PASS. Service and the next microphone backend
+remain synthetic, so this does not prove `.playback` to `.record`, AVAudioEngine
+restart, hardware input or on-device Korean ASR. The collector requires all three
+cases and reports OS playback separately from `live_asr=NOT_RUN`.
+
+Already granted permissions use their current status without requesting them
+again. Unknown permissions retain the existing OS request and generation fences.
+An in-memory ring records only enum events, phases and relative milliseconds;
+manual Settings sharing exports that record, never text, audio, account/request
+identifiers or credentials. It is not an automatic telemetry upload. The record
+separates a missing playback callback, a blocked continuation and a failed new
+capture. It is not evidence that the physical incident was reproduced or fixed.
+
+For physical acceptance, bind the installed build and iOS/audio route, complete
+5–10 Korean turns with one start, and observe the system microphone indicator
+return after each spoken reply. Include Stop, background and route interruption;
+none may restart automatically. Preserve any failed trace without collecting
+conversation content. Local unsupported CLT checks and simulator evidence cannot
+replace this gate. This hardening adds no provider/model call or permission grant;
+existing inference and CI costs remain in their existing lanes.
+
 For a device testing candidate, confirm the same source passed native CI, the
 signed artifact processed successfully, and the tester can install that exact
 version. Record actual microphone permission, Korean language asset availability,

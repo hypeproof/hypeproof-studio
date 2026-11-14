@@ -243,6 +243,79 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue((field(app).value as? String)?.contains("Keep this spoken draft without sending") == true)
         try evidence("journey-voice-stop", app: app)
     }
+    @MainActor private func waitForVoiceEvent(_ event: String, in app: XCUIApplication, count: Int = 1, timeout: TimeInterval = 10) {
+        let trace = diagnostic("nativeVoiceTimeline", in: app)
+        let observed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let lines = (trace.value as? String ?? "").split(separator: "\n")
+            return lines.filter { $0.split(separator: " ").dropFirst().first == Substring(event) }.count >= count
+        }, object: trace)
+        let result = XCTWaiter.wait(for: [observed], timeout: timeout)
+        if result != .completed {
+            let evidence = XCTAttachment(string: trace.value as? String ?? "voice timeline missing")
+            evidence.name = "voice-handoff-incomplete"; evidence.lifetime = .keepAlways; add(evidence)
+            let screen = XCTAttachment(screenshot: app.screenshot()); screen.lifetime = .keepAlways; add(screen)
+        }
+        XCTAssertEqual(result, .completed, "The requested real controller boundary must complete; no timed substitute is acceptance.")
+    }
+    @MainActor private func deliverPlaybackCompletion(_ app: XCUIApplication) {
+        app.buttons["conversationSettings"].tap()
+        let finish = app.buttons["nativePlaybackFinish"]; enabled(finish); finish.tap()
+    }
+    @MainActor func testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop() throws {
+        let app = launch("voice-playback-held"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap(); answer(app)
+        waitForVoiceEvent("playbackStarted", in: app)
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
+        deliverPlaybackCompletion(app)
+        waitForVoiceEvent("playbackFinished", in: app)
+        waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 2)
+        valueContains(field(app), "Keep this spoken draft without sending")
+        app.buttons["sharedVoiceStop"].tap()
+        deliverPlaybackCompletion(app)
+        waitForVoiceEvent("stalePlaybackCallback", in: app)
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 2)
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
+        XCTAssertTrue((field(app).value as? String)?.contains("Keep this spoken draft without sending") == true)
+        try evidence("journey-playback-delegate-stop", app: app)
+    }
+    @MainActor func testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped() throws {
+        let app = launch("voice-playback-held"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap(); answer(app)
+        waitForVoiceEvent("playbackStarted", in: app)
+        let draft = field(app); draft.tap(); draft.typeText("Keep my next thought")
+        deliverPlaybackCompletion(app)
+        waitForVoiceEvent("draftPresent", in: app)
+        let status = app.staticTexts["sharedVoiceStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.contains("입력 중인 글을 남겨 두었어요"))
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        XCTAssertTrue((draft.value as? String)?.contains("Keep my next thought") == true)
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
+        try evidence("journey-playback-draft-preserved", app: app)
+    }
+    @MainActor func testRealKoreanPlaybackCompletionReachesNextCaptureBoundary() throws {
+        // This scenario opts into OS synthesis. Only Service and microphone
+        // input are synthetic; absent Korean voice/callback is a failure, not a
+        // fallback to the generic 400ms journey completion.
+        let app = launch("voice-playback-real"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        let reply = app.staticTexts["sharedReply"].firstMatch
+        XCTAssertTrue(reply.waitForExistence(timeout: 10))
+        XCTAssertEqual(reply.label, "HP Studio의 답변. 내일은 어떤 작은 일을 해 보고 싶나요?")
+        waitForVoiceEvent("playbackStarted", in: app, timeout: 20)
+        waitForVoiceEvent("playbackFinished", in: app, timeout: 20)
+        waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 2)
+        valueContains(field(app), "Keep this spoken draft without sending")
+        app.buttons["sharedVoiceStop"].tap()
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 2)
+        let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
+        XCTAssertFalse(timeline.contains("syntheticPlayback"))
+        let observation = XCTAttachment(string: timeline); observation.name = "actual-os-korean-playback-synthetic-next-capture"; observation.lifetime = .keepAlways; add(observation)
+        try evidence("journey-real-playback-handoff", app: app)
+    }
     @MainActor private func waitForRegisteredResponse(in app: XCUIApplication) {
         let transport = diagnostic("nativeJourneyTrace", in: app)
         let registered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in

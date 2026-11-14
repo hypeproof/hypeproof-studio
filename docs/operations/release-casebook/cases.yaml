@@ -640,7 +640,8 @@ cases:
     requirements: [MFR-03, MFR-04]
     steps:
       - 나의 질문 화면에서 음성 대화 를 누르고 처음 필요한 iOS 마이크·음성 인식 권한을 허용한다
-      - 자신의 고민을 말하고 잠시 쉰다. 답변 뒤 두 번째 말을 시작한다
+      - 자신의 고민을 말하고 잠시 쉰다. 답변을 실제 한국어 음성으로 읽은 뒤 마이크 표시가 돌아오는지 확인하고 두 번째 말을 시작한다. 합성 재생 완료나 시뮬레이터 마이크 대체만으로 물리 기기 성공을 기록하지 않는다
+      - 별도 실행에서 답변을 읽는 동안 다음 생각을 입력한다. 재생이 끝나도 이 글을 지우거나 새 녹음을 시작하지 않고 이유를 안내하는지 확인한다
       - 두 번째 말을 보내기 전에 음성 멈춤 을 누르고 기다린다. 앱을 다시 열어도 임의로 음성이 재시작하지 않는지 확인한다
       - 별도 실행에서 첫 응답이 전송 중일 때 답변 중지 를 누른다. 별도 초안을 적고 앱을 다시 연다
     expect:
@@ -650,10 +651,10 @@ cases:
     origin:
       kind: escaped-bug
       date: "2026-11-12"
-      ref: "#3771, #3784"
+      ref: "#3771, #3784, #4024"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 다섯 차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
+    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop 와 testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped 는 조건 주도 delegate·Stop·입력 중 초안 경계를 검사한다. testRealKoreanPlaybackCompletionReachesNextCaptureBoundary 는 실제 OS 한국어 재생 완료를 확인하되 다음 마이크는 합성이다. 한국어 음성이나 실제 완료 callback 이 없으면 실패로 남기며 대체하지 않는다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 5–10차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
 
   - id: BB-036
     journey: CUJ-8
