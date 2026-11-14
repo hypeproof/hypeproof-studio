@@ -7,12 +7,24 @@ import CryptoKit
 @MainActor enum NativeJourneyFixture {
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
-    static var trace: String { JourneyTransport.store.trace() }
+    static var trace: String {
+        let value = JourneyTransport.store.trace()
+        guard !emptyStopBoundary.isEmpty,
+              var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
+        fields["empty_stop_boundary"] = emptyStopBoundary
+        return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
+    }
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
+    static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
+    private(set) static var emptyStopBoundary: [String: Any] = [:]
+    static func recordEmptyStopBoundary(active: Bool, phase: String) {
+        guard enabled, JourneyConfiguration.scenario == "voice-empty-results" else { return }
+        emptyStopBoundary = ["active": active, "phase": phase]
+    }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
@@ -49,9 +61,33 @@ import CryptoKit
                                        "entries": ["personal-reflection": entry]]
         try JSONSerialization.data(withJSONObject: snapshot).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
-    static func speech(deliver: @escaping @MainActor (String, Bool) -> Void) -> Task<Void, Never>? {
+    static func speech(deliver: @escaping @MainActor (String, Bool) -> Void,
+                       stopAfterEmpty: @escaping @MainActor () -> Void = {}) -> Task<Void, Never>? {
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
+        if JourneyConfiguration.scenario == "voice-empty-results" {
+            return Task { @MainActor in
+                do {
+                    try await Task.sleep(nanoseconds: 200_000_000)
+                    try Task.checkCancellation()
+                    // Real controller sees partial -> empty final, an empty
+                    // post-playback capture, then useful speech and exhaustion.
+                    if capture == 1 || capture == 3 {
+                        deliver(capture == 1 ? "들리니" : "다음 생각도 이어갈게요", false)
+                        try await Task.sleep(nanoseconds: 300_000_000)
+                        try Task.checkCancellation()
+                    }
+                    JourneyTransport.store.finishedSpeech(); deliver("", true)
+                    JourneyTransport.store.deliveredSpeech()
+                    if capture == 7 {
+                        // After the real empty-result handler schedules its350ms
+                        // retry, invoke the actual controller Stop synchronously.
+                        // This is timer cancellation evidence, not a user tap.
+                        stopAfterEmpty()
+                    }
+                } catch { /* Stop/background cancels the recognizer producer. */ }
+            }
+        }
         let hold = JourneyConfiguration.scenario == "voice-hold" || capture > 1
         let text = hold ? "Keep this spoken draft without sending" : "I want to understand my next step"
         return Task { @MainActor in
@@ -80,7 +116,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -99,6 +135,10 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         do {
+            // Hold only the desktop discovery response, after validating and
+            // recording its actual authenticated request. The production HTTP
+            // deadline or app teardown owns cancellation; no fixture retry.
+            if try holdDesktopListIfNeeded() { return }
             if try Self.store.beginHeldResponse(request) {
                 heldResponse = true
                 waitForResponse(deadline: ProcessInfo.processInfo.systemUptime + 20)
@@ -116,6 +156,11 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         // UI-driven logout has several real controls before explicit release.
         // Its DEBUG-only read budget is 90s; all other scenarios keep 20s/25s.
         waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + (JourneyConfiguration.scenario == "logout-sync" ? 60 : 20))
+    }
+    private func holdDesktopListIfNeeded() throws -> Bool {
+        stopLock.lock(); defer { stopLock.unlock() }
+        guard !stopped else { return true }
+        return try Self.store.beginHeldDesktopList(request, id: historyID)
     }
     private func waitForCancelAcknowledgement(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
@@ -173,6 +218,7 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     override func stopLoading() {
         stopLock.lock(); stopped = true; delayed?.cancel(); delayed = nil
         Self.store.cancelHistory(historyID)
+        Self.store.cancelDesktopList(historyID)
         stopLock.unlock()
     }
 }
@@ -205,6 +251,9 @@ private struct JourneySnapshot: Codable {
     var desktopRequests = 0
     var retryFailures = 0
     var historyReads = 0
+    var historyTimeoutFailures: Int?
+    var historyCancellationFailures: Int?
+    var submittedWhileDesktopListHeld: Int?
     var delayedHistoryReads = 0
     var speechEndedDuringHistory = 0
     var approvalDecisionID: String?
@@ -218,6 +267,9 @@ private final class JourneyStore: @unchecked Sendable {
     private let requestID = String(repeating: "b", count: 64)
     private var value: JourneySnapshot
     private var activeHistoryReads: Set<UUID> = []
+    private var activeDesktopLists: Set<UUID> = []
+    private var desktopListStarts = 0
+    private var desktopListCancellations = 0
     private var speechDelivered = false
     private var historyArmed = false
     private var historyReleased = false
@@ -262,6 +314,11 @@ private final class JourneyStore: @unchecked Sendable {
             "history_window_messages": min(80, value.accepted.count * 2 + failedTurns.count), "history_revision": value.accepted.count * 2 + failedTurns.count,
             "voice_start_attempts": value.voiceStartAttempts,
             "history_reads": value.historyReads, "delayed_history_reads": value.delayedHistoryReads,
+            "history_timeout_failures": value.historyTimeoutFailures ?? 0,
+            "history_cancellation_failures": value.historyCancellationFailures ?? 0,
+            "desktop_list_starts": desktopListStarts, "held_desktop_lists": activeDesktopLists.count,
+            "desktop_list_cancellations": desktopListCancellations,
+            "submitted_while_desktop_list_held": value.submittedWhileDesktopListHeld ?? 0,
             "speech_ended_during_history": value.speechEndedDuringHistory,
             "history_barrier_timeouts": historyBarrierTimeouts,
             "history_barrier_completions": historyBarrierCompletions,
@@ -277,6 +334,19 @@ private final class JourneyStore: @unchecked Sendable {
         let (status, _) = try respond(request)
         guard status == 202 else { throw URLError(.badServerResponse) }
         return true
+    }
+    func beginHeldDesktopList(_ request: URLRequest, id: UUID) throws -> Bool {
+        guard JourneyConfiguration.scenario == "desktop-list-held", request.httpMethod == "GET",
+              request.url?.path == "/v1/me/conversations" else { return false }
+        let (status, _) = try respond(request)
+        guard status == 200 else { throw URLError(.badServerResponse) }
+        lock.lock(); defer { lock.unlock() }
+        desktopListStarts += 1; activeDesktopLists.insert(id)
+        return true
+    }
+    func cancelDesktopList(_ id: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        if activeDesktopLists.remove(id) != nil { desktopListCancellations += 1 }
     }
     func responseMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
@@ -342,8 +412,11 @@ private final class JourneyStore: @unchecked Sendable {
         guard JourneyConfiguration.enabled, !value.state.isEmpty,
               url.scheme == "https", url.host == "hypeproof-ai.xyz", url.path == "/api/studio-native",
               URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "request" })?.value == requestID else { throw URLError(.badServerResponse) }
-        if JourneyConfiguration.scenario == "sign-in-expired" { throw URLError(.timedOut) }
+        if JourneyConfiguration.scenario == "sign-in-network-failure" { throw URLError(.timedOut) }
         value.callbacks += 1
+        if JourneyConfiguration.scenario == "sign-in-expired" {
+            return URL(string: "hypeproof-studio-mobile://account-return?error=login_expired&state=" + value.state)!
+        }
         return URL(string: "hypeproof-studio-mobile://account-return?code=" + code + "&state=" + value.state)!
     }
     func nextSpeech() -> Int {
@@ -494,12 +567,21 @@ private final class JourneyStore: @unchecked Sendable {
             }
             return (200, ["events": events, "cursor": 80, "has_more": false])
         case ("GET", "/v1/me/reflection"):
+            if JourneyConfiguration.scenario == "history-cancelled", (value.historyCancellationFailures ?? 0) == 0 {
+                value.historyCancellationFailures = 1
+                throw URLError(.cancelled)
+            }
+            if JourneyConfiguration.scenario == "history-timeout", (value.historyTimeoutFailures ?? 0) == 0 {
+                value.historyTimeoutFailures = 1
+                throw URLError(.timedOut)
+            }
             if JourneyConfiguration.scenario == "response-stop-denied", value.heldTurn != nil { value.stopHistoryRead = true }
             return (200, reflection())
         case ("POST", "/v1/me/reflection/turns"):
             guard let id = body["id"] as? String, let text = body["text"] as? String,
                   let revision = body["revision"] as? Int else { return (400, ["error": "invalid_request"]) }
             value.submittedIDs.append(id); value.submittedTexts.append(text)
+            if !activeDesktopLists.isEmpty { value.submittedWhileDesktopListHeld = (value.submittedWhileDesktopListHeld ?? 0) + 1 }
             if JourneyConfiguration.scenario.hasPrefix("response-stop") {
                 guard revision == 0, value.heldTurn == nil else { return (409, ["error": "reflection_changed"]) }
                 value.heldTurn = JourneyAcceptedTurn(id: id, text: text)

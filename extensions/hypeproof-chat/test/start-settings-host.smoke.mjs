@@ -16,7 +16,8 @@ const { startSettingsView, parseStartSettingWrite, advancedSettingsAllowed, STAR
 assert.equal(START_SETTING_ROWS.length, START_SETTINGS_MAX_ROWS, 'REQ-SHELL-14 names six rows');
 const J = (x) => JSON.parse(JSON.stringify(x)); // vm realm → this realm
 const base = J(startSettingsView({ textSize: 'large', reduceMotion: 'on', notices: true, profileMinor: false, age: undefined }));
-assert.deepEqual([...base.rows], ['textSize', 'reduceMotion', 'notices'], 'only rows whose behaviour exists, in the requirement order');
+assert.deepEqual([...base.rows], ['textSize', 'reduceMotion', 'notices', 'export'], 'only rows whose behaviour exists, in the requirement order (no theme before #4053, no tips before SHELL-R-019)');
+assert.ok(!base.rows.includes('tips'), 'a 팁 보기 row would be a switch with nothing behind it');
 assert.ok(base.rows.length <= 6);
 assert.deepEqual({ ...base, rows: 0 }, { rows: 0, textSize: 'large', reduceMotion: 'on', notices: true, advanced: true });
 const odd = startSettingsView({ textSize: 'huge', reduceMotion: true, notices: 'yes', profileMinor: null, age: undefined });
@@ -30,7 +31,7 @@ for (const bad of [null, 'x', {}, { key: 'textSize', value: 'Large' }, { key: 't
 assert.deepEqual(J(parseStartSettingWrite({ type: 'startSetting', key: 'textSize', value: 'xlarge' })), { key: 'textSize', value: 'xlarge' });
 assert.deepEqual(J(parseStartSettingWrite({ key: 'reduceMotion', value: 'off' })), { key: 'reduceMotion', value: 'off' });
 assert.deepEqual(J(parseStartSettingWrite({ key: 'notices', value: false })), { key: 'notices', value: false });
-console.log('PASS start settings helper: six named rows, three available, normalized view, minor gate, hostile writes refused');
+console.log('PASS start settings helper: six named rows, four available, normalized view, minor gate, hostile writes refused');
 
 // ── host: the real StartPage ──
 const bundle = await build({ stdin: { contents: "export * from './src/startPage.ts';", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
@@ -42,7 +43,7 @@ const config = new Map([['workbench.reduceMotion', 'auto'], ['hypeproofChat.osTa
 const updates = [], commands = [], states = [];
 const global = new Map();
 const ctx = { globalState: { get: (k) => global.get(k), update: async (k, v) => { global.set(k, v); } }, workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} }, secrets: { get: async () => undefined, store: async () => {}, delete: async () => {} }, extension: { packageJSON: { version: 'test' } }, subscriptions: [] };
-const chat = { ensureProfile: async () => current, profileFailure: () => null, invalidateProfile() {}, refreshConfig: async () => { refreshes++; }, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => 'Coach', coachNameIsChosen: () => true };
+const chat = { exports: 0, exportMyWork: async () => { chat.exports++; return undefined; }, ensureProfile: async () => current, profileFailure: () => null, invalidateProfile() {}, refreshConfig: async () => { refreshes++; }, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => 'Coach', coachNameIsChosen: () => true };
 const vscode = {
   workspace: { workspaceFolders: [], getConfiguration: (section) => ({
     get: (key) => config.get(`${section}.${key}`),
@@ -99,4 +100,16 @@ assert.deepEqual(commands, [], 'under-14 answer: the host refuses the editor');
 global.set('hypeproofChat.freeStart.age.v1', '14+');
 await page.handle({ type: 'openAdvancedSettings' });
 assert.deepEqual(commands, ['workbench.action.openSettings'], 'no seat, 14+: the setup path stays');
+// CGP-SHELL-R-014: 내 작업 내보내기 runs the shipped export once, in the same seats as the chat settings entry (no seat gate there).
+for (const p of [adult, minor]) {
+  current = p; chat.exports = 0;
+  await page.handle({ type: 'startSetting', key: 'textSize', value: 'base' });
+  assert.ok(last().rows.includes('export'), `${p.profile_id}: the export row is offered`);
+  await page.handle({ type: 'startExportMyWork' });
+  assert.equal(chat.exports, 1, `${p.profile_id}: the row runs the shipped export once`);
+}
+const exportsBefore = chat.exports, commandsBefore = commands.length;
+for (const bad of [{ type: 'startExportMyWork ' }, { type: 'exportMyWork' }, { type: 'startSetting', key: 'export', value: true }]) await page.handle(bad);
+assert.equal(chat.exports, exportsBefore, 'only the exact message runs the export');
+assert.equal(commands.length, commandsBefore, 'and it runs no command');
 console.log('PASS start settings host: no direct editor path, writes land in their stores, hostile writes refused, minor seats never reach 고급 설정');
