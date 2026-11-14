@@ -18382,6 +18382,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/personal-entry-harness.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-reflection-admission.test.tsx"
         }
       ]
     },
