@@ -90,3 +90,35 @@ test('a page change posts a card; buttons reach preview and revealFileInOS; outs
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// #4066 round 3 (verify-r004): the record site itself. The page card's root must be recorded in canonicalFolder's form,
+// because the gate re-resolves it (exactRoot). On Linux JS realpath and the native realpath agree, so this case makes
+// them disagree on purpose: the bundled pageCardSeam.realpath plays a case-folding volume where the folder opened as
+// `work` is `WORK` on disk (WORK is a link to work so both spellings reach the same files). Recording the raw turn root
+// (`handle.root`, the round-2 bug) refuses the open and the reveal below.
+test('record site: a case-folding volume still opens and reveals the card page (root recorded canonically)', async () => {
+  const fs = await import('node:fs');
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'page-card-case-')));
+  const f = await createTaskHarness(root);
+  const seam = f.internals.pageCardSeam;
+  try {
+    const work = join(root, 'work'), WORK = join(root, 'WORK');
+    await mkdir(work); await symlink(work, WORK);
+    seam.realpath = (p) => { const r = fs.realpathSync.native(p); return r === work || r.startsWith(work + '/') ? WORK + r.slice(work.length) : r; };
+    f.h.resolveCoachCwd = () => work;
+    const shown = [];
+    f.h.preview = { show: async (html, base) => { shown.push(base.fsPath); }, watchForReload: () => {} };
+    const point = await f.h.beginTurnRestore('turn-case');
+    await writeFile(join(work, 'index.html'), '<!doctype html><title>대소문자</title>');
+    await f.h.endTurnRestore(point, 'turn-case', 'msg-case');
+    const cards = f.posts.filter((m) => m.type === 'pageCardsState').at(-1)?.cards;
+    assert.equal(cards?.[0]?.pages?.[0]?.path, 'index.html', 'the card was made');
+    await f.handle(f.scoped({ type: 'pageCardOpen', turnId: 'turn-case', path: 'index.html' }));
+    assert.deepEqual(shown, [WORK], 'opened, under the canonical spelling');
+    f.browserState.commandArgs = [];
+    await f.handle(f.scoped({ type: 'pageCardReveal', turnId: 'turn-case', path: 'index.html' }));
+    const reveals = (f.browserState.commandArgs ?? []).filter((c) => c[0] === 'revealFileInOS');
+    assert.equal(reveals.length, 1, 'revealed once');
+    assert.equal(reveals[0][1].fsPath, join(WORK, 'index.html'));
+  } finally { seam.realpath = null; await rm(root, { recursive: true, force: true }); }
+});
