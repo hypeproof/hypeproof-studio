@@ -85,6 +85,7 @@ private struct SharedCacheFile: Codable {
     @Published private(set) var signIn: DeviceSignIn?
     @Published private(set) var busy = false
     @Published private(set) var syncing = false
+    @Published private(set) var loggingOut = false
     @Published private(set) var stoppingReflection = false
     private var reflectionCredential: Task<String, Error>?
     private var responseGeneration = UUID()
@@ -169,10 +170,17 @@ private struct SharedCacheFile: Codable {
     private let browser = NativeBrowserSignIn()
     @Published private(set) var loginStatus = ""
     private var queuedSend: (id: String, requestID: String)?
+    private struct LogoutIntent {
+        let epoch: UUID
+        let accountID: String
+        let sessionID: String
+    }
+    private var queuedLogout: LogoutIntent?
     private let directory: URL
     var cache: ConversationCache { overlay(entries[selected ?? ""] ?? ConversationCache(), id: selected ?? "") }
     var draftText: String { signedIn ? cache.draft : guestDraft.text }
-    var canEditDraft: Bool { signedIn ? selected != nil && cacheReadable : guestDraftReadable }
+    var canEditDraft: Bool { !loggingOut && (signedIn ? selected != nil && cacheReadable : guestDraftReadable) }
+    var canLogout: Bool { signedIn && account != nil && !busy && !stoppingReflection }
     var pendingGuestDraft: String? { signedIn && !guestDraft.text.isEmpty ? guestDraft.text : nil }
     var canRestoreGuestDraft: Bool {
         signedIn && accountStorageReady && cacheReadable && guestDraftReadable && isReflection
@@ -311,12 +319,13 @@ private struct SharedCacheFile: Codable {
         } catch { guestDraftFailure = error.localizedDescription; self.error = guestDraftFailure; return false }
     }
     func editContext(_ key: String, value: String) {
-        guard let selected, let account else { return }
+        guard !loggingOut, let selected, let account else { return }
         editing[account.accountID, default: [:]][selected, default: [:]][key] = value
         do { try edit(selected) { if $0.context == nil { $0.context = [:] }; $0.context?[key] = value } }
         catch { self.error = error.localizedDescription }
     }
     func shareContextDraft() -> Bool {
+        guard !loggingOut else { return false }
         guard let selected, cache.draft.isEmpty else { error = "작성 중인 글을 먼저 확인해 주세요. 덮어쓰지 않았어요."; return false }
         let fields = [("goal", "바라는 변화"), ("audience", "도움을 주고 싶은 사람"), ("experience", "지금 알고 있는 것과 어려운 것"), ("style", "편한 질문 방식")]
         let lines = fields.compactMap { key, title -> String? in
@@ -386,6 +395,7 @@ private struct SharedCacheFile: Codable {
     }
     func cancelLogin() {
         epoch = UUID(); browser.cancel(); operation?.cancel(); operation = nil
+        queuedLogout = nil; loggingOut = false
         signIn = nil; busy = false; loginStatus = ""; notice = "로그인을 취소했어요."
     }
     private func token() async throws -> String {
@@ -426,6 +436,13 @@ private struct SharedCacheFile: Codable {
         syncing = true; let attempt = epoch; let current = selected
         defer {
             syncing = false
+            // Preserve one-use credential rotation. Explicit logout wins over
+            // queued Send after the existing refresh/read has fully unwound.
+            if let intent = queuedLogout, intent.epoch == attempt {
+                queuedLogout = nil
+                if matches(intent) { finishLogout(intent) }
+                else if epoch == attempt { busy = false; loggingOut = false; notice = "" }
+            }
             // Only this session's explicit Send can start a queued request. Reads,
             // restart and ambiguous network failures never schedule a replay.
             if let queued = queuedSend {
@@ -436,7 +453,13 @@ private struct SharedCacheFile: Codable {
         }
         do {
             let credential = try await token()
+#if DEBUG
+            // Only the isolated logout journey holds HTTP for deliberate UI
+            // actions. Release and every other scenario retain the 25s limit.
+            let personal = try await service.reflection(credential, timeout: NativeJourneyFixture.logoutSync ? 90 : 25)
+#else
             let personal = try await service.reflection(credential)
+#endif
             guard epoch == attempt else { return }
             try applyReflection(personal)
             let personalItem = SharedConversation(id: Self.personalID, title: "나를 알아가는 대화", host_session_id: "", revision: personal.state.revision, updated_at: personal.state.messages.last?.created_at ?? 0)
@@ -624,19 +647,49 @@ private struct SharedCacheFile: Codable {
         }
     }
     func logout() {
+        guard canLogout, let account else { return }
+        guard (editing[account.accountID] ?? [:]).isEmpty else {
+            error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
+        }
         approvals.invalidate()
-        guard !busy, !syncing, !stoppingReflection else { return }
-        if let account, !(editing[account.accountID] ?? [:]).isEmpty { error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return }
+        let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
+        // Consume only the in-memory scheduling intent, never durable words or
+        // request identity. Reopening must not replay an uncertain request.
+        queuedSend = nil; busy = true; loggingOut = true; error = nil
+        notice = "진행 중인 계정 확인을 마친 뒤 로그아웃할게요."
+        if syncing { queuedLogout = intent }
+        else { finishLogout(intent) }
+    }
+    private func matches(_ intent: LogoutIntent) -> Bool {
+        epoch == intent.epoch && account?.accountID == intent.accountID && account?.tokens.session_id == intent.sessionID
+    }
+    private func finishLogout(_ intent: LogoutIntent) {
+        guard matches(intent), !syncing, let current = account else { return }
+        guard (editing[current.accountID] ?? [:]).isEmpty else {
+            busy = false; loggingOut = false; notice = ""
+            error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
+        }
+        // Let a shared credential refresh finish before invalidating its flight.
         tokenFlight.invalidate()
-        let old = account; epoch = UUID(); let attempt = epoch; busy = true
+        epoch = UUID()
+        let execution = LogoutIntent(epoch: epoch, accountID: current.accountID, sessionID: current.tokens.session_id)
         operation = Task {
+            defer {
+                if epoch == execution.epoch && (matches(execution) || account == nil) {
+                    busy = false; loggingOut = false
+                }
+            }
             do {
-                if let old { try await service.logout(old.tokens.access_token) }
+                try await service.logout(current.tokens.access_token)
+                guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                guard epoch == attempt else { return }
-                account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil; notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
-            } catch { self.error = "서버의 기기 연결을 해제하지 못했어요. 인터넷을 확인하고 다시 시도해 주세요." }
-            busy = false
+                account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
+                notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
+            } catch {
+                if matches(execution) {
+                    notice = ""; self.error = "서버의 기기 연결을 해제하지 못했어요. 인터넷을 확인하고 다시 시도해 주세요."
+                }
+            }
         }
     }
     func exportCache() -> URL? {
