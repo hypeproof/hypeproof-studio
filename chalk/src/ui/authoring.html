@@ -89,7 +89,7 @@ label small{color:var(--hp-mute)}
 <table id="assist-table" aria-labelledby="assist-card-title"><thead><tr><th scope="col">항목</th><th scope="col">이전</th><th scope="col">새 값</th></tr></thead><tbody></tbody></table>
 <div class="assist-actions"><button id="assist-apply" type="button" class="primary">적용</button><button id="assist-discard" type="button" class="ghost">버리기</button></div>
 </div></div>
-<nav id="ai-nav" aria-label="수업 AI 설정 구역"><ol><li><a href="#ai-identity">정체성</a></li><li><a href="#ai-instructions">지시문</a></li><li><a href="#ai-model">모델·처리 수준</a></li><li><a href="#ai-features">기능·승인</a></li><li id="ai-nav-starters"><a href="#ai-starters">시작 문장</a></li><li><a href="#ai-preview">미리보기</a></li></ol></nav>
+<nav id="ai-nav" aria-label="수업 AI 설정 구역"><ol><li><a href="#ai-identity">정체성</a></li><li><a href="#ai-instructions">지시문</a></li><li><a href="#ai-model">모델·처리 수준</a></li><li><a href="#ai-features">기능·승인</a></li><li id="ai-nav-starters"><a href="#ai-starters">시작 문장</a></li><li id="ai-nav-skill-cards"><a href="#ai-skill-cards">학생 스킬 카드</a></li><li><a href="#ai-preview">미리보기</a></li></ol></nav>
 <details id="ai-identity" class="ai-section" open><summary>정체성</summary>
 <label>이 수업의 AI 이름<input id="assistant_name" maxlength="40" autocomplete="off" placeholder="예: 제작 파트너"></label><small>학생 Studio의 헤더와 답변 이름에 그대로 표시됩니다(40자 이내, 한 줄). 비우면 코호트 기본 규칙(고정 이름 또는 학생이 직접 짓기)을 따르고, 이름을 넣으면 학생이 지은 이름 대신 이 이름이 고정됩니다. 이름은 도구 권한·모델·AI 고지를 바꾸지 않습니다. 버전을 고정한 뒤의 편집은 새 버전에만 적용됩니다.</small>
 <div id="style-identity">
@@ -141,6 +141,14 @@ label small{color:var(--hp-mute)}
 <ol id="starters-list"><li><label>시작 문장 1<input id="ai-starter-1" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-1-count"></label> <small id="ai-starter-1-count" class="counter">0/80</small></li><li><label>시작 문장 2<input id="ai-starter-2" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-2-count"></label> <small id="ai-starter-2-count" class="counter">0/80</small></li><li><label>시작 문장 3<input id="ai-starter-3" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-3-count"></label> <small id="ai-starter-3-count" class="counter">0/80</small></li><li><label>시작 문장 4<input id="ai-starter-4" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-4-count"></label> <small id="ai-starter-4-count" class="counter">0/80</small></li></ol>
 <p id="starters-warning" role="status"></p>
 <small id="starters-disclosure">학생은 시작 문장으로 이 수업의 자료 내용을 끌어낼 수 있습니다. 학생에게 보여 주면 안 되는 내용은 시작 문장과 ‘시작 예제·자료’에 넣지 마세요.</small>
+</div>
+</details>
+<details id="ai-skill-cards" class="ai-section" open><summary>학생 스킬 카드</summary>
+<div id="skill-cards-body">
+<p class="muted">학생 Studio의 ‘이 수업의 스킬’에 보이는 카드입니다. 학생이 ‘써 보기’를 누르면 시작 프롬프트가 입력창에 들어가고, 자동으로 보내지지 않습니다. 코치에게 주는 내부 지시문은 학생에게 보이지 않습니다. 이름·한 줄 설명·시작 프롬프트를 모두 채운 카드만 저장되고, 빈 카드는 저장되지 않습니다.</p>
+<ol id="skill-cards-list"></ol>
+<p id="skill-cards-warning" role="status"></p>
+<small id="skill-cards-disclosure">학생은 카드의 시작 프롬프트를 그대로 보고 고칠 수 있습니다. 학생에게 보여 주면 안 되는 내용은 넣지 마세요. 링크(https:// 등)는 넣을 수 없습니다.</small>
 </div>
 </details>
 <details id="ai-preview" class="ai-section" open><summary>미리보기</summary>
@@ -257,7 +265,7 @@ const fields=['title','audience','duration_minutes','objective','prerequisites',
 // 여기 없는 키(steps[].help, learning, 앞으로 생길 칸)는 다음 저장에서 조용히 사라진다.
 // 그래서 render() 가 연 초안의 미확인 키를 들고 있다가 content() 에서 되돌려 깐다.
 // 보존만 한다 — 편집 UI 는 이 변경의 범위가 아니다.
-const formKeys=['schema',...fields,'audience_tier','steps','assistant','starters','model','features','approval_preset','learning'];
+const formKeys=['schema',...fields,'audience_tier','steps','assistant','starters','skill_cards','model','features','approval_preset','learning'];
 const stepFormKeys=['id','title','instructions','hint','acceptance','help','ui'];
 let carriedTop={},carriedStep=new Map(),carriedLearning={};
 let revision=null,bound=null,dirty=false,busy=false,pending=null,batch=[];
@@ -276,9 +284,9 @@ function changed(){dirty=true;$('completion').textContent='';controls();}
 function discard(){return !dirty||confirm('저장하지 않은 편집을 바꿀까요? 필요한 내용은 먼저 내보내세요.');}
 function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!globalThis.chalkConnection?.current?.connected)throw Error('위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
 function step(data={id:'step-'+crypto.randomUUID().slice(0,8),title:'',instructions:'',hint:'',acceptance:''}){const f=document.createElement('fieldset');f.className='step';for(const [key,label] of Object.entries({id:'단계 ID',title:'단계 제목',instructions:'안내·실습',hint:'힌트',acceptance:'완료 기준'})){const l=document.createElement('label');l.textContent=label;const e=document.createElement(key==='id'||key==='title'?'input':'textarea');e.dataset.field=key;e.value=data[key]??'';l.append(e);if(key==='id')l.hidden=true;f.append(l);}stepTeaching(f,data);for(const [label,action] of [['위로',()=>f.previousElementSibling?.before(f)],['아래로',()=>f.nextElementSibling?.after(f)],['삭제',()=>f.remove()]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();changed();};f.append(b);}$('steps').append(f);}
-function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));const s={...carriedStep.get(own.id),...own,...stepTeachingValue(f)};if((s.ui??'')!==(f.dataset.uiOrig??'')){delete s.ui_version;delete s.ui_params;}return s;}),...assistantValue(name),...startersField(),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...(lessonApprovalPreset?{approval_preset:lessonApprovalPreset}:{}),...learningValue()};}
+function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));const s={...carriedStep.get(own.id),...own,...stepTeachingValue(f)};if((s.ui??'')!==(f.dataset.uiOrig??'')){delete s.ui_version;delete s.ui_params;}return s;}),...assistantValue(name),...startersField(),...skillCardsField(),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...(lessonApprovalPreset?{approval_preset:lessonApprovalPreset}:{}),...learningValue()};}
 function carry(c){carriedTop=Object.fromEntries(Object.entries(c).filter(([k])=>!formKeys.includes(k)));carriedStep=new Map((c.steps||[]).map(s=>[s.id,Object.fromEntries(Object.entries(s).filter(([k])=>!stepFormKeys.includes(k)))]));}
-function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();lessonApprovalPreset=typeof c.approval_preset==='string'&&c.approval_preset?c.approval_preset:undefined;renderApproval();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';$('assistant_role').value=typeof c.assistant?.role==='string'?c.assistant.role:'';lessonTone=typeof c.assistant?.tone==='string'&&c.assistant.tone?c.assistant.tone:undefined;renderTone();setStarters(c.starters);styleSync();renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
+function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();lessonApprovalPreset=typeof c.approval_preset==='string'&&c.approval_preset?c.approval_preset:undefined;renderApproval();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';$('assistant_role').value=typeof c.assistant?.role==='string'?c.assistant.role:'';lessonTone=typeof c.assistant?.tone==='string'&&c.assistant.tone?c.assistant.tone:undefined;renderTone();setStarters(c.starters);styleSync();renderSkillRows();setSkillCards(c.skill_cards);skillSync();renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
 async function call(path,method='GET',body,draftSave=false){let r,j;
 try{r=await fetch(path,{method,redirect:'error',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});j=await r.json();}
 catch(e){if(draftSave)throw Error('저장 결과를 확인하지 못했습니다. 입력한 내용은 이 화면에 남아 있습니다. 내용을 바꾸지 말고 ‘초안 저장’을 다시 눌러 주세요.');throw e;}
@@ -438,10 +446,59 @@ function styleCheck(){
   const d=starterDuplicates();if(d.length)throw fix(starterInputs()[d[0]-1],'시작 문장 '+d[0]+'번이 앞의 문장과 같습니다. 하나를 바꾸거나 지운 뒤 저장하세요.');
 }
 const startersLine=a=>Array.isArray(a)&&a.length?a.map((x,i)=>(i+1)+'. '+x).join(' / '):'없음';
+// CGP-AGENT-R-020 (Jay, 2026-11-14) — learner skill cards: a name, a one-line summary and a starter prompt, frozen with the version.
+// The Service owns the contract (hypeproof-service worker/src/lib/lesson-skill-cards.ts) and serves its limits on the features read
+// as `skill_cards`. Like the starters: before that read the section is shown with the default limits; once a read shows an older
+// Service without the key, the section hides and sends nothing. A card is saved only when all three fields are filled; empty rows
+// are dropped; the key is omitted when no card is left, so an old lesson keeps its bytes and digest. Cards are plain text: no link.
+const SKILL_DEFAULT={max_count:6,name_max:30,summary_max:80,prompt_max:300,prompt_max_lines:6};
+const SKILL_LINK=/\b(?:https?|javascript|data|file|vbscript|mailto|vscode|command):/i;
+const skillServed=()=>!(featureCatalogueScope===identity()&&featureCatalogue&&!(featureCatalogue.skill_cards&&typeof featureCatalogue.skill_cards==='object'));
+const skillLimits=()=>{const s=featureCatalogueScope===identity()&&featureCatalogue?.skill_cards;if(!s||typeof s!=='object')return SKILL_DEFAULT;const out={...SKILL_DEFAULT};for(const k of Object.keys(SKILL_DEFAULT))if(Number.isSafeInteger(s[k])&&s[k]>0)out[k]=s[k];return out;};
+const skillRows=()=>[...document.querySelectorAll('#skill-cards-list>li')];
+const cleanPrompt=v=>String(v??'').replace(/\r\n?/g,'\n').replace(/[​-‍﻿]/g,'').trim();
+function renderSkillRows(){
+  const L=skillLimits(),keep=skillRows().map(r=>({name:r.querySelector('.skill-name').value,summary:r.querySelector('.skill-summary').value,prompt:r.querySelector('.skill-prompt').value}));
+  if(keep.length===L.max_count&&skillRows().every(r=>r.querySelector('.skill-name').maxLength===L.name_max&&r.querySelector('.skill-summary').maxLength===L.summary_max&&r.querySelector('.skill-prompt').maxLength===L.prompt_max))return;
+  const field=(tag,cls,id,label,max)=>{const w=document.createElement('label');w.className='skill-field';const t=document.createElement('span');t.textContent=label;const e=document.createElement(tag);e.id=id;e.className=cls;e.maxLength=max;e.autocomplete='off';if(tag==='textarea')e.rows=3;const c=document.createElement('small');c.id=id+'-count';c.className='counter';e.setAttribute('aria-describedby',c.id);w.append(t,e);return [w,c];};
+  const rows=[];
+  for(let i=1;i<=L.max_count;i++){const li=document.createElement('li');const h=document.createElement('p');h.className='skill-card-title';h.textContent='카드 '+i;
+    li.append(h,...field('input','skill-name','skill-card-'+i+'-name','이름',L.name_max),...field('input','skill-summary','skill-card-'+i+'-summary','한 줄 설명',L.summary_max),...field('textarea','skill-prompt','skill-card-'+i+'-prompt','시작 프롬프트 (최대 '+L.prompt_max_lines+'줄)',L.prompt_max));rows.push(li);}
+  $('skill-cards-list').replaceChildren(...rows);setSkillCards(keep.filter(c=>c.name||c.summary||c.prompt));
+}
+function setSkillCards(list){const a=Array.isArray(list)?list:[];skillRows().forEach((r,i)=>{const c=a[i]&&typeof a[i]==='object'?a[i]:{};r.querySelector('.skill-name').value=typeof c.name==='string'?c.name:'';r.querySelector('.skill-summary').value=typeof c.summary==='string'?c.summary:'';r.querySelector('.skill-prompt').value=typeof c.prompt==='string'?c.prompt:'';});}
+function skillCardsValue(){return skillRows().map(r=>({name:cleanLine(r.querySelector('.skill-name').value),summary:cleanLine(r.querySelector('.skill-summary').value),prompt:cleanPrompt(r.querySelector('.skill-prompt').value)})).filter(c=>c.name||c.summary||c.prompt);}
+function skillCardsField(){const a=skillCardsValue();return skillServed()&&a.length?{skill_cards:a}:{};}
+function skillDuplicates(){const seen=new Set(),out=[];skillRows().forEach((r,i)=>{const v=cleanLine(r.querySelector('.skill-name').value);if(!v)return;const k=starterKey(v);if(seen.has(k))out.push(i+1);else seen.add(k);});return out;}
+function skillSync(){
+  const on=skillServed();$('ai-skill-cards').hidden=!on;$('ai-nav-skill-cards').hidden=!on;
+  for(const r of skillRows())for(const e of r.querySelectorAll('input,textarea'))$(e.id+'-count').textContent=e.value.length+'/'+e.maxLength;
+  const d=skillDuplicates();$('skill-cards-warning').textContent=d.length?'같은 이름의 카드가 있습니다: 카드 '+d.join(', ')+'번이 앞의 카드와 이름이 같습니다. 저장하기 전에 이름을 바꾸세요.':'';
+}
+function skillCheck(){
+  if(!skillServed())return;
+  const L=skillLimits();
+  for(const [i,r] of skillRows().entries()){
+    const n=r.querySelector('.skill-name'),s=r.querySelector('.skill-summary'),p=r.querySelector('.skill-prompt'),name=cleanLine(n.value),sum=cleanLine(s.value),pr=cleanPrompt(p.value),no=i+1;
+    if(!name&&!sum&&!pr)continue;
+    if(!name)throw fix(n,'카드 '+no+'번의 이름을 적어 주세요. 세 칸을 모두 채운 카드만 저장됩니다.');
+    if(!sum)throw fix(s,'카드 '+no+'번의 한 줄 설명을 적어 주세요. 세 칸을 모두 채운 카드만 저장됩니다.');
+    if(!pr)throw fix(p,'카드 '+no+'번의 시작 프롬프트를 적어 주세요. 세 칸을 모두 채운 카드만 저장됩니다.');
+    if(name.length>L.name_max||STYLE_UNSAFE.test(name))throw fix(n,'카드 '+no+'번의 이름은 줄바꿈·보이지 않는 문자 없이 '+L.name_max+'자 이내 한 줄로 적어 주세요.');
+    if(sum.length>L.summary_max||STYLE_UNSAFE.test(sum))throw fix(s,'카드 '+no+'번의 한 줄 설명은 줄바꿈·보이지 않는 문자 없이 '+L.summary_max+'자 이내로 적어 주세요.');
+    const lines=pr.split('\n');
+    if(pr.length>L.prompt_max||lines.length>L.prompt_max_lines||lines.some(x=>x!==x.trim()||STYLE_UNSAFE.test(x)))throw fix(p,'카드 '+no+'번의 시작 프롬프트는 '+L.prompt_max+'자, '+L.prompt_max_lines+'줄 이내로, 줄 앞뒤 공백과 보이지 않는 문자 없이 적어 주세요.');
+    for(const [e,v,label] of [[n,name,'이름'],[s,sum,'한 줄 설명'],[p,pr,'시작 프롬프트']])if(SKILL_LINK.test(v))throw fix(e,'카드 '+no+'번의 '+label+'에는 링크(https:// 등)를 넣을 수 없습니다.');
+  }
+  const d=skillDuplicates();if(d.length)throw fix(skillRows()[d[0]-1].querySelector('.skill-name'),'카드 '+d[0]+'번의 이름이 앞의 카드와 같습니다. 이름을 바꾼 뒤 저장하세요.');
+}
+const skillCardsLine=a=>Array.isArray(a)&&a.length?a.map((c,i)=>(i+1)+'. '+(c?.name??'')+' — '+(c?.summary??'')).join(' / '):'없음';
+$('skill-cards-list').addEventListener('input',()=>skillSync());
+renderSkillRows();skillSync();
 renderTone();
-$('features-load').onclick=()=>run(async()=>{const catalog=await call(scope()+'/features/'+encodeURIComponent($('profile').value.trim()));featureCatalogue=catalog;featureCatalogueScope=identity();renderFeatures();renderApproval();renderTone();$('features-status').textContent='이 코호트가 가진 기능 '+catalog.choices.length+'개 · 고른 기능만 남고 나머지는 이 수업에서 꺼집니다. 새 권한은 생기지 않습니다.';});
+$('features-load').onclick=()=>run(async()=>{const catalog=await call(scope()+'/features/'+encodeURIComponent($('profile').value.trim()));featureCatalogue=catalog;featureCatalogueScope=identity();renderFeatures();renderApproval();renderTone();renderSkillRows();skillSync();$('features-status').textContent='이 코호트가 가진 기능 '+catalog.choices.length+'개 · 고른 기능만 남고 나머지는 이 수업에서 꺼집니다. 새 권한은 생기지 않습니다.';});
 $('add').onclick=()=>{step();changed();};
-async function saveDraft(expected=revision){if(bound!==identity()||revision===null)throw Error('먼저 초안을 선택하세요.');learningCheck();styleCheck();const path=scope();const b={expected_revision:expected,profile_id:$('profile').value.trim(),content:content()};const signature=JSON.stringify([path,b]);if(pending?.signature!==signature)pending={signature,id:crypto.randomUUID()};const d=await call(path,'PUT',{...b,request_id:pending.id},true);revision=d.revision;dirty=false;pending=null;$('version').value='';$('completion').textContent='';status('저장했습니다. revision '+revision);if(candidateVersion)await loadReadiness();assistProbe();}
+async function saveDraft(expected=revision){if(bound!==identity()||revision===null)throw Error('먼저 초안을 선택하세요.');learningCheck();styleCheck();skillCheck();const path=scope();const b={expected_revision:expected,profile_id:$('profile').value.trim(),content:content()};const signature=JSON.stringify([path,b]);if(pending?.signature!==signature)pending={signature,id:crypto.randomUUID()};const d=await call(path,'PUT',{...b,request_id:pending.id},true);revision=d.revision;dirty=false;pending=null;$('version').value='';$('completion').textContent='';status('저장했습니다. revision '+revision);if(candidateVersion)await loadReadiness();assistProbe();}
 $('editor').onsubmit=e=>{e.preventDefault();run(()=>saveDraft());};
 // CGP-AGENT-R-014 / CGP-AGENT-D-012 — 설정 부탁하기. The Service (flag HPS_AUTHORING_ASSISTANT, default off → 404) returns allow-listed
 // {key, before, after} proposals validated like a manual save; it never writes. This page shows them as a card (values as TEXT only),
@@ -588,7 +645,8 @@ function aiRows(c,labels){
     ['처리 수준(Effort)',!effort?'코호트 기본값':effort.allowed.length===1?elabel(effort.default)+' (고정)':elabel(effort.default)+' 기본 · 학생이 '+effort.allowed.map(elabel).join(', ')+' 중 선택'],
     ['쓸 수 있는 기능',!feats?'코호트 기본값 그대로':feats.allowed.length?feats.allowed.map(flabel).join(', '):'채팅만 사용'],
     ['AI가 묻는 방식',approvalWords(c.approval_preset)],
-    ...(styleServed()?[['시작 문장',startersLine(c.starters)]]:[])
+    ...(styleServed()?[['시작 문장',startersLine(c.starters)]]:[]),
+    ...(skillServed()?[['학생 스킬 카드',skillCardsLine(c.skill_cards)]]:[])
   ];
 }
 function aiList(el,rows){el.replaceChildren(...rows.flatMap(([k,v])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=k;dd.textContent=v;return [dt,dd];}));}
@@ -716,7 +774,7 @@ function impactLines(i){const out=[];const st=i.steps;
  for(const t of i.text||[])out.push((FIELD_WORDS[t.field]||t.field)+': ‘'+t.from+'’ → ‘'+t.to+'’');
  for(const c of i.step_changes||[]){const parts=[];if(c.text.length)parts.push(c.text.map(k=>STEP_TEXT_WORDS[k]||k).join('·')+' 문구');if(c.help)parts.push('도움 방식 '+helpWords(c.help.from)+' → '+helpWords(c.help.to));if(c.surface)parts.push('작업 화면 '+surfaceWords(c.surface.from)+' → '+surfaceWords(c.surface.to));out.push('단계 '+c.id+': '+parts.join(' / '));}
  if(i.title)out.push('강의 제목: ‘'+i.title.from+'’ → ‘'+i.title.to+'’');if(i.assistant_name)out.push('AI 이름: '+(i.assistant_name.from||'기본')+' → '+(i.assistant_name.to||'기본')+' (이름만 바뀌며 가르치는 방식은 위 도움 방식·단계로 바뀝니다)');
- if(i.assistant_role)out.push('AI 역할: '+(i.assistant_role.from||'없음')+' → '+(i.assistant_role.to||'없음'));if(i.assistant_tone)out.push('AI 말투: '+toneWords(i.assistant_tone.from)+' → '+toneWords(i.assistant_tone.to));if(i.starters)out.push('시작 문장: '+startersLine(i.starters.from)+' → '+startersLine(i.starters.to));
+ if(i.assistant_role)out.push('AI 역할: '+(i.assistant_role.from||'없음')+' → '+(i.assistant_role.to||'없음'));if(i.assistant_tone)out.push('AI 말투: '+toneWords(i.assistant_tone.from)+' → '+toneWords(i.assistant_tone.to));if(i.starters)out.push('시작 문장: '+startersLine(i.starters.from)+' → '+startersLine(i.starters.to));if(i.skill_cards)out.push('학생 스킬 카드: '+(i.skill_cards.from?.length?i.skill_cards.from.join(', '):'없음')+' → '+(i.skill_cards.to?.length?i.skill_cards.to.join(', '):'없음'));
  if(i.learning){const L=i.learning,m=x=>x?x.week+'주차 ‘'+x.mission+'’':'미션 없음',cs=x=>x?.completion?.length?x.completion.map(c=>'‘'+c.text+'’('+(EVENT_LABELS[c.event]||c.event)+')').join(', '):'없음';if(L.week||L.mission)out.push('학생 미션: '+m(L.from)+' → '+m(L.to));if(L.completion)out.push('완료 조건: '+cs(L.from)+' → '+cs(L.to));if(L.advanced.length)out.push('보존 중인 학습 설계 항목 바뀜: '+L.advanced.map(k=>ADVANCED_WORDS[k]||k).join(', '));}
  if(i.model)out.push('모델 허용 범위가 바뀝니다');if(i.features)out.push('허용 기능: '+(i.features.from?i.features.from.join(', '):'코호트 기본')+' → '+(i.features.to?i.features.to.join(', '):'코호트 기본'));if(i.approval_preset)out.push('AI가 묻는 방식: '+approvalWords(i.approval_preset.from)+' → '+approvalWords(i.approval_preset.to));
  return out.length?out:['학생에게 달라지는 내용이 없습니다'];}
@@ -725,7 +783,7 @@ function renderReadiness(){const box=$('readiness');box.replaceChildren();if(!re
  line('후보 '+r.version+' · '+(REHEARSAL_WORDS[r.state]||r.state)+(r.rehearsal?.reasons?.length?' — '+r.rehearsal.reasons.map(x=>REASON_WORDS[x]||x).join(', '):''),'state-'+r.state);
  line('이 후보의 학생 미션: '+missionLine(r.content?.learning));
  line('이 후보의 AI가 묻는 방식: '+approvalWords(r.content?.approval_preset)+' — 고정된 버전이라 바뀌지 않습니다','approval-frozen');
- if(styleServed()){line('이 후보의 AI 역할·말투: '+(r.content?.assistant?.role||'역할 없음')+' · '+toneWords(r.content?.assistant?.tone)+' — 고정된 버전이라 바뀌지 않습니다','style-frozen');line('이 후보의 시작 문장: '+startersLine(r.content?.starters),'starters-frozen');}
+ if(styleServed()){line('이 후보의 AI 역할·말투: '+(r.content?.assistant?.role||'역할 없음')+' · '+toneWords(r.content?.assistant?.tone)+' — 고정된 버전이라 바뀌지 않습니다','style-frozen');line('이 후보의 시작 문장: '+startersLine(r.content?.starters),'starters-frozen');}if(skillServed()){line('이 후보의 학생 스킬 카드: '+skillCardsLine(r.content?.skill_cards)+' — 고정된 버전이라 바뀌지 않습니다','skill-cards-frozen');}
  const mc=r.rehearsal?.checks?.mission;if(mc)line({match:'리허설 학생 화면의 미션: 이 후보와 같았습니다',mismatch:'리허설 학생 화면의 미션: 이 후보와 달랐습니다 — ‘'+(mc.observed?.sentence??'')+'’',not_reported:'리허설 학생 화면의 미션: 확인하지 못했습니다',none:'미션이 없는 후보 — 미션 관련 준비 판정은 하지 않습니다'}[mc.result]||mc.result);
  if(r.draft_changed_since)line('이 후보를 고정한 뒤 초안이 바뀌었습니다. 확정하는 것은 이 후보이며, 바뀐 초안은 새 후보로 고정해 다시 리허설해야 합니다.');
  if(r.confirmed)line('확정됨 — '+new Date(r.confirmed.at).toLocaleString()+(r.confirmation_current?'':' · 확정 뒤 수업 설정이 바뀌어 다시 리허설이 필요합니다'));
@@ -1135,6 +1193,11 @@ body{max-width:var(--ds-c-chalk-authoring-size-97);margin:0 auto!important;paddi
 /* DEC-30: role and starter inputs are single lines at the 44px target; the counter sits under its field and wraps, never beside it. */
 #assistant_role,.ai-starter{box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);width:100%}
 #starters-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--ds-c-chalk-authoring-space-2)}
+/* CGP-AGENT-R-020: one card per list item; each field is a full-width 44px control with its counter under it. */
+#skill-cards-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--ds-c-chalk-authoring-space-2)}
+.skill-field{display:grid;gap:var(--ds-c-chalk-authoring-space-13)}
+.skill-name,.skill-summary,.skill-prompt{box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);width:100%}
+.skill-card-title{margin:0;font-weight:var(--ds-c-chalk-authoring-typography-7)}
 .counter{color:var(--hp-mute)}
 /* CGP-LEARN-R-004 / DES-CGP-LEARN-04 — the instructor-only block chip under the work-surface select. */
 .ui-chip{display:inline-block;margin-block:var(--ds-c-chalk-authoring-space-13) var(--ds-c-chalk-authoring-space-2);padding-block:var(--ds-c-chalk-authoring-space-14);padding-inline:var(--ds-c-chalk-authoring-space-2);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-control-line);border-radius:var(--ds-c-chalk-authoring-radius-10);font-size:var(--ds-c-chalk-authoring-type-17);color:var(--hp-text-2)}
