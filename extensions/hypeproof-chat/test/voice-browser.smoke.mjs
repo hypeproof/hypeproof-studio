@@ -86,7 +86,7 @@ try {
     const label = `${seat} ${dark ? 'dark' : 'light'} ${width}px`;
     // A fresh window per load: setDocumentContent keeps the old window, and with it the old App's window listeners.
     let nav = 0;
-    const load = async (mic = 'ok', height = 700) => { await b.send('Page.navigate', { url: `data:text/html,<p>voice-${++nav}</p>` }); await settle(120); await b.load(page(themeVars(dark), dark, mic), { width, height, dark }); };
+    const load = async (mic = 'ok', height = 700) => { await b.send('Page.navigate', { url: `data:text/html,<p>voice-${++nav}</p>` }); await settle(120); await b.load(page(themeVars(dark), dark, mic), { width, height, dark, appReady: true }); };
 
     // 1. No voice block: nothing voice is drawn, and the composer is unmarked.
     await load();

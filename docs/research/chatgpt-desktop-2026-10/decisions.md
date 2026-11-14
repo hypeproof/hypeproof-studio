@@ -2248,6 +2248,69 @@ Requirement: `docs/studio-requirements.md` "Blocked read-aloud recovery"; VO-42 
 - **Not covered.** A real browser autoplay refusal (the scripted engine stands in), a screen reader, the packaged app, and the VAD half of D-021.
 - Confirmed by Jay: no.
 
+## CGP-LEARN-R-004 / CGP-LEARN-D-004: Studio draws only the pinned versions it renders (2026-11-14)
+
+This is the Studio half of the block reference contract. The Service contract is hypeproof-service#461 and the Chalk chip is CH-12. Confirmed by Jay: no.
+
+- **Version set (agent choice).** `RENDERED_UI_VERSIONS` lists the catalog versions each kind is drawn at, which is v1 for all seven today. A step with no `ui_version` (frozen before pinning) means v1. A version outside the list, or a pin that is not an integer, is drawn as the existing unsupported notice: no block and no guessing. The rehearsal report then says `unsupported:<kind>`, so an App that cannot draw a pinned version cannot pass a rehearsal for it.
+- **Learner copy (agent choice).** The unsupported notice no longer shows the type id between brackets, to meet "the learner UI never shows type ids or versions". It reads "이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요." The id stays in the `data-surface` attribute for tests and rehearsal, and is not shown.
+- **Not covered:** a real installed App (only the component on the minimal DOM and the pure helpers ran); a real v2 block (none exists yet).
+
+## CGP-LEARN-R-010 / CGP-LEARN-D-010: reset and undo for a learning block (2026-11-14)
+
+This is a Studio-only change with no Service contract. Confirmed by Jay: no (all agent choices).
+
+- **Preset (agent reading).** The blocks this App draws (`criterion_form`, `decision_form`) are catalog v1 with no params, so their preset is empty fields. "처음으로" empties the fields on screen. It does not delete the learner's saved work, which stays until the next 저장. Deleting saved work would be a host write, and REQ-CGP-LEARN-10 (c) rules that out.
+- **What one change is (agent choice).** A burst of typing in one field ends on blur, after a 1 s pause, or with a reset or undo. One reset also counts as a change. Undoing keystroke by keystroke would turn a sentence into dozens of steps. The history is held per lesson version and step, and capped at 50.
+- **No events (requirement).** Reset and undo post nothing to the host, so they cause no save and no observation event. The browser test counts host messages to check this.
+- **Look (agent choice).** Both are the existing quiet button (not Primary, per SX-04), with 44px targets and 14px text. A disabled button uses the muted text token and a dashed boundary, so "visibly distinct" does not rest on opacity alone. The native `disabled` state carries the announcement.
+- **Copy.** Each block's controls help names both buttons, and the button labels are the design row's. Both are the agent's wording within the row.
+- **Not covered:** a real installed App and a real screen reader.
+
+## CGP-LEARN-R-011 (c) / CGP-LEARN-D-011: collapse a learning block, partial (2026-11-14)
+
+Confirmed by Jay: no. These are agent choices within the design row, and the coordinator set the scope.
+
+- **Scope (coordinator, 2026-11-14).** Only the collapse half ships, and the row stays partial. The report half needs a Service and Chalk route, because `/v1/report` goes to the operator and not to the lesson's instructor. It also needs a decision on the 0–300 learner field for minor cohorts.
+- **Menu (agent choice, following DES-CGP-LEARN-11).**
+  - The overflow menu is drawn now, with one item, so the report item lands in the same place later.
+  - The button is the existing quiet button with the dots icon, named "자료 메뉴: <title>".
+  - Keyboard handling is the same as the rail's task menu (TaskMenu.tsx).
+  - The button is on the open card only, in the head after 닫기. The card geometry tests ruled out two other placements:
+    - A fourth column in the closed head gave the title 0px in a 280px rail.
+    - A button in the caption row made the open card taller, which pushed the caption under the mission header at 480px / 200 %.
+  - The closed card stays DES-CGP-LEARN-01's one row.
+  - The menu opens in flow as a row under the head instead of floating, keeping DES-CGP-LEARN-01's "nothing is positioned".
+- **Collapsed row (agent choice).**
+  - "접은 자료: <title>" and "다시 보기", 44px.
+  - The body stays mounted and hidden, so the rehearsal read-back is unchanged.
+  - The polite state line is not drawn, so a block the learner put away is not announced.
+  - Restoring gives back the open card, which is the state it was collapsed from.
+- **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
+- **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
+- **Not covered:** a real installed App and a real screen reader.
+
+## CGP-ART-R-023 gap: 폴더에서 보기 on the deck PDF result (2026-11-14, #4057 §7.2)
+
+Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 on the PDF result, reveal the exported file inside the seat's served root, reuse the existing reveal path and its path-safety checks, and never reveal anything outside the root. The choices below are the agent's.
+
+- **Where (agent choice).** One quiet button under the saved notice, outside its polite region, so the region still reads only the sentence. It is the page notice's single optional action. There is no new card, and the other notices are unchanged.
+- **What is revealed.** `deck.pdf` itself, selected in its folder by `revealFileInOS`. The record is the served root the export used (canonical) and the file's path under it, so the file reveal always stays inside that root.
+- **Path safety (reuse).** The page card's walk is now `resolveFileInFolder` and `recheckFileInFolder`. The page variants keep their page-type check and their behaviour. The webview sends no path.
+- **Root identity (verify-r004 on #4066).** The walk re-canonicalized the root at use time, so a root path swapped for a link after it was recorded moved the whole walk. `WalkOptions.exactRoot` refuses a recorded canonical root that no longer canonicalizes to itself. The deck PDF reveal and the page card gate (open, reload, reveal) use it. The page card case predates this PR and is fixed here, because the walk is shared. The roots an `exactRoot` walk checks are recorded through `recordedRoot`, which is canonicalFolder's form: the page card's turn root and the deck PDF's served root (round 2). JS realpath keeps a Windows `c:` and the opened case, and would make every legitimate walk fail.
+- **Refusal copy (agent wording).** "저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요." is used for every refusal, because the fix is the same each time.
+- **Not changed.** The page card's own 폴더에서 보기: a nested page still reveals its own folder.
+- **Not covered:** the installed App's OS file manager. `revealFileInOS` is a fixture in the host test.
+
+## Refused-photo chip remove × contrast (2026-11-14, a #4053 follow-up, agent-selected)
+
+Confirmed by Jay: no. builder-art-r005 handed it over, from verify-3956's #4053 check.
+
+- **Defect (real, not an instrument limit).** On the refused-photo chip, #2365 made the remove button `position: static`. Its `::before` dot (`position: absolute`) then anchored to the chip, not the button, so the white × sat on the light panel at 1.19:1 (Light+, HP Light). #4053's branch notes this as an instrument limit of text-contrast-computed. The note lives only on that branch and should be corrected when #4053 merges.
+- **Fix (agent choice).** The refused chip's button is `position: relative`: it stays in the flex row and anchors its dot again. In the personal seat the × is a transparent 44px square with a foreground ×, by design, so its dot is not drawn (`::before { content: none }`). Left on, that dot anchored to the chip and painted a dark circle across it.
+- **Measure.** `attachment-remove-contrast-computed` runs the real ChatPanel with every bundled theme, for the classroom and personal seats. Where a dot is drawn, the button must anchor it, and the × must reach 4.5:1 against what is painted behind it. Pinning the "attachment × ::before" row in text-contrast-computed's default set waits for #4053's all-rows mode.
+- **Not covered:** HP Light. That theme exists only on #4053's branch. The smoke iterates THEMES, so it picks the theme up when #4053 lands.
+
 ## CGP-SHELL-R-010 / CGP-SHELL-D-009: microphone explainer before the OS prompt (2026-11-14, agent-selected)
 
 Requirement: `docs/studio-requirements.md` "Microphone explainer before the OS prompt".

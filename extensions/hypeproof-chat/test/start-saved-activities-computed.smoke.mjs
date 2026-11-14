@@ -21,7 +21,7 @@ const activities=[
 const b=await launch(bin);
 try{for(const dark of [true,false])for(const width of [320,800,1420]){
  const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
- await b.load(`<!doctype html><html data-surface="start" style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div id="root"></div><script>window.acquireVsCodeApi=()=>({postMessage(){},getState(){},setState(){}});</script><script>${js}</script></body></html>`,{width,height:900,dark});
+ await b.load(`<!doctype html><html data-surface="start" style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div id="root"></div><script>window.acquireVsCodeApi=()=>({postMessage(){},getState(){},setState(){}});</script><script>${js}</script></body></html>`,{width,height:900,dark,appReady:'start'});
  await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'1.0.0',activities:${JSON.stringify(activities)}}}}))`);
  let rows=null;for(let n=0;n<50&&!rows;n++){rows=await b.evaluate(`document.querySelectorAll('.studio-saved-activities button').length===4||null`);if(!rows)await new Promise(r=>setTimeout(r,20));}
  assert.ok(rows,`${width}px: the four saved activities render`);

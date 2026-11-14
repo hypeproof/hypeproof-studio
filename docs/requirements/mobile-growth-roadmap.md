@@ -152,6 +152,24 @@ outside capture. A failed or cancelled service reply preserves the already saved
 human message; it is not automatically replayed. Silence without words cannot
 send a turn.
 
+For iPhone playback continuation (#4024), already granted OS permissions do not
+require another permission-request round trip. Show the active listening,
+finalizing, waiting or playback phase; if a concurrent draft or unavailable
+conversation blocks the next capture, explain it and preserve the words. A
+bounded memory-only enum/timing record can be deliberately shared for diagnosis;
+it contains no audio, conversation content, identity or credentials. Actual OS
+playback callbacks, synthetic next capture and physical Korean continuation are
+separate evidence; this hardening alone does not establish the incident's cause.
+
+Conversation settings use an explicitly presented native sheet. Opening it,
+closing it or swiping it away must not stop an active voice turn. Refresh and
+Logout explicitly dismiss settings even when a history read changes state;
+Logout records its accepted intent immediately. Context, notebook, privacy and
+export destinations open once after settings has dismissed, with current account
+guards rechecked. Actions have at least 44pt targets and settings remain scrollable
+at larger text sizes. This preserves the existing voice/sync acceptance, including
+the requirement that settings has actually closed before the next voice tap.
+
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
 No raw audio is written to files or uploaded by the app. Optional self-listening
 retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,
@@ -221,6 +239,15 @@ An example path is: install and use the same account → “요즘 어떤 일에
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
 
+Under MPER-03/04 and MIRS-01, an explicit iPhone logout remains available during
+background history synchronization. It waits for the existing credential/read
+operation without cancelling one-use token rotation, then revokes the same
+account/session once using its current credentials. Pending logout blocks new
+edits and execution, takes precedence over an in-memory queued Send, and retains
+the durable request ID and words in that account's cache. Stale callbacks cannot
+clear a newer account. The app shows pending status until confirmation; an
+uncertain revoke retains the account and requires another explicit action.
+
 ### Conversation from the first screen (Studio #3937)
 
 MPER-01 includes an editable text/voice composer before login. A person can write
@@ -262,6 +289,18 @@ be released before claiming live Android reflection readiness. Current account
 entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
+
+#### Android in-flight response Stop — Studio #3997
+
+MADR-02/03/04 and MPER-04 keep `응답 수신 멈추기` available while the original
+turn POST is waiting. Stop ends local voice continuation and observes the exact
+request ID and words before calling the existing Service cancel route. Only a
+matching terminal acknowledgement changes the durable outbox; an unconfirmed stop
+preserves its original identity and words without replay. Same-account/session
+fences reject late responses; a confirmed failed turn retains its later typed
+monthly/admission error. Cancellation does not promise zero provider cost.
+Real JVM HTTP and Activity/Keystore tests cover separate boundaries; native live
+HTTP, physical speech and billing remain separate acceptance.
 
 #### Confirmed failed-question recovery — Studio #3974
 
@@ -306,6 +345,12 @@ removed; account conversation keeps the existing voice and admission contract.
 Optional on-device dictation only edits the notebook draft. Returning is an
 explicit navigation action that preserves both destinations' drafts and stops
 capture. Existing server compatibility for older versions remains unchanged.
+
+The notebook owns one native navigation bar. Its title, return action, record
+history and menu must remain visible without overlapping each other or a parent
+disclosure strip. The local-storage notice belongs below that bar in the record
+content. Studio #3998 follows the actual simulator overlap found after #3985;
+source integration does not establish visual or installed-device acceptance.
 
 ### Desktop visible question entry (Studio #3798)
 
@@ -367,3 +412,12 @@ human time remain costs. Endpoint thresholds require physical Korean/noisy-room
 validation; synthetic silence controls are not speech-quality evidence. Speech
 recognition and microphone OS permissions may both be required by iOS; app-level
 repeat approvals are removed, OS consent is not bypassed.
+
+Studio #3995 adds an explicit iPhone personal-response Stop action (at least
+44pt) while a submission is in flight or a saved request is pending/running.
+It uses the existing Service cancel route and preserves submitted words, request
+identity and separate drafts. Stop immediately ends local voice continuation;
+only a matching terminal server snapshot confirms the outcome. A completed reply
+winning the race remains completed, and an uncertain cancel leaves the outbox
+recoverable without replay. Already dispatched AI work may still incur cost.
+Source, synthetic native acceptance and installed/live acceptance remain distinct.

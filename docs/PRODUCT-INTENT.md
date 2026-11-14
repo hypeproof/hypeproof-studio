@@ -51,7 +51,7 @@ Studio는 사용자의 사고를 대신 완성하는 것이 아니라, 필요한
 
 ## 첫 체험에 대한 Product Intent
 
-체험판의 첫 경험은 `AI가 무엇을 만들어줄 수 있는지`를 카탈로그처럼 고르게 하는 데서 시작하지 않는다.
+Studio의 첫 경험(초대받은 사람의 무료 시작이나 수업 입장)은 `AI가 무엇을 만들어줄 수 있는지`를 카탈로그처럼 고르게 하는 데서 시작하지 않는다.
 
 먼저 사용자가 처한 상황과 원하는 변화를 최소한으로 명료하게 만든 뒤, 실제 작업으로 이동한다. 이 요구는 Human Asset `INTENT` 하나를 시험하기 위한 것이 아니라, Studio의 더 상위 Product Intent인 **human judgment stays visible + learning is embedded**에서 파생된다.
 
@@ -116,7 +116,9 @@ Judgment, Verify, Orchestrate, Adapt, Ownership은 이를 연구할 잠정 후�
 [HC-01~08](requirements/capability-model-contract.md)이 legacy evidence와 새 해석의 경계를 정한다.
 
 가격과 수업 운영은 같은 의도를 지속해서 제공하기 위한 조건이다. 강사가 설정하는 수업,
-개인 구독, 기관 지원, 검증된 BYO를 구분하되 같은 Service 권한 계약으로 집행한다.
+초대받은 개인(HypeProof가 한 사람당 월 상한까지 AI 원가를 부담), 기관 지원, 검증된 BYO를
+구분하되 같은 Service 권한 계약으로 집행한다. Studio는 무료이고 초대로만 들어온다(Lab 결정
+2026-11-11 이용권 판매 중지, 2026-11-12 초대 전용). AI 사용은 원가 그대로 센다.
 **사용자는 실행 전에 무엇이 포함되고 누가 비용을 부담하는지 이해하며, 강사는 배정된
 자원 안에서 여러 수업의 도움과 실행 범위를 조절할 수 있어야 한다.**
 
@@ -124,11 +126,12 @@ Judgment, Verify, Orchestrate, Adapt, Ownership은 이를 연구할 잠정 후�
 [이용 권한·pricing Intent](https://github.com/hypeproof/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/products/studio/access-and-pricing-intent.md)에 둔다.
 이 문서는 다음 제품 원칙으로 번역하며, 실제 금액은 Lab pricing.ts의 버전별 계약을 따른다.
 
-- 수업·구독이 겹쳐도 사용 출처를 명시하며 한 요청을 두 번 차감하거나 개인 비용으로 자동 전환하지 않는다.
+- 수업·초대 이용이 겹쳐도 사용 출처를 명시하며 한 요청을 두 번 차감하거나 개인 비용으로 자동 전환하지 않는다.
 - 구매한 기능과 강사의 수업 정책은 플랫폼 안전·사용자 승인·런타임 지원 안에서만 작동한다.
 - 한도 도달·만료·실패는 새 유료 실행을 제한하며 자기 결과·파일·중지·내보내기를 지키도록 설계한다.
 - 실제 원가·예약·미정산·상품 포함량을 구분한다. 토큰·비용·유료 등급은 인간 역량의 점수가 아니다.
-- 이용권이 포함하는 것은 기간 안의 요청 횟수이고, 한 요청은 메뉴에서 어느 모델을 고르든 같은 단위로 센다
+- 초대 이용의 한도는 요청 횟수가 아니라 한 달 AI 원가 상한이다. 상한에 닿으면 그 사람만 다음 달까지 멈추고, 고객 화면에는 금액을 적지 않는다.
+- 2026-11-11 이전에 판매된 이용권이 포함하는 것은 기간 안의 요청 횟수이고, 한 요청은 메뉴에서 어느 모델을 고르든 같은 단위로 센다
   (Service `399109c` `lib/purchase.ts:24-29`, `middleware/native-trial-budget.ts:60-66`). 메뉴의 모델은 Service가 붙인
   현재 표시 이름으로 실행 전에 보인다(`lib/lesson-model-policy.ts:60`). 2026-10-14 별칭 재지정 뒤 이용권의 기본은 Claude Sonnet 5.5이고
   Claude Opus 5.5·Haiku 5.5도 같은 단위로 고를 수 있다([REQ-M36](studio-requirements.md), Service
