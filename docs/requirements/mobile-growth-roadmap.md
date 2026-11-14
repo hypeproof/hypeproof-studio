@@ -161,6 +161,15 @@ it contains no audio, conversation content, identity or credentials. Actual OS
 playback callbacks, synthetic next capture and physical Korean continuation are
 separate evidence; this hardening alone does not establish the incident's cause.
 
+Conversation settings use an explicitly presented native sheet. Opening it,
+closing it or swiping it away must not stop an active voice turn. Refresh and
+Logout explicitly dismiss settings even when a history read changes state;
+Logout records its accepted intent immediately. Context, notebook, privacy and
+export destinations open once after settings has dismissed, with current account
+guards rechecked. Actions have at least 44pt targets and settings remain scrollable
+at larger text sizes. This preserves the existing voice/sync acceptance, including
+the requirement that settings has actually closed before the next voice tap.
+
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
 No raw audio is written to files or uploaded by the app. Optional self-listening
 retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,

@@ -266,6 +266,18 @@ final class StudioJourneyTests: XCTestCase {
         enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap(); answer(app)
         waitForVoiceEvent("playbackStarted", in: app)
         XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
+        // Inspecting settings, then closing or swiping it away, must not end
+        // the live turn or invent a destination/action on dismissal.
+        app.buttons["conversationSettings"].tap()
+        let close = app.buttons["closeConversationSettings"]; enabled(close)
+        let settingsScreen = XCTAttachment(screenshot: app.screenshot())
+        settingsScreen.name = "journey-settings-open"; settingsScreen.lifetime = .keepAlways; add(settingsScreen)
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+        app.buttons["conversationSettings"].tap(); enabled(close)
+        app.navigationBars["대화 설정"].swipeDown()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
         deliverPlaybackCompletion(app)
         waitForVoiceEvent("playbackFinished", in: app)
         waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 2)
@@ -378,11 +390,14 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor func testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening() throws {
         let app = launch("queued-voice"); signIn(app)
-        app.buttons["conversationSettings"].tap(); app.buttons["새로 고침"].tap()
+        app.buttons["conversationSettings"].tap()
+        let refresh = app.buttons["새로 고침"]; enabled(refresh)
+        XCTAssertTrue(refresh.isHittable); XCTAssertGreaterThanOrEqual(refresh.frame.height, 44)
+        refresh.tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
         XCTAssertTrue(syncing.waitForExistence(timeout: 5))
-        // Refresh starts before the system menu has finished dismissing. An
-        // enabled button behind that menu is not yet a usable touch target.
+        // Refresh may overlap the sheet dismissal. A voice button behind an
+        // open settings surface is not yet a usable touch target.
         XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
         let voice = app.buttons["sharedVoice"]
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -541,7 +556,8 @@ final class StudioJourneyTests: XCTestCase {
         let logout = app.buttons["로그아웃"]
         XCTAssertTrue(logout.waitForExistence(timeout: 5))
         XCTAssertTrue(logout.isEnabled); XCTAssertTrue(logout.isHittable)
-        XCTAssertTrue(syncing.exists, "The one logout tap must overlap the actual held GET.")
+        let settingsSyncing = app.descendants(matching: .any).matching(identifier: "settingsSyncing").firstMatch
+        XCTAssertTrue(settingsSyncing.exists, "The one logout tap must overlap the actual held GET; observe it in the active sheet.")
         logout.tap()
         let pending = app.descendants(matching: .any).matching(identifier: "sharedLoggingOut").firstMatch
         XCTAssertTrue(pending.waitForExistence(timeout: 5))
