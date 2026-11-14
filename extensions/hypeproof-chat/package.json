@@ -128,6 +128,10 @@
         "title": "Chalk: 강사 토큰 입력"
       },
       {
+        "command": "hypeproof-chat.endRehearsalSeat",
+        "title": "리허설 끝내고 강사로 돌아가기"
+      },
+      {
         "command": "hypeproof-chat.chalk.checkPlan",
         "title": "Chalk: 초안 검사 (강사용)"
       },
@@ -437,6 +441,7 @@
         }
       ],
       "commandPalette": [
+        { "command": "hypeproof-chat.endRehearsalSeat", "when": "hypeproofChat.rehearsalSeat" },
         { "command": "hypeproof-chat.chalk.checkPlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
         { "command": "hypeproof-chat.chalk.openCourse", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
         { "command": "hypeproof-chat.chalk.savePlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },

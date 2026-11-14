@@ -275,6 +275,8 @@ interface Props {
   onCancel: () => void;
   onClear: () => void;
   onSetToken: () => void;
+  /** #4048 — the rehearsal band's button: ask the host to leave the rehearsal seat (the host confirms). */
+  onEndRehearsalSeat?: () => void;
   onSettings: () => void;
   onRunCode: (html: string) => void;
   onNamingRitual: () => void;
@@ -1486,9 +1488,14 @@ export function ChatPanel(props: Props) {
   //
   // If you need a new hook, add it **above** this block.
   // ─────────────────────────────────────────────────────────────────────────
-  const updateBanner = config?.update ? (
+  const updateBannerCore = config?.update ? (
     <UpdateBanner offer={config.update} onInstall={props.onInstallUpdate} onDismiss={props.onDismissUpdate} />
   ) : null;
+  // #4052 — the rehearsal band rides in the same slot as the update banner. Without the signal that slot is exactly the
+  // one main renders, so no sibling's tree position (and no React useId) moves. A new sibling would shift them.
+  const updateBanner = config?.rehearsalSeat ? (
+    <>{updateBannerCore}<RehearsalSeatBand visible onEnd={props.onEndRehearsalSeat ?? (() => undefined)} /></>
+  ) : updateBannerCore;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
   // #3563 — an instructor verified by the Chalk runtime sees the Chalk tab notice, not the student start screen.
@@ -3222,6 +3229,17 @@ function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 
 
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
+}
+
+/** #4048 — the band in a rehearsal seat. Drawn only when the host sent the rehearsal signal; otherwise nothing. */
+export function RehearsalSeatBand({ visible, onEnd }: { visible: boolean; onEnd: () => void }) {
+  if (!visible) return null;
+  return (
+    <div className="hps-rehearsal-seat" role="status">
+      <span>리허설 중</span>{" "}
+      <button type="button" onClick={onEnd}>끝내고 돌아가기</button>
+    </div>
+  );
 }
 
 export function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {

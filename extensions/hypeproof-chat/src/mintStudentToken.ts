@@ -19,6 +19,7 @@ import {
 } from "./mintStudentTokenHelpers";
 
 export { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
+import { MINT_BLOCKED, REHEARSAL_RETURN_KEY, returnHeld } from "./rehearsalSeat";
 
 export interface MintCommandDeps {
   context: vscode.ExtensionContext;
@@ -41,6 +42,11 @@ export async function runMintStudentToken(deps: MintCommandDeps): Promise<MintRe
 
   // 1. Issuer token — SecretStorage; prompt once if missing.
   let issuerToken = await context.secrets.get(ISSUER_TOKEN_KEY);
+  // #4048 — during a rehearsal the credential is held aside; never take a new one into the same slot.
+  if (!issuerToken && (await returnHeld(context.secrets))) {
+    vscode.window.showWarningMessage(MINT_BLOCKED);
+    return undefined;
+  }
   if (!issuerToken) {
     const pasted = await vscode.window.showInputBox({
       title: "강사 issuer 토큰을 한 번 붙여넣어 주세요",
@@ -149,6 +155,7 @@ export async function runMintStudentToken(deps: MintCommandDeps): Promise<MintRe
       // Auth fail → forget the stored issuer; likely stale.
       if (status === 401 || status === 403) {
         await context.secrets.delete(ISSUER_TOKEN_KEY);
+        await context.secrets.delete(REHEARSAL_RETURN_KEY);
       }
       vscode.window.showWarningMessage(`토큰 발급 실패: ${friendly}`);
       return undefined;
@@ -176,6 +183,7 @@ export async function runMintStudentToken(deps: MintCommandDeps): Promise<MintRe
         await vscode.env.clipboard.writeText(result.token);
       } else if (choice === "issuer 토큰 지우기") {
         await context.secrets.delete(ISSUER_TOKEN_KEY);
+        await context.secrets.delete(REHEARSAL_RETURN_KEY);
         vscode.window.showInformationMessage(
           "issuer 토큰이 지워졌어요. 다음 발급 시 다시 물어봅니다.",
         );

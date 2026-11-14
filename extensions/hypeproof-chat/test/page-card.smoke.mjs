@@ -23,8 +23,14 @@ fs.writeFileSync(path.join(root, "index.html"), "<!doctype html><title>a</title>
 fs.writeFileSync(path.join(root, "game", "level.HTM"), "<html></html>");
 fs.writeFileSync(path.join(root, "style.css"), "body{}");
 fs.writeFileSync(path.join(outside, "secret.html"), "<html>secret</html>");
-fs.symlinkSync(path.join(outside, "secret.html"), path.join(root, "escape.html"));
-fs.symlinkSync(outside, path.join(root, "linked"));
+// Windows without the symlink privilege refuses these with EPERM; the cases that need links then print a skip (as
+// consult-tool does) and every other case still runs.
+let canLink = true;
+try {
+  fs.symlinkSync(path.join(outside, "secret.html"), path.join(root, "escape.html"));
+  fs.symlinkSync(outside, path.join(root, "linked"), "dir");
+} catch (e) { if (e.code !== "EPERM") throw e; canLink = false; }
+const tl = (label, fn) => (canLink ? t(label, fn) : (console.log(`  skip ${label} (no symlink privilege)`), Promise.resolve()));
 for (const n of ["a", "b", "c", "d"]) fs.writeFileSync(path.join(root, `${n}.html`), "<html></html>");
 
 const card = (changes) => buildPageCard({ root, turnId: "turn-1", anchorId: "msg-1", changes });
@@ -55,7 +61,7 @@ await t("negative control: a listed page that no longer exists is not a row", ()
   assert.equal(card({ added: ["gone.html"], changed: [], deleted: [] }), null);
 });
 
-await t("a symlink escaping the folder gives no row (file link and directory link)", () => {
+await tl("a symlink escaping the folder gives no row (file link and directory link)", () => {
   const view = card({ added: ["escape.html", "linked/secret.html", "index.html"], changed: [], deleted: [] });
   assert.deepEqual(view.pages.map((p) => p.path), ["index.html"]);
   assert.equal(card({ added: ["escape.html", "linked/secret.html"], changed: [], deleted: [] }), null);
@@ -72,7 +78,7 @@ await t("up to 3 rows plus 외 N개", () => {
   assert.equal(few.more, 0);
 });
 
-await t("resolvePageInFolder: positive control and each refusal", () => {
+await tl("resolvePageInFolder: positive control and each refusal", () => {
   const ok = resolvePageInFolder(root, "game/level.HTM");
   assert.equal(ok.ok, true);
   assert.equal(ok.abs, path.join(fs.realpathSync(root), "game", "level.HTM"));
@@ -100,7 +106,7 @@ await t("열기 and 폴더에서 보기 reach the right host action with the rea
   assert.deepEqual(calls, [["open", path.join(real, "index.html"), "<!doctype html><title>a</title>"], ["reveal", path.join(real, "game", "level.HTM")]]);
 });
 
-await t("the host handler refuses a path outside the folder (and a path not on the card)", async () => {
+await tl("the host handler refuses a path outside the folder (and a path not on the card)", async () => {
   calls.length = 0;
   for (const p of ["../outside/secret.html", path.join(outside, "secret.html"), "escape.html", "a.html"]) {
     const out = await act({ type: "pageCardOpen", turnId: "turn-1", path: p });
@@ -156,26 +162,26 @@ await t("positive control: the handle-based read returns the checked bytes", () 
   assert.equal(r.ok, true);
   assert.equal(r.text, "INSIDE");
 });
-await t("F1: the file swapped for a link between check and read is refused, never read", () => {
+await tl("F1: the file swapped for a link between check and read is refused, never read", () => {
   resetRace();
   const r = withSeam((abs) => swapFile(abs), () => readPageInFolder(race, "page.html"));
   assert.equal(r.ok, false);
   assert.equal(r.text, undefined);
 });
-await t("F1: a directory on the path swapped for a link between check and read is refused (dev+ino)", () => {
+await tl("F1: a directory on the path swapped for a link between check and read is refused (dev+ino)", () => {
   resetRace();
   const r = withSeam(() => swapDir(), () => readPageInFolder(race, "sub/deep.html"));
   assert.equal(r.ok, false);
   assert.equal(r.cause, "changed");
 });
-await t("F1: 폴더에서 보기 walks again right before the OS call and refuses a swapped file or directory", () => {
+await tl("F1: 폴더에서 보기 walks again right before the OS call and refuses a swapped file or directory", () => {
   resetRace();
   assert.equal(recheckPageInFolder(race, "page.html").ok, true);
   assert.equal(withSeam((abs) => swapFile(abs), () => recheckPageInFolder(race, "page.html")).ok, false);
   resetRace();
   assert.equal(withSeam(() => swapDir(), () => recheckPageInFolder(race, "sub/deep.html")).ok, false);
 });
-await t("CGP-ART-R-023: the same walk for any file (deck.pdf) — inside, no link, no climb, swapped file or directory refused", () => {
+await tl("CGP-ART-R-023: the same walk for any file (deck.pdf) — inside, no link, no climb, swapped file or directory refused", () => {
   resetRace();
   fs.writeFileSync(path.join(race, "deck.pdf"), "%PDF");
   assert.equal(resolveFileInFolder(race, "deck.pdf").ok, true, "positive control: a non-page file inside the root");
@@ -187,7 +193,7 @@ await t("CGP-ART-R-023: the same walk for any file (deck.pdf) — inside, no lin
   fs.writeFileSync(path.join(race, "sub", "deck.pdf"), "%PDF");
   assert.equal(withSeam(() => swapDir(), () => recheckFileInFolder(race, "sub/deck.pdf")).ok, false, "a directory on the path swapped at the seam");
 });
-await t("F1: through the gate, a swap at the seam reaches neither open nor reveal, and reload re-checks", async () => {
+await tl("F1: through the gate, a swap at the seam reaches neither open nor reveal, and reload re-checks", async () => {
   resetRace();
   const reg = new PageCardRegistry();
   reg.add("k", race, { turnId: "r1", anchorId: "a", pages: [{ path: "page.html", kind: "changed" }] });
@@ -206,7 +212,7 @@ await t("F1: through the gate, a swap at the seam reaches neither open nor revea
   assert.equal(reload(), null, "a reload after a swap must not read the link target");
 });
 
-await t("#4066 (verify-r004): the recorded root swapped for a link after the card was made — open, reload, reveal refused", async () => {
+await tl("#4066 (verify-r004): the recorded root swapped for a link after the card was made — open, reload, reveal refused", async () => {
   // A copy of the folder elsewhere, then the recorded root path itself becomes a link to it.
   const rootA = path.join(tmp, "swap-root"), elsewhere = path.join(tmp, "swap-elsewhere"), moved = path.join(tmp, "swap-moved");
   for (const d of [rootA, elsewhere, moved]) fs.rmSync(d, { recursive: true, force: true });
@@ -267,6 +273,35 @@ await t("#4066 round 2: a root recorded in another spelling of the same folder s
     assert.notEqual(canonicalFolder(win, pageCardSeam.realpath), win, "the raw c: form would fail exactRoot");
   } finally { pageCardSeam.realpath = null; }
 });
+
+// Windows (the "extension / windows smokes" CI job): JS realpath keeps a drive letter as given, so a turn root opened as
+// `c:\…` is recorded as `c:\…` unless it goes through recordedRoot, while the exactRoot walk re-resolves to `C:\…`.
+// A real lowercased-drive spelling of this tmp folder, through fs.promises.realpath, like beginTurnRestore.
+if (process.platform === "win32") {
+  await t("Windows: a turn root spelled with a lowercase drive opens and reveals once recorded through recordedRoot", async () => {
+    const dir = path.join(tmp, "win-drive");
+    fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, "index.html"), "INSIDE");
+    const lower = dir.replace(/^[A-Z]:/, (d) => d.toLowerCase());
+    const jsRoot = await fs.promises.realpath(lower);
+    // Documented in workspaceRouting.ts; if a Node release ever normalized it, the control below has nothing to show.
+    const kept = /^[a-z]:/.test(jsRoot);
+    if (!kept) console.log(`  note JS realpath returned ${jsRoot.slice(0, 2)}: the raw-root control is not meaningful on this Node`);
+    const press = async (rootAs) => {
+      const reg = new PageCardRegistry(), got = [];
+      reg.add("k", rootAs, { turnId: "r1", anchorId: "a", pages: [{ path: "index.html", kind: "changed" }] });
+      const deps = { open: (abs) => got.push(["open", abs]), reveal: (abs) => got.push(["reveal", abs]) };
+      const ok = [(await handlePageCardAction(reg, "k", { type: "pageCardOpen", turnId: "r1", path: "index.html" }, deps)).ok,
+                  (await handlePageCardAction(reg, "k", { type: "pageCardReveal", turnId: "r1", path: "index.html" }, deps)).ok];
+      return { ok, got };
+    };
+    if (kept) assert.deepEqual((await press(jsRoot)).ok, [false, false], "control: the raw JS-realpath root is refused (the #4066 round-2 bug)");
+    const rec = recordedRoot(jsRoot);
+    assert.match(rec, /^[A-Z]:/);
+    const r = await press(rec);
+    assert.deepEqual(r.ok, [true, true], "recorded through recordedRoot it opens and reveals");
+    assert.equal(r.got.length, 2);
+  });
+} else console.log("  skip Windows lowercase-drive root (not win32)");
 
 fs.rmSync(tmp, { recursive: true, force: true });
 if (fail) { console.error(`page-card: ${fail} failed`); process.exit(1); }
