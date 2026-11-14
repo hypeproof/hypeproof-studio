@@ -158,6 +158,8 @@ function rehearsalSeatHostFor(context: vscode.ExtensionContext, connections: Act
     },
     notify: (message) => { void vscode.window.showWarningMessage(message); },
     now: () => Date.now(),
+    // #4048 Dev 3차 — label lines (cleared by …) go to the same channel as the seat outcome.
+    log: (line) => rehearsalSeatChannel().appendLine(line),
   };
 }
 

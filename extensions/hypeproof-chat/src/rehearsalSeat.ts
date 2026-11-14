@@ -45,9 +45,14 @@ export interface SeatHost {
   askResume(): Promise<"resume" | "return" | undefined>;
   notify(message: string): void;
   now(): number;
+  /** Diagnostic line (facts only: a label, never a value). Optional; the host writes it to its channel. */
+  log?(line: string): void;
 }
 
 export class RehearsalSeatError extends Error {}
+
+/** #4048 Dev 3차 — every clear of the return key or the seat records its path label (no value). */
+const clearedBy = (h: SeatHost, label: string): void => { h.log?.(`[seat] cleared by ${label}`); };
 
 const parseSeat = (raw: string | undefined): SeatRecord | undefined => {
   if (!raw) return undefined;
@@ -62,6 +67,7 @@ async function restoreIssuer(h: SeatHost): Promise<void> {
   const ret = await h.secrets.get(REHEARSAL_RETURN_KEY);
   if (ret) await h.secrets.store(ISSUER_TOKEN_KEY, ret);
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
+  clearedBy(h, "restore");
   await h.secrets.delete(REHEARSAL_RETURN_KEY);
 }
 
@@ -77,6 +83,15 @@ export async function enterRehearsal(h: SeatHost, input: { token: string; expire
   const folder = h.rehearsalFolderFor(input.rehearsalId);
   await h.secrets.store(REHEARSAL_RETURN_KEY, issuer);
   await writeSeat(h, { phase: "entering", rehearsalId: input.rehearsalId, expiresAt: input.expiresAt, homeFolder: home, rehearsalFolder: folder, pendingToken: input.token });
+  // #4048 Dev 3차 — the issuer is removed only after the return key and the seat read back as written.
+  const readBack = await h.secrets.get(REHEARSAL_RETURN_KEY);
+  const seatBack = await readSeat(h);
+  if (readBack !== issuer || !seatBack || seatBack.rehearsalId !== input.rehearsalId || seatBack.pendingToken !== input.token) {
+    clearedBy(h, "enter-readback");
+    await h.secrets.delete(REHEARSAL_SEAT_KEY);
+    await h.secrets.delete(REHEARSAL_RETURN_KEY);
+    throw new RehearsalSeatError(ENTER_OPEN_FAILED);
+  }
   await h.secrets.delete(ISSUER_TOKEN_KEY);
   try {
     h.makeFolder(folder);
@@ -100,6 +115,7 @@ async function resumeReturn(h: SeatHost, seat: SeatRecord): Promise<"done" | "re
       await h.openFolder(seat.homeFolder);
       return "reloading";
     }
+    clearedBy(h, "return");
     await h.secrets.delete(REHEARSAL_RETURN_KEY);
     await h.secrets.delete(REHEARSAL_SEAT_KEY);
     return "done";
@@ -117,6 +133,7 @@ async function finishInterrupted(h: SeatHost, seat: SeatRecord | undefined): Pro
     try { await h.openFolder(seat.homeFolder); return "reloading"; }
     catch { h.notify(RETURN_FAILED); return "failed"; }
   }
+  clearedBy(h, "finish");
   await h.secrets.delete(REHEARSAL_RETURN_KEY);
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
   return "done";
@@ -136,7 +153,7 @@ export async function resumeOnActivation(h: SeatHost): Promise<"none" | "bound" 
   const ret = await h.secrets.get(REHEARSAL_RETURN_KEY);
   const seat = await readSeat(h);
   if (!ret) {
-    if (seat) await h.secrets.delete(REHEARSAL_SEAT_KEY);
+    if (seat) { clearedBy(h, "no-return"); await h.secrets.delete(REHEARSAL_SEAT_KEY); }
     return "none";
   }
   if (await h.secrets.get(ISSUER_TOKEN_KEY)) return finishInterrupted(h, seat);
@@ -180,6 +197,7 @@ export async function forgetIssuer(h: SeatHost): Promise<void> {
   const root = h.currentRoot();
   if (seat && sameFolder(root, seat.rehearsalFolder)) await h.releaseStudentBinding(root as string);
   await h.secrets.delete(ISSUER_TOKEN_KEY);
+  clearedBy(h, "forget");
   await h.secrets.delete(REHEARSAL_RETURN_KEY);
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
 }
