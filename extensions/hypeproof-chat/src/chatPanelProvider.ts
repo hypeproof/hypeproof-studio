@@ -12456,7 +12456,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ||heldUnsaved?.binding.session===binding.session&&heldUnsaved.binding.activity===binding.activity
           &&heldUnsaved.binding.workspace===binding.workspace&&heldUnsaved.binding.task===binding.task)){
         const same=(b:ReflectionBinding|undefined)=>b?.session===binding.session&&b.activity===binding.activity&&b.workspace===binding.workspace&&b.task===binding.task;
-        const session=await accounts.conversationSession();
+        let session: string | undefined;
+        try { session=await accounts.conversationSession(); }
+        catch { /* Offline refresh must not hide local history; omit the unverified admission marker. */ }
         if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!same(this.reflectionBinding()))return false;
         if(session===binding.session){
           const current=this.reflectionBinding()!;

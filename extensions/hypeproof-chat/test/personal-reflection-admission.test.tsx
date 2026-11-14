@@ -1,4 +1,4 @@
-// MPER-05: real App/bridge -> existing account reflection host -> real task files.
+// MPER-03/04: real App/bridge -> existing account reflection host -> real task files.
 // Only VS Code presentation, profile configuration and HTTP use the existing entry fixture.
 import React, { act } from 'react';
 import assert from 'node:assert/strict';
@@ -26,7 +26,7 @@ async function main() {
   root = createRoot(document.getElementById('root')!);
   const { personalEntryFixture, deferred } = await import(pathToFileURL(process.cwd() + '/test/personal-entry-harness.mjs').href);
   const { App } = await import('../webview-ui/src/App');
-  let body: any, failed = false;
+  let body: any, failed = false, offline = false;
   const posted = deferred(), release = deferred();
   const words = '내가 정말 중요하게 생각하는 일은 무엇일까요?';
   const reason = '이번 달 이용 한도에 닿았습니다.';
@@ -37,6 +37,7 @@ async function main() {
   const response = (value: any, status = 200) => new Response(JSON.stringify(value), { status });
   fixture = await personalEntryFixture({ publish: (data: any) => window.dispatchEvent(new dom.window.MessageEvent('message', { data })),
     responseFor: async (route: string, options: any) => {
+      if (offline && route.endsWith('/auth/refresh')) throw new TypeError('Synthetic offline refresh');
       if (route.endsWith('/me/reflection/turns')) { body = JSON.parse(options.body); posted.resolve(); await release.promise; failed = true; return response({ error: 'reflection_monthly_limit' }, 429); }
       if (route.endsWith('/me/reflection')) return response(snapshot());
     } });
@@ -91,5 +92,31 @@ async function main() {
   assert.equal(fixture.current.h.currentTaskStore().getHistory(task).filter((m: any) => m.id === body.id).length, 1);
   assert.equal(fixture.requests.filter((r: any) => r.route.endsWith('/me/reflection/turns')).length, 1, 'refresh and fresh host never resend');
   console.log('PASS mounted App send → real account/host/disk → recorded failed GET retains typed refusal and one original question');
+
+  // Exercise real AccountSession refresh failure, not a stubbed conversationSession.
+  // A fresh App must still receive its saved local history while identity is unavailable.
+  const accountKey = 'hypeproofChat.personalAccount.v1';
+  const credentials = JSON.parse(fixture.vault.get(accountKey));
+  fixture.vault.set(accountKey, JSON.stringify({ ...credentials, expiresAt: Date.now() + 60_000 }));
+  const beforeOffline = JSON.parse(fs.readFileSync(bindingFile, 'utf8'));
+  offline = true;
+  await settle(() => root.unmount());
+  root = createRoot(document.getElementById('root')!);
+  await settle(() => root.render(<App />));
+  assert(!document.body.textContent?.includes(words), 'fresh mount cannot reuse the old timeline DOM');
+  const historiesBefore = fixture.posts.filter((p: any) => p.type === 'history').length;
+  const refreshesBefore = fixture.requests.filter((r: any) => r.route.endsWith('/auth/refresh')).length;
+  await settle(() => fixture.current.h.postHistory());
+  assert.equal(fixture.requests.filter((r: any) => r.route.endsWith('/auth/refresh')).length, refreshesBefore + 1, 'near-expired account performs one actual failed refresh');
+  assert.equal(fixture.posts.filter((p: any) => p.type === 'history').length, historiesBefore + 1, 'offline refresh still delivers saved history');
+  const offlineHistory = fixture.posts.findLast((p: any) => p.type === 'history');
+  assert.equal(offlineHistory.reflectionFailure, undefined, 'unverified identity must not project the admission marker');
+  assert.equal(document.body.textContent?.split(words).length, 2, 'saved question remains visible exactly once while offline');
+  assert(!document.body.textContent?.includes(reason), 'no unverified refusal explanation is projected');
+  assert.equal(document.querySelector<HTMLTextAreaElement>('textarea')?.value, richDraft.queued + '\n' + richDraft.text, 'fresh composer preserves queued and unsent words');
+  assert.equal(JSON.stringify(fixture.current.h.currentTaskStore().getDraft(task)), JSON.stringify(richDraft), 'offline history preserves every rich draft field');
+  assert.deepEqual(JSON.parse(fs.readFileSync(bindingFile, 'utf8')), beforeOffline, 'failed refresh does not discard the persisted admission marker');
+  assert.equal(fixture.requests.filter((r: any) => r.route.endsWith('/me/reflection/turns')).length, 1, 'offline remount never replays the question');
+  console.log('PASS real offline credential refresh → fresh App retains local question and rich draft, omits unverified marker, no replay');
 }
 main().then(async () => { await act(async () => root.unmount()); fixture?.close(); dom.window.close(); process.exit(0); }, e => { console.error(e); fixture?.close(); dom.window.close(); process.exit(1); });
