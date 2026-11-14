@@ -102,7 +102,7 @@ try {
     checks += 9;
 
     // 2. Round trip: two full cards and an empty row between them; trimmed; empty rows dropped; read back after re-open.
-    await ev(`${card(1, '  요약 스킬 ', '긴 글을 세 줄로 줄여요', '아래 글을 세 줄로 요약해 줘.')}${clearCard(2)}${card(3, '질문 만들기', '확인 질문 세 개', '이 내용으로 확인 질문 세 개를 만들어 줘.\\n답은 아직 알려 주지 마.')}return 0`);
+    await ev(`${card(1, '  요약 스킬 ', '긴 글을 세 줄로 줄여요', '아래 글을 세 줄로 요약해 줘.')}${clearCard(2)}${card(3, '질문 만들기', '확인 질문 세 개', '이 내용으로 확인 질문 세 개를 만들어 줘.\n답은 아직 알려 주지 마.')}return 0`);
     const draft = await ev(`return content().skill_cards`);
     const expected = [{ name: '요약 스킬', summary: '긴 글을 세 줄로 줄여요', prompt: '아래 글을 세 줄로 요약해 줘.' }, { name: '질문 만들기', summary: '확인 질문 세 개', prompt: '이 내용으로 확인 질문 세 개를 만들어 줘.\n답은 아직 알려 주지 마.' }];
     assert.deepEqual(draft, expected, `${width}px: trimmed, empty rows dropped, order kept`);
@@ -125,8 +125,8 @@ try {
       [card(3, '질문 만들기', '설명', '자세한 건 https://example.com 참고'), /카드 3번의 시작 프롬프트에는 링크/],
       [card(3, 'javascript:x', '설명', '프롬프트'), /카드 3번의 이름에는 링크/],
       [card(3, '요약 스킬', '설명', '프롬프트'), /카드 3번의 이름이 앞의 카드와 같습니다/],
-      [card(3, '줄 많음', '설명', '1\\n2\\n3\\n4\\n5\\n6\\n7'), /6줄 이내/],
-      [card(3, '공백 줄', '설명', '첫 줄\\n  들여쓴 줄'), /줄 앞뒤 공백/],
+      [card(3, '줄 많음', '설명', '1\n2\n3\n4\n5\n6\n7'), /6줄 이내/],
+      [card(3, '공백 줄', '설명', '첫 줄\n  들여쓴 줄'), /줄 앞뒤 공백/],
     ];
     for (const [js, re] of blocked) {
       await ev(`${js}return 0`);
