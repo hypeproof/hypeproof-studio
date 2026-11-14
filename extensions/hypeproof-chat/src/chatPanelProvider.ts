@@ -3669,12 +3669,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
     // CGP-KNOW-R-028 follow-up (#4014) — the learner's own save of a memory file in the editor is Studio's change, never
     // something a keep-off turn check puts back.
-    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(document => {
+    // Optional call: a host without the event (the hand-written vscode stubs of the provider smokes) simply has no
+    // editor saves to note.
+    const memorySaves = vscode.workspace.onDidSaveTextDocument?.(document => {
       const file = document.uri.fsPath;
       if (document.uri.scheme !== "file" || path.basename(path.dirname(file)) !== "memory" || path.basename(path.dirname(path.dirname(file))) !== ".hypeproof") return;
       // The bytes on disk, not the editor's text: a byte-order mark or line endings would make the save look foreign.
       void noteStudioMemorySave(file);
-    }));
+    });
+    if (memorySaves) context.subscriptions.push(memorySaves);
     // The quarantine's retention and caps are applied at activation too (a window closed for a week starts clean).
     try { void pruneQuarantine(this.memoryQuarantineBase()).catch(() => undefined); } catch { /* no global storage yet: the next guard run prunes */ }
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
