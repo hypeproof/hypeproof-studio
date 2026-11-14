@@ -52,7 +52,7 @@ import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import {
   RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
   enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation, storeIssuerUnlessHeld,
-  leaveWithoutReport, leaveAfterReport, storeDevSeed, type LeaveAsk,
+  leaveWithoutReport, leaveAfterReport, storeDevSeed, seatFacts, seatLogLine, returnAfterUnsettled, type LeaveAsk,
   type SeatHost,
 } from "./rehearsalSeat";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -93,6 +93,13 @@ import { QUIT_GUARD_COMMAND, UPDATE_DURING_TURN_COPY, quitGuardPrompt } from "./
 import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/publishConfig";
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
+
+/** #4048 — the diagnostic channel for the seat outcome (facts only; no path, token or cohort). */
+let seatChannel: vscode.OutputChannel | undefined;
+function rehearsalSeatChannel(): vscode.OutputChannel {
+  seatChannel ??= vscode.window.createOutputChannel("HypeProof 리허설 기록");
+  return seatChannel;
+}
 
 /** #4048 — the same-window rehearsal host for this window (set by activate after the activity wrap). */
 let seatHost: SeatHost | undefined;
@@ -186,7 +193,13 @@ export async function activate(context: vscode.ExtensionContext) {
   context = connections.wrap();
   // #4048 — a same-window rehearsal: enter, bind, or return, decided from the secrets before the resume marker runs.
   seatHost = rehearsalSeatHostFor(context, connections);
-  const seatOutcome = await resumeOnActivation(seatHost).catch(() => { void vscode.window.showWarningMessage(RETURN_FAILED); return 'failed' as const; });
+  // #4048 Dev 2차 — one facts-only line per activation, and the safety net for a window that ends without a learner connection.
+  rehearsalSeatChannel().appendLine('[seat] activation reached the seat step');
+  let seatOutcome: string;
+  try { seatOutcome = await resumeOnActivation(seatHost); } catch { seatOutcome = 'threw'; }
+  const seatFactsNow = await seatFacts(seatHost).catch(() => undefined);
+  if (seatFactsNow) rehearsalSeatChannel().appendLine(seatLogLine(seatOutcome, seatFactsNow));
+  await returnAfterUnsettled(seatHost, seatOutcome).catch(() => 'failed' as const);
   if (seatOutcome === 'ask') void offerResume(seatHost).catch(() => undefined);
   registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
