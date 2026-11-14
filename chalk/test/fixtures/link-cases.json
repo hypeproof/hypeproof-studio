@@ -23,7 +23,9 @@
   "example.com/x \ub97c \uc5f4\uc5b4 \ubcf4\uc138\uc694",
   "a.b.c",
   "www \uc0ac\uc774\ud2b8",
-  "Q:\ub2f5"
+  "Q:\ub2f5",
+  "www.",
+  "www.x"
  ],
  "links": [
   "https://x.example",
