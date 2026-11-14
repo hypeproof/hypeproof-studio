@@ -29,6 +29,15 @@ export function findChromium() {
   return null;
 }
 
+// For load(html, { appReady: true }): a script placed before the page's first <script> that wraps the page's own
+// acquireVsCodeApi stub, so the App's `ready` post sets window.__hpsAppReady whatever the stub does with its messages.
+const READY_PROBE = `<script>(()=>{let f;Object.defineProperty(window,'acquireVsCodeApi',{configurable:true,get:()=>f&&(()=>{const api=f();const post=api.postMessage;return {...api,getState:(...a)=>api.getState(...a),setState:(...a)=>api.setState(...a),postMessage:(m)=>{if(m&&m.type==='ready')window.__hpsAppReady=true;return post.call(api,m);}};}),set:(v)=>{f=v;}});})();</script>`;
+export function withReadyProbe(html) {
+  const at = html.indexOf('<script');
+  if (at < 0) throw new Error('appReady load: the page has no <script> to mount the App');
+  return html.slice(0, at) + READY_PROBE + html.slice(at);
+}
+
 // A cold Chrome start on a busy CI runner can take longer than a warm local one: wait up to
 // 30 s, then retry once with a fresh profile before failing.
 export async function launch(bin, attempt = 1) {
@@ -76,12 +85,21 @@ export async function launch(bin, attempt = 1) {
     send, evaluate, waitForEvent,
     onEvent(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     // One document at a time. `forcedColors` and `dark` are media emulation, not class names.
-    async load(html, { width = 1420, height = 800, forcedColors = false, dark = true } = {}) {
+    // `appReady`: the page mounts the whole App (webview-ui/src/main.tsx) and the test then sends it host messages. The App
+    // registers its message listener and posts `ready` in the same effect, so a message sent before `ready` is lost, and the
+    // App stays on its disconnected screen (CI, #4017). With `appReady`, load() resolves only after the App posted `ready`.
+    async load(html, { width = 1420, height = 800, forcedColors = false, dark = true, appReady = false } = {}) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
       await send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: forcedColors ? 'active' : 'none' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
       const { frameTree } = await send('Page.getFrameTree');
-      await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
+      await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html: appReady ? withReadyProbe(html) : html });
       await new Promise((r) => setTimeout(r, 50));
+      if (appReady) {
+        for (const end = Date.now() + 15000; !(await evaluate('window.__hpsAppReady === true')); ) {
+          if (Date.now() > end) throw new Error('the App never posted ready (appReady load)');
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      }
     },
     // Matches `selector` and forces :focus-visible on the first hit, then reads computed styles.
     async focusVisibleStyle(selector, props = ['outline-width', 'outline-style', 'outline-color', 'outline-offset'], states = [], focus = true) {

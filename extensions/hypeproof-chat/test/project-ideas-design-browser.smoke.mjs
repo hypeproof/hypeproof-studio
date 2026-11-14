@@ -25,7 +25,7 @@ const waitFor=async(expr,what,ms=5000)=>{const end=Date.now()+ms;for(;;){if(awai
 const settle=async(expr)=>{const r=await browser.send('Runtime.evaluate',{expression:expr,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description??'evaluate failed');return r.result.value;};
 const frames=()=>settle(`new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))`);
 const post=(m)=>browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(m)}}))`);
-const open=async(theme,width,height,forcedColors=false)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme),{width,height,dark:theme.kind==='dark',forcedColors});
+const open=async(theme,width,height,forcedColors=false)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme),{width,height,dark:theme.kind==='dark',forcedColors,appReady:true});
  await post({type:'config',config});await waitFor(`!!document.querySelector('.hps-input textarea')`,'composer');
  await post({type:'history',messages:history});await waitFor(`document.querySelectorAll('[data-project-ideas] .hps-project-idea').length>0`,'idea list');
  // Two animation frames so layout and the newest-end scroll have settled before measuring.

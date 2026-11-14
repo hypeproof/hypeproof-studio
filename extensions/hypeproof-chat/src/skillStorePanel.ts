@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { StoreClient, StoreClientError, STORE_COPY, storeErrorMessage } from "./skillStore";
 import type { StoreAttributionInput, StoreHostMessage, StoreLocalConnections, StoreQuestDraft, StoreRequest, StoreState, StoreStepView, StoreTab } from "./skillStoreProtocol";
 import { adaptOverlay } from "./questSkill";
+import { refuseOnChildSeat } from "./childProfileHost";
 
 export const SKILL_STORE_COMMAND = "hypeproof-chat.skillStore";
 /** The quest completion card's "스토어에 등록": the sell tab with the finished quest prefilled (scene 1). */
@@ -368,8 +369,9 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     });
   };
   context.subscriptions.push(
-    vscode.commands.registerCommand(SKILL_STORE_COMMAND, () => open()),
+    vscode.commands.registerCommand(SKILL_STORE_COMMAND, () => refuseOnChildSeat("store") ? undefined : open()),
     vscode.commands.registerCommand(SKILL_STORE_PUBLISH_QUEST_COMMAND, () => {
+      if (refuseOnChildSeat("store")) return;
       const offer = deps.questOffer?.();
       if (!offer) return void vscode.window.showInformationMessage("먼저 자동화 퀘스트의 모든 단계를 완료해 주세요.");
       open("sell", { questDraft: offer.draft, notice: STORE_COPY.questPrefill });
