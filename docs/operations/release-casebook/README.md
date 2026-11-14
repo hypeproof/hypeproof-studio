@@ -116,12 +116,17 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 |---|---|
 | BB-033 | `testFirstInstallSignInToFirstAnswerWithoutDesktop` |
 | BB-033 | `testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking` |
+| BB-033 | `testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin` |
 | BB-033 | `testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend` |
 | BB-033 | `testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice` |
 | BB-033 | `testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable` |
 | BB-034 | `testDictationEditsDraftThenSendGetsReplyWithoutDesktop` |
 | BB-034 | `testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening` |
+| BB-034 | `testPersonalQuestionReadyAndSendWhileDesktopListIsHeld` |
+| BB-034 | `testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft` |
+| BB-034 | `testCancelledHistoryStillAllowsTheNextOrdinaryPoll` |
 | BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-035 | `testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry` |
 | BB-035 | `testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop` |
 | BB-035 | `testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped` |
 | BB-035 | `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary` |

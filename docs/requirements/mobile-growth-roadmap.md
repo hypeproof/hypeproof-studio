@@ -406,6 +406,22 @@ outcome or change account eligibility, financial limits or desktop tool authorit
 | MFR-05 | Tests cover the full visible login-to-answer path with a deterministic transport, including desktop-off, denied access, offline/uncertain send and restart. Fixtures cannot replace app identity/outbox logic or reach live providers. | MFR-T05. |
 | MFR-06 | Release evidence lists required simulator journeys by exact name and marks absent/skipped/failed cases honestly. Package availability, simulator evidence, live sign-in and physical-device acceptance are separate. Unverified TestFlight candidates may be distributed for testing but cannot be reported as accepted. | MFR-T06; existing Foundry and Harness receipts. |
 
+Studio #4093 refines MFR-01–05 after observed expiry, persistent checking and
+empty-recognition failures. A successful personal history read makes the question
+composer ready without waiting for desktop discovery. Failed personal reads end
+checking and expose an explicit retry while retaining the account and draft;
+automatic polling pauses only for real failures, never for cancellation. Each
+HTTP operation has an elapsed deadline as well as its existing idle timeout,
+without automatic credential exchange or POST replay. A verified expired callback
+and a network timeout remain different errors.
+
+Within an already-started voice conversation, an empty recognizer update cannot
+retract earlier words. A useful partial is finalized once. A capture with no words
+sends nothing and may restart at most twice with a 350 ms cancellable delay before
+pausing. Useful speech or a deliberate new conversation start resets that budget.
+Stop stays available during the delay; foreground, account, conversation, draft
+and outstanding-request checks still govern every automatic continuation.
+
 Cost: no new hosted ASR/TTS calls. Existing Service money limits and routing apply
 to each automatically submitted conversation turn. Device energy, CI minutes and
 human time remain costs. Endpoint thresholds require physical Korean/noisy-room

@@ -3231,8 +3231,8 @@ export function RehearsalSeatBand({ visible, onEnd }: { visible: boolean; onEnd:
   if (!visible) return null;
   return (
     <div className="hps-rehearsal-seat" role="status">
-      <span>리허설 중</span>{" "}
-      <button type="button" onClick={onEnd}>끝내고 돌아가기</button>
+      <span className="hps-rehearsal-seat-label">리허설 중</span>
+      <button type="button" className="hp-cta-quiet" onClick={onEnd}>끝내고 돌아가기</button>
     </div>
   );
 }
