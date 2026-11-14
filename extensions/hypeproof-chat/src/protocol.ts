@@ -1034,8 +1034,12 @@ export type HostMessage = (
   /** #751 G2 — the learner's saved work-surface entries for the lesson `sha256` (read from this device), and the rehearsal result. */
   | { type: "lessonWorkState"; sha256: string; work: Record<string, import("./lessonFocus").StepWork> }
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
-  /** CGP-LEARN-R-011 — what happened to a material report: queued for the class board, or not sent (no live class connection / no block). */
-  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "not_sent" }
+  /**
+   * CGP-LEARN-R-011 — what the Service did with a material report: `sent` (accepted), `already` (it already holds this
+   * learner's report of that block), `capped` (the daily limit), `unconfirmed` (no answer in time), `not_sent` (no live
+   * class connection, the Service does not store the kind, no block, or refused).
+   */
+  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "already" | "capped" | "unconfirmed" | "not_sent" }
   /**
    * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
    * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the

@@ -80,32 +80,23 @@ export type MaterialReportReason = (typeof MATERIAL_REPORT_REASONS)[number];
 export const MATERIAL_REPORT_REASON_WORDS: Record<MaterialReportReason, string> = { wrong: "내용이 틀려요", broken: "열리지 않아요", unclear: "이해하기 어려워요" };
 export const isMaterialReportReason = (v: unknown): v is MaterialReportReason => typeof v === "string" && (MATERIAL_REPORT_REASONS as readonly string[]).includes(v);
 
-/** Key order never changes the digest: objects are written with sorted keys, at every depth. */
-export function stableJson(v: unknown): string {
-  if (Array.isArray(v)) return "[" + v.map(stableJson).join(",") + "]";
-  if (v && typeof v === "object") return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + stableJson((v as Record<string, unknown>)[k])).join(",") + "}";
-  return JSON.stringify(v) ?? "null";
-}
-
 /**
- * The report's payload, built in the HOST from the served lesson only: which block (course, version, step, type, pinned
- * version, a digest of its params) and the reason. The webview names a step and a reason, nothing else; a step that draws no
- * block here, or a reason outside the three, gives null. `digest` is sha-256 hex (the host passes node:crypto).
+ * The report's payload, built in the HOST from the served lesson only: which block (course, version, step, type and pinned
+ * version) and the reason. The webview names a step and a reason, nothing else; a step that draws no block here, or a reason
+ * outside the three, gives null. There is no params digest: the frozen lesson version already pins the params, and the
+ * Service refuses a client-chosen digest (it would be a free-text channel).
  */
 export function materialReportPayload(
   lesson: (Lesson & { course_id: string }) | null | undefined,
   msg: { stepId?: unknown; reason?: unknown },
-  digest: (text: string) => string,
 ): Record<string, unknown> | null {
   if (!lesson || typeof msg.stepId !== "string" || !isMaterialReportReason(msg.reason)) return null;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(lesson.course_id) || !/^[A-Za-z0-9_.+-]{1,64}$/.test(lesson.version) || !/^[A-Za-z0-9_-]{1,128}$/.test(msg.stepId)) return null;
   const material = stepMaterial(lesson, msg.stepId);
   if (!material) return null;
-  const params = (lesson.content.steps.find((s) => s.id === msg.stepId) as { ui_params?: unknown } | undefined)?.ui_params;
   return {
     lesson_course: lesson.course_id, lesson_version: lesson.version, step_id: material.stepId,
     block_type: material.kind, block_version: material.uiVersion,
-    ...(params !== undefined ? { params_sha256: digest(stableJson(params)) } : {}),
     reason: msg.reason,
   };
 }

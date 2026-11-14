@@ -9653,13 +9653,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       // CGP-LEARN-R-011 — "자료가 틀린 것 같아요". Only a block the served lesson draws on that step, and one of three reasons;
-      // it goes to the class board over the classroom-ops outbox (ids only, no text). No live class connection: not sent, and said so.
+      // it goes to the class board over the classroom-ops outbox (ids only, no text). The answer is the Service's own outcome.
       case "materialReport": {
         const lesson = this.cachedProfile?.lesson;
-        const payload = materialReportPayload(lesson, msg, (t) => createHash("sha256").update(t, "utf8").digest("hex"));
-        let sent = false;
-        if (payload) { try { sent = (await this.opsObserver?.materialReport?.(payload)) === true; } catch { sent = false; } }
-        if (lesson) await this.post({ type: "materialReportResult", sha256: lesson.sha256, stepId: msg.stepId, state: sent ? "sent" : "not_sent" });
+        const payload = materialReportPayload(lesson, msg);
+        // "sent" only after the Service accepted it (or already holds the same report); a queued report is not sent.
+        let outcome: string = "not_sent";
+        if (payload) { try { outcome = (await this.opsObserver?.materialReport?.(payload)) ?? "not_sent"; } catch { outcome = "not_sent"; } }
+        const state = outcome === "accepted" ? "sent" : outcome === "duplicate" ? "already" : outcome === "capped" ? "capped" : outcome === "unconfirmed" ? "unconfirmed" : "not_sent";
+        if (lesson) await this.post({ type: "materialReportResult", sha256: lesson.sha256, stepId: msg.stepId, state });
         return;
       }
       // AE-01 (#554) — the learner's own goal and completion criteria for this lesson revision. Kept on this device beside

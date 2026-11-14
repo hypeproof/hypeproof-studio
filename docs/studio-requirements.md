@@ -9015,9 +9015,11 @@ REQ-STUDIO-LEARNING-BLOCK-REPORT / REQ-CGP-LEARN-11 (a) and DES-CGP-LEARN-11, re
 REQ-STUDIO-LEARNING-BLOCK-COLLAPSE, CGP-LEARN-R-011) / PI#2: a learner can tell the class instructor that a learning block looks
 wrong, and the instructor learns which block it was without reading anything the learner wrote.
 
-The open card's 자료 메뉴 gains "자료가 틀린 것 같아요", before 접기, only while this window has a live class connection (the
-inbox view has a run and is neither offline nor ended). Without one there is no instructor to reach, so the item is not drawn;
-instructor windows and rehearsals never draw it. The item opens the report inline, as a row under the card head, never as a
+The open card's 자료 메뉴 gains "자료가 틀린 것 같아요", before 접기, only while this window has a live class connection to a
+Service that stores material reports. The inbox view must have a run, be neither offline nor ended, and carry `reports`.
+The host sets `reports` only after the Service's sync answer names `material_report` in `event_kinds`, which it sends to a
+device that declares the `material_report` capability. Without that, there is no instructor to reach, or the Service would
+drop the report, so the item is not drawn. Instructor windows and rehearsals never draw it. The item opens the report inline, as a row under the card head, never as a
 modal. The row asks "어떤 점이 이상한가요?" and offers three reasons as native radios in 44px labels at a 14px floor: 내용이 틀려요,
 열리지 않아요, 이해하기 어려워요. Focus moves to the first reason. A note says "어떤 자료인지와 고른 이유만 선생님께 가요. 대화 내용은
 가지 않아요." "선생님께 보내기" stays disabled until a reason is picked, and "취소" or Escape closes the row with focus on the
@@ -9030,30 +9032,39 @@ The webview posts `{ type: "materialReport", stepId, reason }` and nothing else.
 lesson only (`lessonFocus.ts` `materialReportPayload`):
 - the course, version and step;
 - the block type and pinned version of the block that step draws;
-- a key-order-free sha-256 of the step's `ui_params`, when it has any;
 - the reason.
 
 A step that draws no block, or an unknown reason, gives nothing. The host queues the payload as a classroom-ops
-`material_report` event with actor student (`ClassroomOpsHost.materialReport`). It answers `materialReportResult` "sent" or
-"not_sent". "sent" closes the row and shows the toast "선생님께 전달했어요" in the polite live region, and focus returns to the menu
-button. "not_sent" (no connection, or the outbox refused or failed) keeps the row and says "수업 연결이 없어 보내지 못했어요. 선생님께
-직접 말해 주세요." The report is not work, not evidence and not a spool line, and it carries no transcript. The Service lists it
+`material_report` event with actor student (`ClassroomOpsHost.materialReport`). It then waits up to 15 seconds for the
+Service's outcome for that event's seq in the sync answer (`material_reports`). **A queued report is never called sent.**
+- `accepted` → "sent": the row closes, the toast "선생님께 전달했어요" is announced in the polite live region, and focus returns to
+  the menu button.
+- `duplicate` → "already": the Service already holds this learner's report of that block. The row closes, and the toast says
+  "이미 선생님께 전달한 자료예요".
+- `capped` → the row stays and says "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요."
+- No answer in time, or the connection dropped → "unconfirmed": the row stays and says "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시
+  뒤 다시 보내 보세요." Sending again is safe, because a report the Service already has comes back as "already".
+- `rejected`, no connection, a Service that does not store the kind, or a refused outbox → "not_sent": the row stays and says
+  "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요."
+
+The report is not work, not evidence and not a spool line, and it carries no transcript. The Service lists it
 on the run's instructor board, and Chalk `/manage` shows it as "자료 신고" (hypeproof-service material_report; Chalk
 `chalk/test/material-report.test.mjs`). Seats: classroom seats with a live class connection. Default: on.
 
 Evidence:
 - `extensions/hypeproof-chat/test/learning-block-report-browser.smoke.mjs` runs in headless Chromium with real key events,
   light and dark, at 800 and 1420px. It checks:
-  - with no connection, an offline one or an ended one, the menu holds only 접기 (the control);
+  - with no connection, an offline one, an ended one, or a Service that does not store the kind, the menu holds only 접기 (the control);
   - the inline row has no dialog, nothing positioned and no text field, three 44px/14px radios, focus on the first and a focus ring;
   - opening it sends nothing, and the post is exactly a step and a reason;
-  - "not_sent" is said, and another lesson's answer is ignored;
-  - "sent" closes it with the polite announcement and focus on the menu button;
+  - "not_sent", "capped" and "unconfirmed" are said with no toast, and another lesson's answer is ignored;
+  - "sent" and "already" close it with their polite announcement, and "sent" returns focus to the menu button;
   - Escape closes it, and a dropped connection removes the item and the open row.
 - `extensions/hypeproof-chat/test/learning-block-report-host.smoke.mjs` runs the pure payload with positive and negative controls
   against the Service allowlist. It drives the real `ChatPanelProvider.handleMessage`, which drops webview-supplied block fields
-  and text, records no spool line and covers every "not_sent" path. It also runs the real `ClassroomOpsHost.materialReport`:
-  an outbox event with actor student, and false with no connection or a full outbox.
+  and text, records no spool line and maps each Service outcome (only `accepted` is "sent"). The sync loop hands every 200
+  answer of its own stream to the host. The real `ClassroomOpsHost.materialReport` answers with the outcome for its own seq:
+  an older Service that does not name the kind, a rejected seq, a timeout and the real `stopConnection` are never "sent".
 
 ## Activity memory state line (CGP-KNOW-R-022)
 

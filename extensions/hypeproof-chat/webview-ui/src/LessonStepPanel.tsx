@@ -10,6 +10,13 @@ import "./learningBlockCard.css";
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
 type Step = Lesson["content"]["steps"][number];
 
+/** CGP-LEARN-R-011 — what the report row says when the Service did not take the report. "sent" is never said for these. */
+const REPORT_FAILED: Partial<Record<string, string>> = {
+  not_sent: "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요.",
+  capped: "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요.",
+  unconfirmed: "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시 뒤 다시 보내 보세요.",
+};
+
 /** CGP-LEARN-D-001 — the 자료 card's 48px thumbnail icon for each block kind (the card's title is MATERIAL_TEXT's). */
 const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
   criterion_form: "flag", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
@@ -46,8 +53,8 @@ export function LessonStepPanel(props: {
   /** CGP-LEARN-R-011 (c) — the seat the collapsed set belongs to (lessonFocus.ts collapseSeat). */
   seat: string;
   /**
-   * CGP-LEARN-R-011 (a) — this window has a live class connection (the inbox view says so), so a material report has an
-   * instructor to reach. Without one the 자료 메뉴 has no report item at all.
+   * CGP-LEARN-R-011 (a) — this window has a live class connection to a Service that stores material reports (the inbox
+   * view says so), so a report has an instructor to reach. Otherwise the 자료 메뉴 has no report item at all.
    */
   canReport?: boolean;
 }) {
@@ -102,10 +109,11 @@ export function LessonStepPanel(props: {
   useLayoutEffect(() => { if (menuOpen) menuPanel.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus({ preventScroll: true }); }, [menuOpen]);
   const closeMenu = (restoreFocus: boolean) => { setMenuFor(""); if (restoreFocus) menuButton.current?.focus({ preventScroll: true }); };
   // CGP-LEARN-R-011 (a) / D-011 — "자료가 틀린 것 같아요" opens inline in the open card (not a modal): three reason chips, no text
-  // field for any seat, and 선생님께 보내기. The host builds the block identity from the served lesson and queues it on the class
-  // connection; the toast "선생님께 전달했어요" says only that it was handed over. Not an evidence event, no transcript.
+  // field for any seat, and 선생님께 보내기. The host builds the block identity from the served lesson and sends it on the class
+  // connection; the toast "선생님께 전달했어요" appears only after the Service accepted it. Not an evidence event, no transcript.
   const [reportFor, setReportFor] = useState(""), [reportReason, setReportReason] = useState<MaterialReportReason | "">("");
-  const [reportState, setReportState] = useState<{ key: string; state: "sending" | "sent" | "not_sent" } | null>(null);
+  type ReportState = "sending" | "sent" | "already" | "capped" | "unconfirmed" | "not_sent";
+  const [reportState, setReportState] = useState<{ key: string; state: ReportState } | null>(null);
   const reportOpen = !!props.canReport && reportFor === blockKey;
   const reportPanel = useRef<HTMLDivElement>(null);
   const openReport = () => { setMenuFor(""); setReportReason(""); setReportState(null); setReportFor(blockKey); };
@@ -115,9 +123,9 @@ export function LessonStepPanel(props: {
     if (m.type !== "materialReportResult" || m.sha256 !== lesson.sha256) return;
     const k = JSON.stringify([lesson.course_id, lesson.version, lesson.sha256, m.stepId]);
     setReportState((cur) => cur && cur.key === k && cur.state === "sending" ? { key: k, state: m.state } : cur);
-    if (m.state === "sent") { setReportFor((f) => (f === k ? "" : f)); setReportReason(""); menuButton.current?.focus({ preventScroll: true }); }
+    if (m.state === "sent" || m.state === "already") { setReportFor((f) => (f === k ? "" : f)); setReportReason(""); menuButton.current?.focus({ preventScroll: true }); }
   }), [lesson.course_id, lesson.version, lesson.sha256]);
-  const sent = reportState?.key === blockKey && reportState.state === "sent";
+  const sent = reportState?.key === blockKey && (reportState.state === "sent" || reportState.state === "already");
   useEffect(() => { if (!sent) return; const t = setTimeout(() => setReportState(null), 4000); return () => clearTimeout(t); }, [sent]);
   const sendReport = () => { if (!reportReason || reportState?.state === "sending") return; setReportState({ key: blockKey, state: "sending" }); post({ type: "materialReport", stepId: step.id, reason: reportReason }); };
   const effective = chosen ?? (choices.includes(step.help?.default as HelpMode) ? (step.help!.default as HelpMode) : null);
@@ -247,9 +255,9 @@ export function LessonStepPanel(props: {
           </button>
           <button type="button" className="hp-cta-quiet" data-report-cancel="" onClick={() => closeReport(true)}>취소</button>
         </div>
-        {reportState?.key === blockKey && reportState.state === "not_sent" && <p className="hp-block-report-failed" role="status" data-report-result="not_sent">수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요.</p>}
+        {reportState?.key === blockKey && REPORT_FAILED[reportState.state] && <p className="hp-block-report-failed" role="status" data-report-result={reportState.state}>{REPORT_FAILED[reportState.state]}</p>}
       </div>}
-      {sent && <CopyFeedback failed={false} className="hp-block-report-sent">선생님께 전달했어요</CopyFeedback>}
+      {sent && <CopyFeedback failed={false} className="hp-block-report-sent">{reportState?.state === "already" ? "이미 선생님께 전달한 자료예요" : "선생님께 전달했어요"}</CopyFeedback>}
       <div className="hp-block-card-body" id={ids + "b"} hidden={!blockOpen}>
         <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
         {content}

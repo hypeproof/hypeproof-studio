@@ -17,6 +17,23 @@ export const OPS_PROTOCOL = 1;
 /** Base capability. The host appends "commands" plus each action it registered an executor for. */
 /** `observe_*` say WHAT this build reports from its real runtime path. A board must show a missing one as "unknown", never as "nothing happened". */
 export const OPS_CLIENT_CAPABILITIES = ["observe", "observe_step", "observe_runtime", "observe_evidence"] as const;
+/**
+ * CGP-LEARN-R-011 — declared so the Service answers with the event kinds it stores (`event_kinds`) and with each material
+ * report's outcome (`material_reports`). The report is offered only when the Service names `material_report`.
+ */
+export const MATERIAL_REPORT_CAPABILITY = "material_report";
+/** What the Service did with one material report: only `accepted` (and `duplicate`: it already has that report) reached the instructor. */
+export type MaterialReportOutcome = "accepted" | "duplicate" | "capped" | "rejected";
+/** Reads the sync answer's report fields. Anything malformed is not an outcome: the report stays unconfirmed. */
+export function readReportAnswer(body: { event_kinds?: unknown; material_reports?: unknown; rejected?: unknown } | undefined): { served: boolean; outcomes: Array<{ seq: number; outcome: MaterialReportOutcome }>; rejected: number[] } {
+  const kinds = body?.event_kinds, list = body?.material_reports, rej = body?.rejected;
+  const OUT: readonly string[] = ["accepted", "duplicate", "capped", "rejected"];
+  return {
+    served: Array.isArray(kinds) && kinds.includes(MATERIAL_REPORT_CAPABILITY),
+    outcomes: Array.isArray(list) ? list.filter((x): x is { seq: number; outcome: MaterialReportOutcome } => !!x && typeof x === "object" && Number.isSafeInteger((x as { seq?: unknown }).seq) && OUT.includes((x as { outcome?: unknown }).outcome as string)) : [],
+    rejected: Array.isArray(rej) ? rej.map((x) => (x && typeof x === "object" ? (x as { seq?: unknown }).seq : undefined)).filter((q): q is number => Number.isSafeInteger(q)) : [],
+  };
+}
 /** U4 — this build names the command a follow-up observation belongs to. Without it the Service expects none and says so. */
 export const RECOVERY_FOLLOWUP_CAPABILITY = "recovery_followup";
 export const SYNC_TIMEOUT_MS = 4000;
@@ -256,11 +273,16 @@ export class OpsOutbox {
 
   /** Persisted before it is ever sent. Returns false when the cap refused it. */
   async add(kind: OpsEventKind, payload: Record<string, unknown>, actor: OpsActor = "system"): Promise<boolean> {
-    if (this.closed) return false;
-    if (this.state.events.length >= OUTBOX_CAP) { this.state.refused++; await this.persist(); return false; }
-    this.state.events.push({ event_id: this.uuid(), seq: this.state.next_seq++, observed_at: this.now(), kind, actor, payload });
+    return (await this.addSeq(kind, payload, actor)) !== null;
+  }
+  /** As add(), returning the event's seq (null when refused), so a caller can wait for the Service's answer about it. */
+  async addSeq(kind: OpsEventKind, payload: Record<string, unknown>, actor: OpsActor = "system"): Promise<number | null> {
+    if (this.closed) return null;
+    if (this.state.events.length >= OUTBOX_CAP) { this.state.refused++; await this.persist(); return null; }
+    const seq = this.state.next_seq++;
+    this.state.events.push({ event_id: this.uuid(), seq, observed_at: this.now(), kind, actor, payload });
     await this.persist();
-    return true;
+    return seq;
   }
 
   /** Oldest first, bounded by count and by serialized size. */
@@ -296,7 +318,7 @@ export class OpsOutbox {
 export interface SyncResponse {
   status: number;
   /** Parsed JSON body when there was one. */
-  body?: { reason?: string; poll_after_ms?: number; connection_epoch?: number; ack?: { boot_id: string; contiguous_seq: number; missing: Array<[number, number]> }; commands?: unknown[]; receipt_acks?: unknown[]; control?: { paused: boolean; control_revision: number }; server_time?: number; distribution?: { items?: unknown[]; withdraw?: unknown[]; receipt_acks?: unknown[]; withdraw_acks?: unknown[]; more?: boolean } };
+  body?: { reason?: string; poll_after_ms?: number; connection_epoch?: number; ack?: { boot_id: string; contiguous_seq: number; missing: Array<[number, number]> }; commands?: unknown[]; receipt_acks?: unknown[]; control?: { paused: boolean; control_revision: number }; server_time?: number; event_kinds?: unknown; material_reports?: unknown; rejected?: unknown; distribution?: { items?: unknown[]; withdraw?: unknown[]; receipt_acks?: unknown[]; withdraw_acks?: unknown[]; more?: boolean } };
   retryAfterSec?: number;
 }
 export interface SyncDeps {
@@ -317,6 +339,8 @@ export interface SyncDeps {
   onEpoch?(epoch: number): void;
   /** Declared on every sync: a window that did not pair itself still says what it can run. */
   capabilities?: string[];
+  /** CGP-LEARN-R-011 — every 200 answer's report fields (readReportAnswer), for the report's outcome and its availability. */
+  onReports?(answer: ReturnType<typeof readReportAnswer>): void;
   /**
    * U2 inbox of instructor notices/materials. Absent → this client declares no inbox and is never offered one.
    * `window` is when THIS request was sent, on two clocks: an item must be committed within its budget counted from there,
@@ -353,6 +377,7 @@ export function startOpsSync(deps: SyncDeps, initialPollMs = 5000): OpsSyncLoop 
         failures = 0;
         await deps.outbox.acked(r.body.ack.boot_id, r.body.ack.contiguous_seq);
         if (stopped) return;
+        if (r.body.ack.boot_id === deps.outbox.bootId) { try { deps.onReports?.(readReportAnswer(r.body)); } catch (err) { deps.log?.(`[ops] reports: ${(err as Error).message}`); } }
         if (typeof r.body.poll_after_ms === "number") pollMs = Math.min(Math.max(r.body.poll_after_ms, 1000), 120000);
         if (typeof r.body.connection_epoch === "number") deps.onEpoch?.(r.body.connection_epoch);
         if (r.body.control && typeof r.body.control.paused === "boolean") deps.onControl?.(r.body.control);
