@@ -53,7 +53,8 @@ export function useAgentStatus(source: AgentEventSource, intervalMs: number): Ag
 export function useAgentStatusVoice(line: AgentStatusLine | null, output: OutputMute, hub: ReadAloud | null): { announced: string; speechFailed: boolean } {
   const store = hub ?? idleStore;
   const status = useSyncExternalStore(store.subscribe, store.getStatus, store.getStatus);
-  const speechFailed = status.kind === "error" && status.id === AGENT_STATUS_SPEECH_ID;
+  // A refused start (autoplay `blocked`, CGP-VOICE-R-028) is a failed reading too: the status was not heard (VO-20).
+  const speechFailed = (status.kind === "error" || status.kind === "blocked") && status.id === AGENT_STATUS_SPEECH_ID;
 
   const [announced, setAnnounced] = useState("");
   const lastSeq = useRef<number | null>(null);
@@ -63,8 +64,9 @@ export function useAgentStatusVoice(line: AgentStatusLine | null, output: Output
     setAnnounced(line.text);
     if (!hub || output.getMuted()) return;
     const now = hub.getStatus();
-    // The learner chose to hear an answer: a status never cuts it off.
-    if (now.kind === "playing" && now.id !== AGENT_STATUS_SPEECH_ID) return;
+    // The learner chose to hear an answer: a status never cuts it off. Nor does it replace a blocked
+    // answer: play() would stop the hub and drop the unheard chunks its 소리 켜기 reads (CGP-VOICE-R-028).
+    if ((now.kind === "playing" || now.kind === "blocked") && now.id !== AGENT_STATUS_SPEECH_ID) return;
     hub.play(AGENT_STATUS_SPEECH_ID, line.text);
   }, [line, hub, output]);
   // A reading still going when the panel leaves is stopped with it.
