@@ -9386,8 +9386,12 @@ catches what the checks above cannot see: a shell command that builds the path a
     to the item size. A learner's save followed by a shell overwrite in the same turn puts back the learner's save, not
     the pre-turn version. An editor save is journaled from the bytes on disk, so a byte-order mark or CRLF line endings
     are not mistaken for a foreign write.
-  - **Junk names.** A new name the store would never read as memory (not a memory file name) is removed without a copy,
-    so a flood of them cannot fill the quarantine.
+  - **Other files are moved, never deleted.** A new name the store would never read as memory (a photo the learner
+    dropped in from the file manager, or junk) is renamed into the quarantine: no copy, no extra disk. At most 200 per
+    turn; the rest is left in place and reported. A move across volumes is not attempted, and the file stays and is
+    reported. Moved files follow the count and seven-day caps, but not the byte cap.
+  - **An item that cannot be put back keeps its bytes.** When the item was replaced by a folder, its earlier bytes are
+    copied into the quarantine before the failure is reported.
   - **Quarantine bounds.**
     - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
       with one folder per seat activity (a keyed hash of its scope) and per task.

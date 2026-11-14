@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { ActivityMemory, MEMORY_LIMITS } from '../src/activityMemory.ts';
-import { FOLDER_GUARD_COPY, NAME_ONLY, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
+import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'memory-guard-')));
 let passed = 0;
@@ -121,9 +121,52 @@ try {
     assert.equal(read(root, 'm-item.md'), '원래 기억\n', 'the rewrite is still put back');
     assert.deepEqual(ls(memDir(root)), ['m-item.md'], 'every new file is gone');
     assert.equal(r.failed, 0);
-    const copies = ls(q);
-    assert.equal(copies.some(n => n.includes('.junk-')), false, 'junk names are removed without a copy');
-    assert.equal(copies.length, SNAPSHOT_MAX.files + 10 + 1, 'the memory-named adds and the rewrite are kept aside');
+    const kept = ls(q);
+    const moved = kept.filter(n => n.startsWith(MOVED_PREFIX));
+    assert.equal(moved.length, 30, 'junk names are moved (renamed) into the quarantine, not copied or deleted');
+    assert.ok(moved.every(n => fs.readFileSync(path.join(q, n), 'utf8') === 'j'));
+    assert.equal(kept.length - moved.length, SNAPSHOT_MAX.files + 10 + 1, 'the memory-named adds and the rewrite are kept aside');
+  });
+
+  await t("no data loss: a learner's photo dropped in mid-turn is moved, not deleted; an item swapped for a folder keeps its bytes", async () => {
+    clearStudioMemoryJournal();
+    const root = path.join(top, 'no-loss'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'item.md'), '지켜야 할 기억\n');
+    const since = Date.now();
+    const before = await snapshotMemoryFolder(root);
+    const photo = Buffer.alloc(200_000, 7); // larger than the item size: not a memory file, never copied
+    fs.writeFileSync(path.join(memDir(root), 'photo.png'), photo);
+    fs.rmSync(path.join(memDir(root), 'item.md'));
+    fs.mkdirSync(path.join(memDir(root), 'item.md'));
+    fs.writeFileSync(path.join(memDir(root), 'item.md', 'inside'), 'x');
+    const q = path.join(top, 'q-no-loss');
+    const r = await revertTurnChanges(root, before, since, q);
+    const files = ls(q);
+    const movedPhoto = files.find(n => n.startsWith(MOVED_PREFIX) && n.endsWith('photo.png'));
+    assert.ok(movedPhoto, 'the photo is moved into the quarantine');
+    assert.deepEqual(fs.readFileSync(path.join(q, movedPhoto)), photo, 'byte for byte');
+    assert.equal(fs.existsSync(path.join(memDir(root), 'photo.png')), false);
+    const kept = files.filter(n => n.endsWith('item.md')).map(n => fs.readFileSync(path.join(q, n), 'utf8'));
+    assert.deepEqual(kept, ['지켜야 할 기억\n'], "the item's earlier bytes are kept aside when it cannot be put back");
+    assert.equal(r.failed, 1, 'the folder swap is reported');
+    assert.equal(r.reverted, 1, 'the photo move');
+  });
+
+  await t('moves are capped per turn and moved files sit outside the byte cap', async () => {
+    clearStudioMemoryJournal();
+    const root = path.join(top, 'many-moves'); fs.mkdirSync(memDir(root), { recursive: true });
+    const since = Date.now();
+    const before = await snapshotMemoryFolder(root);
+    for (let i = 0; i < QUARANTINE_LIMITS.movesPerTurn + 7; i++) fs.writeFileSync(path.join(memDir(root), `.j${String(i).padStart(4, '0')}`), 'j');
+    const q = path.join(top, 'q-many', 'a'.repeat(24), 't');
+    const r = await revertTurnChanges(root, before, since, q);
+    assert.equal(r.reverted, QUARANTINE_LIMITS.movesPerTurn, 'at most movesPerTurn moves');
+    assert.equal(r.failed, 7, 'the rest is left in place and reported');
+    assert.equal(ls(memDir(root)).length, 7);
+    const big = path.join(top, 'q-bytecap', 'b'.repeat(24), 't'); fs.mkdirSync(big, { recursive: true });
+    fs.writeFileSync(path.join(big, `${MOVED_PREFIX}huge.bin`), Buffer.alloc(QUARANTINE_LIMITS.bytes + 10, 1));
+    await pruneQuarantine(path.join(top, 'q-bytecap'));
+    assert.ok(fs.existsSync(path.join(big, `${MOVED_PREFIX}huge.bin`)), 'a moved file is not removed by the byte cap');
   });
 
   await t("the learner's save during the turn wins over the turn's later shell overwrite", async () => {

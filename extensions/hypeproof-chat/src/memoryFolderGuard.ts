@@ -29,7 +29,9 @@ export const SNAPSHOT_MAX = { files: MEMORY_LIMITS.items + 50, keepBytes: MEMORY
  * extension's global storage (this OS account only, folders 0700, files 0600), one folder per activity scope and task;
  * a task's folder goes when the task is archived or moved. Nothing reads it back into memory, uploads it or logs it.
  */
-export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000 } as const;
+export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000, movesPerTurn: MEMORY_LIMITS.items } as const;
+/** Files moved (renamed, never copied) out of the store: kept under the count and age caps, outside the byte cap. */
+export const MOVED_PREFIX = "moved-";
 
 /** `digest` NAME_ONLY: listed but not read (past the bounds); its content changes are not seen. */
 export interface SnapEntry { size: number; digest: string; bytes: Buffer | null }
@@ -161,7 +163,9 @@ export async function pruneQuarantine(base: string, now = Date.now()): Promise<v
     files.sort((a, b) => b.at - a.at);
     let count = 0, bytes = 0;
     for (const f of files) {
-      count++; bytes += f.size;
+      count++;
+      // A moved file (the learner's or the turn's non-memory file) costs no extra disk: the byte cap is for copies.
+      if (!path.basename(f.file).startsWith(MOVED_PREFIX)) bytes += f.size;
       if (count > QUARANTINE_LIMITS.files || bytes > QUARANTINE_LIMITS.bytes) await fs.rm(f.file, { force: true }).catch(() => undefined);
     }
     if (!(await fs.readdir(scopeDir).catch(() => [])).length) await fs.rmdir(scopeDir).catch(() => undefined);
@@ -199,7 +203,7 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
     await fs.chmod(path.dirname(quarantine), 0o700).catch(() => undefined);
     made = true;
   };
-  let seq = 0;
+  let seq = 0, moves = 0;
   const keepCopy = async (name: string, bytes: Buffer) => {
     await ensureQuarantine();
     const target = path.join(quarantine, `${stamp}-${++seq}-${path.basename(name)}`);
@@ -226,7 +230,15 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
     // A new name the store would never read as memory (not a memory file name) is removed without a copy: it cannot
     // carry memory, and a flood of such names must not fill the quarantine.
     if (!was && !studio && current && !memoryFileName(name)) {
-      try { await fs.unlink(path.join(dir, name)); result.reverted++; } catch { result.failed++; }
+      // Moved, not deleted and not copied: it may be the learner's own file (a photo dropped in from the file manager).
+      // A rename costs no disk; at most movesPerTurn per turn, the rest is left in place and reported. A move across
+      // volumes (EXDEV) is not attempted as a copy: the file is left where it is and reported.
+      if (moves >= QUARANTINE_LIMITS.movesPerTurn) { result.failed++; continue; }
+      try {
+        await ensureQuarantine();
+        await fs.rename(path.join(dir, name), path.join(quarantine, `${MOVED_PREFIX}${stamp}-${++seq}-${path.basename(name)}`));
+        moves++; result.reverted++;
+      } catch { result.failed++; }
       continue;
     }
     if (!current && targetAbsent) { if (studio) result.kept++; continue; }
@@ -243,7 +255,11 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
         else if (current) { result.failed++; continue; }        // a new file past the item size: left, reported
       } else {
         if (!target!.bytes) { result.failed++; continue; }
-        await putBack(name, target!.bytes);
+        try { await putBack(name, target!.bytes); } catch (error) {
+          // Cannot be put back (the item was swapped for a folder, say): its earlier bytes are kept aside first, never lost.
+          await keepCopy(name, target!.bytes).catch(() => undefined);
+          throw error;
+        }
       }
       result.reverted++;
     } catch { result.failed++; }
