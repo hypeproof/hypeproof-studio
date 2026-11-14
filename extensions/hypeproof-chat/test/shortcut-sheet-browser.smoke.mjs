@@ -53,7 +53,7 @@ try {
   for (const seat of ['personal', 'classroom']) for (const dark of [true, false]) for (const width of [320, 800, 1420]) for (const platform of ['MacIntel', 'Win32']) {
     if (platform === 'Win32' && width !== 800) continue;
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(page(vars, dark, platform), { width, height: 900, dark });
+    await b.load(page(vars, dark, platform), { width, height: 900, dark, appReady: true });
     await send({ type: 'config', config: configFor(seat) });
     await send({ type: 'history', messages: [] });
     assert.equal(await b.evaluate(`!!document.querySelector('.hps-shell[data-chat-detail=personal]')`), seat === 'personal', 'requested seat branch is mounted');
@@ -157,7 +157,7 @@ try {
     states++;
   }
   // Forced colours: key caps and the dialog keep visible borders.
-  await b.load(page('', true, 'MacIntel'), { width: 800, height: 900, forcedColors: true });
+  await b.load(page('', true, 'MacIntel'), { width: 800, height: 900, forcedColors: true, appReady: true });
   await send({ type: 'config', config: configFor('personal') }); await send({ type: 'history', messages: [] });
   await b.evaluate(`document.querySelector('#task-conversation').focus()`);
   await press(null, QUESTION); await settle(120);
