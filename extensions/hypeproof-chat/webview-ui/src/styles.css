@@ -1262,6 +1262,10 @@ html, body, #root {
 }
 .hps-step-divider-label { flex: 0 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
 
+/* CGP-ART-R-023: the page notice's one action (the deck PDF's 폴더에서 보기), a quiet 44px button at the 14px floor under the
+   notice line. Its fills are the quiet button's own. */
+.hps-page-notice-actions { display: flex; margin: 0 0 var(--ds-c-studio-styles-space-7); }
+.hps-page-notice-actions > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
 .hps-page-notice {
   margin: var(--ds-c-studio-styles-space-15) 0 var(--ds-c-studio-styles-space-7);
   padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7);
