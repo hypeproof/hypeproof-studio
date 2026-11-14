@@ -50,7 +50,7 @@ export const START_SETTINGS_COPY = {
   title: "설정",
   close: "설정 닫기",
   textSize: "글자 크기",
-  textSizeHint: "혼자 하는 활동의 대화 글자 크기예요.",
+  textSizeHint: "대화와 시작 화면의 글자 크기예요.",
   theme: "화면 밝기",
   themeLabels: { dark: "어둡게", light: "밝게", system: "기기 설정 따르기" } as Record<ThemeChoice, string>,
   themeCustom: "VS Code에서 직접 고른 테마를 쓰고 있어요. 여기서는 바꾸지 않아요.",

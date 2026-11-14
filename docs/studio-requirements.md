@@ -844,10 +844,24 @@ CGP-DS-R-009 (2026-10-19): in personal chat the learner chooses a text size, 기
 in the 대화 설정 dialog. Message bodies and the composer read 16/18/20px, and the reply-choice text
 inside answers grows by the same 2px steps; control heights and 44px targets do not change. The
 choice is a device preference (`globalState`, not part of any lesson or activity) and applies when
-the host confirms it. The default size adds no markup. Not built: classroom seats have no settings
-dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
+the host confirms it. The default size adds no markup. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
 variable on the shell, so every caption in the personal chat (code pills included) follows it too.
-Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport.
+CGP-SHELL-R-017 (REQ-SHELL-17, 2026-11-14) carries the same choice to the classroom chat, the help
+sheets and panels inside the chat (키보드 단축키, 새로운 기능, the lesson tip, and the classroom help-request,
+approval and lesson panels, whose fixed 15px size now adds the step, plus the mission header's sentence and the lesson
+material cards, which also had fixed sizes) and
+the start page with its 설정 sheet: the step is set on every chat shell, not only the personal one, and
+on the start page root, where every font size adds it. A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so its
+learner sets the size in the start page 설정 sheet, whose note now says "대화와 시작 화면의 글자 크기예요.".
+At 아주 크게 every surface fits a 320px pane and a 640px pane at 200% zoom without horizontal scroll or a
+clipped control; in a 320px pane at 200% (160 CSS px) the start-page footer tagline and the lesson tip's 입력창에 넣기
+action wrap. The personal
+workspace's task rail and heading stay outside the chat shell at their own sizes, as before. Kept as
+shipped, a recorded difference from REQ-SHELL-17: 16 / 18 / 20px, not 15 / 17 / 20px, and the label
+기본, not 보통 (decisions.md "CGP-SHELL-R-017"). Not covered: the entry screen shown before the start
+page connects (`.studio-disconnected`, it has no settings yet) and the separate automation,
+local-review and skill-store webviews.
+Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport. `test/text-size-reach.smoke.mjs` (CGP-SHELL-R-017) renders the start page, its 설정 sheet, the classroom and personal chat and the shortcut sheet in both seats at each size, dark and light, at 320 and 800px and at 200% zoom: every visible line computes to its base size plus the step, and no control leaves the viewport, clips its label or gets shorter.
 
 CGP-CHAT-D-002 (D65, 2026-10-20) extends this edit flow: the latest prompt's
 44px edit control has a 16px pencil and the Korean label `수정`. It remains visible
@@ -1297,7 +1311,7 @@ chips and domains, chip captions, AI disclosure, rail time and message count, ru
 host names and source policy line rise from 10-13px to 14px. Values are recorded first in
 `docs/design/studio-learning-experience.md` §디자인 시스템. The text-size choice (CGP-DS-R-009) is
 one variable: `--hp-font-step` is 0px on `:root`, and the personal shell sets 2px (크게) or 4px
-(아주 크게). The size tokens are declared on `:root, .hps-shell`, because a custom property is
+(아주 크게); since CGP-SHELL-R-017 every chat shell and the start page root set it. The size tokens are declared on `:root, .hps-shell, .studio-start`, because a custom property is
 substituted where it is declared: re-declared on the shell they pick up its step, so every token
 size inside the chat grows by the same 2px/4px, and the shell's own size is the caption step so text
 that only inherits follows as well. Control heights and 44px targets do not change; they are
@@ -1357,13 +1371,13 @@ runner bar and gallery notice, and the automation question card (`UserQuestionCa
 The naming screen's activity line (`start.css`, ChatPanel only, outside any shell) moves from .9em to
 the caption step in both seats. Side effect in the personal seat: the error-boundary screen and the
 coach-naming card draw a bare `.hps-shell`, so their inherited text grows from 13px to 14px. The
-personal rules and the personal text-size step are unchanged; the classroom keeps the base step
-(0px). DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
+personal rules and the personal text-size step are unchanged; the classroom kept the base step
+(0px) until CGP-SHELL-R-017 gave it the same step. DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
 hidden text, decorative glyphs, glyph-only buttons with an accessible name, instructor-only text and
 the unmounted VoicePanel. Not covered: the error-boundary screen's own 11-13px lines (both seats), the
 naming screen's draft-error line and update banner (drawn beside the naming card, outside any shell), the entry page (`start.css`), the automation and local-review surfaces (their own webview
 entry points), DES-CGP-DS-09 weights/tracking/upper steps in the classroom (CGP-DS-D-005 is
-personal-scoped) and the text-size choice in the classroom (CGP-DS-R-009).
+personal-scoped). The text-size choice in the classroom, listed here as not covered, landed with CGP-SHELL-R-017.
 Tests: `test/type-scale.smoke.mjs` step 7 classifies every sub-14px rule in every file the classroom
 loads (not only `styles.css`; personal-scoped and `.tw-*` selectors skip) and computes each classroom learner selector, plus inherited probes
 (CTA, bare paragraph, answer paragraph, trial line, code copy status, tools caption, citation chip,
@@ -8257,8 +8271,9 @@ stale one opens nothing). The sheet lists at most six rows, in the order REQ-SHE
 behaviour exists in the build (DEC-SHELL-R014):
 
 - 글자 크기 — a 기본 / 크게 / 아주 크게 list, the same device preference as the personal chat settings
-  (CGP-DS-R-009, `hypeproof.textSize`); the row says it is the size of personal-activity chat text.
-  An open chat picks the change up at once.
+  (CGP-DS-R-009, `hypeproof.textSize`); since CGP-SHELL-R-017 it applies to every chat seat and the
+  start page itself, and the row's note says "대화와 시작 화면의 글자 크기예요.". An open chat and the
+  start page pick the change up at once.
 - 움직임 줄이기 — a 기기 설정 따르기 / 줄이기 / 줄이지 않기 list, written to `workbench.reduceMotion`
   (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
 - 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
