@@ -980,7 +980,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "a0436e4d7ae49fd4e1ac4ef5e9c093d8126b25ee41cc3312c343001e8b4f4b87",
+      "sha256": "7595f55c696554a35d310afbdde1bb2bee47a86068334b8155c3805305eee9dc",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4769,6 +4769,38 @@
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "mobile-notebook-exit-4060",
+      "title": "Preserve unsaved local notes when leaving the notebook",
+      "issue": 4060,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MREF-02",
+            "MREF-04"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify failed-save return and dismissal on both native platforms, preserve the original v1 file and exported pending words, and deliver a verified candidate. Physical acceptance remains open.",
+      "design_delta": "Use the existing atomic writer and pending local edits; refuse destructive navigation on failure, retain retry/export, and return normally after recovery. No new schema, account or AI call.",
+      "positive_control": "After storage recovery, explicit return saves the pending words; reopening and restarting retain them without copying into the account conversation.",
+      "negative_control": "A real failed write followed by outer iOS return/swipe or Android Back/return cannot destroy visible edits; the original saved file remains unchanged and export includes the pending words.",
+      "evidence_required": "Exact-source existing native journeys extended at the exit boundary, meaningful old-source failure, independent review and separately recorded physical acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/App/StudioModel.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java",
+        "docs/testing/native-mobile-growth.md"
       ]
     },
     {

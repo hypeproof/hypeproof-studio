@@ -74,10 +74,24 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 | ID | Required behavior | Evidence boundary |
 |---|---|---|
 | MREF-01 | Five optional human-owned notes can be edited in any order on iOS and Android; blank/skip is valid. | Native UI journey and actual device observation.  MREF-T01. |
-| MREF-02 | v1 notes/drafts/revisions remain readable; notes persist across restart; a later successful save includes earlier visible failed-save edits. | Migration, save-candidate recovery and Android failure-injection regression.  MREF-T02. |
+| MREF-02 | v1 notes/drafts/revisions remain readable; notes persist across restart; a later successful save includes earlier visible failed-save edits. Leaving the notebook must not discard the only in-memory copy after a save failure. | Migration, save-candidate recovery and native exit failure-injection regression.  MREF-T02. |
 | MREF-03 | Notes do not become AI context or human-confirmed intention automatically; project data remains isolated. | Captured context and cross-project tests.  MREF-T03. |
 | MREF-04 | Reflection-only projects are distinguishable and searchable; visible unsaved text remains exportable. | Library journey and export round-trip regression.  MREF-T04. |
 | MREF-05 | Native controls remain usable with keyboard, system theme and accessibility; exact candidate CI is retained before a testing build. | Native iOS/Android evidence; physical-device accessibility remains a separate acceptance.  MREF-T05. |
+
+### Notebook exit recovery — #4060
+
+Under MREF-02/04 and parent #3688, returning from local records flushes pending
+visible edits through the existing atomic writer. If it still fails, the notebook
+stays open with the words and retry/export actions. Android system Back follows
+the same rule; iOS sheet dismissal is prevented while failed edits remain, with
+ordinary dismissal restored after a successful save. A successful return keeps
+the existing account draft and never copies notes into an AI request or confirms
+an intention. The v1 schema, account identity and voice contracts do not change.
+This prevents intentional navigation from discarding the only copy; it does not
+promise durability after forced process termination while all writes fail.
+No new Service or paid model call is introduced. Exact native and physical
+acceptance remain separate; this paragraph is not an execution receipt.
 
 ## Correlated native deployment — MTF-01
 

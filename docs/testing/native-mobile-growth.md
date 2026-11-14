@@ -8,7 +8,7 @@ inferred from UI use or passing these tests.
 | Test ID | Targets | Scenario and oracle |
 |---|---|---|
 | MREF-T01 | MREF-01 | Native optional notebook opens from a project; edit any field/order, leave other fields blank and retain human control. Its title, return, history and menu remain visible and non-overlapping; inspect the actual screenshot and native frames, then return without sending or copying either draft. |
-| MREF-T02 | MREF-02 | Decode old v1 data; restart restores notes; failed-save edits remain in the next successful save and exported visible snapshot. |
+| MREF-T02 | MREF-02 | Decode old v1 data; restart restores notes; failed-save edits remain in the next successful save and exported visible snapshot. While the writer actually fails, attempt outer notebook return and iOS sheet dismissal / Android Back with the keyboard already closed: the notebook and exact words remain. Restore writable storage, return normally, reopen and restart to recover the saved words. |
 | MREF-T03 | MREF-03 | Capture selected-project request context and confirmed revisions; optional notes and unrelated projects must not leak into either. |
 | MREF-T04 | MREF-04 | Locate a reflection-only project by its own display title/search; export round-trips unsaved visible text. |
 | MREF-T05 | MREF-05 | Native keyboard, large text, screen reader and light/dark controls remain operable on each physical platform; successful CI alone is insufficient. |
@@ -27,6 +27,18 @@ reflection/intent/draft recovery, search/export and deliberate return without
 copying a local draft or dispatching an account question. Assertions for its
 removed anonymous AI onboarding are retired, not counted as passed voice tests.
 No native or physical pass is recorded here.
+
+#4060 extends the existing `StudioShellTests.testNativeCaptureConfirmAndRelaunch`
+and `StudioJourneyTest.failedReflectionSaveKeepsVisibleAndExportableTextUntilNextSave`
+journeys rather than replacing their previous persistence assertions. The iOS
+DEBUG fixture uses a unique disposable notebook directory and a real directory
+collision at the atomic file path, preserves original v1 bytes and reads the
+actual exported file. Android uses the existing AtomicFile failure seam. Neither
+fixture forces a persistence success. The unchanged Android local-record return
+journey separately checks the same question Activity, account draft and zero
+synthetic transport calls. Preserve the old-source failing exit observation and
+failed build attempts. These controls do not prove physical storage exhaustion,
+force-kill durability during an unwritable filesystem, or live account behavior.
 
 Implementation tests: `IntentTests.swift`, `VoiceTurnTests.swift`,
 `StudioShellTests.swift`, `StudioStateTest.java`, `VoiceSessionTest.java` and

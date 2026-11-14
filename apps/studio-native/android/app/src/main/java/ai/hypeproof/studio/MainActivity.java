@@ -265,8 +265,18 @@ public final class MainActivity extends Activity {
         query.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){filter.run();}public void afterTextChanged(Editable e){}});
         filter.run();dialog.show();
     }
+    @Override public void onBackPressed() { returnToQuestions(); }
     private void returnToQuestions() {
         cancel();
+        if(!editing.isEmpty()&&!change(()->{})) {
+            render();
+            new AlertDialog.Builder(this).setTitle("아직 저장하지 못했어요")
+                .setMessage("작성한 글을 지키기 위해 기록 화면에 머물러요. 다시 저장하거나 내보내 주세요.")
+                .setNegativeButton("계속 적기",null)
+                .setNeutralButton("내보내기",(d,w)->export())
+                .setPositiveButton("다시 저장하고 돌아가기",(d,w)->returnToQuestions()).show();
+            return;
+        }
         if(isTaskRoot())startActivity(new Intent(this,QuestionActivity.class));
         finish();
     }

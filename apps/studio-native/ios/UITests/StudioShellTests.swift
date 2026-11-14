@@ -72,9 +72,11 @@ final class StudioShellTests: XCTestCase {
         reflection.tap()
         XCTAssertTrue(app.navigationBars["생각 정리"].waitForExistence(timeout: 5))
     }
-    @MainActor func testNativeCaptureConfirmAndRelaunch() {
+    @MainActor func testNativeCaptureConfirmAndRelaunch() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launch()
+        let app = XCUIApplication()
+        app.launchEnvironment["HP_NOTEBOOK_FIXTURE_ID"] = UUID().uuidString
+        app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         openNotebook(app)
         notebookNavigationIsUsable(app)
@@ -108,6 +110,42 @@ final class StudioShellTests: XCTestCase {
         XCTAssertFalse(app.buttons["connectAI"].exists, "Account questions own the only AI entry.")
         XCTAssertTrue(app.buttons["dictateVoice"].exists)
         XCTAssertFalse(app.buttons["stopVoice"].exists)
+        // The disposable namespace still uses the real atomic writer. Preserve
+        // the last saved v1 bytes while a directory blocks the next write.
+        let evidence = app.descendants(matching: .any).matching(identifier: "notebookStorageEvidence").firstMatch
+        XCTAssertTrue(evidence.waitForExistence(timeout: 5))
+        let beforeFailure = try XCTUnwrap(JSONSerialization.jsonObject(with: Data((evidence.value as? String ?? "").utf8)) as? [String: Any])
+        app.buttons["localNotebookMenu"].tap(); app.buttons["blockNotebookWrites"].tap()
+        openReflection(in: app)
+        let failed = editable("reflection-audience", in: app)
+        let pendingAudience = "Keep my unsaved audience note"
+        failed.tap(); failed.typeText(pendingAudience)
+        XCTAssertEqual(failed.value as? String, pendingAudience)
+        app.buttons["닫기"].tap()
+        app.buttons["대화로 돌아가기"].tap()
+        XCTAssertTrue(app.navigationBars["기기 기록"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["retryNotebookSave"].exists)
+        // A real sheet gesture must not discard the only in-memory copy either.
+        app.navigationBars["기기 기록"].swipeDown()
+        XCTAssertTrue(app.navigationBars["기기 기록"].exists)
+        app.buttons["localNotebookMenu"].tap(); app.buttons["전체 기록 내보내기"].tap()
+        let closeShare = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Close", "닫기")).firstMatch
+        XCTAssertTrue(closeShare.waitForExistence(timeout: 5)); closeShare.tap()
+        XCTAssertTrue(evidence.waitForExistence(timeout: 5))
+        let bytes = Data((evidence.value as? String ?? "").utf8)
+        let storage = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertEqual(storage["blocked"] as? Bool, true)
+        XCTAssertEqual(try XCTUnwrap(storage["disk_bytes"] as? String), try XCTUnwrap(beforeFailure["disk_bytes"] as? String))
+        let disk = try XCTUnwrap(storage["disk"] as? [String: Any])
+        let exported = try XCTUnwrap(storage["export"] as? [String: Any])
+        let savedProject = try XCTUnwrap((disk["projects"] as? [[String: Any]])?.first)
+        let exportedProject = try XCTUnwrap((exported["projects"] as? [[String: Any]])?.first)
+        XCTAssertEqual((savedProject["reflection"] as? [String: String])?["observation"], "Two customers waited outside")
+        XCTAssertEqual((savedProject["reflection"] as? [String: String])?["audience"] ?? "", "")
+        XCTAssertEqual((exportedProject["reflection"] as? [String: String])?["audience"], pendingAudience)
+        XCTAssertEqual(exportedProject["draft"] as? String, "Keep this unfinished thought")
+        XCTAssertEqual((exportedProject["revisions"] as? [[String: Any]])?.count, 1)
+        app.buttons["localNotebookMenu"].tap(); app.buttons["restoreNotebookWrites"].tap()
         app.buttons["대화로 돌아가기"].tap()
         XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5))
         let accountDraft = editable("sharedInput", in: app).value as? String ?? ""
@@ -116,10 +154,16 @@ final class StudioShellTests: XCTestCase {
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
         app.terminate(); app.launch(); openNotebook(app)
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
+        openReflection(in: app)
+        XCTAssertEqual(editable("reflection-observation", in: app).value as? String, "Two customers waited outside")
+        XCTAssertEqual(editable("reflection-audience", in: app).value as? String, pendingAudience)
+        app.buttons["닫기"].tap()
         XCTAssertEqual(app.buttons["sendThought"].label, "생각 기록하기")
         XCTAssertFalse(app.buttons["stopVoice"].exists)
         XCTAssertEqual(app.webViews.count, 0)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "native-iphone-intent"; shot.lifetime = .keepAlways; add(shot)
+        app.navigationBars["기기 기록"].swipeDown()
+        XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5), "A saved notebook must still support ordinary sheet dismissal.")
     }
 }
 

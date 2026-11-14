@@ -6,6 +6,7 @@ import SwiftUI
     @Published var error: String?
     @Published private(set) var readOnly = false
     @Published private var editing: [String: String] = [:]
+    var hasUnsavedEdits: Bool { !editing.isEmpty }
     var draftText: String { editing[(active ?? "") + ":draft"] ?? project?.draft ?? "" }
     var intentText: String { editing[(active ?? "") + ":intent"] ?? project?.intentDraft ?? "" }
     func editDraft(_ text: String, intent: Bool = false) {
@@ -34,7 +35,12 @@ import SwiftUI
     var visibleNotebook: Notebook { notebook.includingEdits(editing) }
     var project: Project? { visibleNotebook.projects.first { $0.id == active } }
     init() {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        var directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+#if DEBUG
+        if let id = ProcessInfo.processInfo.environment["HP_NOTEBOOK_FIXTURE_ID"], UUID(uuidString: id) != nil {
+            directory = directory.appendingPathComponent("notebook-exit-fixture-" + id)
+        }
+#endif
         file = directory.appendingPathComponent("studio-notebook-v1.json")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -50,6 +56,13 @@ import SwiftUI
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try url.setResourceValues(values)
         notebook = value
+        editing.removeAll()
+        error = nil
+    }
+    @discardableResult func savePendingEdits() -> Bool {
+        guard hasUnsavedEdits else { return true }
+        do { try persist(visibleNotebook); return true }
+        catch { self.error = "아직 저장하지 못했어요. 작성한 글을 지키기 위해 기록 화면에 머물러요. 다시 저장하거나 내보내 주세요."; return false }
     }
     @discardableResult func update(_ edit: (inout Project) throws -> Void) -> Bool {
         guard let active else { return false }
@@ -90,7 +103,50 @@ import SwiftUI
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(readOnly ? "HP-Studio-recovery-original.json" : "HP-Studio-records.json")
             let snapshot = notebook.includingEdits(editing)
             let bytes = try readOnly ? Data(contentsOf: file) : snapshot.encode()
-            try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]); return url
+            try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+#if DEBUG
+            if notebookFixtureEnabled { fixtureExport = url }
+#endif
+            return url
         } catch { self.error = error.localizedDescription; return nil }
     }
+#if DEBUG
+    // Disposable native-journey storage only. A real directory collision drives
+    // the normal atomic-write error; no save result is replaced by the fixture.
+    var notebookFixtureEnabled: Bool { file.deletingLastPathComponent().lastPathComponent.hasPrefix("notebook-exit-fixture-") }
+    @Published private var fixtureExport: URL?
+    private var fixtureBackup: URL { file.deletingLastPathComponent().appendingPathComponent("preserved-v1.json") }
+    func blockNotebookFixtureWrites() {
+        guard notebookFixtureEnabled else { return }
+        do {
+            try FileManager.default.moveItem(at: file, to: fixtureBackup)
+            try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+            try Data("fixture".utf8).write(to: file.appendingPathComponent("write-blocker"))
+            objectWillChange.send()
+        } catch { self.error = error.localizedDescription }
+    }
+    func restoreNotebookFixtureWrites() {
+        guard notebookFixtureEnabled, FileManager.default.fileExists(atPath: fixtureBackup.path),
+              FileManager.default.fileExists(atPath: file.appendingPathComponent("write-blocker").path) else { return }
+        do {
+            try FileManager.default.removeItem(at: file)
+            try FileManager.default.moveItem(at: fixtureBackup, to: file)
+            objectWillChange.send()
+        } catch { self.error = error.localizedDescription }
+    }
+    var notebookFixtureEvidence: String {
+        guard notebookFixtureEnabled else { return "" }
+        let blocked = FileManager.default.fileExists(atPath: fixtureBackup.path)
+        var result: [String: Any] = ["blocked": blocked]
+        if let data = try? Data(contentsOf: blocked ? fixtureBackup : file),
+           let value = try? JSONSerialization.jsonObject(with: data) {
+            result["disk"] = value; result["disk_bytes"] = data.base64EncodedString()
+        }
+        if let url = fixtureExport, let data = try? Data(contentsOf: url),
+           let value = try? JSONSerialization.jsonObject(with: data) { result["export"] = value }
+        guard let data = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        return text
+    }
+#endif
 }
