@@ -127,7 +127,7 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
 import { DataDeletionRequest } from "./DataDeletionRequest";
-import { LessonTip } from "./LessonTip";
+import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
@@ -572,6 +572,9 @@ export function ChatPanel(props: Props) {
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
   const [dismissedTips, setDismissedTips] = useState<string[]>(() => readDismissed(readWebviewState<Record<string, unknown>>()));
+  // CGP-SHELL-R-019 — the note that says tips are off and how to get them back, shown once after 팁 그만 보기.
+  const [tipsOffNote, setTipsOffNote] = useState(false);
+  const tipsResumeRef = useRef<HTMLDivElement | null>(null);
   // CGP-SHELL-R-020 — idea lists the learner closed with "내가 정할래요", per task and answer.
   const [dismissedIdeas, setDismissedIdeas] = useState<string[]>(() => readIdeaDismissals(readWebviewState<Record<string, unknown>>()));
   // #751 F4 — local display state for the learner's step self-report; it is separate from task completion.
@@ -989,6 +992,11 @@ export function ChatPanel(props: Props) {
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
   // CGP-CHAT-R-021 — the step the rail shows (the first before any is picked); no tip for the instructor console.
   const lessonTip = props.instructor ? null : lessonTipFor(config?.profile?.lesson, currentStepId);
+  // CGP-SHELL-R-019 — the "tips are off" note is said once: the next send (or turning tips back on) ends it.
+  useEffect(() => { if (streaming || props.sendPending) setTipsOffNote(false); }, [streaming, props.sendPending]);
+  // A different learner on this window (shared classroom PCs) never sees the previous learner's note.
+  const tipsSeat = collapseSeat({ activityId: config?.profile?.activity_id, entryId: config?.lessonCapabilityEntry?.id, localActivityId: config?.activity?.id });
+  useEffect(() => { setTipsOffNote(false); }, [tipsSeat]);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
@@ -2479,13 +2487,25 @@ export function ChatPanel(props: Props) {
           requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
         }} />}
         {/* CGP-CHAT-R-021 — at most one tip, from the served step's Chalk-authored hint only. Hidden while a turn runs. */}
-        {lessonTip && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
+        {/* CGP-SHELL-R-019 — 팁 그만 보기 hides only this row (never the lesson's steps, instructions or mission header). */}
+        {(tipsOffNote || (lessonTip && config?.lessonTips === false && !dismissedTips.includes(lessonTip.key))) && !streaming && !props.sendPending && <div ref={tipsResumeRef}><LessonTipsOffNote announce={tipsOffNote} onResume={() => {
+          setTipsOffNote(false);
+          postToHost({ type: "setLessonTips", on: true });
+          requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+        }} /></div>}
+        {lessonTip && config?.lessonTips !== false && !tipsOffNote && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
           tip={lessonTip}
           disabled={frozen || unavailable || !!props.sendLocked || folderMissing}
           onUse={() => {
             if (streaming || frozen || unavailable || props.sendLocked || props.sendPending || folderMissing) return;
             setDraft(current => prefillWithTip(current, lessonTip.text));
             requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+          }}
+          onStopTips={() => {
+            setTipsOffNote(true);
+            postToHost({ type: "setLessonTips", on: false });
+            // Focus moves to the note's 다시 켜기, so the way back is one key press away.
+            requestAnimationFrame(() => tipsResumeRef.current?.querySelector("button")?.focus({ preventScroll: true }));
           }}
           onDismiss={() => {
             const next = withDismissed(dismissedTips, lessonTip.key);
@@ -2730,6 +2750,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-019 — the lasting way back after 팁 그만 보기: only where a lesson can show tips, never the instructor console. */}
+        {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}

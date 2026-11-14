@@ -156,7 +156,7 @@ import { logsAvailable, readSessionLogs } from "./reportLogsHost";
 import { collectReportMetadata } from "./reportProblem";
 import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
 import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
-import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { acceptFocus, acceptWork, collapseSeat, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -314,6 +314,7 @@ import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./b
 import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLockOf, browserSettingsReverts, browserSettingsWritable, BROWSER_SETTINGS_REWRITE_MS, externalLinkDialog, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
+import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
@@ -5545,6 +5546,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
   }
 
+  /**
+   * CGP-SHELL-R-019 — the 팁 보기 choice of the seat the chat currently belongs to, for the start page's
+   * settings row (CGP-SHELL-R-014), which has no lesson context of its own. One seat derivation, here.
+   */
+  lessonTipsState(): { on: boolean; seat: string } {
+    return { on: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)), seat: this.lessonTips.currentSeat };
+  }
+
+  /**
+   * CGP-SHELL-R-019 — turn this seat's tips on or off and refresh the chat. The result says what happened, so a
+   * caller can tell the learner: `stored` (kept for this seat), `memory-only` (no seat is known yet, e.g. before
+   * the first config, or an empty seat: it lasts only for this window) or `refused` (not a boolean: nothing changes).
+   */
+  async setLessonTips(on: unknown): Promise<"stored" | "memory-only" | "refused"> {
+    if (typeof on !== "boolean") return "refused";
+    const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), on);
+    if (next) await this.context.globalState.update(LESSON_TIPS_KEY, next);
+    await this.postConfig();
+    return next ? "stored" : "memory-only";
+  }
+
   refreshConfig(): Promise<void> {
     return (async () => {
       await this.postConfig();
@@ -9078,6 +9100,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.globalState.update(TEXT_SIZE_KEY, normalizeTextSize(msg.size));
         await this.postConfig();
         return;
+      case "setLessonTips":
+        // CGP-SHELL-R-019 — one learner's choice, kept per seat on this computer (shared classroom PCs); an
+        // empty seat keeps it in memory only. Written only from a boolean; nothing leaves this computer.
+        if (typeof msg.on !== "boolean") return;
+        await this.setLessonTips(msg.on);
+        return;
       case "setLearnerNickname": {
         // CGP-KNOW-R-032 — the host's check is the authoritative one: the seat must offer the field
         // and the value must pass the same screen the field ran. A refused value changes nothing.
@@ -11889,6 +11917,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     for (const id of ids) await this.lessonChanges?.seen(id).catch(() => false);
   }
 
+  /**
+   * CGP-SHELL-R-019 — the 팁 보기 choice of the seat the current config was built for. Created on first use, so a
+   * provider made without the constructor (host test harnesses build one with Object.create) never throws in postConfig.
+   */
+  private lessonTipsPref: LessonTipsPreference | undefined;
+  private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
+
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
     // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
@@ -11996,7 +12031,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const visibleClassWindow = classWindow && classNoticeId && this.context.globalState?.get(classWindowReceiptKey(classNoticeId)) !== true
       ? { ...classWindow, noticeId: classNoticeId } : null;
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
+    // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
+    // A different seat starts with tips on; an in-memory choice does not carry over to it.
+    const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
+    // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
+    this.lessonTips.forSeat(tipsSeat);
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
@@ -12042,6 +12082,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
+        lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
