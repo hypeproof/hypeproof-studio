@@ -59,6 +59,7 @@ const OVERRIDES = {
   "ask-about-file": { banner: BANNER_POSTED_ARROW },
   "artifact-info": { banner: BANNER_POSTED_ARROW },
   "activity-materials": { banner: BANNER_POSTED_ARROW },
+  "coach-layout-compact": { banner: BANNER_POSTED_ARROW },
   "activity-home": { banner: BANNER_POSTED_STATE },
   "attachment-failure-ui": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
