@@ -8759,7 +8759,10 @@ The collapsed set belongs to the learner's own view. It is keyed by lesson versi
 webview's own state, so it survives a hide/show re-mount in the session. It is stored with its seat. The seat is the Service seat
 id (`activity_id`); without one, the lesson capability receipt id; without that, the local activity id. A seat sees only its
 own set. Classroom PCs are shared, so when another learner's seat appears on the same window, the previous learner's set is
-cleared from the webview state, not only hidden. It is bounded to 50, and a new lesson version starts
+cleared from the webview state, not only hidden. A window with no seat (a local/dev runtime, or an instructor profile without
+a Service seat id) would make every such window share one set, so its set is kept in memory only and never stored. Switching
+to it clears what another seat stored. A seat switch sends the host nothing that a same-seat re-mount does not, and fetches
+nothing. It is bounded to 50, and a new lesson version starts
 with every block shown. It is never sent to the host, so it is not work, not a report and not an observation event. Seats:
 every seat that draws the lesson rail. Default: on. Display only, with no new data flow and no new learner text field.
 
@@ -8773,6 +8776,8 @@ Evidence:
   - no host message and no fetch;
   - the state survives a re-mount for the same learner;
   - a second learner on the same window sees every block, and the first learner's set is cleared;
+  - host traffic across a seat switch equals a same-seat re-mount's, with no fetch (post-on-seat and fetch-on-seat mutants fail);
+  - with no seat, the block collapses in view, nothing is stored, a re-mount shows it again, and the previous seat's set is cleared;
   - another step and a new lesson version are shown;
   - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
 - `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
