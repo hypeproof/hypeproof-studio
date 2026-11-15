@@ -161,6 +161,9 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
   const s = auditRegionText("남은 단계 2", { region: "work" });
   assert.equal(s.ok, true, `"남은 단계 2"를 수치로 잡았다 → 계측기 결함: ${describe(s)}`);
   console.log("ok 양성: 3주차 · 남은 단계 2 는 허용 수치다");
+  const st = auditRegionText("2 / 4 단계: 두 번째 단계", { region: "work" });
+  assert.equal(st.ok, true, `단계 넘겨 보기의 위치 "2 / 4 단계"를 수치로 잡았다 → 계측기 결함: ${describe(st)}`);
+  console.log("ok 양성: 단계 넘겨 보기의 '2 / 4 단계' 는 허용 수치다");
 }
 
 {
@@ -244,6 +247,8 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
     ["★★★☆☆", "stars"],
     ["오늘의 성과 0.82", "bare_number"],
     ["확인함 12", "bare_number"],
+    // The stage position is allowed only with 단계: the bare ratio is still a number with no explanation.
+    ["진행 2 / 4", "bare_number"],
   ];
   for (const [sample, rule] of negatives) {
     const r = auditRegionText(sample, { region: "work" });

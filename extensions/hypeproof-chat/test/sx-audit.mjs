@@ -120,6 +120,9 @@ export const NUMERIC_PATTERNS = [
 export const ALLOWED_NUMERIC = [
   { id: "week", label: "\\d+주차", re: /\d+\s*주차/g },
   { id: "steps_left", label: "남은 단계 \\d+", re: /남은\s*단계\s*\d+/g },
+  // CGP-LEARN-R-005 (REQ-CGP-LEARN-05): the stage stepper shows its position as "2 / 4 단계". It is where the learner is in
+  // the instructor's stages, not a score; only that exact shape with 단계 is allowed (a bare "2 / 4" is still flagged).
+  { id: "stage_position", label: "\\d+ / \\d+ 단계", re: /\d+\s*\/\s*\d+\s*단계/g },
   { id: "date_numeric", label: "날짜(2026-09-20)", re: /\d{4}\s*[-./]\s*\d{1,2}\s*[-./]\s*\d{1,2}\.?/g },
   { id: "date_ko", label: "날짜(9월 20일)", re: /\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*월(?=\s|$)|\d{1,2}\s*일(?=\s|$)/g },
   { id: "time_clock", label: "시각(3:05)", re: /(?:오전|오후)?\s*\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g },
