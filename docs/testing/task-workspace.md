@@ -368,6 +368,13 @@ browser autoplay refusal, a screen reader and the packaged app are not run here.
 
 ## Microphone explainer before the OS prompt (CGP-SHELL-R-010 / CGP-SHELL-D-009)
 
+`test/dictation-recovery-table.smoke.mjs` checks every dictation cause against every (retry, clipKept)
+combination. A clip problem (unreadable, too short, too large, too long) is always 다시 말하기, never 다시 보내기.
+`test/dictation-level-meter.smoke.mjs` runs the real `webAudioLevelMeter` on a fake AudioContext inside the
+real recorder. The analyser is never connected to the output. Stop, cancel and the 58 s hard stop each disconnect the
+source and the analyser and close the context exactly once. Both are red on main: the first on `unreadable`, the
+second on the missing export.
+
 `test/dictation-recovery.test.tsx` (CGP-VOICE-R-014 / R-015 / D-010 / D-012) renders the real dictation addon under a
 served-voice profile for an adult seat and a minor seat, with voice-ui's scripted recorder and timers. Each webview
 cause (no microphone, microphone busy, unsupported, too short) and each host cause (network, cap, auth, unavailable, too

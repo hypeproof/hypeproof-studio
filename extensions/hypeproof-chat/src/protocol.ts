@@ -617,6 +617,8 @@ export type WebviewMessage = (
   | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
   | { type: 'automationClose' }
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
+  /** CGP-SHELL-R-026 — the learner's answer to the link confirm dialog. */
+  | {type:'linkConfirmAnswer';id:string;choice:import('./linkConfirm').LinkConfirmChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
   | { type: "stopRunningProcess"; id: string }
@@ -1036,10 +1038,11 @@ export type HostMessage = (
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
   /**
    * CGP-LEARN-R-011 — what the Service did with a material report: `sent` (accepted), `already` (it already holds this
-   * learner's report of that block), `capped` (the daily limit), `unconfirmed` (no answer in time), `not_sent` (no live
-   * class connection, the Service does not store the kind, no block, or refused).
+   * learner's report of that block), `capped` (the daily limit), `unconfirmed` (no answer in time), `rejected` (the
+   * Service refused this report, e.g. a lesson it does not match), `not_sent` (no live class connection, the Service does
+   * not store the kind, no block, or the outbox refused).
    */
-  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "already" | "capped" | "unconfirmed" | "not_sent" }
+  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "already" | "capped" | "unconfirmed" | "rejected" | "not_sent" }
   /**
    * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
    * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the
@@ -1078,8 +1081,8 @@ export type HostMessage = (
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
-  /** CGP-ART-D-008 — a safe-session link outside the cohort allowlist did not open (flag `safeLinkAllowlistEnabled`). */
-  | { type: "externalLinkBlocked"; host: string; at: number }
+  /** CGP-SHELL-R-026 — confirm an external link before it opens (null closes the dialog). */
+  | { type: "linkConfirmPrompt"; prompt: import("./linkConfirm").LinkConfirmPrompt | null }
   | { type: "history"; messages: ChatMessage[] }
   | { type: "answerAttemptSelected"; root: ChatMessage; scope: string }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */

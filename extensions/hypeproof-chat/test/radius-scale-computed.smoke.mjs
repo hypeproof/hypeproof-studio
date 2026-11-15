@@ -140,6 +140,7 @@ const DIALOGS = [
   ['hps-annotation-leave hp-modal', 'AnnotationLeaveDialog.tsx'],
   ['hps-write-approval hps-browser-approval hp-modal', 'BrowserApprovalDialog.tsx'],
   ['hps-write-approval hps-command-approval hp-modal', 'CommandApprovalDialog.tsx'],
+  ['hps-write-approval hps-link-confirm hp-modal', 'LinkConfirmDialog.tsx'],
   ['hps-delegation-panel hp-modal', 'DelegationGroup.tsx'],
   ['hps-file-context-preview hp-modal', 'FileContextChip.tsx'],
   ['hps-outbound hp-modal hps-folder-consent', 'FolderConsentDialog.tsx'],

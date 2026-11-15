@@ -109,3 +109,21 @@ export function injectInnerCsp(html: string, cspSource: string): string {
   }
   return `<head>${metaTag}</head>${html}`;
 }
+
+/**
+ * CGP-SHELL-R-026 — the preview's link relay. A generated page cannot leave the sandbox (no popups, no top navigation,
+ * no https frames), so a click on an external link inside it is relayed to the host, which shows the confirm dialog.
+ * The relay acts only on a trusted click (`isTrusted`) on an `<a href>` with an absolute http(s) address that is not
+ * the page itself. This is defence in depth only: a page script can post the same message shape to its parent, so the
+ * host is the boundary (every preview link asks, rate-limited to one per 2 s, for every seat).
+ */
+export const PREVIEW_LINK_MESSAGE = "hp:open-link";
+export const PREVIEW_LINK_RELAY = `(function(){document.addEventListener("click",function(e){if(!e.isTrusted||e.defaultPrevented||e.button!==0)return;var t=e.target;var a=t&&t.closest?t.closest("a[href]"):null;if(!a)return;var h=a.href;if(!/^https?:\\/\\//i.test(h))return;e.preventDefault();try{parent.postMessage({type:"${PREVIEW_LINK_MESSAGE}",href:h},"*")}catch(_){}},true)})();`;
+export function injectLinkRelay(html: string): string {
+  const tag = `<script>${PREVIEW_LINK_RELAY}</script>`;
+  const headOpen = /<head\b[^>]*>/i;
+  if (headOpen.test(html)) return html.replace(headOpen, (m) => `${m}${tag}`);
+  const htmlOpen = /<html\b[^>]*>/i;
+  if (htmlOpen.test(html)) return html.replace(htmlOpen, (m) => `${m}<head>${tag}</head>`);
+  return `<head>${tag}</head>${html}`;
+}

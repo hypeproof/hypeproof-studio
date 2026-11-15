@@ -86,6 +86,8 @@ export async function launch(bin, attempt = 1) {
   };
   return {
     send, evaluate, waitForEvent,
+    // The DevTools port: a test can open the browser-level endpoint too (CGP-SHELL-R-026 root-session popups).
+    port,
     onEvent(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     // One document at a time. `forcedColors` and `dark` are media emulation, not class names.
     // `appReady` (true or 'app' for the App, 'start' for StartPage, whose listener posts `startReady` in the same effect):

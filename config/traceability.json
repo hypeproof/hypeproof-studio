@@ -6801,7 +6801,16 @@
           "path": "extensions/hypeproof-chat/src/browserSafetyHelpers.ts"
         },
         {
-          "path": "extensions/hypeproof-chat/webview-ui/src/ExternalLinkBlocked.tsx"
+          "path": "extensions/hypeproof-chat/src/linkConfirm.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/linkNavigationGuard.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioTabs.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LinkConfirmDialog.tsx"
         }
       ]
     },
@@ -6818,7 +6827,13 @@
           "path": "extensions/hypeproof-chat/test/external-link-route.smoke.mjs"
         },
         {
-          "path": "extensions/hypeproof-chat/test/external-link-blocked.test.tsx"
+          "path": "extensions/hypeproof-chat/test/link-confirm-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/link-confirm-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/link-confirm-render.test.tsx"
         }
       ]
     },
@@ -17817,6 +17832,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/voice-conversation-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-recovery-table.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-level-meter.smoke.mjs"
         }
       ]
     },

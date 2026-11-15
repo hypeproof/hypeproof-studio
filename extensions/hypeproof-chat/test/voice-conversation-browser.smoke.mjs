@@ -83,6 +83,18 @@ try {
  const store=await setup();
  assert(await b.evaluate("document.querySelectorAll('.tw-task').length>0"),'the real task rail is drawn');
  await noMarker('before any voice session');
+ // CGP-VOICE-R-014: while dictation records, the conversation button is off and says why (name and tooltip); a null
+ // reason (verify-r004's mutant) leaves only the plain name and fails here.
+ await b.evaluate(`document.querySelector('button.hps-voice-mic').click()`);
+ // The first press may show Studio's microphone explainer (CGP-SHELL-R-010): allow it, then the recording starts.
+ await wait(async()=>await b.evaluate(`!!document.querySelector('.hps-voice-recording, .hps-voice-explain, .hps-voice-disclosure')`),'dictation started or asked first');
+ if (await b.evaluate(`!!document.querySelector('.hps-voice-explain')`)) await b.evaluate(`document.querySelector('.hps-voice-explain .hps-voice-primary').click()`);
+ await wait(async()=>await b.evaluate(`!!document.querySelector('.hps-voice-recording')`),'dictation recording');
+ {const c=await b.evaluate(`(()=>{const e=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')??'').startsWith('자동 음성 대화 시작'));return e?{label:e.getAttribute('aria-label'),tip:e.getAttribute('data-hp-tooltip'),disabled:e.disabled}:null})()`);
+  assert.deepEqual(c,{label:'자동 음성 대화 시작, 받아쓰기가 끝나면 쓸 수 있어요',tip:'받아쓰기가 끝나면 쓸 수 있어요',disabled:true},'the conversation names why it is off while dictation records: '+JSON.stringify(c));}
+ await b.evaluate(`[...document.querySelectorAll('.hps-voice-recording button')].find(x=>x.textContent==='취소').click()`);
+ await wait(async()=>!(await b.evaluate(`!!document.querySelector('.hps-voice-recording')`))&&await live()===0,'dictation cancelled, microphone closed');
+ controls.push('while dictation records the conversation button names why it is off');
  await click('자동 음성 대화 시작');
  assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-disclosure")'),false,'existing acknowledgement adds no recurring mode gate');
  controls.push('one deliberate start with inline behavior and no redundant acknowledgement');
