@@ -454,6 +454,12 @@ receipt, and no automatic question answer or conversation send. Missing or skipp
 execution blocks the native candidate. The transport and APNs notification are
 synthetic; a passing journey does not establish physical push delivery.
 
+The native CI contract job also runs the existing release casebook selection and
+publish-gate controls before either platform build. A newly required journey must
+appear in its release case, and the active iOS P0 selection must agree. A missing
+mapping stops before provisioning the Android emulator or starting the Mac job;
+it does not change any journey, approval, or physical-device acceptance requirement.
+
 Desktop controls: `account-cards.smoke.mjs`, `team-product-loop.smoke.mjs`,
 `account-question-entry.test.tsx`, and existing personal-reflection/member-approval host/UI controls.
 Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
