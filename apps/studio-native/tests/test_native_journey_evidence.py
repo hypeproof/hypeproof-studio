@@ -12,8 +12,9 @@ SPEC = importlib.util.spec_from_file_location('journey_evidence', SCRIPT)
 journey = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(journey)
 SHA = 'a' * 40
 
-def case(name, state='passed'):
-    return f"Test Case '-[HPStudioUITests.StudioJourneyTests {name}]' started.\nTest Case '-[HPStudioUITests.StudioJourneyTests {name}]' {state} (1.000 seconds).\n"
+def case(name, state='passed', test_class=None):
+    test_class = test_class or journey.CLASSES[name]
+    return f"Test Case '-[HPStudioUITests.{test_class} {name}]' started.\nTest Case '-[HPStudioUITests.{test_class} {name}]' {state} (1.000 seconds).\n"
 
 class JourneyEvidence(unittest.TestCase):
     def run_fixture(self, log=None, build='** BUILD SUCCEEDED **\n', build_exit=0, test_exit=0):
@@ -66,6 +67,15 @@ class JourneyEvidence(unittest.TestCase):
         for log in [good + case(names[0]), '\n'.join(name + ': PASS' for name in names), good.replace("' started.", "' fake-start.")]:
             self.assertEqual(self.run_fixture(log=log)['test_candidate_eligibility'], 'BLOCKED')
         self.assertEqual(self.run_fixture(build='compiler done\n')['build']['status'], 'NOT_RUN')
+
+    def test_team_case_name_under_another_class_cannot_satisfy_the_release_gate(self):
+        required = journey.REQUIRED['MENT-T02-question']
+        log = ''.join(case(name, test_class='StudioJourneyTests' if name == required else None)
+                      for name in journey.REQUIRED.values())
+        result = self.run_fixture(log=log)
+        self.assertEqual(result['test_candidate_eligibility'], 'BLOCKED')
+        missing = next(item for item in result['simulator_journeys']['cases'] if item['requirement'] == 'MENT-T02-question')
+        self.assertEqual(missing['status'], 'NOT_RUN')
 
     def test_actual_cli_preserves_failure_receipt_and_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:

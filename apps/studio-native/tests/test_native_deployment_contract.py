@@ -64,7 +64,7 @@ class DeploymentContracts(unittest.TestCase):
 
     def fixture_repo(self, directory):
         root = Path(directory) / 'repo'; scripts = root / 'apps/studio-native/scripts'; scripts.mkdir(parents=True)
-        for name in ['verify-native-candidate.py', 'apple-upload.sh']: shutil.copyfile(NATIVE / 'scripts' / name, scripts / name)
+        for name in ['verify-native-candidate.py', 'apple-upload.sh', 'apple-push-config.py']: shutil.copyfile(NATIVE / 'scripts' / name, scripts / name)
         ios = scripts.parent / 'ios'; ios.mkdir(); (ios / 'placeholder').write_text('fixture')
         (root / '.github/workflows').mkdir(parents=True)
         (root / gate.WORKFLOW).write_text('fixture native workflow')
@@ -208,7 +208,7 @@ print('fixture command completed')
                 evidence = root / 'apps/studio-native/evidence/apple-ios'; evidence.mkdir(parents=True)
                 env.update(PATH=str(commands) + os.pathsep + env['PATH'], FAIL_PHASE=failure, CALLS=str(temp / 'calls'),
                            APPLE_DEVELOPER_TEAM_ID='fixture', APP_STORE_CONNECT_KEY_ID='fixture', APP_STORE_CONNECT_ISSUER_ID='fixture',
-                           private=str(private), evidence=str(evidence), platform='ios', identity='fixture', profile_name='fixture',
+                           private=str(private), evidence=str(evidence), platform='ios', identity='fixture', profile_name='fixture', push_enabled='false',
                            control_scripts=str(scripts), candidate_root=str(root))
                 p = subprocess.run(['bash', '-c', "set -euo pipefail\ndestination='generic/platform=iOS'" + tail], cwd=ios, env=env, capture_output=True, text=True)
                 receipt = evidence / 'upload-receipt.json'

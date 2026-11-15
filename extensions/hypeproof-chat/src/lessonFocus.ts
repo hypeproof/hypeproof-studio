@@ -7,6 +7,7 @@
 //   work surface  the step's `ui`: a form the learner fills in; its saved text travels with the next turn as context
 //   tool grants   untouched here. They come from the served profile only.
 // A header names a teaching pointer; the Service re-resolves both against the frozen steps and refuses anything else.
+import { boxParams, stageParams, type BoxValues, type Stage } from "./blockParams.ts";
 
 export const HELP_MODES = ["demonstrate", "hint", "co_edit", "independent"] as const;
 export type HelpMode = (typeof HELP_MODES)[number];
@@ -18,10 +19,10 @@ export const HELP_MODE_LABELS: Record<HelpMode, string> = {
   independent: "직접 해보기",
 };
 /** Work surfaces this Studio renders. The Service accepts seven `ui` values (MATERIAL_KINDS); the rest are reported as unsupported. */
-export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form"] as const;
+export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form", "box_spacing", "stage_stepper"] as const;
 export const WORK_TEXT_MAX = 1000;
 
-type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string; ui_version?: unknown };
+type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string; ui_version?: unknown; ui_params?: unknown };
 type Lesson = { sha256: string; version: string; content: { steps: Step[] } };
 export interface LessonFocus { sha256: string; stepId: string; helpMode: HelpMode | null }
 
@@ -31,6 +32,9 @@ const isMode = (x: unknown): x is HelpMode => typeof x === "string" && (HELP_MOD
 export function surfaceOf(step: Step): string {
   const kind = typeof step.ui === "string" ? step.ui : "chat";
   if (kind !== "chat" && !rendersPin(kind, step.ui_version)) return "unsupported:" + kind;
+  // CGP-LEARN-R-005/006 — a parametric block draws only with params that fit its v1 spec here too (fail closed).
+  if (kind === "box_spacing" && !boxParams(step.ui_version, step.ui_params)) return "unsupported:" + kind;
+  if (kind === "stage_stepper" && !stageParams(step.ui_version, step.ui_params)) return "unsupported:" + kind;
   return (SUPPORTED_SURFACES as readonly string[]).includes(kind) ? kind : "unsupported:" + kind;
 }
 
@@ -41,6 +45,7 @@ export function surfaceOf(step: Step): string {
  */
 export const RENDERED_UI_VERSIONS: Readonly<Record<string, readonly number[]>> = {
   canvas_editor: [1], canvas_preview: [1], criterion_form: [1], evidence_note: [1], coach_request: [1], decision_form: [1], metric_board: [1],
+  box_spacing: [1], stage_stepper: [1],
 };
 export function rendersPin(kind: string, uiVersion: unknown): boolean {
   const version = uiVersion === undefined ? 1 : uiVersion;
@@ -53,9 +58,15 @@ export function rendersPin(kind: string, uiVersion: unknown): boolean {
  * CGP-LEARN-R-001 (DEC-19) — a step's learning block lives in the step's existing `ui` field: the seven values the Service's
  * learning-design.ts accepts (STEP_UI_KINDS). No other key and no other value is a block.
  */
-export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board"] as const;
+export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board", "box_spacing", "stage_stepper"] as const;
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
-export interface StepMaterial { kind: MaterialKind; stepId: string; version: string; sha256: string; uiVersion: number }
+export interface StepMaterial {
+  kind: MaterialKind; stepId: string; version: string; sha256: string; uiVersion: number;
+  /** CGP-LEARN-R-006 — box_spacing's pinned values, re-validated (the starting state of its controls). */
+  box?: BoxValues;
+  /** CGP-LEARN-R-005 — stage_stepper's stages, re-validated; untrusted text, drawn as text only. */
+  stages?: Stage[];
+}
 
 /**
  * The block the confirmed lesson version attaches to ONE step, or null. The only source is the served lesson (pinned by its
@@ -68,7 +79,10 @@ export function stepMaterial(lesson: Lesson | null | undefined, stepId: string):
   if (!lesson || !step || typeof kind !== "string" || !(MATERIAL_KINDS as readonly string[]).includes(kind)) return null;
   // CGP-LEARN-R-004 — only a pinned version this App renders; otherwise no block (the step shows the unsupported notice).
   if (!rendersPin(kind, step.ui_version)) return null;
-  return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256, uiVersion: (step.ui_version as number | undefined) ?? 1 };
+  const base = { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256, uiVersion: (step.ui_version as number | undefined) ?? 1 };
+  if (kind === "box_spacing") { const box = boxParams(step.ui_version, step.ui_params); return box ? { ...base, box } : null; }
+  if (kind === "stage_stepper") { const stages = stageParams(step.ui_version, step.ui_params); return stages ? { ...base, stages } : null; }
+  return base;
 }
 
 /**
@@ -151,6 +165,18 @@ export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   evidence_note: UNDRAWN("근거 메모"),
   coach_request: UNDRAWN("코치에게 부탁하기"),
   metric_board: UNDRAWN("수치 살펴보기"),
+  // CGP-LEARN-R-006 / R-005 — their state sentence is the caption the block computes from its own values (LessonStepPanel
+  // passes it in); this one is only what a screen reader hears before the block has drawn.
+  box_spacing: {
+    title: "상자 여백 탐색",
+    controlsHelp: "막대를 움직여 안쪽 여백, 테두리, 바깥 여백을 바꾸고 배치를 골라 보세요. 화살표 키는 1px, Page Up과 Page Down은 크게 움직여요. 미리보기 상자는 내용 너비에 안쪽 여백과 테두리를 더한 크기예요. '처음으로'는 시작 상태로, '되돌리기'는 바로 전에 바꾼 것으로 돌아가요.",
+    state: () => ({ key: "box", sentence: "상자 여백 탐색을 준비하고 있어요." }),
+  },
+  stage_stepper: {
+    title: "단계 넘겨 보기",
+    controlsHelp: "'다음'과 '이전'으로 한 단계씩 넘겨 보세요. 이 자료에 포커스가 있을 때는 왼쪽·오른쪽 화살표 키로도 넘길 수 있어요. 저절로 넘어가지 않아요.",
+    state: () => ({ key: "stage", sentence: "단계 넘겨 보기를 준비하고 있어요." }),
+  },
 };
 
 /**

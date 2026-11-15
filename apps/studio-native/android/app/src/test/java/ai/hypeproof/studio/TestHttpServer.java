@@ -9,8 +9,8 @@ import java.util.concurrent.*;
 final class TestHttpServer implements AutoCloseable {
     interface Handler {void handle(Request r)throws Exception;}
     static final class Request {
-        final String path;final Map<String,String> headers=new HashMap<>();final byte[] body;final OutputStream out;
-        Request(Socket socket)throws Exception{InputStream in=socket.getInputStream();out=socket.getOutputStream();path=line(in).split(" ")[1];for(String l;!(l=line(in)).isEmpty();){int split=l.indexOf(':');headers.put(l.substring(0,split).toLowerCase(Locale.ROOT),l.substring(split+1).trim());}body=in.readNBytes(Integer.parseInt(headers.getOrDefault("content-length","0")));}
+        final String path,method;final Map<String,String> headers=new HashMap<>();final byte[] body;final OutputStream out;
+        Request(Socket socket)throws Exception{InputStream in=socket.getInputStream();out=socket.getOutputStream();String[] request=line(in).split(" ");method=request[0];path=request[1];for(String l;!(l=line(in)).isEmpty();){int split=l.indexOf(':');headers.put(l.substring(0,split).toLowerCase(Locale.ROOT),l.substring(split+1).trim());}body=in.readNBytes(Integer.parseInt(headers.getOrDefault("content-length","0")));}
         void respond(int code,String type,byte[] bytes,String extra)throws Exception{out.write(("HTTP/1.1 "+code+" Test\r\nContent-Type: "+type+"\r\nContent-Length: "+bytes.length+"\r\nConnection: close\r\n"+extra+"\r\n").getBytes(StandardCharsets.US_ASCII));out.write(bytes);out.flush();}
         private static String line(InputStream in)throws IOException{ByteArrayOutputStream b=new ByteArrayOutputStream();for(int n;(n=in.read())!=-1;){if(n=='\n')break;if(n!='\r')b.write(n);if(b.size()>8192)throw new IOException("long_header");}return b.toString(StandardCharsets.US_ASCII);}
     }

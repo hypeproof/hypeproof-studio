@@ -31,6 +31,27 @@ public final class QuestionActivity extends Activity {
     private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
     private ReflectionStorage storage;
     private ReflectionModel model;
+    private final ExecutorService experienceWorker=Executors.newSingleThreadExecutor();
+    private NativeProductExperience experience;
+    private NativePush push;
+    private NativePush.Open pendingPush;
+    private Boolean pendingPushDestination;
+    private NativeDeviceSignIn.Credentials pendingPushAccount;
+    private final ExecutorService pushWorker=Executors.newSingleThreadExecutor();
+    private AlertDialog pushDialog;
+    private TextView pushStatus;
+    private NativePush.Permission pushPermission;
+    private final StudioMessagingService.Listener pushListener=token->resumePush();
+    private static final int PUSH_PERMISSION=41011;
+    private AlertDialog experienceDialog;
+    private LinearLayout experienceContent;
+    private NativeTeamModel team;
+    private NativeDeviceSignIn.Credentials teamIdentity;
+    private LinearLayout teamEntry,teamContent;
+    private TextView greeting;
+    private Button questionsEntry,approvalsEntry;
+    private AlertDialog teamDialog;
+    private boolean approvalDialog;
     private NativeVoice voice;
     private LinearLayout root,messages,actions,voiceActions,body;
     private EditText composer;
@@ -51,6 +72,10 @@ public final class QuestionActivity extends Activity {
         NativeDeviceSignIn.Target target=NativeDeviceSignIn.Target.production();
         NativeDeviceSignIn.Transport http=BuildConfig.DEBUG&&testTransport!=null?testTransport:new DeviceSignInHttp(target,deadlines);
         model=new ReflectionModel(storage,new NativeDeviceSignIn(target,http,NativeDeviceSignIn.MONOTONIC),http,worker,r->handler.post(r),this::update);
+        experience=new NativeProductExperience(()->model.credentials,http,experienceWorker,r->handler.post(r),storage,()->{renderExperience();if(team!=null)team.startAvailabilityChanged();});
+        model.observed=experience::record;
+        DeviceSignInHttp pushHttp=new DeviceSignInHttp(target,deadlines);
+        push=new NativePush(()->model.credentials,pushHttp::push,storage,pushWorker,r->handler.post(r),()->{if(pushStatus!=null)pushStatus.setText(push.status);});
         voice=new NativeVoice(this,new NativeVoice.Host(){
             public String projectID(){return voiceScope();}
             public boolean foreground(){return foreground;}
@@ -63,26 +88,29 @@ public final class QuestionActivity extends Activity {
                 voicePrefix="";voiceTurn=null;return true;
             }
             public void changed(){update();}
+            public void observed(NativeProductExperience.Kind kind){experience.record(kind);}
             public void failed(String value){voiceTurn=null;model.error=value;update();}
             public void transcript(String id,String value,boolean complete,boolean automatic){
                 if(!Objects.equals(id,voiceScope()))return;
                 model.edit(voicePrefix.isEmpty()?value:voicePrefix+"\n"+value);
-                if(complete&&automatic){if(model.send()){voiceTurn=model.state.request.optString("id");voiceTicket=voice.session.ticket();voiceWait=SystemClock.elapsedRealtime();}else{voice.stop();model.error="인식한 글을 확인한 뒤 직접 보내 주세요.";}}
+                if(complete&&automatic){experience.record(NativeProductExperience.Kind.VOICE_FINAL);if(model.send()){voiceTurn=model.state.request.optString("id");voiceTicket=voice.session.ticket();voiceWait=SystemClock.elapsedRealtime();}else{voice.stop();model.error="인식한 글을 확인한 뒤 직접 보내 주세요.";}}
                 update();
             }
         });
+        team=new NativeTeamModel(()->model.credentials,http,worker,r->handler.post(r),storage,()->{update();renderTeamDialog();});
+        team.observed=experience::record;team.startingAvailable=experience::availableFor;
         if(saved!=null&&saved.getBundle("unsavedDrafts")!=null){Bundle drafts=saved.getBundle("unsavedDrafts");for(String account:drafts.keySet())model.unsavedDrafts.put(account,drafts.getString(account,""));}
         model.restore();
         if(saved!=null&&Objects.equals(model.account(),saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
         update();
     }
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
-    @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
+    @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();StudioMessagingService.attach(pushListener);resumePush();consumePush(getIntent());}
     @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
-    @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();super.onStop();}
+    @Override protected void onStop(){visible=false;StudioMessagingService.detach(pushListener);handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();if(experienceDialog!=null)experienceDialog.dismiss();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
-    @Override protected void onDestroy(){if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);}
+    @Override protected void onDestroy(){if(push!=null)push.invalidate();pushWorker.shutdown();if(experience!=null)experience.invalidate();experienceWorker.shutdown();if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);if(request==PUSH_PERMISSION){if(push.accepts(pushPermission)){if(grants.length>0&&grants[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)resumePush();else disablePush();}pushPermission=null;}}
     private LinearLayout column(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);return c;}
     private TextView text(String value,int size,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(ink);t.setPadding(0,dp(6),0,dp(8));if(bold)t.setTypeface(null,Typeface.BOLD);return t;}
     private GradientDrawable rounded(int color,int radius){GradientDrawable shape=new GradientDrawable();shape.setColor(color);shape.setCornerRadius(dp(radius));return shape;}
@@ -106,6 +134,9 @@ public final class QuestionActivity extends Activity {
         root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(16),insets.getSystemWindowInsetTop()+dp(4),dp(16),bottom+dp(8));return insets;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setBaselineAligned(false);
         TextView title=text("HP Studio",18,true);title.setPadding(dp(4),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));header.addView(iconButton("메뉴",R.drawable.ic_conversation_menu,this::menu));root.addView(header);
+        teamEntry=column();greeting=text("안녕하세요.",14,false);greeting.setContentDescription("계정 인사");teamEntry.addView(greeting);
+        LinearLayout entries=new LinearLayout(this);questionsEntry=button("도착한 질문",()->openTeam(false));approvalsEntry=button("확인 요청",()->openTeam(true));
+        entries.addView(questionsEntry,new LinearLayout.LayoutParams(0,-2,1));entries.addView(approvalsEntry,new LinearLayout.LayoutParams(0,-2,1));teamEntry.addView(entries);root.addView(teamEntry);
         messages=column();timeline=new ConversationScroll(this,messages);body=column();body.setPadding(dp(4),dp(24),dp(4),dp(20));
         heading=text(ReflectionState.OPENING,24,true);heading.setLineSpacing(dp(3),1);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);
         hint=text(ReflectionState.HINT,14,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);body.addView(messages);timeline.addView(body);
@@ -140,10 +171,18 @@ public final class QuestionActivity extends Activity {
     }
     private void update(){
         if(isDestroyed()||model==null)return;
+        if(team!=null&&!NativeTeamModel.same(teamIdentity,model.credentials)){
+            if(push!=null)push.invalidate();
+            experience.invalidate();if(experienceDialog!=null)experienceDialog.dismiss();team.invalidate();if(teamDialog!=null)teamDialog.dismiss();teamIdentity=model.credentials;
+            if(teamIdentity!=null){team.profile(teamIdentity);experience.refresh(teamIdentity);}
+        }
         if(root==null||!Objects.equals(shownAccount,model.account())){if(voice!=null)voice.stop();voiceTurn=null;build();}
+        teamEntry.setVisibility(model.account()!=null&&!composer.hasFocus()&&!voice.session.active()?View.VISIBLE:View.GONE);
+        greeting.setText(team==null||team.displayName.isEmpty()?"안녕하세요.":"안녕하세요, "+team.displayName+"님.");
+        questionsEntry.setEnabled(!model.busy&&!model.readOnly);approvalsEntry.setEnabled(!model.busy&&!model.readOnly);
         timeline.beforeContentChange();
         ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?"로그인 전에는 이 기기에만 저장돼요.":s.hint);
-        body.setGravity(s!=null&&s.messages.length()>0?Gravity.TOP:Gravity.BOTTOM);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
+        body.setGravity(Gravity.TOP);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
         String key=s==null?"signed-out":s.messages.toString()+String.valueOf(s.request)+s.earlier;
         if(!key.equals(transcriptKey)){
             transcriptKey=key;messages.removeAllViews();
@@ -193,6 +232,120 @@ public final class QuestionActivity extends Activity {
             }
         }
         updateVoiceReply();
+        openPendingPush();
+    }
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);consumePush(intent);}
+    private void resumePush(){
+        if(push==null||!push.enabled()||!StudioMessagingService.configured(this)||!StudioMessagingService.permission(this))return;
+        NativePush.Permission ticket=push.permissionTicket();
+        if(StudioMessagingService.tokenDeletion!=null){
+            com.google.android.gms.tasks.Task<Void> pending=StudioMessagingService.tokenDeletion;
+            pending.addOnCompleteListener(this,result->{
+                if(!push.accepts(ticket)||StudioMessagingService.tokenDeletion!=pending)return;
+                if(!result.isSuccessful()){push.unavailable("이전 알림 해제를 확인하지 못했어요. 알림 끄기를 다시 눌러 주세요.");return;}
+                StudioMessagingService.tokenDeletion=null;resumePush();
+            });return;
+        }
+        NativeDeviceSignIn.Credentials expected=model.credentials;
+        // Service v1 accepts registration tokens; FID mode is explicitly disabled.
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken().addOnCompleteListener(this,task->{
+            if(!NativeTeamModel.same(expected,model.credentials)||!push.accepts(ticket)||StudioMessagingService.tokenDeletion!=null||!StudioMessagingService.permission(this))return;
+            if(task.isSuccessful())push.register(task.getResult());else push.unavailable("시스템 알림 등록을 확인하지 못했어요. 다시 시도해 주세요.");
+        });
+    }
+    private void disablePush(){
+        push.disable();
+        if(StudioMessagingService.configured(this)){
+            com.google.firebase.messaging.FirebaseMessaging messaging=com.google.firebase.messaging.FirebaseMessaging.getInstance();
+            messaging.setAutoInitEnabled(false);if(StudioMessagingService.tokenDeletion==null||StudioMessagingService.tokenDeletion.isComplete())StudioMessagingService.tokenDeletion=messaging.deleteToken();
+        }
+        getSystemService(NotificationManager.class).cancelAll();
+    }
+    private void openPushSettings(){
+        if(model.credentials==null)return;stopVoice();composer.clearFocus();boolean configured=StudioMessagingService.configured(this);
+        LinearLayout content=column();content.setPadding(dp(20),dp(12),dp(20),dp(12));
+        pushStatus=text(configured?push.status:"이 버전은 알림 연결이 아직 준비되지 않았어요. 질문과 확인 요청에서 직접 확인할 수 있어요.",15,false);content.addView(pushStatus);
+        Button enable=button("알림 켜기",()->model.withCurrentAccount(c->{if(!push.enable())return;pushPermission=push.permissionTicket();
+            if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},PUSH_PERMISSION);
+            else if(StudioMessagingService.permission(this))resumePush();else push.unavailable("시스템 설정에서 HP Studio 알림을 허용해 주세요.");
+        }));enable.setEnabled(configured);content.addView(enable);content.addView(button("알림 끄기",()->{disablePush();}));
+        pushDialog=new AlertDialog.Builder(this).setTitle("질문과 확인 요청 알림").setView(content).setNegativeButton("닫기",null).create();pushDialog.setOnDismissListener(d->{pushStatus=null;pushDialog=null;});pushDialog.show();
+    }
+    private void consumePush(Intent intent){
+        if(intent==null||push==null)return;String raw=intent.getStringExtra(StudioMessagingService.EXTRA);
+        try{
+            JSONObject payload;
+            if(raw!=null)payload=new JSONObject(raw);else{if(!"hps-push/1".equals(intent.getStringExtra("schema")))return;payload=new JSONObject();for(String key:new String[]{"schema","delivery_id","kind","id","revision"})payload.put(key,intent.getStringExtra(key));}
+            for(String key:new String[]{StudioMessagingService.EXTRA,"schema","delivery_id","kind","id","revision"})intent.removeExtra(key);
+            NativePush.Open reference=NativePush.Open.parse(payload);
+            pendingPush=reference;openPendingPush();
+        }catch(Exception ignored){/* Opaque payloads cannot act as account authority. */}
+    }
+    private void openPendingPush(){
+        if(!foreground||model.credentials==null||model.busy||push.busy)return;
+        if(pendingPushDestination!=null){Boolean destination=pendingPushDestination;pendingPushDestination=null;if(NativeTeamModel.same(pendingPushAccount,model.credentials))openTeam(destination);pendingPushAccount=null;return;}
+        if(pendingPush==null)return;
+        NativePush.Open reference=pendingPush;pendingPush=null;
+        model.withCurrentAccount(c->push.open(reference,approvals->{if(!isDestroyed()){pendingPushDestination=approvals;pendingPushAccount=model.credentials;handler.post(this::openPendingPush);}}));
+    }
+    private void openExperience(){
+        if(model.credentials==null||model.busy)return;stopVoice();composer.clearFocus();ScrollView scroll=new ScrollView(this);experienceContent=column();experienceContent.setPadding(dp(20),dp(8),dp(20),dp(12));scroll.addView(experienceContent);
+        experienceDialog=new AlertDialog.Builder(this).setTitle("사용 경험 공유").setView(scroll).setNegativeButton("닫기",null).create();experienceDialog.setOnDismissListener(d->{experienceDialog=null;experienceContent=null;});experienceDialog.show();renderExperience();model.withCurrentAccount(experience::refresh);
+    }
+    private void renderExperience(){
+        if(experienceDialog==null||experienceContent==null||!experienceDialog.isShowing())return;experienceContent.removeAllViews();
+        experienceContent.addView(text(experience.granted?"사용 경험 공유 켜짐":"사용 경험을 공유하지 않아요",16,true));
+        if(!experience.notice.isEmpty())experienceContent.addView(text(experience.notice,15,false));if(!experience.status.isEmpty())experienceContent.addView(text(experience.status,14,false));
+        for(boolean allow:new boolean[]{true,false}){Button choice=button(allow?"동의하고 공유하기":"공유하지 않기",()->experience.choose(allow));choice.setEnabled(experience.available&&!experience.busy);experienceContent.addView(choice);}
+        Button refresh=button("설정 다시 확인",()->experience.refresh(model.credentials));refresh.setEnabled(!experience.busy);experienceContent.addView(refresh);
+    }
+    private void openTeam(boolean approvals){
+        if(team==null||model.credentials==null||model.busy)return;
+        stopVoice();composer.clearFocus();approvalDialog=approvals;
+        ScrollView scroll=new ScrollView(this);teamContent=column();teamContent.setPadding(dp(20),dp(8),dp(20),dp(12));scroll.addView(teamContent);
+        teamDialog=new AlertDialog.Builder(this).setTitle(approvals?"확인 요청":"도착한 질문").setView(scroll).setNegativeButton("닫기",null).create();
+        teamDialog.setOnDismissListener(d->{team.dismiss();teamDialog=null;teamContent=null;});teamDialog.show();
+        model.withCurrentAccount(c->{if(teamDialog==null)return;if(approvals)team.approvals(c);else team.questions(c);});
+        renderTeamDialog();
+    }
+    private void renderTeamDialog(){
+        if(teamDialog==null||teamContent==null||!teamDialog.isShowing())return;
+        teamContent.removeAllViews();if(!team.message.isEmpty())teamContent.addView(text(team.message,15,false));
+        if(approvalDialog){
+            for(NativeApprovalCard item:team.approvals){try{
+                JSONObject source=item.json.getJSONObject("source"),brief=item.json.getJSONObject("brief");
+                teamContent.addView(text(source.getString("repo")+" #"+source.getLong("pr"),14,true));
+                String summary=brief.getJSONArray("authored").getString(0);if(summary.startsWith("summary: "))summary=summary.substring(9);
+                TextView change=text(summary,16,false);change.setMaxLines(3);change.setEllipsize(android.text.TextUtils.TruncateAt.END);teamContent.addView(change);
+                teamContent.addView(text("검토 담당자로 지정됐어요. "+item.status(),13,false));
+                LinearLayout choices=new LinearLayout(this);
+                String[] labels={"승인","보류","설명 요청"},values={"approve","reject","question"};
+                for(int i=0;i<labels.length;i++){String choice=values[i];Button b=button(labels[i],()->model.withCurrentAccount(c->team.decide(c,item,choice)));b.setEnabled(!model.busy&&!team.busy&&team.availability.equals("ready")&&!team.pending.contains(item.id)&&item.canDecide());choices.addView(b,new LinearLayout.LayoutParams(0,-2,1));}teamContent.addView(choices);
+                LinearLayout evidence=column();evidence.setVisibility(View.GONE);String head=source.getString("head");
+                teamContent.addView(button("설명과 근거 "+head.substring(0,7),()->evidence.setVisibility(evidence.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE)));
+                evidence.addView(text("정확한 버전\n"+head,13,false));
+                for(String family:new String[]{"authored","verified"}){evidence.addView(text(family.equals("authored")?"작성자가 설명한 변경":"검증된 근거",14,true));JSONArray facts=brief.getJSONArray(family);for(int i=0;i<facts.length();i++)evidence.addView(text(facts.getString(i),14,false));}
+                teamContent.addView(evidence);
+                JSONObject review=item.json.optJSONObject("review");if(review!=null)teamContent.addView(button("GitHub에 반영된 승인 보기",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(review.optString("html_url"))));}catch(ActivityNotFoundException ignored){}}));
+            }catch(JSONException e){teamContent.addView(text("요청 정보를 표시하지 못했어요. 새로고침해 주세요.",14,false));}}
+        }else if(team.question!=null){
+            NativeAccountCard card=team.question;JSONObject j=card.json;
+            try{
+                for(String key:new String[]{"title","preface","prompt"})if(!j.isNull(key))teamContent.addView(text(j.getString(key),key.equals("prompt")?20:15,key.equals("prompt")));
+                JSONArray segments=j.getJSONArray("segments");for(int i=0;i<segments.length();i++){JSONObject segment=segments.getJSONObject(i);if(!segment.isNull("label"))teamContent.addView(text(segment.getString("label"),13,true));teamContent.addView(text(segment.getString("text"),16,false));}
+                JSONArray choices=j.getJSONArray("choices");for(int i=0;i<choices.length();i++){JSONObject choice=choices.getJSONObject(i);String id=choice.getString("id");Button b=button(choice.getString("label")+(id.equals(team.choice)?" ✓":""),()->{if(j.optString("select").equals("tap"))model.withCurrentAccount(c->team.answer(c,null,id,false));else{team.choice=id;renderTeamDialog();}});b.setEnabled(!team.busy&&card.available());teamContent.addView(b);}
+                JSONObject input=j.optJSONObject("text");if(input!=null){teamContent.addView(text(input.getString("label"),14,true));EditText answer=new EditText(this);answer.setTextColor(ink);answer.setHintTextColor(muted);answer.setTextSize(17);answer.setMinHeight(dp(56));answer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);answer.setHint(input.getString("placeholder"));answer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(input.getInt("max"))});answer.setText(team.words);answer.setEnabled(!team.busy);answer.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){team.words=s.toString();}public void afterTextChanged(Editable e){}});teamContent.addView(answer);}
+                JSONArray actions=j.getJSONArray("actions");for(int i=0;i<actions.length();i++){JSONObject action=actions.getJSONObject(i);String id=action.getString("id");Button b=button(action.getString("label"),()->model.withCurrentAccount(c->team.answer(c,id,null,false)));b.setEnabled(!team.busy&&card.available());teamContent.addView(b);}
+                if(!j.isNull("skip")){Button skip=button(j.getString("skip"),()->model.withCurrentAccount(c->team.answer(c,null,null,true)));skip.setEnabled(!team.busy);teamContent.addView(skip);}
+                if(!j.isNull("note"))teamContent.addView(text(j.getString("note"),13,false));
+                team.presented();
+            }catch(JSONException e){teamContent.addView(text("질문을 표시하지 못했어요. 새로고침해 주세요.",14,false));}
+        }
+        if(!approvalDialog&&team.canStart){
+            String[] labels={"목표를 정리하고 싶어요","방법이 막혔어요","결정을 앞두고 있어요"},values={"goal","method","decision"};
+            for(int i=0;i<values.length;i++){String choice=values[i];Button b=button(labels[i],()->model.withCurrentAccount(c->team.begin(c,choice)));b.setEnabled(!team.busy&&!model.busy&&(team.pendingChoice==null||team.pendingChoice.equals(choice)));teamContent.addView(b);}
+        }
+        Button refresh=button("새로고침",()->model.withCurrentAccount(c->{if(approvalDialog)team.approvals(c);else team.questions(c);}));refresh.setEnabled(!team.busy&&!model.busy);teamContent.addView(refresh);
     }
     private void addMessage(String label,String value,String id){
         boolean user=label.equals("나의 생각")||label.equals("전송 확인이 필요한 내 생각");
@@ -219,9 +372,14 @@ public final class QuestionActivity extends Activity {
             if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();if(model.error.isEmpty())model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
         }catch(Exception e){stopVoice();}
     }
-    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인"},(d,w)->{
-        switch(w){case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->model.logout()).show();break;}
-    }).show();}
+    static java.util.function.Consumer<JSONObject> testMenuObservation;
+    private void menuObservation(String phase,View view){
+        if(!BuildConfig.DEBUG||testMenuObservation==null)return;
+        try{android.graphics.Rect bounds=new android.graphics.Rect();view.getGlobalVisibleRect(bounds);testMenuObservation.accept(new JSONObject().put("phase",phase).put("elapsed_ms",SystemClock.elapsedRealtime()).put("attached",view.isAttachedToWindow()).put("focused",view.hasWindowFocus()).put("bounds",bounds.toShortString()));}catch(Exception ignored){}
+    }
+    private void menu(){menuObservation("listener",getWindow().getDecorView());stopVoice();update();AlertDialog dialog=new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인","사용 경험 공유 설정","질문 알림 설정"},(d,w)->{
+        switch(w){case 9:openPushSettings();break;case 8:openExperience();break;case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->{disablePush();model.logout();}).show();break;}
+    }).create();dialog.show();menuObservation("shown",dialog.getWindow().getDecorView());}
     private void export(){
         if(model.state==null)return;
         try{File directory=new File(getCacheDir(),"exports");if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException();File out=new File(directory,"studio-questions.json");byte[] bytes;if(model.readOnly){storage.exportOriginal(model.account(),out);bytes=null;}else{ReflectionState copy=model.state.copy();copy.draft=model.draft;bytes=copy.json().toString(2).getBytes(StandardCharsets.UTF_8);}if(bytes!=null)try(FileOutputStream stream=new FileOutputStream(out)){stream.write(bytes);}Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",out);Intent intent=new Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);intent.setClipData(ClipData.newRawUri("HP Studio questions",uri));startActivity(Intent.createChooser(intent,"기록 내보내기"));}

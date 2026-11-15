@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 
 @main struct HPStudioApp: App {
+    @UIApplicationDelegateAdaptor(NativePushDelegate.self) private var pushDelegate
     var body: some Scene { WindowGroup { StudioRoot() } }
 }
 struct StudioHome: View {

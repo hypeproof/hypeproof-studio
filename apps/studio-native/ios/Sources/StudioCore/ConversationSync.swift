@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -265,19 +266,89 @@ public final class ConversationService: @unchecked Sendable {
         try tokens.validate(); return tokens
     }
     public func accountID(_ token: String, sessionID: String? = nil) async throws -> String {
+        try await accountProfile(token, sessionID: sessionID).id
+    }
+    public func accountProfile(_ token: String, sessionID: String? = nil) async throws -> (id: String, displayName: String?) {
         let (data, _) = try await request("/v1/me", token: token)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let account = object["account"] as? [String: Any], let id = account["id"] as? String,
               StoredAccount.validID(id), account["status"] as? String == "active",
               let returnedSession = object["session_id"] as? String, StoredAccount.validID(returnedSession),
               sessionID == nil || sessionID == returnedSession else { throw SyncFailure.invalidResponse }
-        return id
+        let name = (account["display_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (id, name.flatMap { !$0.isEmpty && $0.count <= 100 && !$0.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) ? $0 : nil })
     }
     public func refresh(_ refreshToken: String) async throws -> AccountTokens {
         let (data, _) = try await request("/v1/auth/refresh", method: "POST", body: ["refresh_token": refreshToken])
         return try JSONDecoder().decode(AccountTokens.self, from: data)
     }
     public func logout(_ token: String) async throws { _ = try await request("/v1/auth/logout", method: "POST", body: [:], token: token) }
+    public func accountQuestion(_ token: String) async throws -> AccountQuestion? {
+        struct Envelope: Decodable { let card: AccountQuestion? }
+        let (data, _) = try await request("/v1/me/cards?surface=mobile", token: token)
+        let value = try JSONDecoder().decode(Envelope.self, from: data).card
+        try value?.validate(); return value
+    }
+    public func startAccountQuestion(id: String, choice: String, token: String) async throws {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id, ["goal", "method", "decision"].contains(choice) else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/question-triggers", method: "POST", body: ["schema": "hps-question-trigger/1", "id": id, "kind": "choice", "source_id": id, "source_revision": 1, "choice": choice], token: token)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              result["schema"] as? String == "hps-question-trigger/1", let key = result["key"] as? String, AccountQuestion.validKey(key), key.hasPrefix("growth:"), result["policy"] as? String == "team-question/1",
+              let created = result["created"] as? NSNumber, CFGetTypeID(created) == CFBooleanGetTypeID(),
+              let source = result["source"] as? [String: Any], source["kind"] as? String == "choice", source["id"] as? String == id, source["revision"] as? Int == 1,
+              let reentry = result["reentry"] as? [String: String], reentry["method"] == "GET", reentry["path"] == "/v1/me/cards",
+              result["model_calls"] as? Int == 0 else { throw SyncFailure.invalidResponse }
+    }
+    public func accountPush(_ id: String, method: String, body: [String: String]?, token: String) async throws {
+        let parts = id.split(separator: "/", omittingEmptySubsequences: false)
+        guard let first = parts.first, UUID(uuidString: String(first))?.uuidString.lowercased() == String(first),
+              ["PUT", "DELETE", "POST"].contains(method),
+              (method == "POST" ? parts.count == 2 && parts[1] == "opened" : parts.count == 1),
+              (method == "DELETE") == (body == nil) else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/push-devices/" + id, method: method, body: body, token: token, timeout: 12)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SyncFailure.invalidResponse }
+        if method == "POST" {
+            guard let recorded = result["recorded"] as? NSNumber, CFGetTypeID(recorded) == CFBooleanGetTypeID(), recorded.boolValue,
+                  result["evidence_kind"] as? String == "client_observed" else { throw SyncFailure.invalidResponse }
+        } else {
+            guard result["schema"] as? String == "hps-push-device/1", result["id"] as? String == id,
+                  let active = result["active"] as? NSNumber, CFGetTypeID(active) == CFBooleanGetTypeID(), active.boolValue == (method == "PUT") else { throw SyncFailure.invalidResponse }
+            if method == "PUT" { guard let generation = result["generation"] as? NSNumber, CFGetTypeID(generation) != CFBooleanGetTypeID(), generation.doubleValue.isFinite, generation.doubleValue.rounded() == generation.doubleValue, generation.doubleValue >= 1 else { throw SyncFailure.invalidResponse } }
+        }
+    }
+    public func productExperienceConsent(_ granted: Bool? = nil, token: String) async throws -> ProductExperienceConsent {
+        if let granted {
+            let (data, _) = try await request("/v1/me/product-events/consent", method: "POST", body: ["notice_version": "team-ux/1", "granted": granted], token: token)
+            guard (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["ok"] as? Bool == true else { throw SyncFailure.invalidResponse }
+        }
+        let (data, _) = try await request("/v1/me/product-events/consent", token: token)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any], result["schema"] as? String == "hps-product-consent/1", result["notice_version"] as? String == "team-ux/1",
+              let title = result["title"] as? String, !title.isEmpty, title.count <= 200,
+              let notice = result["notice"] as? String, !notice.isEmpty, notice.count <= 4000 else { throw SyncFailure.invalidResponse }
+        var enabled = false
+        if let preference = result["preference"] as? [String: Any] {
+            guard preference["notice_version"] as? String == "team-ux/1", let value = preference["granted"] as? NSNumber, value == 0 || value == 1 else { throw SyncFailure.invalidResponse }
+            enabled = value == 1
+        } else { guard result["preference"] is NSNull else { throw SyncFailure.invalidResponse } }
+        return .init(title: title, notice: notice, granted: enabled)
+    }
+    public func productExperienceEvents(_ events: [ProductExperienceEvent], token: String) async throws -> Set<String> {
+        guard !events.isEmpty, events.count <= 20 else { throw SyncFailure.invalidResponse }; try events.forEach { try $0.validate() }
+        let values = try JSONSerialization.jsonObject(with: JSONEncoder().encode(events))
+        let (data, _) = try await request("/v1/me/product-events", method: "POST", body: ["schema": "hps-product-events/1", "events": values], token: token)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any], result["schema"] as? String == "hps-product-events/1", result["evidence_kind"] as? String == "client_observed",
+              let accepted = result["accepted"] as? [String], let deferred = result["deferred"] as? [String],
+              Set(accepted + deferred).count == accepted.count + deferred.count, Set(accepted + deferred) == Set(events.map(\.id)) else { throw SyncFailure.invalidResponse }
+        return Set(accepted)
+    }
+    public func accountQuestionAction(_ key: String, action: String, body: [String: String], token: String) async throws -> String {
+        guard AccountQuestion.validKey(key), ["shown", "answer", "skip"].contains(action), body["surface"] == "mobile" else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/cards/" + key + "/" + action, method: "POST", body: body, token: token)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], object["ok"] as? Bool == true else { throw SyncFailure.invalidResponse }
+        if action == "shown" { return "" }
+        guard let message = object[action == "answer" ? "thanks" : "message"] as? String, !message.isEmpty, message.count <= 4000, !message.contains("\0") else { throw SyncFailure.invalidResponse }
+        return message
+    }
     public func approvalInbox(_ token: String) async throws -> MemberApprovalInbox {
         let (data, _) = try await request("/v1/me/approval-inbox", token: token)
         let value = try JSONDecoder().decode(MemberApprovalInbox.self, from: data); try value.validate(); return value

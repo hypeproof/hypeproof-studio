@@ -120,6 +120,12 @@ export const NUMERIC_PATTERNS = [
 export const ALLOWED_NUMERIC = [
   { id: "week", label: "\\d+주차", re: /\d+\s*주차/g },
   { id: "steps_left", label: "남은 단계 \\d+", re: /남은\s*단계\s*\d+/g },
+  // CGP-LEARN-R-005 (REQ-CGP-LEARN-05): the stage stepper shows its position as "2 / 4 단계". It is where the learner is in
+  // the instructor's stages, not a score, so only that exact shape is allowed: single digits within the stepper's 2–8
+  // stages (so "90 / 100 단계" is not a position), no score word before it ("정답률 2 / 4 단계") and no judgment word after
+  // 단계 ("3 / 4 단계 통과"). A bare "2 / 4" is still flagged. Anything the allowance does not cover keeps its numbers, so
+  // the ratio is flagged by the rules below.
+  { id: "stage_position", label: "N / M 단계 (M ≤ 8, 판정어 없음)", re: /(?<!(?:률|율|점수|성적|등급|정답|평가)\s*)(?<!\d|\d[.,])[1-8]\s*\/\s*[2-8]\s*단계(?!\s*(?:통과|성공|실패|완료|달성|정답|오답|우수|미달|합격|불합격|맞|틀|점|등급|만점|클리어|성취|잘))/g },
   { id: "date_numeric", label: "날짜(2026-09-20)", re: /\d{4}\s*[-./]\s*\d{1,2}\s*[-./]\s*\d{1,2}\.?/g },
   { id: "date_ko", label: "날짜(9월 20일)", re: /\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*월(?=\s|$)|\d{1,2}\s*일(?=\s|$)/g },
   { id: "time_clock", label: "시각(3:05)", re: /(?:오전|오후)?\s*\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g },

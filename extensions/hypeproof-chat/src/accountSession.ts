@@ -170,6 +170,24 @@ export class AccountSession {
     if ((await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized', friendly('unauthorized'));
     return response.body;
   }
+  async productLoopRequest(binding: import('./memberApproval').ApprovalIdentity, route: import('./teamProductLoop').ProductRoute, body?: unknown): Promise<unknown> {
+    const routes = {consent:'/me/product-events/consent',events:'/me/product-events',trigger:'/me/question-triggers'};
+    if (!Object.prototype.hasOwnProperty.call(routes,route)) throw new Error('Invalid product route');
+    if (route !== 'consent' && body === undefined) throw new Error('Missing product body');
+    const token = await this.accessToken();
+    if (!token || (await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized',friendly('unauthorized'));
+    const response = await this.call(routes[route],body,token);
+    if ((await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized',friendly('unauthorized'));
+    return response.body;
+  }
+  async questionCardRequest(binding: import('./memberApproval').ApprovalIdentity, key?: string, action?: import('./accountCards').CardAction, answer?: import('./accountCards').CardAnswer): Promise<unknown> {
+    if ((key === undefined) !== (action === undefined) || (key !== undefined && (!/^[a-z][a-z0-9:.-]{1,63}$(?![\s\S])/.test(key) || key.includes('..'))) || (action !== undefined && !['shown','answer','skip'].includes(action))) throw new Error('Invalid question route');
+    const token = await this.accessToken();
+    if (!token || (await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized', friendly('unauthorized'));
+    const response = await this.call('/me/cards' + (key ? '/' + encodeURIComponent(key) + '/' + action : '?surface=desktop'), action ? {...(action === 'answer' ? answer : {}), surface:'desktop'} : undefined, token);
+    if ((await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized', friendly('unauthorized'));
+    return response.body;
+  }
   async reflectionRequest(sessionId: string, suffix = '', body?: unknown, signal?: AbortSignal): Promise<unknown> {
     if (suffix !== '' && suffix !== '/turns' && !/^\/turns\/[A-Za-z0-9._:-]{1,128}\/(?:abandon|cancel)$/.test(suffix)) throw new Error('Invalid reflection route');
     const token = await this.accessToken();

@@ -110,6 +110,8 @@ public class ConversationHistoryTest {
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("history-account","history-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         reply.set(snapshot(0,79,1));ReflectionState state=new ReflectionState("history-account");state.apply(reply.get());state.draft="지켜야 하는 초안";store.save(state);
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"history-account","history-session");
+            if(accountRead!=null)return accountRead;
             if(body!=null)posts.incrementAndGet();assertEquals("/me/reflection",path);
             if(delay.compareAndSet(true,false)){entered.countDown();assertTrue("controlled response released",release.await(10,TimeUnit.SECONDS));}
             JSONObject next=reply.get();return new NativeDeviceSignIn.Reply(200,Map.of("state",next.getJSONObject("state"),"opening",next.getString("opening"),"hint",next.getString("hint")));

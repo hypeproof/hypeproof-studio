@@ -27,7 +27,13 @@ public class ReflectionModelTest {
         final Store store=new Store();final Queue worker=new Queue();final Deque<Runnable> ui=new ArrayDeque<>();final List<Map<String,String>> submitted=new ArrayList<>();
         NativeDeviceSignIn.Reply answer;boolean networkFailure;ReflectionModel model;
         Harness(){NativeDeviceSignIn.Transport transport=(p,b,t,c)->{if(p.equals("/auth/refresh"))assertTrue(store.spent);if(b!=null&&p.equals("/me/reflection/turns"))submitted.add(new HashMap<>(b));if(networkFailure)throw new Exception("offline");return answer;};model=new ReflectionModel(store,new NativeDeviceSignIn(NativeDeviceSignIn.Target.production(),transport,NativeDeviceSignIn.MONOTONIC),transport,worker,ui::add,()->{});model.restore();}
-        void finish(){worker.one();ui.remove().run();}
+        void finish(){
+            worker.one();
+            // A request can post its observation before its terminal callback.
+            // The synchronous worker has returned: consume the complete UI FIFO.
+            while(!ui.isEmpty())ui.remove().run();
+            assertFalse("the request's terminal callback must finish",model.busy);
+        }
         void snapshot(JSONObject value){Map<String,Object> map=new HashMap<>();for(Iterator<String> it=value.keys();it.hasNext();){String k=it.next();map.put(k,value.opt(k));}answer=new NativeDeviceSignIn.Reply(200,map);}
     }
     @Test public void failedDurableWriteCannotDispatchAndUncertainRetryKeepsItsID() throws Exception {

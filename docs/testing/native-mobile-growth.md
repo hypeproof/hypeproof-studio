@@ -72,6 +72,31 @@ conversation content. Local unsupported CLT checks and simulator evidence cannot
 replace this gate. This hardening adds no provider/model call or permission grant;
 existing inference and CI costs remain in their existing lanes.
 
+#### iPhone microphone routes — Studio #4107
+
+MVOICE-T02/T03/T04 and MFR-T03 use the real `AVAudioSession`/`AVAudioEngine`
+capture path for route acceptance. Verify `.record`/`.measurement` with
+`allowBluetoothHFP` on the existing iOS 17 deployment target and current SDK.
+No preferred-input override, A2DP input assumption or simultaneous recording
+during reply playback is introduced. Inspect preparation before engine start,
+then listening only after a current input, finite positive sample rate, nonzero
+channel count and successful engine start. A missing input or setup failure must
+clean up the engine tap and recognition request while retaining editable words.
+
+Use built-in, wired and HFP microphones separately on a physical iPhone; record
+OS/build and only the anonymized route category. Complete five Korean turns,
+including reply playback followed by capture, and repeat disconnect, Stop and
+background boundaries. No invalidated session may reopen capture or send again.
+Keep current useful-partial, empty-result retry limits and exactly-once request
+checks. Inspect the bounded manual timeline for `inputBuiltIn`, `inputWired`,
+`inputBluetoothHFP`, `inputOther` or `inputUnavailable`; never collect device names,
+identifiers, raw audio or conversation text for this diagnostic record.
+
+The existing synthetic capture fixtures bypass real audio-session setup. Their
+PASS cannot validate the HFP option, engine format or headphone switching. Native
+SDK compile/configuration and physical route acceptance must be reported
+separately; no pure option-equality assertion substitutes for those checks.
+
 For a device testing candidate, confirm the same source passed native CI, the
 signed artifact processed successfully, and the tester can install that exact
 version. Record actual microphone permission, Korean language asset availability,
@@ -410,3 +435,58 @@ and identity; its former pre-persistence local-retry shortcut is not evidence.
 
 New App journeys and changed AX diagnostics require actual hosted Xcode execution.
 Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.
+# Account question entry verification — #4111
+
+| Test ID | Targets | Required observation |
+|---|---|---|
+| MENT-T01 | MENT-01, MENT-02 | Existing desktop StartPage displays the own-account greeting, safe question text and enrolled approval entry. A question action is distinct from an approval; logout and late replies clear private state. |
+| MENT-T02 | MENT-01, MENT-02 | Existing iOS/Android account screens expose the same contracts; a controlled real Activity/HTTP/persistence journey preserves the conversation draft through question use and relaunch. Native iOS and actual account acceptance remain separate. |
+| MENT-T03 | MENT-03 | Unknown trigger response followed by restart reuses the durable ID and choice; storage failure blocks POST and a mismatched/incomplete receipt cannot clear pending intent. |
+| MENT-T04 | MENT-04 | No observations before opt-in; failed opt-out remains locally paused; immutable queued records retry safely and account switches fence pending sends. Raw-content/unknown fields fail at server admission. |
+| MENT-T05 | MENT-05 | Register, rotate, revoke and open a generic notice using a current account/device generation. Controlled provider calls do not count as a received device notification. |
+| MENT-T06 | MENT-06 | Pin app/source/platform evidence and check actual login, voice re-listening and approval authority before marking the affected release available/accepted. |
+
+`MENT-T05-push-idle` is a required iOS App journey. It holds the actual authenticated
+registration request, delivers a synthetic notification while registration is busy,
+and releases the response only after the view observes that pending reference.
+The question must open without a second tap, with one registration and one opened
+receipt, and no automatic question answer or conversation send. Missing or skipped
+execution blocks the native candidate. The transport and APNs notification are
+synthetic; a passing journey does not establish physical push delivery.
+
+The native CI contract job also runs the existing release casebook selection and
+publish-gate controls before either platform build. A newly required journey must
+appear in its release case, and the active iOS P0 selection must agree. A missing
+mapping stops before provisioning the Android emulator or starting the Mac job;
+it does not change any journey, approval, or physical-device acceptance requirement.
+
+Desktop controls: `account-cards.smoke.mjs`, `team-product-loop.smoke.mjs`,
+`account-question-entry.test.tsx`, and existing personal-reflection/member-approval host/UI controls.
+Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
+`NativeTeamModelTest.java`, `TeamEntryJourneyTest.java`, `AccountPushTests.swift`,
+`NativePushTest.java`. A fixture name or compiled APK alone is not
+an executed native journey. Report the actual run and any missing physical/provider evidence.
+
+Capability controls must exercise unavailable/error/account-switch metadata as
+well as available-but-declined consent. Both the visible choice and controller
+submission boundary must agree; no trigger is sent for an unavailable capability,
+and an existing pending intent is retained. Consent menu checks use one real tap
+and observe the window rather than retrying a lost interaction into a pass.
+
+Push controls must cover logout and off/on during permission/token work, stale
+receipts, and opening a notice with current authorization. The default unconfigured
+build never substitutes a token or reports delivery. Use `apps/studio-native/PUSH.md`
+for the provisioning boundary; source review and local transport do not qualify
+APNs/FCM acceptance or a physical notification.
+`test_apple_push_config.py` executes the fixed release helper and controlled actual
+upload shell path. A wrong profile, disabled exported flag, wrong signed app/team,
+non-production APNs entitlement or unsafe/ambiguous IPA must stop before upload.
+The old upload script is a negative control; mocked signing commands are not
+Apple signature or device evidence. Existing deployment and two-source gate tests
+retain their assertions, and the new tests run in the existing native contract CI.
+
+For MFR-03/04 and MVOICE-03/04, automatic personal-history reads keep a cached ready conversation
+visually quiet. `testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft`
+holds an actual model history GET while a second final event produces a distinct accepted request,
+then verifies a third capture and Stop preserving its partial draft. Injected recognizer events and
+synthetic playback do not establish physical Korean ASR or acoustic turn-taking.

@@ -40,7 +40,7 @@ export function appliesToTarget(c, target = 'desktop') {
 }
 // Requirement id families a case may link (REQ-, TUX-, US-, PRA- plus NAT-, AB- and CGP- from the
 // requirement docs). select-cases.mjs extracts touched ids with the same pattern.
-export const REQ_ID = /\b(?:REQ-[A-Z0-9]+(?:-[A-Z0-9]+)*|TUX-[A-Z0-9]+(?:-[A-Z0-9]+)*|US-\d{2,}|PRA-\d{2,}|NAT-\d{2,}|AB-\d{2,}|MFR-\d{2}|CGP-[A-Z]+-R-\d{3})\b/g;
+export const REQ_ID = /\b(?:REQ-[A-Z0-9]+(?:-[A-Z0-9]+)*|TUX-[A-Z0-9]+(?:-[A-Z0-9]+)*|US-\d{2,}|PRA-\d{2,}|NAT-\d{2,}|AB-\d{2,}|MFR-\d{2}|MENT-\d{2}|CGP-[A-Z]+-R-\d{3})\b/g;
 
 function scalar(raw, where) {
   const s = raw.trim();
