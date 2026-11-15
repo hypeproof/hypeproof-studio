@@ -7237,9 +7237,33 @@ the choice was `stored` for the seat or kept `memory-only` (no seat known yet, o
 caller can tell the learner it was not saved. The host takes the seat only in a config build that passed its staleness check, so a
 press never lands on a previous seat. Per-step 닫기 is unchanged. Seats
 without a served lesson, hintless steps and the instructor console draw no tip and no action.
-Not built (needs Jay, decisions/README.md): REQ-SHELL-19's "at most once per session and only after an
-observed trigger (e.g. 3 failed runs)". It contradicts the owner decision that a step's hint shows
-from the start.
+**Observed trigger (Jay, 2026-11-15: the coach judges when to hint; it is not a Chalk field).**
+- **What the coach gets.** After 3 consecutive failed runs on a lesson step, the next request carries one model-only
+  observation for the coach (`src/runFailureHint.ts`). The coach decides whether a hint helps, and how; the Service's
+  intervention ladder bounds it to rung 3: point at one place to check, no answer.
+- **What counts as a failed run.** One learner turn whose last run-kind tool result was an error. Run-kind means a shell
+  command (Bash, PowerShell) or the live preview start. The host cannot tell a run the learner asked for from one the
+  coach chose, so it counts per learner turn: retries inside one turn are one run, and retries that ended in success are a
+  success. Other tools change nothing.
+- **Resets and limits.** The count resets on a successful run and on a step change. There is at most one observation per
+  step per window session, held in memory only.
+- **What it carries.** A count only: no error text, path or command output.
+- **Where it rides.** The per-turn context channel memory uses: `contextText` on the proxy runtime, `memoryContext` on the
+  agent-sdk runtime. The learner's text, the saved conversation, the session spool and every webview post hold none of it.
+- **Never sent:**
+  - with tips off (`팁 그만 보기`);
+  - on a lesson without a `learning` block. That lesson gets no ladder from the Service, so the line could invite
+    answer-giving; this is a stated limit;
+  - for an instructor;
+  - on a local runtime.
+- **Minor seats.** Same behaviour. They run on the proxy runtime, where the only run tool is the preview start inside
+  browser control; a proxy seat without browser control runs no tool, so nothing is counted.
+- **What is unmeasured.** Whether a Bash non-zero exit arrives as `is_error` from the SDK is not measured here (the SDK's
+  CLI is a native binary); the counter uses the host's `isError`. Agent choices: decisions/CGP-SHELL-R-019.md "CGP-SHELL-R-019:
+  AI-judged hint after failed runs".
+Validation (observed trigger): `run-failure-hint.smoke.mjs` (count, resets, once per step, seat gate, the line pinned
+verbatim) and `run-failure-hint-host.smoke.mjs` (the real provider, both runtimes, adult and minor seats; never with tips
+off, without `learning` or without a lesson; never in the learner's text, history, spool or posts); 9 mutants each fail one.
 Validation: `lesson-tips-off.smoke.mjs` (actual App in headless Chromium, 18 cases: one off write and
 the way back; off hides every tip but never the lesson or the rail's 힌트 보기; the quiet 다시 켜기
 line after a send and after a reload; a seat switch drops the note; the settings switch reads and

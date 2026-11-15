@@ -322,6 +322,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
 import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
+import { RunFailureTracker, hintSeatFor, joinTurnContext } from "./runFailureHint";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
@@ -10224,6 +10225,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // It never joins userTextForModel: each runtime sends it beside the learner's message (memoryContext / contextText),
     // so the Service's last-user-message record (lastUserMessageText) carries none of it.
     const memoryTurn = await this.takeMemoryContext(profile);
+    // CGP-SHELL-R-019 — after three failed runs on this lesson step, one model-only observation (a count, no error text) for
+    // the coach to judge whether a hint helps; never with tips off (팁 그만 보기), without a `learning` block, for an
+    // instructor or on a local runtime (runFailureHint.ts). It rides beside the learner's message like memory, so neither
+    // the saved conversation nor the Service's last-user-message record holds it.
+    const hintSeat = hintSeatFor({
+      lesson: profile?.lesson, step: turnFocus.step, activityId: profile?.activity_id ?? undefined,
+      taskId: this.currentTaskStore?.()?.getView().activeTaskId ?? undefined,
+      tipsOn: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
+      instructor: this._instructorMode.isInstructor === true, local: toolSeat.local,
+    });
+    const hintObservation = this.runFailures.take(hintSeat);
+    const turnContext = joinTurnContext(memoryTurn?.text, hintObservation);
     // 2026-08-19 — pre-built guest worlds. When a child picks a guest they are not
     // made to wait 30–40 s for the coach to produce 5 KB: the filled-in HTML is
     // fetched from the worker, saved and shown immediately, and the coach is told
@@ -10291,6 +10304,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // has to be able to resend it to the worker's trace. The worker validates turn_id
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
+    this.runFailures.begin(streamId, hintSeat);
     if (temporaryTurn) (this.temporaryStreams ??= new Set()).add(streamId);
     // CGP-KNOW-R-028 — the task this turn belongs to, for the keep switch.
     this.taskMemoryStreams ??= new Map();
@@ -10869,7 +10883,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             token,
             history,
             userText: userTextForModel,
-            ...(memoryTurn ? { contextText: memoryTurn.text } : {}),
+            ...(turnContext ? { contextText: turnContext } : {}),
             images: effectiveImages,
             signal: ctrl.signal,
             streamId,
@@ -10900,7 +10914,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           token,
           history,
           userText: userTextForModel,
-          ...(memoryTurn ? { contextText: memoryTurn.text } : {}),
+          ...(turnContext ? { contextText: turnContext } : {}),
           images: effectiveImages,
           signal: ctrl.signal,
           coachName: effectiveCoachName,
@@ -11066,9 +11080,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             userText: userTextForModel,
             // CGP-KNOW-R-026 — a prompt that carries memory leaves no CLI session file outside the activity (DEC-01).
             // CGP-KNOW-R-029 — so does every turn of a "기록 없이 묻기" task.
-            ...(memoryTurn || temporaryTurn || storeRun ? { ephemeralSession: true } : {}),
+            ...(memoryTurn || hintObservation || temporaryTurn || storeRun ? { ephemeralSession: true } : {}),
             ...(storeRun ? { storeRun } : {}),
-            ...(memoryTurn ? { memoryContext: memoryTurn.text } : {}),
+            ...(turnContext ? { memoryContext: turnContext } : {}),
             images: effectiveImages,
             signal: ctrl.signal,
             // #457 — with no folder open, workspaceFolders is empty and cwd goes
@@ -11381,6 +11395,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void this.loadAccess(true).then(()=>this.postConfig()).catch(()=>{});
       this.turnTimelines.delete(streamId);
       this.taskActivity.end(streamId);
+      this.runFailures.end(streamId);
       // CGP-KNOW-R-026 — a turn that ended with no answer leaves no pending count behind.
       this.memoryTurns?.delete(streamId);
       // Persistence failure must not skip closing the runtime and verification turn.
@@ -12340,6 +12355,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private lessonTipsPref: LessonTipsPreference | undefined;
   private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
+  /** CGP-SHELL-R-019 — failed runs per lesson step, this window only (memory; nothing stored or sent but the observation). */
+  private runFailuresTracker: RunFailureTracker | undefined;
+  private get runFailures(): RunFailureTracker { return this.runFailuresTracker ??= new RunFailureTracker(); }
 
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
@@ -12933,6 +12951,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** CGP-ART-R-020 — one tool event of a turn; a successful result is shown at once (taskActivityHost.ts). */
   private noteTaskActivity(streamId: string, event: TaskActivityEvent): void {
+    // CGP-SHELL-R-019 — the same tool events, both runtimes: which runs of this learner turn failed.
+    this.runFailures.note(streamId, event);
     const msg = this.taskActivity.note(streamId, event);
     if (msg) void this.post(msg);
   }

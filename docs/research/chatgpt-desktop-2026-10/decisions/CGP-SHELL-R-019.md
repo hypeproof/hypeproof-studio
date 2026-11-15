@@ -10,3 +10,27 @@ Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-0
 - Not covered: a real installed App and a screen reader: NOT RUN.
 - The parked 3-failure clause only: Confirmed by Jay: yes (2026-11-15), chosen option "AI가 알아서 판단": REQ-SHELL-19's 3-failure hint is judged by the AI. Other choices in this entry: Confirmed by Jay: no.
 
+## CGP-SHELL-R-019: AI-judged hint after failed runs (2026-11-15; Jay's scope, agent choices below)
+
+**Jay (2026-11-15).** For REQ-SHELL-19's "after 3 failed runs", the coach judges when to give a hint; it is not a Chalk field. This supersedes the parked clause in "CGP-SHELL-R-019 / CGP-SHELL-D-018" in this file. Everything below is an agent choice under that decision, agreed with the coordinator, and is not Jay's.
+
+**Audit.**
+- The lesson part of the coach prompt is built in the Service (`worker/src/lib/chat-gate.ts`, both runtimes). Its intervention ladder (`learning-prompt.ts`) already says to climb when the learner "asked for help or failed repeatedly at the same step", and rung 3 is a hint that points at one place to check.
+- The coach's history is text only (`proxyClient.ts`, #503): tool results of earlier turns are dropped, so the coach cannot see failures across turns.
+- The tips switch (`hypeproofChat.lessonTips`, #4086) exists only in Studio.
+
+**Choices.**
+- **Studio observes; the coach decides.** There is no Service ladder edit. After 3 consecutive failed runs on a lesson step, the next request carries one model-only observation line (`src/runFailureHint.ts`, pinned verbatim). It carries a count only, never error text, paths or command output.
+- **A failed run** is one learner turn whose last run-kind tool result was an error: Bash, PowerShell or the live preview start.
+  - The host cannot tell a learner-requested run from a coach-chosen one, so it counts per learner turn: the coach's retries inside a turn are one run, and retries that ended in success are a success.
+  - Whether a Bash non-zero exit is `is_error` is unmeasured here; the counter uses the host's `isError`.
+- **Once per step per session.** The count resets on a successful run and on a step change, in memory only.
+- **Channel.** The line rides on memory's per-turn context (`contextText` / `memoryContext`), so the learner's text, the Service's last-user-message record, the saved conversation, the spool and the webview never hold it. A turn carrying it runs as an ephemeral SDK session, like memory.
+- **Never** with tips off, on a lesson without a `learning` block, for an instructor or on a local runtime.
+  - Without `learning` there is no ladder, so a bare "the learner is stuck" could invite answer-giving. Those lessons are skipped; this is a stated limit in the requirement.
+- **Minors.** The behaviour is the same and no new data leaves the computer (a count). On the proxy runtime the only run tool is the preview start in browser control; without browser control nothing is counted.
+- **Prompt safety.** The line changes no grant, tool or policy. It says so itself, asks for one pointer and no answer, and lets the coach ignore it. It needs a prompt review in the verify.
+
+**Not covered.** A real coach's response to the line, and the SDK's real `is_error` on a failing Bash. Both are NOT RUN.
+
+Confirmed by Jay: no (the decision to let the coach judge is Jay's; the choices above are not).
