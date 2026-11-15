@@ -350,7 +350,16 @@ export class AccountSession {
       await this.call('/auth/logout', {}, replaced.accessToken).catch(() => undefined);
       await this.options.invalidated?.(replaced.sessionId);
     }
+    // The session is stored: the view says so with the account the exchange named, before the refresh. A refresh
+    // that fails (offline, 5xx) then only adds its message and the 15-second watch fills in the passes; the view
+    // never reads "signed out" while a working session is stored.
+    this.state = { status: 'signedIn', busy: true, account: target }; this.emit();
     await this.refreshView();
+    if ((await this.read())?.sessionId !== bundle.sessionId) {
+      // The Service refused the new session at once (refreshView forgot it): not signed in.
+      this.state = { ...this.state, busy: false }; this.emit();
+      return 'refused';
+    }
     this.state = { ...this.state, busy: false }; this.emit();
     // The caller continues (start page, invite grant): `signedIn` stays the device-approval hook.
     return 'signedIn';

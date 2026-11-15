@@ -39,7 +39,7 @@ const SERVICE = 'http://127.0.0.1:8793/v1', SITE = 'http://localhost:3193';
 const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const ALICE = { id: 'acc_alice', email: 'alice@example.test', display_name: '앨리스' };
 const BOB = { id: 'acc_bob', email: 'bob@example.test', display_name: '밥' };
-function harness({ exchange = 'ok', target = ALICE, signedIn, meFails = false, freeCredential } = {}) {
+function harness({ exchange = 'ok', target = ALICE, signedIn, meFails = false, freeCredential, newSession = 'ok' } = {}) {
   const world = { now: 1_000_000, store: new Map(), calls: [], invalidated: [], asked: [] };
   const secrets = { get: async k => world.store.get(k), store: async (k, v) => { world.store.set(k, v); }, delete: async k => { world.store.delete(k); } };
   if (signedIn) world.store.set(ACCOUNT_SECRET_KEY, JSON.stringify({ service: SERVICE, accessToken: 'old-access', refreshToken: 'old-refresh', sessionId: 'ses_old', expiresAt: world.now + 3_600_000 }));
@@ -56,9 +56,9 @@ function harness({ exchange = 'ok', target = ALICE, signedIn, meFails = false, f
     const token = headers.get('authorization');
     if (u.pathname.endsWith('/me')) {
       if (token === 'Bearer old-access') return meFails ? reply(503, { error: 'account_unavailable' }) : reply(200, { account: { ...signedIn, status: 'active' }, session_id: 'ses_old' });
-      if (token === 'Bearer new-access') return reply(200, { account: { ...target, status: 'active' }, session_id: 'ses_new' });
+      if (token === 'Bearer new-access') return newSession === 'down' ? reply(503, { error: 'account_unavailable' }) : newSession === 'revoked' ? reply(401, { error: 'session_revoked' }) : reply(200, { account: { ...target, status: 'active' }, session_id: 'ses_new' });
     }
-    if (u.pathname.endsWith('/me/passes')) return reply(200, { passes: [] });
+    if (u.pathname.endsWith('/me/passes')) return newSession === 'down' && token === 'Bearer new-access' ? reply(503, { error: 'account_unavailable' }) : reply(200, { passes: [] });
     throw new Error('Unexpected request ' + u.pathname);
   };
   const client = new AccountSession({ service: SERVICE, site: SITE, secrets, label: 'Mac · Studio test', fetch, now: () => world.now, openBrowser: async () => true, invalidated: async id => { world.invalidated.push(id); }, ...(freeCredential ? { freeCredential: async () => freeCredential } : {}) });
@@ -147,6 +147,26 @@ const logouts = world => world.calls.filter(c => c.path.endsWith('/auth/logout')
   assert.deepEqual([a, b], ['signedIn', 'signedIn']);
   assert.equal(world.calls.filter(c => c.path.endsWith('/auth/handoff/exchange')).length, 1, 'one exchange');
   console.log('PASS duplicate delivery → one exchange');
+}
+
+{ // The refresh right after the exchange fails (Service busy): the stored session is real, so the view is signed in
+  // as the exchanged account, with the failure's message, never "signed out" next to a working session.
+  const { client, stored, confirm } = harness({ newSession: 'down' });
+  assert.equal(await client.handoff(TICKET, confirm(true)), 'signedIn');
+  assert.equal(stored().sessionId, 'ses_new', 'the session stays stored');
+  assert.equal(client.view().status, 'signedIn', 'view agrees with the stored session');
+  assert.equal(client.view().account.id, ALICE.id, 'named by the exchange answer');
+  assert.equal(client.view().busy, false);
+  assert.equal(typeof client.view().message, 'string', 'the refresh failure is said');
+  console.log('PASS refresh fails after the exchange → still signed in as the exchanged account');
+}
+{ // The Service refuses the brand-new session at once: forgotten, reported as refused, view signed out.
+  const { client, stored, confirm, world } = harness({ newSession: 'revoked' });
+  assert.equal(await client.handoff(TICKET, confirm(true)), 'refused');
+  assert.equal(stored(), undefined, 'nothing stored');
+  assert.equal(client.view().status, 'signedOut');
+  assert.deepEqual(world.invalidated, ['ses_new'], 'the forgotten session binding ends');
+  console.log('PASS new session refused at once → refused, signed out');
 }
 
 // ── Wiring: one URI handler, handoff after the account check, /account-return unchanged ──
