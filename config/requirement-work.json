@@ -990,7 +990,7 @@
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "6b7de4be35af596a7a3bdd9142a2135cee5622c088c230b1cfae5f048dde153e",
+      "sha256": "c72a20b19226429a14ce02bbcf064b5a656bf46a322161d043b0497ce014c8b2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
