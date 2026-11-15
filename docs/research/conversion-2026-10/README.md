@@ -86,7 +86,7 @@ US row and its code. They do not add a parallel requirement.
 |---|---|---|
 | Free seat, end card, pass list, purchase sign-in copy, installers, funnel events, owner funnel | Conversion loop (this register) | Branches `feat/conv-*` |
 | Chat panel parity, design tokens, Chalk, generic sign-in copy-link fallback (CGP-SHELL-R-022) | CGP loop | Branches `feat/cgp-*` |
-| Remaining-count chip next to the composer (CGP-SHELL-R-029) | CGP loop, with a conversion constraint | Never shown on a free seat (profile `studio-open-trial`); recorded as DEC-35 in `../chatgpt-desktop-2026-10/decisions.md` |
+| Remaining-count chip next to the composer (CGP-SHELL-R-029) | CGP loop, with a conversion constraint | Never shown on a free seat (profile `studio-open-trial`); recorded as DEC-35 in `../chatgpt-desktop-2026-10/decisions/DEC-35.md` |
 | Shared files (`chatPanelProvider.ts`, `startPage.ts`, `StartPage.tsx`, `ChatPanel.tsx`, `docs/studio-requirements.md`) | Whoever has the open PR | The conversion loop skips a row whose files overlap an open `feat/cgp-*` PR and picks the next file-disjoint row |
 | GitHub calls | One gh lane across both loops | `.claude/rules/gh-budget.md` |
 

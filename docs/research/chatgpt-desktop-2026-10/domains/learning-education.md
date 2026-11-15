@@ -241,9 +241,9 @@ ChatGPT's.
 | REQ-CGP-LEARN-16 | The Studio header shows one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 / 만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. | (a) Exactly one state visible at a time, derived from the existing timeline (REQ-C17) and approval state (REQ-E1). (b) "확인이 필요해요" appears whenever an approval is pending. (c) No character or animation is required to convey state. | P2 | 2 |
 | REQ-CGP-LEARN-17 | Chalk help-request queue supports keyboard triage: next, previous, open, resolve-and-advance. | (a) J/K (or ↓/↑) moves selection; Enter opens; a documented key resolves and advances. (b) "?" shows the shortcut list. (c) Shortcuts never fire inside text inputs (Korean IME composition safe). | P2 | 1 (one-instructor intent, ADM-05, DES-06) |
 
-REQ-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-R-003): implemented in Studio's lesson step panel. Every block kind has a Korean title, controls help and state sentence in the block catalog (`MATERIAL_TEXT`, checked by `materialTextGaps()`); the state sentence sits in a visible polite live region that changes within 500 ms of each state change. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-TEXT. Tests: `learning-block-text.smoke.mjs`, `learning-block-text-browser.smoke.mjs`. (c) VoiceOver run is NOT RUN (manual). Owner choices in `decisions.md`.
+REQ-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-R-003): implemented in Studio's lesson step panel. Every block kind has a Korean title, controls help and state sentence in the block catalog (`MATERIAL_TEXT`, checked by `materialTextGaps()`); the state sentence sits in a visible polite live region that changes within 500 ms of each state change. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-TEXT. Tests: `learning-block-text.smoke.mjs`, `learning-block-text-browser.smoke.mjs`. (c) VoiceOver run is NOT RUN (manual). Owner choices in `decisions/CGP-LEARN-R-003.md`.
 
-REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/authoring` as the completion-condition helper. Requirement: `docs/requirements/chalk-authoring.md` "완료 조건 도우미". Test: T-49. Owner choices are in `decisions.md`: bare 점 is allowed, the check runs on the page and in the Chalk forwarder, and there is no Service text check.
+REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/authoring` as the completion-condition helper. Requirement: `docs/requirements/chalk-authoring.md` "완료 조건 도우미". Test: T-49. Owner choices are in `decisions/CGP-LEARN-R-015.md`: bare 점 is allowed, the check runs on the page and in the Chalk forwarder, and there is no Service text check.
 
 ## 3. Design requirements (same rows)
 
@@ -291,7 +291,7 @@ REQ-CGP-LEARN-11 / DES-CGP-LEARN-11 status (2026-11-14, CGP-LEARN-R-011 / D-011)
   - The 자료 메뉴 gains "자료가 틀린 것 같아요" while the window has a live class connection. It opens inline with three reason chips (내용이 틀려요 / 열리지 않아요 / 이해하기 어려워요), and the toast is "선생님께 전달했어요".
   - The payload is lesson course, version, step, block type, pinned version, a params digest and the reason. There is no transcript.
   - The run's instructor sees it in Chalk `/manage` as "자료 신고", with "확인함". It goes over the class connection, not `/v1/report`, so it never reaches the operator, Discord or GitHub.
-- Deferred: the optional 0–300 learner text field, for every seat. The class board never carries a learner's words, so (a)'s "optional learner text" is not built (decisions.md CGP-LEARN-R-011 (a)).
+- Deferred: the optional 0–300 learner text field, for every seat. The class board never carries a learner's words, so (a)'s "optional learner text" is not built (decisions/CGP-LEARN-R-011.md CGP-LEARN-R-011 (a)).
 
 REQ-CGP-LEARN-10 / DES-CGP-LEARN-10 status (2026-11-14, CGP-LEARN-R-010 / D-010): implemented in Studio as REQ-STUDIO-LEARNING-BLOCK-RESET-UNDO (`docs/studio-requirements.md`).
 - "처음으로" restores the preset, which is empty fields for every drawn block today.
@@ -299,7 +299,7 @@ REQ-CGP-LEARN-10 / DES-CGP-LEARN-10 status (2026-11-14, CGP-LEARN-R-010 / D-010)
 - Neither posts anything to the host, so they create no observation event.
 - Both are quiet 44px buttons, and a disabled one reads differently in colour and boundary style.
 
-DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions.md`.
+DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions/CGP-LEARN-D-003.md`.
 
 Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px (28 rem) → diagram 50 % beside
 text; < 448 px (VS Code side rail is usually below this) → stacked, diagram full width then caption; at 320 px
@@ -318,7 +318,7 @@ centre hit test for every action, the 3:1 ring under a light-scheme request, mou
 
 DES-CGP-LEARN-15 status (2026-10-27, CGP-LEARN-D-015): already met on main by the CGP-LEARN-R-015 build. Chalk `/authoring`
 draws the checklist as one list row per item (sentence + record kind + row actions), with no points column and no level
-headers. Proved by a computed headless test (T-50, `chalk/test/checklist-output.browser.mjs`). Decision: `decisions.md`
+headers. Proved by a computed headless test (T-50, `chalk/test/checklist-output.browser.mjs`). Decision: `decisions/README.md`
 CGP-LEARN-D-015.
 
 ## 4. Open questions / unknowns
@@ -359,7 +359,7 @@ CGP-LEARN-D-015.
 
 ## Implementation notes
 
-- **REQ-CGP-LEARN-17 (CGP-LEARN-R-017), 2026-10-26.** Implemented in Chalk `/manage` as REQ-CHALK-HELP-TRIAGE (`docs/requirements/classroom-admin.md#help-queue-keyboard-triage`), with DES-CGP-LEARN-17. Agent choices under the owner rules (recorded in `decisions.md`): "resolve" for the instructor is 답변 완료 · 학생 확인 대기, because only the learner marks a request resolved (ADM-05); the documented key is `E`; selection is keyboard focus on the row's own button; keys listen only in the help region and the open record.
+- **REQ-CGP-LEARN-17 (CGP-LEARN-R-017), 2026-10-26.** Implemented in Chalk `/manage` as REQ-CHALK-HELP-TRIAGE (`docs/requirements/classroom-admin.md#help-queue-keyboard-triage`), with DES-CGP-LEARN-17. Agent choices under the owner rules (recorded in `decisions/CGP-LEARN-R-017.md`): "resolve" for the instructor is 답변 완료 · 학생 확인 대기, because only the learner marks a request resolved (ADM-05); the documented key is `E`; selection is keyboard focus on the row's own button; keys listen only in the help region and the open record.
 - **CGP-LEARN-R-016 (REQ-CGP-LEARN-16), 2026-10-26.** Implemented in Studio as REQ-STUDIO-COACH-RUN-STATE (`docs/studio-requirements.md`), with DES-CGP-LEARN-16. Owner-delegated choices (precedence, icon-based activity classifier with unknown → 생각 중, which dialogs count as approval, the personal heading's run note leaving the row, every seat) are recorded in `../decisions.md`.
 - **CGP-LEARN-D-016 (DES-CGP-LEARN-16), 2026-10-27.** Already met on main by the R-016 work (20px icon + words at 14px in the chat header, polite live region, no animation, colour only reinforcing). The one unguarded clause was "state change announced": nothing failed if the region was remounted per state. `test/coach-run-state-browser.smoke.mjs` now proves in headless Chromium that the live region is the same mounted node across all seven states and its words change in place. Recorded in `../decisions.md`.
 - **CGP-LEARN-R-001 (REQ-CGP-LEARN-01), 2026-10-28.** Implemented in Studio as REQ-STUDIO-LEARNING-BLOCK-ATTACH (`docs/studio-requirements.md`) under DEC-18/19/20: the block is the confirmed step's `ui` value (the pinned Service validates and serves it unchanged), drawn in the coach rail for the current step only with a `data-hps-material` identity; coach replies stay text. Choices recorded in `../decisions.md`.

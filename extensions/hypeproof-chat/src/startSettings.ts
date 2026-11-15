@@ -6,7 +6,7 @@
  * Pure (no vscode, no DOM): the host builds the view and validates every write here; the webview
  * only draws the view and posts the learner's choice.
  *
- * Only rows whose behaviour exists today are listed (DEC-SHELL-R014 in decisions.md):
+ * Only rows whose behaviour exists today are listed (DEC-SHELL-R014 in decisions/DEC-SHELL-R014.md):
  * 글자 크기 (CGP-DS-R-009 text size), 움직임 줄이기 (workbench.reduceMotion, CGP-DS-R-015) and
  * 알림 (hypeproofChat.osTaskNotices, the task-notice core patch), 화면 밝기 (CGP-SHELL-R-016: HP Dark, HP Light or the
  * device's setting) and 내 작업 내보내기 (REQ-SHELL-28), an action row that runs the shipped export (CGP-SHELL-R-028).
