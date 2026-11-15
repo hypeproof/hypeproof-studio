@@ -19018,6 +19018,9 @@
         },
         {
           "path": "apps/studio-native/tests/test_apple_push_config.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/check-ios-push-metadata.py"
         }
       ]
     },
@@ -20226,6 +20229,9 @@
         },
         {
           "path": "apps/studio-native/scripts/apple-push-config.py"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Info.plist"
         }
       ]
     },
