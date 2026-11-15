@@ -203,13 +203,21 @@ public class ConversationHistoryTest {
         refreshPhase="menu_tap";observeRefresh("menu_tap_requested",new JSONObject());
         onView(withContentDescription("메뉴")).perform(new androidx.test.espresso.ViewAction(){
             public org.hamcrest.Matcher<View> getConstraints(){return click().getConstraints();}
-            public String getDescription(){return "one menu click with non-consuming touch observation";}
+            public String getDescription(){return "one short menu tap with non-consuming touch observation";}
             public void perform(androidx.test.espresso.UiController ui,View view){
                 view.setOnTouchListener((target,event)->{
-                    try{observeRefresh("menu_touch",new JSONObject().put("action",event.getActionMasked()).put("x",event.getX()).put("y",event.getY()).put("attached",target.isAttachedToWindow()).put("window_focus",target.hasWindowFocus()).put("pressed",target.isPressed()));}catch(JSONException ignored){}
+                    try{observeRefresh("menu_touch",new JSONObject().put("action",event.getActionMasked()).put("x",event.getX()).put("y",event.getY()).put("attached",target.isAttachedToWindow()).put("window_focus",target.hasWindowFocus()).put("pressed",target.isPressed()).put("down_time",event.getDownTime()).put("event_time",event.getEventTime()).put("uptime_ms",SystemClock.uptimeMillis()).put("long_press_timeout_ms",ViewConfiguration.getLongPressTimeout()));}catch(JSONException ignored){}
                     return false;
                 });
-                try{click().perform(ui,view);}finally{view.setOnTouchListener(null);}
+                // SINGLE waits for app idle after DOWN, which can let a history redraw
+                // stretch the intended tap into a real tooltip long press. The existing
+                // sequence injector schedules both real events before waiting for idle.
+                float[] xy=androidx.test.espresso.action.GeneralLocation.VISIBLE_CENTER.calculateCoordinates(view);
+                MotionEvent down=androidx.test.espresso.action.MotionEvents.obtainDownEvent(xy,new float[]{1,1},InputDevice.SOURCE_TOUCHSCREEN,MotionEvent.BUTTON_PRIMARY);
+                MotionEvent up=androidx.test.espresso.action.MotionEvents.obtainUpEvent(down,down.getDownTime()+ViewConfiguration.getTapTimeout()/2,xy);
+                try{assertTrue("one short DOWN/UP sequence injected",ui.injectMotionEventSequence(java.util.List.of(down,up)));}
+                catch(androidx.test.espresso.InjectEventSecurityException problem){throw new AssertionError(problem);}
+                finally{up.recycle();down.recycle();view.setOnTouchListener(null);}
             }
         });
         refreshPhase="refresh_item_tap";observeRefresh("refresh_item_tap_requested",new JSONObject());
