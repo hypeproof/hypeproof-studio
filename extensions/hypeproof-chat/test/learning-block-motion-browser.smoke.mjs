@@ -29,7 +29,7 @@ const js = (await build({ stdin: { contents: `import React from 'react';import{c
 const root=createRoot(document.getElementById('root'));
 window.mount=(config)=>root.render(<ChatPanel {...${JSON.stringify(data)}} {...{${callbacks}}} config={config} messages={[]}/>);
 function Fixture(){const p=useBlockPlayback(5,50);return <section data-fixture=""><p data-fixture-frame="">{'장면 '+(p.state.frame+1)}</p><PlaybackControls playback={p}/></section>;}
-window.mountFixture=()=>root.render(<Fixture/>);`, resolveDir: root + '/webview-ui', loader: 'tsx' }, bundle: true, write: false, outdir: 'out', platform: 'browser', loader: { '.svg': 'dataurl' }, logLevel: 'silent' })).outputFiles.find((f) => f.path.endsWith('.js')).text;
+let remounts=0;window.mountFixture=()=>root.render(<Fixture key={++remounts}/>);// a new key: a fresh, paused controller each time`, resolveDir: root + '/webview-ui', loader: 'tsx' }, bundle: true, write: false, outdir: 'out', platform: 'browser', loader: { '.svg': 'dataurl' }, logLevel: 'silent' })).outputFiles.find((f) => f.path.endsWith('.js')).text;
 
 // Week 3 with every kind on its own step; the parametric ones with valid params.
 const content = weekFixture(3);
