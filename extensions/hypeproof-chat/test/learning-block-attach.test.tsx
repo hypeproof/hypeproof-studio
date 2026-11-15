@@ -88,7 +88,8 @@ t("rule: only the served lesson's own step `ui`, one of the seven kinds, is a bl
   eq(stepMaterial(WITH as never, "nope"), null, "a step the lesson does not have");
   eq(stepMaterial(null, "s1"), null, "no lesson");
   for (const s of BOGUS.content.steps) eq(stepMaterial(BOGUS as never, s.id), null, `bogus ui ${JSON.stringify(s.ui)}`);
-  eq([...MATERIAL_KINDS].sort(), ["canvas_editor", "canvas_preview", "coach_request", "criterion_form", "decision_form", "evidence_note", "metric_board"], "the Service's seven STEP_UI_KINDS");
+  // CGP-LEARN-R-006 / R-005 added box_spacing and stage_stepper (Service STEP_UI_KINDS, #509 and #510).
+  eq([...MATERIAL_KINDS].sort(), ["box_spacing", "canvas_editor", "canvas_preview", "coach_request", "criterion_form", "decision_form", "evidence_note", "metric_board", "stage_stepper"], "the Service's STEP_UI_KINDS");
 });
 
 t("(c) the attached block renders in the coach rail for the current step only; switching steps hides it", async () => {

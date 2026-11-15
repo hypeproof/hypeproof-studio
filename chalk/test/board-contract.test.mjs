@@ -74,7 +74,9 @@ const body = JSON.parse(text);
 // --- closed key set ----------------------------------------------------------------
 assert.deepEqual(
   Object.keys(body).sort(),
-  ["id", "now", "paused", "profiles", "roster_size", "scope", "session", "templates"],
+  // update_freeze: the Service testkit 0.1.11 chalk-state route adds it (dist/worker/src/routes/chalk-state.ts:76);
+  // the console reads it (chalk/src/ui/console.html, update-freeze-forward test). Pin bump only.
+  ["id", "now", "paused", "profiles", "roster_size", "scope", "session", "templates", "update_freeze"],
   "GET /admin/cohorts/:id/state — top-level keys are a closed set",
 );
 assert.equal(body.id, COHORT);

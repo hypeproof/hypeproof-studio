@@ -1,0 +1,171 @@
+{
+  "note": "CGP-LEARN-R-004 published step block versions (params and presets). Append a version here when one is published; never remove or edit one.",
+  "types": {
+    "canvas_editor": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "canvas_preview": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "criterion_form": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "evidence_note": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "coach_request": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "decision_form": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "metric_board": {
+      "1": {
+        "params": {},
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    },
+    "box_spacing": {
+      "1": {
+        "params": {
+          "padding": {
+            "kind": "integer",
+            "min": 0,
+            "max": 48,
+            "default": 16
+          },
+          "border": {
+            "kind": "integer",
+            "min": 0,
+            "max": 8,
+            "default": 1
+          },
+          "margin": {
+            "kind": "integer",
+            "min": 0,
+            "max": 48,
+            "default": 8
+          },
+          "layout": {
+            "kind": "enum",
+            "values": [
+              "block",
+              "inline-block",
+              "flex",
+              "grid"
+            ],
+            "default": "block"
+          }
+        },
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {
+              "padding": 16,
+              "border": 1,
+              "margin": 8,
+              "layout": "block"
+            }
+          },
+          "roomy": {
+            "label": "넉넉하게",
+            "params": {
+              "padding": 32,
+              "border": 2,
+              "margin": 24,
+              "layout": "block"
+            }
+          },
+          "tight": {
+            "label": "촘촘하게",
+            "params": {
+              "padding": 4,
+              "border": 1,
+              "margin": 0,
+              "layout": "flex"
+            }
+          }
+        }
+      }
+    },
+    "stage_stepper": {
+      "1": {
+        "params": {
+          "stages": {
+            "kind": "text_list",
+            "minItems": 2,
+            "maxItems": 8,
+            "fields": {
+              "title": {
+                "maxLength": 40
+              },
+              "sentence": {
+                "maxLength": 60
+              }
+            },
+            "required": true
+          }
+        },
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {}
+          }
+        }
+      }
+    }
+  }
+}

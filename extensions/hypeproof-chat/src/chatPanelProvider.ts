@@ -5485,10 +5485,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
         // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
         // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
-        let strict = false, formLineAt = -Infinity;
+        let strict = false, formLineAt = -Infinity, frameClosed = false;
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
+          // #4128: on a minor seat a cross-site iframe loads only when the lesson list (or loopback) admits it; no dialog.
+          decideFrame: minor ? (url) => this.frameAllowed(url) : undefined,
+          // Without the network hold a frame off the list is sent back to about:blank; one that cannot be, or that went
+          // out of process unwatched, closes the tab (fail closed, verify-3928 on #4128).
+          onFrameUnheld: () => { if (frameClosed) return; frameClosed = true; void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); },
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
           // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
           // as any refused address (the route `allowlistOnly` refuses); on the list, the stop stays silent (a known gap).
@@ -5542,6 +5547,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (route.kind === "integrated") return true;
     if (route.kind === "confirm") void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
     return false;
+  }
+  /**
+   * #4128 — a cross-site iframe on a minor seat: the same admission as `allowlistOnly` (loopback or the trusted lesson
+   * allowlist), with no line to the learner, who did not ask for the frame (an embedded ad would bring one per load).
+   */
+  private async frameAllowed(url: string): Promise<boolean> {
+    return (await this.learnerLinkRoute(url, "browser")).kind === "integrated";
   }
   /** CGP-SHELL-R-026 — a minor (safe-session) seat, by the same policy the link route uses. */
   private async minorLinkSeat(): Promise<boolean> {
