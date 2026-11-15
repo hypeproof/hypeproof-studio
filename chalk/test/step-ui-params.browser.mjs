@@ -135,6 +135,14 @@ try {
     // 3. stage_stepper. Untrusted text stays a value; nothing was created from it.
     const stg = await ev(`const f=${S('stg')};return {titles:[...f.querySelectorAll('[data-stage=title]')].map(e=>e.value),count:f.querySelector('[data-stage-count]').textContent,imgs:document.querySelectorAll('#steps img').length,pwn:window.__pwn??null,chip:f.querySelector('[data-ui-chip]').textContent,counters:[...f.querySelectorAll('.stage-field .counter')].slice(0,2).map(e=>e.textContent),max:[f.querySelector('[data-stage=title]').maxLength,f.querySelector('[data-stage=sentence]').maxLength]}`);
     assert.deepEqual(stg, { titles: [XSS, '둘째', '셋째'], count: '3 / 8단계', imgs: 0, pwn: null, chip: 'stage_stepper · v1 · 단계 3개', counters: [XSS.length + '/40', '4/60'], max: [40, 60] }, `${width}px: stages load as field values`);
+    // The counter describes the input; it is not part of its name (the name does not change while typing).
+    const a11y = await ev(`const e=${stageInput('stg', 0, 'title')},l=e.labels[0];return {name:l.textContent,inLabel:!!l.querySelector('.counter'),desc:(e.getAttribute('aria-describedby')||'').split(' ').includes(e._counter.id)}`);
+    assert.deepEqual(a11y, { name: '제목 (40자 이내)', inLabel: false, desc: true }, `${width}px: the counter is a description, outside the label`);
+    // Lengths are UTF-16 units, as maxlength and the Service count: 20 emoji are 40 units.
+    await ev(`${type(stageInput('stg', 1, 'title'), '😀'.repeat(20))}return 0`);
+    assert.deepEqual(await ev(`const e=${stageInput('stg', 1, 'title')};return [e._counter.textContent,${stepOf('stg')}.ui_params.stages[1].title.length]`), ['40/40', 40], `${width}px: the counter counts UTF-16 units`);
+    await ev(`${type(stageInput('stg', 1, 'title'), '둘째')}return 0`);
+    checks += 2;
     for (let i = 3; i < 8; i++) await ev(`${S('stg')}.querySelector('[data-stage-add]').click();return 0`);
     const full = await ev(`const f=${S('stg')};return {rows:f.querySelectorAll('.stage-rows>li').length,add:f.querySelector('[data-stage-add]').disabled,count:f.querySelector('[data-stage-count]').textContent,focus:document.activeElement===f.querySelectorAll('.stage-rows>li')[7].querySelector('[data-stage=title]')}`);
     assert.deepEqual(full, { rows: 8, add: true, count: '8 / 8단계', focus: true }, `${width}px: add stops at 8 and focuses the new row`);
@@ -158,7 +166,7 @@ try {
     assert.deepEqual({ ...marked, status: undefined }, { inv: 1, mine: 'true', text: '확인 필요: 링크(https:// 등)는 넣을 수 없어요', described: true, focus: true, status: undefined }, `${width}px: only the named input is marked and focused`);
     assert.match(marked.status, / — ‘흐름’ 단계 · 단계 목록 2번의 한 문장: 링크\(https:\/\/ 등\)는 넣을 수 없어요\. 편집은 보존됐습니다\.$/, `${width}px: the status line names the step and the field`);
     await ev(`${type(stageInput('stg', 1, 'sentence'), '고친 문장')}return 0`);
-    assert.deepEqual(await ev(`const e=${stageInput('stg', 1, 'sentence')};return [e.hasAttribute('aria-invalid'),document.querySelectorAll('.step .field-error').length,e.getAttribute('aria-describedby')===e.nextElementSibling.id]`), [false, 0, true], `${width}px: the next edit clears the mark`);
+    assert.deepEqual(await ev(`const e=${stageInput('stg', 1, 'sentence')};return [e.hasAttribute('aria-invalid'),document.querySelectorAll('.step .field-error').length,e.getAttribute('aria-describedby')===e._counter.id]`), [false, 0, true], `${width}px: the next edit clears the mark`);
     // Planted controls: a step that is not on the page, and a malformed path, mark nothing.
     for (const field of ['steps.nope.ui_params.stages[0].title', 'steps.stg.ui_params.stages[x]']) {
       await ev(`window.__fail={field:${JSON.stringify(field)},reason:'invalid_step_ui',error:${JSON.stringify(field + ' must not be empty')}};document.getElementById('save').click();return 0`);
@@ -180,7 +188,12 @@ try {
     assert.deepEqual(geo.short, [], `${width}px: 44px controls`);
     assert.deepEqual(geo.small, [], `${width}px: 14px text floor`);
     assert.equal(geo.past, 0, `${width}px: controls inside the viewport`);
-    checks += 5;
+    // Forced colours: the stage buttons keep a visible system-colour border (enabled and disabled).
+    await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
+    const fc = await ev(`return [...${S('stg')}.querySelectorAll('.block-stages button')].map(e=>{const c=getComputedStyle(e);return [c.borderTopStyle,parseFloat(c.borderTopWidth)>=1]})`);
+    await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'none' }] });
+    assert.ok(fc.length >= 3 && fc.every(([st, w]) => st === 'solid' && w), `${width}px: forced colours keep the stage buttons' borders ${JSON.stringify(fc)}`);
+    checks += 6;
   }
   console.log(`PASS step-ui-params.browser: ${checks} checks at 1280 and 768 px`);
 } finally {
