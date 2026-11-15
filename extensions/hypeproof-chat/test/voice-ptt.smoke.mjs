@@ -58,8 +58,15 @@ const phase = (r) => r.loop.state.phase;
   assert.deepEqual([phase(r), r.media.length, r.loop.state.note, r.loop.state.mode], ['ready', 0, PTT_READY, 'push_to_talk'], 'a session starts with the microphone closed');
   assert.ok(r.loop.active, 'the session is live while ready');
   r.loop.release(); assert.equal(r.media.length, 0, 'a release without a hold does nothing');
+  // verify-4240: start()'s double-press guard. A second start on a live session (a double click, the key and the button)
+  // changes nothing: still one session, still no microphone; a second hold during a hold opens no second microphone.
+  const viewsBefore = r.views.length;
+  r.loop.start({ mode: 'push_to_talk' }); r.loop.start();
+  assert.deepEqual([phase(r), r.media.length, r.loop.state.mode, r.views.length], ['ready', 0, 'push_to_talk', viewsBefore], 'start() on a live session is ignored');
   r.loop.hold(); await r.flush();
   assert.deepEqual([phase(r), r.media.length, r.live()], ['listening', 1, 1], 'the hold opens the microphone for one turn');
+  r.loop.hold(); await r.flush();
+  assert.deepEqual([r.media.length, r.live()], [1, 1], 'a second hold during a hold opens no second microphone');
   r.end(); await r.flush();
   assert.equal(phase(r), 'listening', 'detected silence never ends a held turn');
   await r.tick(1500); r.loop.release(); await r.flush();
