@@ -188,6 +188,19 @@ export async function pruneQuarantine(base: string, now = Date.now(), io: { rena
     const files: Array<{ file: string; at: number; size: number }> = [];
     // A purge whose rename was refused is retried first, so its copies are not counted as live below.
     for (const name of await fs.readdir(scopeDir).catch(() => [] as string[])) if (name.startsWith(PURGE_PENDING_PREFIX)) await retryPendingPurge(scopeDir, name, io.rename ?? ((a, b) => fs.rename(a, b)));
+    // A temp file of an atomic mark write that never got renamed (a crash mid-write) only pins tombstones: past a grace
+    // period it is removed. A mark that cannot be read is kept, but only until it is older than the retention and no
+    // tombstone of its task is left (its tombstones age out by the same retention as every copy, below).
+    for (const name of await fs.readdir(scopeDir).catch(() => [] as string[])) {
+      if (!name.startsWith(PURGE_PENDING_PREFIX)) continue;
+      const file = path.join(scopeDir, name), st = await fs.lstat(file).catch(() => null);
+      if (!st) continue;
+      if (/\.tmp-[0-9a-f]{12}$/.test(name)) { if (now - st.mtimeMs > PURGE_TMP_GRACE_MS) await fs.rm(file, { force: true }).catch(() => undefined); continue; }
+      if (readMark(file) || now - st.mtimeMs <= QUARANTINE_LIMITS.retentionMs) continue;
+      const task = name.slice(PURGE_PENDING_PREFIX.length);
+      const tombs = (await fs.readdir(scopeDir).catch(() => [] as string[])).filter((n) => n.startsWith(`${PURGE_TOMBSTONE_PREFIX}${task}-`) && /-[0-9a-f]{12}$/.test(n) && n.slice(PURGE_TOMBSTONE_PREFIX.length).replace(/-[0-9a-f]{12}$/, "") === task);
+      if (!tombs.length) await fs.rm(file, { force: true }).catch(() => undefined);
+    }
     // A tombstone a mark still names is a retry in progress: it may hold a later turn's copies, so it is never removed whole.
     const marked = new Set<string>();
     // Any mark-like file for the tombstone's task (a mark, a corrupt or torn one, a temp file of an atomic write) keeps every
@@ -201,7 +214,14 @@ export async function pruneQuarantine(base: string, now = Date.now(), io: { rena
     for (const task of await fs.readdir(scopeDir).catch(() => [] as string[])) {
       const taskDir = path.join(scopeDir, task);
       // A purge that did not finish (the app quit between the rename and the delete) leaves a tombstone: finish it.
-      if (task.startsWith(PURGE_TOMBSTONE_PREFIX)) { if (!marked.has(task) && !pendingFor(task)) await fs.rm(taskDir, { recursive: true, force: true }).catch(() => undefined); continue; }
+      if (task.startsWith(PURGE_TOMBSTONE_PREFIX)) {
+        if (!marked.has(task) && !pendingFor(task)) { await fs.rm(taskDir, { recursive: true, force: true }).catch(() => undefined); continue; }
+        // Pinned (a mark names it, or a mark of its task cannot be read): never removed whole, but its copies age out by
+        // the same retention as every copy, by the stamp in each name. Emptied and not named by a readable mark, it goes.
+        for (const name of await fs.readdir(taskDir).catch(() => [] as string[])) if (now - quarantinedAt(name, now) > QUARANTINE_LIMITS.retentionMs) await fs.rm(path.join(taskDir, name), { recursive: true, force: true }).catch(() => undefined);
+        if (!marked.has(task) && !(await fs.readdir(taskDir).catch(() => ["?"])).length) await fs.rmdir(taskDir).catch(() => undefined);
+        continue;
+      }
       if (task.startsWith(PURGE_PENDING_PREFIX)) continue; // a mark still refused: kept for the next prune
       for (const name of await fs.readdir(taskDir).catch(() => [] as string[])) {
         const file = path.join(taskDir, name);
@@ -241,6 +261,8 @@ export const PURGE_TOMBSTONE_PREFIX = ".purge-";
  * will use. The next prune retries there and deletes only those names. No clock decides anything. Never a task key.
  */
 export const PURGE_PENDING_PREFIX = ".pending-purge-";
+/** How long a temp file of an atomic mark write may stay before a prune removes it (a crash between write and rename). */
+export const PURGE_TMP_GRACE_MS = 10 * 60_000;
 type PurgeMark = { files: string[]; tomb: string };
 function readMark(file: string): PurgeMark | null {
   try {
@@ -256,7 +278,7 @@ function readMark(file: string): PurgeMark | null {
  * await (the task handler) therefore cannot have a late delete remove copies a new turn writes into the same task folder
  * right after an archive, a restore and a new turn (#4124). A tombstone left by a crash is swept by pruneQuarantine.
  */
-export async function purgeTaskQuarantine(base: string, scopeKey: string, taskKey: string, io: { rename?: (from: string, to: string) => void } = {}): Promise<void> {
+export async function purgeTaskQuarantine(base: string, scopeKey: string, taskKey: string, io: { rename?: (from: string, to: string) => void; writeFile?: (file: string, data: string) => void } = {}): Promise<void> {
   if (!/^[0-9a-f]{24}$/.test(scopeKey) || !/^[A-Za-z0-9_-]{1,128}$/.test(taskKey)) return;
   const dir = path.join(base, scopeKey, taskKey), tomb = path.join(base, scopeKey, `${PURGE_TOMBSTONE_PREFIX}${taskKey}-${randomBytes(6).toString("hex")}`);
   try { (io.rename ?? renameSync)(dir, tomb); }
@@ -271,7 +293,7 @@ export async function purgeTaskQuarantine(base: string, scopeKey: string, taskKe
       const files = [...new Set([...(prior?.files ?? []), ...readdirSync(dir)])].sort();
       // Atomic: a torn mark must never exist under the mark's name (a temp file, then a rename over it).
       const tmp = `${markFile}.tmp-${randomBytes(6).toString("hex")}`;
-      writeFileSync(tmp, JSON.stringify({ files, tomb: prior?.tomb ?? path.basename(tomb) }), { mode: 0o600 });
+      (io.writeFile ?? ((f, d) => writeFileSync(f, d, { mode: 0o600 })))(tmp, JSON.stringify({ files, tomb: prior?.tomb ?? path.basename(tomb) }));
       renameSync(tmp, markFile);
     } catch { /* not marked: nothing is deleted */ }
     return;
@@ -295,6 +317,7 @@ async function retryPendingPurge(scopeDir: string, marker: string, rename: (from
   const dir = path.join(scopeDir, taskKey);
   // Two rounds at most: the mark's tombstone (from an interrupted retry) first, then whatever listed names are still in the
   // live folder (a second purge that was refused after the first retry had already moved the folder away).
+  let done = false;
   for (let round = 0; round < 2; round++) {
     const tomb = path.join(scopeDir, mark.tomb);
     const tombExists = await fs.lstat(tomb).then((st) => st.isDirectory(), () => false);
@@ -321,11 +344,14 @@ async function retryPendingPurge(scopeDir: string, marker: string, rename: (from
     // Listed names still in the live folder: they were there at a purge too. Point the mark at a fresh tombstone (atomic
     // write) and go round again; a refusal keeps that mark for the next prune.
     const left: string[] = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => listed.has(n));
-    if (!left.length) break;
+    if (!left.length) { done = true; break; }
     mark = { files: left.sort(), tomb: `${PURGE_TOMBSTONE_PREFIX}${taskKey}-${randomBytes(6).toString("hex")}` };
     try { const tmp = `${markerFile}.tmp-${randomBytes(6).toString("hex")}`; writeFileSync(tmp, JSON.stringify(mark), { mode: 0o600 }); renameSync(tmp, markerFile); }
     catch { return; } // the old mark still lists them; its tombstone is gone, so the next prune renames the folder again
   }
+  // Out of rounds with listed names still in the live folder: the mark (already pointing at a fresh tombstone) stays,
+  // so those names are purged at the next prune. It is removed only when nothing it lists is left.
+  if (!done) return;
   await fs.rm(markerFile, { force: true }).catch(() => undefined);
 }
 
