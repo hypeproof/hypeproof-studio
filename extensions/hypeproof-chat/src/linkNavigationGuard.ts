@@ -97,8 +97,9 @@ const BINDING = "__hpsOpenLink";
  * (`<template shadowrootmode>`) is made by the parser, not by `attachShadow`; its popups are held by layer 2.
  * The effective target is the element's own (the submitter's `formtarget` first), else the page's `<base target>`;
  * the browsing-context keywords are ASCII case-insensitive, as in the HTML spec (verify-r027 on #4187).
- * A named target is resolved like the browser does, by the child browsing context's name (`frames[i].name`), not the
- * iframe's attribute; a cross-origin frame's name cannot be read, so it is not in-page. An empty `target=""` is no
+ * A named target is resolved like the browser does, by the child browsing context's name, not the iframe's attribute.
+ * The name is read through the `name` getter captured before the page ran, so a same-origin child that redefines its
+ * own `name` cannot lie its way in-page; a cross-origin frame's name cannot be read, so it is never in-page. An empty `target=""` is no
  * target, so `<base target>` applies. A page listener that runs after these checks and changes the page (removes the
  * named frame, adds a base target) is not seen here; layer 2 holds the window that opens (pinned by a test).
  * A same-origin form or link aimed at a named iframe of this page is an in-page pattern, not another window: it goes
@@ -118,7 +119,9 @@ var other=function(t){if(!t)return false;t=low(t);return t!=="_self"&&t!=="_top"
 var baseTarget=function(){var l=qsa.call(document,"base[target]");return l.length?getAttr.call(l[0],"target"):""};
 var own=function(el){var t=hasAttr.call(el,"target")?getAttr.call(el,"target"):"";return t!==""?t:baseTarget()};
 var W=window,wlen=Object.getOwnPropertyDescriptor(W,"length")||Object.getOwnPropertyDescriptor(Window.prototype,"length");
-var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(W[i].name===t)return true}catch(_){}}return false};
+var wname=Object.getOwnPropertyDescriptor(W,"name")||Object.getOwnPropertyDescriptor(Window.prototype,"name");
+var nameOf=function(w){return wname&&wname.get?wname.get.call(w):w.name};
+var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(nameOf(W[i])===t)return true}catch(_){/* a cross-origin frame's name cannot be read: never in-page */}}return false};
 var sameSite=function(u){try{return new URL(u,location.href).origin===location.origin}catch(_){return false}};
 var inPage=function(t,u){return namedFrame(t)&&sameSite(u)};
 var aimsAway=function(f,s){var t=sTarget(s);t=t!==null?t:own(f);return other(t)&&!inPage(t,actionOf(f,s))};

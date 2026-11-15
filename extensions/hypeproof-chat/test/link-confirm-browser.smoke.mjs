@@ -147,6 +147,12 @@ try {
       res.end(`<title>S</title><div id="sho" style="width:200px;height:40px"></div><div id="shc" style="width:200px;height:40px"></div><div id="shd" style="width:200px;height:40px"><template shadowrootmode="closed">${f('shadowd')}</template></div>
         <script>document.getElementById('sho').attachShadow({mode:'open'}).innerHTML=${JSON.stringify(f('shadowo'))};document.getElementById('shc').attachShadow({mode:'closed'}).innerHTML=${JSON.stringify(f('shadowc'))};</script>`); return; }
     // verify-r027 round 3: a renamed iframe, an empty target under a base, and a later listener changing the page.
+    // verify-r027 on #4187 (folded into #4192): a same-origin child that lies about its name, and a cross-origin frame
+    // whose name cannot be read. Neither may make a target count as in-page.
+    if (req.url.startsWith('/liepage')) { res.end(`<title>L</title><iframe id="lf" name="zz" src="about:blank" style="width:60px;height:30px"></iframe><iframe src="${B}/xframe" style="width:60px;height:30px"></iframe>
+      <form method="post" action="/hitlie" target="fr7"><button id="lieb" style="display:block;padding:12px">form to the lied name</button></form>
+      <form method="post" action="/hitxname" target="nosuch"><button id="xnb" style="display:block;padding:12px">form to a name no same-origin frame has</button></form>
+      <script>Object.defineProperty(document.getElementById('lf').contentWindow,'name',{get:function(){return 'fr7'},configurable:true})</script>`); return; }
     if (req.url.startsWith('/namepage')) { res.end(`<title>N</title><base target="_blank"><iframe name="fr2" style="width:60px;height:30px"></iframe>
       <form method="post" action="/hitrenamed" target="fr2"><button id="rnf" style="display:block;padding:12px">form to the renamed frame's old name</button></form>
       <a id="rnl" href="/hitrenamedlink" target="fr2" style="display:block;padding:12px">link to the old name</a>
@@ -279,7 +285,7 @@ try {
     }
     // <base target="_blank">: layer 1 sees the effective target. The link goes to the binding (allowed, Studio opens it),
     // the form is stopped and reported, and a link with its own _self target stays in the page.
-    const base = async () => { await b.send('Page.navigate', { url: A.replace(/\/a$/, '/basepage') }); await settle(500); };
+    const base = async () => { await studioNav(A.replace(/\/a$/, '/basepage')); await settle(500); };
     allow = true; hits.length = 0; studioOpened.length = 0; await base(); await clickAt('#bl'); await settle(900);
     ok(studioOpened.some((u) => u.endsWith('/hitbase')), `a link under <base target=_blank> is replaced by layer 1 (${JSON.stringify(studioOpened)} ${JSON.stringify(hits)})`);
     allow = false; hits.length = 0; formStops.length = 0; shift += 10_000; await base(); await clickAt('#bf'); await settle(900);
@@ -288,7 +294,7 @@ try {
     ok(reachedA('hitbaseown') && studioOpened.length === 0, `a link with its own _self under <base target=_blank> stays in the page (${JSON.stringify(hits)})`);
     // The browser resolves a named target by the frame's browsing-context name: after frames[0].name='zz' the old
     // attribute name "fr2" is a new window (here under <base target=_blank> too). An empty target is no target.
-    const page = async (p2) => { await b.send('Page.navigate', { url: A.replace(/\/a$/, p2) }); await settle(500); };
+    const page = async (p2) => { await studioNav(A.replace(/\/a$/, p2)); await settle(500); };
     allow = false;
     for (const [sel, id] of [['#rnf', 'hitrenamed'], ['#rnl', 'hitrenamedlink'], ['#emp', 'hitempty'], ['#empf', 'hitemptyform']]) {
       hits.length = 0; formStops.length = 0; studioOpened.length = 0; const nd = decisions.length, np = guard.stats.popups; shift += 10_000; await page('/namepage'); await clickAt(sel); await settle(1000);
@@ -296,6 +302,16 @@ try {
       const layer1 = sel.endsWith('f') ? formStops.length === 1 : decisions.length > nd && guard.stats.popups === np;
       ok(!hits.some((h) => h.endsWith(`/${id}`)) && layer1, `${sel}: layer 1 sees it as another window and nothing is sent (${JSON.stringify(hits)} stops ${JSON.stringify(formStops)} popups ${guard.stats.popups - np})`);
     }
+    // A same-origin child that lies about its name (a getter on its window's name) does not make "fr7" in-page: the name
+    // is read through the getter captured before the page ran. A cross-origin frame's name cannot be read, so it never
+    // counts as in-page either: a name no same-origin frame has is another window.
+    for (const [sel, id] of [['#lieb', 'hitlie'], ['#xnb', 'hitxname']]) {
+      hits.length = 0; formStops.length = 0; shift += 10_000; await page('/liepage'); await clickAt(sel); await settle(1000);
+      ok(formStops.length === 1 && !reachedA(id), `${sel}: layer 1 stops it as another window (${JSON.stringify(hits)} stops ${JSON.stringify(formStops)})`);
+    }
+    // Close the windows those cases opened: an unknown path here serves the main test page, whose iframe is named
+    // "inner", so a lingering window would hold a frame the next cases' target name resolves to.
+    { const { targetInfos } = await root.send('Target.getTargets'); for (const t of targetInfos) if (t.type === 'page' && t.targetId !== targetInfo.targetId) await root.send('Target.closeTarget', { targetId: t.targetId }).catch(() => {}); }
     // Time of check: a page listener that runs after layer 1's check removes the named frame or adds a base target.
     // Layer 1 does not see the change; layer 2 holds the window that opens, so nothing reaches the other site.
     for (const [sel, id] of [['#toc1b', 'hitp302'], ['#toc2b', 'hittoc2']]) {
@@ -305,7 +321,7 @@ try {
     // A learner's real click on a submit button of a _blank form inside a shadow root: the submit event does not leave
     // the root, so layer 1 listens in every root (attachShadow is wrapped before the page runs). Refused: nothing is
     // sent, whichever layer stops it; and layer 1 reports it for open and closed roots made by script.
-    const shadow = async () => { await b.send('Page.navigate', { url: A.replace(/\/a$/, '/shadowpage') }); await settle(500); };
+    const shadow = async () => { await studioNav(A.replace(/\/a$/, '/shadowpage')); await settle(500); };
     for (const [sel, id, reported] of [['#sho', 'shadowo', true], ['#shc', 'shadowc', true], ['#shd', 'shadowd', false]]) {
       allow = false; hits.length = 0; formStops.length = 0; shift += 10_000; await shadow(); await clickAt(sel); await settle(1100);
       ok(!reachedB(`hit${id}`), `${id}: a _blank form in a shadow root sends nothing when refused (${JSON.stringify(hits)})`);
@@ -368,7 +384,7 @@ try {
       }
       // Shadow-root forms with layer 2 alone: the paused popup holds them (no minor-seat bypass without layer 1).
       for (const [sel, id] of [['#sho', 'shadowo'], ['#shc', 'shadowc'], ['#shd', 'shadowd']]) for (const a of [false, true]) {
-        allow = a; hits.length = 0; await b.send('Page.navigate', { url: A.replace(/\/a$/, '/shadowpage') }); await settle(500); await clickAt(sel); await settle(1300);
+        allow = a; hits.length = 0; await studioNav(A.replace(/\/a$/, '/shadowpage')); await settle(500); await clickAt(sel); await settle(1300);
         ok(a ? reachedB(`hit${id}`) : !reachedB(`hit${id}`), `auto-attach only, ${id} form: ${a ? 'allowed, it went on' : 'refused, nothing reached the other site'} (${JSON.stringify(hits)})`);
       }
       // A form by name into an EXISTING window. The popup opened on this site first (no decision), then the page
