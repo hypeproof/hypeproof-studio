@@ -42,7 +42,7 @@ async function until(js, what) {
   throw new Error('timed out waiting for ' + what);
 }
 const MODELS = { default: 'sonnet', choices: [{ alias: 'sonnet', label: 'Sonnet' }, { alias: 'haiku', label: 'Haiku' }], effort: { default: 'medium', allowed: ['low', 'medium', 'high'] } };
-const FEATURES = { choices: [{ key: 'read', label: '읽기' }, { key: 'write', label: '쓰기' }, { key: 'web_search', label: '웹 검색' }], approval_presets: PRESETS, assistant_tones: TONES };
+const FEATURES = { choices: [{ key: 'read', label: '읽기' }, { key: 'write', label: '쓰기' }, { key: 'web_search', label: '웹 검색' }], approval_presets: PRESETS, assistant_tones: TONES, skill_cards: { max_count: 6, name_max: 30, summary_max: 80, prompt_max: 300, prompt_max_lines: 6 } };
 const OLD_FEATURES = { choices: FEATURES.choices, approval_presets: PRESETS };
 const FROZEN = { schema: 'hps-session-design/1', assistant: { display_name: '고정된 이름', role: '고정 역할', tone: TONES[1].id }, starters: ['고정 시작 하나', '고정 시작 둘'], steps: [{ id: 's1', instructions: 'a' }], model: { default: 'haiku', allowed: ['haiku'] }, features: { allowed: ['read'] }, approval_preset: 'always_ask' };
 // Service stub: models/features reads, a saved draft that PUT writes and GET returns, and a frozen version.
@@ -80,7 +80,7 @@ try {
     // 1. Section order (D-013) and the nav in the same order; no starter-prompt section.
     const order = await ev(`return {ids:[...document.querySelectorAll('#ai-settings>details.ai-section')].map(d=>d.id),names:[...document.querySelectorAll('#ai-settings>details.ai-section>summary')].map(s=>s.textContent.trim()),
       nav:[...document.querySelectorAll('#ai-nav a')].map(a=>[a.textContent.trim(),a.getAttribute('href')]),legend:document.querySelector('#ai-settings>legend').textContent}`);
-    assert.deepEqual(order.names, ['정체성', '지시문', '모델·처리 수준', '기능·승인', '시작 문장', '미리보기'], `${width}px: section order`);
+    assert.deepEqual(order.names, ['정체성', '지시문', '모델·처리 수준', '기능·승인', '시작 문장', '학생 스킬 카드', '미리보기'], `${width}px: section order (CGP-AGENT-R-020 adds 학생 스킬 카드 after 시작 문장)`);
     assert.deepEqual(order.nav, order.names.map((n, i) => [n, '#' + order.ids[i]]), `${width}px: nav follows the same order and targets the sections`);
     assert.equal(order.legend, '수업 AI 설정');
     // Each field sits in its section.

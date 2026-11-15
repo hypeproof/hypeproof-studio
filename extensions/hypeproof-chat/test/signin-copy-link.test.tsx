@@ -68,7 +68,8 @@ t("the press posts accountCopyLink and nothing else", () => {
 // --- CSS: 44px target, ≥14px text, forced colors --------------------------------------------
 const css = staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(readFileSync("webview-ui/src/start.css", "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
 const rule = (sel: string) => { const m = new RegExp(`(^|\\})\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(css); return m ? m[2] : ""; };
-const px = (body: string, prop: string) => { const m = new RegExp(`(^|;|\\s)${prop}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`).exec(body); return m ? Number(m[2]) : NaN; };
+// CGP-SHELL-R-017: a start-page size is "<size> + the text-size step" (0px at the default size); the base is read.
+const px = (body: string, prop: string) => { const m = new RegExp(`(^|;|\\s)${prop}\\s*:\\s*(?:calc\\()?(\\d+(?:\\.\\d+)?)px`).exec(body); return m ? Number(m[2]) : NaN; };
 t("button: min-height ≥ 44px and font-size ≥ 14px", () => {
   const b = rule(".studio-account .studio-signin-copy"); ok(b, "no .studio-account .studio-signin-copy rule");
   ok(px(b, "min-height") >= 44, `min-height ${px(b, "min-height")}`);

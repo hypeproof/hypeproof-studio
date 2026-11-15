@@ -545,7 +545,8 @@ const SHARED_OUT = {
 
 const ENVS = [1280, 1000, 690, 600, 380, 320].flatMap((w) => [900, 480].map((h) => ({ w, h, forced: false, reduce: false })));
 const SCALE_ENVS = [{ w: 1280, h: 900, forced: false, reduce: false }, { w: 380, h: 480, forced: false, reduce: false }];
-const pxOf = (v) => { const m = /^(\d*\.?\d+)px$/.exec(v.trim()); return m ? +m[1] : null; };
+// CGP-SHELL-R-017: a start-page size is "<token> + the text-size step"; its base (step 0) size is the token.
+const pxOf = (v) => { const m = /^(\d*\.?\d+)px$/.exec(v.trim()) ?? /^calc\((\d*\.?\d+)px \+ var\(--hp-font-step\)\)$/.exec(v.trim()); return m ? +m[1] : null; };
 
 
 // The winning declaration of `prop` on the last element of `descs` (inherited properties walk up).
@@ -585,7 +586,8 @@ function check(files, { typeOnly = false } = {}) {
   if (stepRoot?.decls.find((d) => d.prop === "--hp-font-step")?.value !== "0px") findings.push("tokens.css: :root { --hp-font-step: 0px } missing");
   for (const [size, step] of Object.entries(STEPS)) {
     if (!step) continue;
-    const sel = `.hps-shell[data-chat-detail="personal"][data-text-size="${size}"]`;
+    // CGP-SHELL-R-017: the step is set on every chat shell (personal and classroom), not the personal one only.
+    const sel = `.hps-shell[data-text-size="${size}"]`;
     const r = rules.find((x) => x.file === "chatDetails.css" && x.text === sel && x.decls.some((d) => d.prop === "--hp-font-step"));
     if (r?.decls.find((d) => d.prop === "--hp-font-step").value !== `${step}px`) findings.push(`chatDetails.css: ${sel} { --hp-font-step: ${step}px } missing`);
   }
@@ -949,7 +951,7 @@ assert.ok(result.probes >= 120, `only ${result.probes} probes ran; the inventory
 const mutate = (file, fn) => ({ ...real, [file]: fn(real[file]) });
 const NEGATIVE = [
   ["caption token below the floor", mutate("tokens.css", (s) => s.replace("--hp-font-caption: calc(14px + var(--hp-font-step))", "--hp-font-caption: calc(13px + var(--hp-font-step))")), /hp-font-caption is calc\(13px/],
-  ["size tokens declared on :root only (the shell's step cannot reach them)", mutate("tokens.css", (s) => s.replace(/:root, \.hps-shell \{/, ":root {")), /does not follow the text-size step|not also on \.hps-shell/],
+  ["size tokens declared on :root only (the shell's step cannot reach them)", mutate("tokens.css", (s) => s.replace(/:root, \.hps-shell, \.studio-start \{/, ":root {")), /does not follow the text-size step|not also on \.hps-shell/],
   ["a later personal rule with a literal 12px", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-tool-log-line { font-size: 12px; }\n`), /hps-tool-log-line.*(without a --hp-font|computes to 12px)/],
   ["a narrow-only rule below the floor (caught at 690px, not at 1280px)", mutate("styles.css", (s) => `${s}\n@media (max-width: 700px) { .tw-workspace .hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: 12px; } }\n`), /hps-cit-chip computes to 12px at 690x900/],
   ["a size token that is not defined", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-small); }\n`), /undefined custom property --hp-font-small/],
@@ -957,7 +959,7 @@ const NEGATIVE = [
   ["a shared class left without its personal override", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-effort,/, "\n")), /hps-effort computes to 12px/],
   ["the composer's tool buttons left at the compact-menu 13px", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input button,/, "\n").replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input:not\(\[data-expanded\]\) \.hps-tools-menu button,/, "\n").replace(/\n\.hps-shell \.hps-input \.hps-tools-menu > button,/, "\n")), /tools-menu button computes to 13px/],
   ["an unclassified new shared rule below 14px", mutate("styles.css", (s) => `${s}\n.hps-new-meta { font-size: 12px; }\n`), /hps-new-meta sets 12px and is not classified/],
-  ["the text-size step rule removed", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-font-step: 2px; }', "")), /data-text-size="large"\] \{ --hp-font-step: 2px \} missing/],
+  ["the text-size step rule removed", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-text-size="large"] { --hp-font-step: 2px; }', "")), /data-text-size="large"\] \{ --hp-font-step: 2px \} missing/],
   ["a rail metadata line back at 10px", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-task-meta \{([^}]*)font-size: var\(--hp-font-caption\)/, ".tw-task-meta {$1font-size: 10px")), /tw-task-meta.*(without a --hp-font|computes to 10px)/],
   ["the AI-can-do note left at 12px in personal chat", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hp-rail-lesson-note,/, "\n")), /AI-can-do card note .* computes to 12px|hp-rail-lesson-note computes to 12px/],
   ["the run note back to nowrap and rigid", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-run-note \{[^}]*\}/, ".tw-run-note { flex: 0 0 auto; color: var(--tw-muted); font-size: var(--hp-font-caption); white-space: nowrap; }")), /run note .* cannot give way at 390px/],

@@ -518,6 +518,8 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
   // CGP-ART-D-002 — the preview's review bar presses go to the chat's turn review (one undo).
   context.subscriptions.push(preview.onReviewAction((a) => void provider.handlePreviewReviewAction(a)));
+  // CGP-SHELL-R-026 — a link clicked in the preview goes through the learner link exit (always confirmed, rate-limited).
+  context.subscriptions.push(preview.onOpenLink((href) => void provider.openLearnerLink(href, "preview")));
 
   const classroomOps = new ClassroomOpsHost(context, () => provider.opsRuntime(), {
     hasActiveRun: () => provider.hasActiveStream(),

@@ -249,7 +249,7 @@ const FLOOR_MUTATIONS = [
   ["task title button", "taskWorkspace.css", ".tw-workspace .tw-quiet { min-width: var(--hp-control-min); min-height: var(--hp-control-min); }", ".tw-workspace .tw-quiet { min-height: var(--hp-control-min); }"],
   ["start page nav", "start.css", "padding: 7px 14px; min-height: var(--hp-control-min); cursor: pointer; }", "padding: 7px 14px; cursor: pointer; }"],
   ["start page bottom", "start.css", "  padding:0;\n  min-height:var(--hp-control-min);\n", "  padding:0;\n"],
-  ["start page text buttons", "start.css", "  min-height:var(--hp-control-min);\n  font-size:12px!important}", "  font-size:12px!important}"],
+  ["start page text buttons", "start.css", "  min-height:var(--hp-control-min);\n  font-size:calc(12px + var(--hp-font-step))!important}", "  font-size:calc(12px + var(--hp-font-step))!important}"],
   ["composer buttons", "chatDetails.css", "  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: var(--hp-radius-full);", "  width: 36px; height: 36px; padding: 0; border-radius: var(--hp-radius-full);"],
   ["image remove ×", "styles.css", "  width: var(--hp-control-min);\n  height: var(--hp-control-min);\n  padding: 0;\n  line-height:", "  width: 18px;\n  height: 18px;\n  padding: 0;\n  line-height:"],
   ["citation chips", "styles.css", "  min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n  text-align: left;", "  text-align: left;"],

@@ -1,7 +1,7 @@
 import { ChatPreferences } from "./ChatPreferences";
 import { postToHost } from "./vscode";
 import { TEXT_SIZES, TEXT_SIZE_LABELS, type TextSize } from "../../src/textSize";
-import { REDUCE_MOTION_CHOICES, START_SETTINGS_COPY as C, startSettingsView, type ReduceMotionChoice, type StartSettingsView } from "../../src/startSettings";
+import { REDUCE_MOTION_CHOICES, START_SETTINGS_COPY as C, THEME_CHOICES, startSettingsView, type ReduceMotionChoice, type StartSettingsView, type ThemeChoice } from "../../src/startSettings";
 
 /**
  * CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". It lists only the rows
@@ -27,6 +27,19 @@ export function StartSettingsSheet({ open, onClose, opener, view }: { open: bool
       </div>
       <p id="studio-settings-text-hint" className="studio-settings-hint">{C.textSizeHint}</p>
     </>}
+    {rows.includes("theme") && <>
+      {/* CGP-SHELL-R-016: HP Dark, HP Light or the device. A theme the learner chose in VS Code is shown, not replaced. */}
+      <div className="studio-settings-row">
+        <label htmlFor="studio-theme">{C.theme}</label>
+        <select id="studio-theme" name="studio-theme" value={v.theme === "custom" ? "" : v.theme} disabled={v.theme === "custom"}
+          aria-describedby={v.theme === "custom" ? "studio-settings-theme-hint" : undefined}
+          onChange={event => postToHost({ type: "startSetting", key: "theme", value: event.currentTarget.value as ThemeChoice })}>
+          {v.theme === "custom" && <option value="">직접 고른 테마</option>}
+          {THEME_CHOICES.map(choice => <option key={choice} value={choice}>{C.themeLabels[choice]}</option>)}
+        </select>
+      </div>
+      {v.theme === "custom" && <p id="studio-settings-theme-hint" className="studio-settings-hint">{C.themeCustom}</p>}
+    </>}
     {rows.includes("reduceMotion") && <div className="studio-settings-row">
       <label htmlFor="studio-reduce-motion">{C.reduceMotion}</label>
       <select id="studio-reduce-motion" name="studio-reduce-motion" value={v.reduceMotion}
@@ -43,6 +56,11 @@ export function StartSettingsSheet({ open, onClose, opener, view }: { open: bool
         </label>
       </div>
       <p id="studio-settings-notice-hint" className="studio-settings-hint">{C.noticesLabel} {C.noticesHint}</p>
+    </>}
+    {rows.includes("export") && <>
+      <button type="button" className="studio-settings-row studio-settings-action" aria-describedby="studio-settings-export-hint"
+        onClick={() => { onClose(); postToHost({ type: "startExportMyWork" }); }}>{C.export}</button>
+      <p id="studio-settings-export-hint" className="studio-settings-hint">{C.exportHint}</p>
     </>}
     {v.advanced && <button type="button" className="studio-settings-row studio-settings-advanced" onClick={() => { onClose(); postToHost({ type: "openAdvancedSettings" }); }}>{C.advanced}</button>}
   </ChatPreferences>;

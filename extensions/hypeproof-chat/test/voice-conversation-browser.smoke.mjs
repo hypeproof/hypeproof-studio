@@ -83,12 +83,28 @@ try {
  const store=await setup();
  assert(await b.evaluate("document.querySelectorAll('.tw-task').length>0"),'the real task rail is drawn');
  await noMarker('before any voice session');
+ // CGP-VOICE-R-014: while dictation records, the conversation button is off and says why (name and tooltip); a null
+ // reason (verify-r004's mutant) leaves only the plain name and fails here.
+ await b.evaluate(`document.querySelector('button.hps-voice-mic').click()`);
+ // The first press may show Studio's microphone explainer (CGP-SHELL-R-010): allow it, then the recording starts.
+ await wait(async()=>await b.evaluate(`!!document.querySelector('.hps-voice-recording, .hps-voice-explain, .hps-voice-disclosure')`),'dictation started or asked first');
+ if (await b.evaluate(`!!document.querySelector('.hps-voice-explain')`)) await b.evaluate(`document.querySelector('.hps-voice-explain .hps-voice-primary').click()`);
+ await wait(async()=>await b.evaluate(`!!document.querySelector('.hps-voice-recording')`),'dictation recording');
+ {const c=await b.evaluate(`(()=>{const e=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')??'').startsWith('자동 음성 대화 시작'));return e?{label:e.getAttribute('aria-label'),tip:e.getAttribute('data-hp-tooltip'),disabled:e.disabled}:null})()`);
+  assert.deepEqual(c,{label:'자동 음성 대화 시작, 받아쓰기가 끝나면 쓸 수 있어요',tip:'받아쓰기가 끝나면 쓸 수 있어요',disabled:true},'the conversation names why it is off while dictation records: '+JSON.stringify(c));}
+ await b.evaluate(`[...document.querySelectorAll('.hps-voice-recording button')].find(x=>x.textContent==='취소').click()`);
+ await wait(async()=>!(await b.evaluate(`!!document.querySelector('.hps-voice-recording')`))&&await live()===0,'dictation cancelled, microphone closed');
+ controls.push('while dictation records the conversation button names why it is off');
  await click('자동 음성 대화 시작');
  assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-disclosure")'),false,'existing acknowledgement adds no recurring mode gate');
  controls.push('one deliberate start with inline behavior and no redundant acknowledgement');
  await wait(async()=>await live()===1,'capture before IME Escape');
  {const m=await marker();assert.equal(m.count,1,'one row is marked while capture is live');assert.equal(m.active,true,'the marked row is the active task');assert.equal(m.text,'음성 대화 중');assert.match(m.name??'',/, 음성 대화 중$/,'the row name ends with the marker words');assert(m.size>=14,'marker text at the 14px floor '+m.size);assert(m.contrast>=4.5,'marker text contrast >= 4.5:1, got '+m.contrast);}
  controls.push('the active task row is marked 음성 대화 중 while capture is live');
+ // CGP-VOICE-R-014: one microphone owner, and the other control says why it is off (name and tooltip), never only greyed.
+ {const d=await b.evaluate(`(()=>{const e=[...document.querySelectorAll('button.hps-voice-mic')][0];return e?{label:e.getAttribute('aria-label'),tip:e.getAttribute('data-hp-tooltip'),disabled:e.disabled}:null})()`);
+  assert.deepEqual(d,{label:'받아쓰기, 음성 대화 중에는 받아쓰기를 쓸 수 없어요',tip:'음성 대화 중에는 받아쓰기를 쓸 수 없어요',disabled:true},'dictation names why it is off during a conversation: '+JSON.stringify(d));}
+ controls.push('during a conversation the dictation button names why it is off');
  // Exercise the native listener itself; document's IME host barrier is separate protection.
  for (const flags of [{isComposing:true,keyCode:27},{isComposing:false,keyCode:229}]) {
   const prevented=await b.evaluate(`(()=>{const event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true,...${JSON.stringify(flags)}});window.dispatchEvent(event);return event.defaultPrevented})()`);

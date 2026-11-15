@@ -115,7 +115,8 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
     }, true);
   };
   return <div className="hps-voice-note" role="group" aria-label="자동 음성 대화">
-    <button type="button" className="hps-voice-primary" aria-label={active ? '음성 대화 중지' : '자동 음성 대화 시작'} aria-pressed={active}
+    <button type="button" className="hps-voice-primary" aria-label={active ? '음성 대화 중지' : turn.blockedReason ? `자동 음성 대화 시작, ${turn.blockedReason}` : '자동 음성 대화 시작'} aria-pressed={active}
+      data-hp-tooltip={!active && turn.blockedReason ? turn.blockedReason : undefined}
       disabled={!active && (!ready() || !speech.available)} onClick={() => active ? loop.current?.stop() : start()}>
       <ChatIcon kind={active ? 'stop' : 'level'} /> {active ? '중지' : '음성 대화'}
     </button>
