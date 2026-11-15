@@ -64,16 +64,21 @@ check('RR-6 the learning-wiki call is skipped for a subscription rehearsal turn 
   if (!line.includes('!rehearsalSubscription')) throw new Error('brainCall does not exclude subscription rehearsal');
 });
 
-check('RR-7 the server reads after the guard are skipped for a subscription rehearsal: activity check, access view, prebuilt world, observation context', () => {
+check('RR-7 the server reads and writes that a subscription rehearsal turn must not make are skipped: activity check, access view, observation context', () => {
   const pairs = [
-    ['await verifyActivity({token:token!', 'if (!rehearsalSubscription) await verifyActivity'],
-    ['await this.loadAccess();', 'if (!rehearsalSubscription) await this.loadAccess();'],
-    ['await this.openPrebuiltWorldForTurn(', 'rehearsalSubscription ? null : await this.openPrebuiltWorldForTurn('],
-    ['await this.prepareObservation(proxyUrl, token, profile);', 'rehearsalSubscription ? null : await this.prepareObservation(proxyUrl, token, profile);'],
+    'if (!rehearsalSubscription) await verifyActivity',
+    'if (!rehearsalSubscription) await this.loadAccess();',
+    'rehearsalSubscription ? null : await this.prepareObservation(proxyUrl, token, profile);',
   ];
-  for (const [, guarded] of pairs) {
+  for (const guarded of pairs) {
     if (!src.includes(guarded)) throw new Error(`missing guard: ${guarded.slice(0, 70)}`);
   }
+});
+
+check('RR-8 the prebuilt world is opened for a subscription rehearsal turn too (GET /worlds is an authenticated static render, allowed)', () => {
+  const call = 'const opened = await this.openPrebuiltWorldForTurn({';
+  if (!src.includes(call)) throw new Error('openPrebuiltWorldForTurn call is missing or guarded');
+  if (src.includes('rehearsalSubscription ? null : await this.openPrebuiltWorldForTurn')) throw new Error('world call is guarded by rehearsalSubscription');
 });
 
 if (failed) { console.error(`rehearsal-route: ${failed} failed`); process.exit(1); }

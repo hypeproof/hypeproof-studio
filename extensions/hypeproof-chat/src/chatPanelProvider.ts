@@ -9916,8 +9916,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // previous turn released the lock (at most 15 s), so a send right after a stop is not refused as
     // "another window" and its history already holds the partial answer. No previous turn still
     // settling: no await at all, so the send stays synchronous up to its first real await.
-    // #4099 — a subscription rehearsal turn runs only on the local runtime, and no step of it may reach the server.
-    // The profile is the only server read allowed before this guard (read here only when not yet held; no await otherwise).
+    // #4099 — a subscription rehearsal turn runs no server model call and writes no class record.
+    // Allowed server reads for it: the profile (ensureProfile, read here only when not yet held) and the prebuilt world
+    // (openPrebuiltWorldForTurn, GET /worlds, an authenticated static render).
+    // Blocked for it: verifyActivity, loadAccess, prepareObservation, the learning-wiki brainCall, and the Service model routes (messages and chat completions).
     // Without a local runtime the turn stops here with the existing no-local-runtime sentence.
     const rehearsalSubscription = mustStayLocal((this.cachedProfile ?? (await this.ensureProfile().catch(() => null)))?.rehearsal);
     if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
@@ -10201,8 +10203,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // "it is already up — just the opening line".
     let openedWorldThisTurn = false;
     {
-      // #4099 — a prebuilt world is fetched from the server; a subscription rehearsal turn does not open one.
-      const opened = rehearsalSubscription ? null : await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning: plan.planning });
+      const opened = await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning: plan.planning });
       const world = opened?.world;
       {
         if (world && opened?.shown) {
