@@ -8,7 +8,9 @@
 // - type ("글로 쓰기"): close and go to the composer. For a cause speaking again will not fix.
 // The permission card (denied) keeps its own settings action and is not listed here. Pure, DOM-free.
 
-export type DictationRecovery = "resend" | "speak_again" | "type";
+// - use_default ("기본 마이크로 녹음", R-019): the microphone chosen in settings is not connected; one press records
+//   this once with the system default. The choice stays for when it is plugged back in.
+export type DictationRecovery = "resend" | "speak_again" | "type" | "use_default";
 
 /**
  * A problem with the recording itself (silent, unreadable, too short, too big, too long). Sending the same clip
@@ -25,6 +27,7 @@ const SPEAK_AGAIN = new Set(["no_mic", "busy", "failed"]);
  * unknown cause falls back to writing, which never needs the microphone or the network.
  */
 export function recoveryFor(cause: string, retry: boolean, clipKept: boolean): DictationRecovery {
+  if (cause === "mic_missing") return "use_default";
   if (CLIP_PROBLEM.has(cause)) return "speak_again";
   if (retry && clipKept) return "resend";
   if (SPEAK_AGAIN.has(cause)) return "speak_again";

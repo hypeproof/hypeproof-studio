@@ -336,11 +336,20 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   infos.length = 0;
   bind("form", "https://hypeproof-ai.xyz/live/x/gallery/submit"); await settleLong();
   ok(!infos.length && !promptOf(), "a stopped form on the list: no line, no dialog");
-  await new Promise((r) => setTimeout(r, 3100));
+  // verify-r027 on #4182: the cap counts only the lines the learner is shown, so a silent on-list stop does not hide
+  // an off-list one a second later.
+  await new Promise((r) => setTimeout(r, 1000));
   bind("form", "https://forms.example/post"); await settleLong();
-  ok(infos.filter((x) => x === blockedLine).length === 1 && !promptOf(), "a stopped form off the list: the blocked line, no dialog (F4)");
+  ok(infos.filter((x) => x === blockedLine).length === 1 && !promptOf(), "a stopped form off the list 1 s after an on-list one: the blocked line, no dialog (F4)");
   bind("form", "https://forms.example/post"); await settleLong();
   ok(infos.filter((x) => x === blockedLine).length === 1, "a second stop within the window adds no line (rate limit)");
+  // The host caps the lines it shows (verify-r027 on #4187): a page cycling action origins inside 3 s gets one line,
+  // although the guard reports each origin.
+  await new Promise((r) => setTimeout(r, 3100));
+  const before = infos.filter((x) => x === blockedLine).length;
+  for (let i = 0; i < 5; i++) bind("form", `https://forms${i}.example/post`);
+  await settleLong();
+  ok(infos.filter((x) => x === blockedLine).length === before + 1, "five off-list origins inside 3 s: one line");
   formTab.f.emit("Runtime.bindingCalled", { name: "__hpsOpenLink", payload: "https://ads.example/raw" }); await settleLong();
   ok(!promptOf(), "a payload that is not the guard's JSON does nothing");
   // Adults: no replacement is installed (negative control for M4a).
@@ -348,6 +357,61 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   await ad.openLearnerLink("https://news.example.com/start");
   const adult = mk("https://news.example.com/start"); tabOpened(adult.t); await settleLong();
   ok(!adult.f.sent.includes("Runtime.addBinding"), "adult seat: no popup replacement (negative control)");
+}
+
+// 12. #4128: on a minor seat a cross-site subframe document is decided by the lesson list with no dialog; adults load.
+{
+  const fake = (current, reject = []) => {
+    const listeners = new Set(); const sent = [], params = [];
+    const raw = { onDidReceiveMessage: (l) => { listeners.add(l); return { dispose: () => listeners.delete(l) }; }, onDidClose: () => ({ dispose() {} }), close: async () => {},
+      sendMessage: async (m) => { sent.push(m.method); params.push([m.method, m.params]); const reply = (msg) => queueMicrotask(() => { for (const l of [...listeners]) l({ id: m.id, ...msg }); });
+        if (reject.includes(m.method)) reply({ error: { message: `'${m.method}' wasn't found` } });
+        else if (m.method === "Target.getTargets") reply({ result: { targetInfos: [{ type: "page", targetId: "t1" }] } });
+        else if (m.method === "Target.attachToTarget") reply({ result: { sessionId: "s1" } });
+        else if (m.method === "Page.getFrameTree") reply({ result: { frameTree: { frame: { id: "main", url: current } } } });
+        else reply({ result: {} }); } };
+    const emit = (method, params) => { for (const l of [...listeners]) l({ method, params, sessionId: "s1" }); };
+    return { raw, emit, sent, params };
+  };
+  const LIST = "https://hypeproof-ai.xyz/live/x/gallery/start";
+  const frameReq = (f, id, url) => f.emit("Fetch.requestPaused", { requestId: id, request: { url }, resourceType: "Document", frameId: "sub" });
+  const run = async (seat, studioUrl, reject = []) => {
+    reset(); const h = host(seat); h.registerBrowserLinkGuards({ subscriptions: [] });
+    const p = h.openLearnerLink(studioUrl); await tick(); if (promptOf()) h.linkConfirmRequest.respond(promptOf().id, "open"); await p;
+    const f = fake(studioUrl, reject); const t = { url: studioUrl, closed: 0, close: async () => { t.closed++; }, startCDPSession: async () => f.raw };
+    f.tab = t; tabOpened(t); await new Promise((r) => setTimeout(r, 40)); return f;
+  };
+  const wait = () => new Promise((r) => setTimeout(r, 40));
+  const committed = (f, url) => f.emit("Page.frameNavigated", { frame: { id: "sub", parentId: "main", url } });
+  const backToBlank = (f) => f.params.some(([m, q]) => m === "Page.navigate" && q?.url === "about:blank" && q?.frameId === "sub");
+  const f = await run(kid, LIST);
+  f.sent.length = 0;
+  frameReq(f, "fr1", "https://ads.example/frame"); await new Promise((r) => setTimeout(r, 40));
+  ok(f.sent.includes("Fetch.failRequest") && !f.sent.includes("Fetch.continueRequest") && !promptOf(), "minor seat: an off-list cross-site iframe is refused, with no dialog");
+  f.sent.length = 0;
+  frameReq(f, "fr2", "https://hypeproof-ai.xyz/live/x/gallery/frame"); await new Promise((r) => setTimeout(r, 40));
+  ok(f.sent.includes("Fetch.continueRequest") && !f.sent.includes("Fetch.failRequest"), "minor seat: a same-site iframe loads (positive control)");
+  ok(!infos.length, "and a refused frame says nothing to the learner");
+  // No network hold (verify-3928 on #4128): a cross-site frame that committed off the list is sent back to about:blank.
+  const nf = await run(kid, LIST, ["Fetch.enable"]);
+  committed(nf, "https://ads.example/frame"); await wait();
+  ok(backToBlank(nf) && nf.tab.closed === 0, "no Fetch, minor seat: an off-list frame that committed is sent back to about:blank");
+  nf.params.length = 0;
+  committed(nf, "https://hypeproof-ai.xyz/live/x/gallery/frame"); await wait();
+  ok(!nf.params.some(([m]) => m === "Page.navigate"), "no Fetch: a same-site frame is left alone (positive control)");
+  const nn = await run(kid, LIST, ["Fetch.enable", "Page.navigate"]);
+  committed(nn, "https://ads.example/frame"); await wait();
+  ok(nn.tab.closed === 1 && infos.some((m) => m.includes("허용 목록 밖")), "no Fetch and the frame cannot be sent back: the tab is closed and says why");
+  const ns = await run(kid, LIST, ["Fetch.enable", "Target.setAutoAttach"]);
+  ns.emit("Page.frameDetached", { frameId: "sub", reason: "swap" }); await wait();
+  ok(ns.tab.closed === 1, "no Fetch and no iframe attach: a frame going out of process (unwatchable) closes the tab");
+  const na = await run(grown, "https://news.example.com/start", ["Fetch.enable"]);
+  committed(na, "https://ads.example/frame"); na.emit("Page.frameDetached", { frameId: "sub", reason: "swap" }); await wait();
+  ok(!backToBlank(na) && na.tab.closed === 0, "adult seat without Fetch: frames are left alone (negative control)");
+  const g = await run(grown, "https://news.example.com/start");
+  g.sent.length = 0;
+  frameReq(g, "fr3", "https://ads.example/frame"); await new Promise((r) => setTimeout(r, 40));
+  ok(g.sent.includes("Fetch.continueRequest") && !g.sent.includes("Fetch.failRequest"), "adult seat: a cross-site iframe loads (negative control)");
 }
 
 // Wiring: the preview forwards only a bounded http(s) string, and extension.ts routes it as a preview link.

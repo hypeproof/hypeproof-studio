@@ -23,7 +23,7 @@ const BUDGET_429 = 'Claude Code returned an error result: API Error: Request rej
 const TRIAL_BUSY_429 = 'Claude Code returned an error result: API Error: Request rejected (429) · 이미 실행 중인 요청이 있습니다. 완료한 뒤 다시 시도해 주세요.';
 const PASS_SPENT_429 = 'Claude Code returned an error result: API Error: Request rejected (429) · 이용권의 AI 요청 횟수를 모두 썼습니다. 만든 파일과 대화는 그대로 남아 있습니다.';
 const PASS_EXPIRED_403 = 'Claude Code returned an error result: Failed to authenticate. API Error: 403 이용권 기간이 끝났습니다. 만든 파일과 대화는 그대로 남아 있습니다.';
-const STALL_429 = '요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)';
+const STALL_429 = '요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 사용 한도를 확인해 주세요. (429)';
 
 // Controls first: the matcher must see both observed texts and nothing else.
 assert.equal(p.trialEnding(new Error(SDK_EXHAUSTED)), 'exhausted');

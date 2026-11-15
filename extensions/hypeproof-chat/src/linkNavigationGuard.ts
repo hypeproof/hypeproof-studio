@@ -20,6 +20,10 @@
  *        is decided against its opener (a refusal fails it and closes the popup; `onPopup` reports both), and every
  *        later page-requested move or redirect hop to another origin is decided like the page's. Targets that are
  *        not this page's popups are let go.
+ *   - Subframes (#4128, minor seats, `decideFrame`): a document of another origin than the top page it is drawn in is
+ *     decided with no dialog on every load and hop: first in its container's session, then in the out-of-process
+ *     iframe's own session, which is auto-attached paused and given the same hold (and its own auto-attach). A session
+ *     that cannot attach its iframes refuses cross-site frames. Subresources are not held (accepted residual).
  *   - Navigations Studio starts from outside the page (the address bar, a confirmed chat link, the coach's approved
  *     browser actions) are not page-requested and not redirects, so they are not held.
  *   - Allowed: `Fetch.continueRequest`. Refused: `Fetch.failRequest` (Aborted); the page stays where it was.
@@ -49,9 +53,20 @@ export interface GuardOptions {
   onCommit?: (url: string) => void;
   /**
    * Layer 1 stopped a form aimed at another window (its submission cannot be replayed safely). Gets the form's
-   * resolved action address, at most once per `FORM_NOTICE_MS`, so a page looping `submit()` cannot flood the host.
+   * resolved action address, at most once per `FORM_NOTICE_MS` per action origin, so a page looping `submit()` cannot
+   * flood the host and a stop to one site does not hide a stop to another (the host caps the lines it shows).
    */
   onFormStopped?: (url: string) => void;
+  /**
+   * #4128 (minor seats): decides a cross-site subframe document with no dialog — an iframe of the page, of a popup or
+   * of another iframe, on its first load and on every later load or redirect hop. Unset (adults): subframes load.
+   */
+  decideFrame?: (url: string) => Promise<boolean>;
+  /**
+   * #4128 fail closed without the network hold: a cross-site subframe committed off the list and could not be sent
+   * back to `about:blank`, or a frame went out of process where it cannot be watched. The host closes the tab.
+   */
+  onFrameUnheld?: () => void;
 }
 const BINDING = "__hpsOpenLink";
 /**
@@ -62,25 +77,56 @@ const BINDING = "__hpsOpenLink";
  * is not left with a button that does nothing). The prototypes are wrapped and locked, so a detached anchor or form
  * behaves the same. Without the binding (inside a popup) the paths are stopped. The binding carries
  * `{"k":"open"|"form","u":<absolute url>}`; only this script holds it (it is taken off `window` before the page runs).
- * A form's address is read with the prototype's getter: `form.action` is shadowed by a field named "action".
+ * A form's target and address, and a submitter's `formtarget`/`formaction`, are read with the prototypes' getters
+ * (verify-r027): `form.target`, `form.action`, `form.submit` and the like are shadowed by fields of those names.
+ * The listeners are also put in every shadow root, open or closed, as it is made (`attachShadow` is wrapped and locked):
+ * a submit event does not leave its root, and a click in a root is retargeted to the host. A declarative shadow root
+ * (`<template shadowrootmode>`) is made by the parser, not by `attachShadow`; its popups are held by layer 2.
+ * The effective target is the element's own (the submitter's `formtarget` first), else the page's `<base target>`;
+ * the browsing-context keywords are ASCII case-insensitive, as in the HTML spec (verify-r027 on #4187).
+ * A named target is resolved like the browser does, by the child browsing context's name (`frames[i].name`), not the
+ * iframe's attribute; a cross-origin frame's name cannot be read, so it is not in-page. An empty `target=""` is no
+ * target, so `<base target>` applies. A page listener that runs after these checks and changes the page (removes the
+ * named frame, adds a base target) is not seen here; layer 2 holds the window that opens (pinned by a test).
+ * A same-origin form or link aimed at a named iframe of this page is an in-page pattern, not another window: it goes
+ * through (the frame's load is a subframe document, held by the subframe rule where that applies).
  */
 const intercept = (withBinding: boolean) => `(()=>{if(window.__hpsPopupGuard)return;window.__hpsPopupGuard=1;var b=${withBinding ? `window.${BINDING};delete window.${BINDING}` : "null"};
 var send=function(u,k){try{if(b)b(JSON.stringify({k:k||"open",u:String(new URL(u,location.href))}))}catch(_){}};
-var actionOf=(function(){var d=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,"action");return function(f,s){var a=s&&s.getAttribute&&s.getAttribute("formaction");try{return a?String(new URL(a,location.href)):d&&d.get?d.get.call(f):location.href}catch(_){return location.href}}})();
+var G=function(P,k){var d=Object.getOwnPropertyDescriptor(P,k);return d&&d.get?function(o){return d.get.call(o)}:function(o){return o[k]}};
+var FP=HTMLFormElement.prototype,IP=HTMLInputElement.prototype,BP=HTMLButtonElement.prototype,EP=Element.prototype;
+var fAction=G(FP,"action"),iTarget=G(IP,"formTarget"),bTarget=G(BP,"formTarget"),iAction=G(IP,"formAction"),bAction=G(BP,"formAction");
+var hasAttr=EP.hasAttribute,closest=EP.closest,isInput=function(s){return Object.getPrototypeOf(s)===IP};
+var sTarget=function(s){return s&&hasAttr.call(s,"formtarget")?(isInput(s)?iTarget:bTarget)(s):null};
+var sAction=function(s){return s&&hasAttr.call(s,"formaction")?(isInput(s)?iAction:bAction)(s):null};
+var getAttr=EP.getAttribute,qsa=Document.prototype.querySelectorAll;
+var low=function(t){return String(t).replace(/[A-Z]/g,function(c){return String.fromCharCode(c.charCodeAt(0)+32)})};
+var other=function(t){if(!t)return false;t=low(t);return t!=="_self"&&t!=="_top"&&t!=="_parent"};
+var baseTarget=function(){var l=qsa.call(document,"base[target]");return l.length?getAttr.call(l[0],"target"):""};
+var own=function(el){var t=hasAttr.call(el,"target")?getAttr.call(el,"target"):"";return t!==""?t:baseTarget()};
+var W=window,wlen=Object.getOwnPropertyDescriptor(W,"length")||Object.getOwnPropertyDescriptor(Window.prototype,"length");
+var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(W[i].name===t)return true}catch(_){}}return false};
+var sameSite=function(u){try{return new URL(u,location.href).origin===location.origin}catch(_){return false}};
+var inPage=function(t,u){return namedFrame(t)&&sameSite(u)};
+var aimsAway=function(f,s){var t=sTarget(s);t=t!==null?t:own(f);return other(t)&&!inPage(t,actionOf(f,s))};
+var actionOf=function(f,s){try{var a=sAction(s);return a!==null?a:fAction(f)}catch(_){return location.href}};
 var stopForm=function(f,s){send(actionOf(f,s),"form")};
-var other=function(t){return !!t&&t!=="_self"&&t!=="_top"&&t!=="_parent"};
 var lock=function(o,k,v){try{Object.defineProperty(o,k,{value:v,writable:false,configurable:false})}catch(_){try{o[k]=v}catch(__){}}};
 var A=HTMLAnchorElement.prototype,F=HTMLFormElement.prototype,E=EventTarget.prototype;
 var aClick=A.click,dispatch=E.dispatchEvent,fSubmit=F.submit,fRequest=F.requestSubmit;
-var away=function(a,e){return /^https?:/i.test(a.href)&&(other(a.target)||(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.button===1)))};
+var near=function(el){return el&&el instanceof Element?closest.call(el,"a[href]"):null};
+var away=function(a,e){var t=own(a);return /^https?:/i.test(a.href)&&((other(t)&&!inPage(t,a.href))||(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.button===1)))};
 lock(window,"open",function(u){if(u)send(u);return null});
 lock(A,"click",function(){if(away(this))return send(this.href);return aClick.call(this)});
-lock(E,"dispatchEvent",function(e){var a=this instanceof Element&&e&&(e.type==="click"||e.type==="auxclick")?this.closest("a[href]"):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
-lock(F,"submit",function(){if(other(this.target))return stopForm(this);return fSubmit.call(this)});
-if(fRequest)lock(F,"requestSubmit",function(s){if(other(this.target)||(s&&other(s.getAttribute&&s.getAttribute("formtarget"))))return stopForm(this,s);return fRequest.apply(this,arguments)});
-document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)},true);
-document.addEventListener("auxclick",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}},true);
-document.addEventListener("submit",function(e){var f=e.target,s=e.submitter;if(f&&(other(f.target)||(s&&other(s.getAttribute("formtarget"))))){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}},true)})();`;
+lock(E,"dispatchEvent",function(e){var a=e&&(e.type==="click"||e.type==="auxclick")?near(this):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
+lock(F,"submit",function(){if(aimsAway(this))return stopForm(this);return fSubmit.call(this)});
+if(fRequest)lock(F,"requestSubmit",function(s){if(aimsAway(this,s))return stopForm(this,s);return fRequest.apply(this,arguments)});
+var onClick=function(e){var a=near(e.target);if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)};
+var onAux=function(e){var a=near(e.target);if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}};
+var onSubmit=function(e){var f=e.target,s=e.submitter;if(f instanceof HTMLFormElement&&aimsAway(f,s)){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}};
+var listen=E.addEventListener,guardRoot=function(r){listen.call(r,"click",onClick,true);listen.call(r,"auxclick",onAux,true);listen.call(r,"submit",onSubmit,true)};
+var attach=EP.attachShadow;if(attach)lock(EP,"attachShadow",function(){var r=attach.apply(this,arguments);guardRoot(r);return r});
+guardRoot(document)})();`;
 export const POPUP_INTERCEPT = intercept(true);
 const POPUP_INTERCEPT_NO_BINDING = intercept(false);
 
@@ -96,8 +142,18 @@ const REQUEST_WINDOW_MS = 10_000;
 export const FORM_NOTICE_MS = 3_000;
 const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", requestStage: "Request" }] };
 
-/** The main-frame rules' state for one page session: the tab's page, or a popup it opened (for its whole life). */
+/**
+ * One session the guard holds requests in: the tab's page, a popup it opened (main-frame rules for its whole life), or
+ * an out-of-process iframe (#4128: subframe rules only, judged against the top page that contains it).
+ */
 interface FrameState {
+  kind: "page" | "popup" | "frame";
+  /** A frame's container: the page, a popup, or another frame. */
+  owner?: FrameState;
+  /** This session auto-attaches its own out-of-process iframes (paused), so their later loads can be held too. */
+  framesAttached: boolean;
+  /** `Fetch.enable` worked in this session: its requests are held before they leave. */
+  fetchHeld: boolean;
   sessionId?: string;
   targetId?: string;
   mainFrame: string | undefined;
@@ -109,20 +165,24 @@ interface FrameState {
   /** A popup's first document request is decided against its opener's address; a page's is not held. */
   popupFirst: boolean;
 }
-const frameState = (current: string, sessionId?: string, targetId?: string, popupFirst = false): FrameState =>
-  ({ sessionId, targetId, mainFrame: undefined, current, requested: new Map(), hops: new Map(), popupFirst });
+const frameState = (kind: FrameState["kind"], current: string, sessionId?: string, targetId?: string, owner?: FrameState): FrameState =>
+  ({ kind, owner, framesAttached: false, fetchHeld: false, sessionId, targetId, mainFrame: kind === "page" ? undefined : targetId, current, requested: new Map(), hops: new Map(), popupFirst: kind === "popup" });
+/** The page (or popup) a frame state is drawn in: subframes are compared with its address. */
+const topOf = (state: FrameState): FrameState => { let s = state; while (s.kind === "frame" && s.owner) s = s.owner; return s; };
+const AUTO_ATTACH = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true };
 
 export class LinkNavigationGuard {
-  private readonly page: FrameState = frameState("");
-  /** Auto-attached popups, each with the same main-frame rules as the page for as long as it lives. */
-  private readonly popups = new Map<string, FrameState>();
+  private readonly page: FrameState = frameState("page", "");
+  /** Auto-attached sessions by sessionId: popups (main-frame rules for life) and out-of-process iframes (#4128). */
+  private readonly children = new Map<string, FrameState>();
   private sub: { dispose(): void } | undefined;
   private scriptId: string | undefined;
   /** The main frame's address when the guard attached (or after the last main-frame navigation). */
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
-  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0 };
-  private lastFormNotice = -Infinity;
+  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0 };
+  /** The last stopped-form report per action origin (the cap is per origin: one site cannot hide another). */
+  private readonly lastFormNotice = new Map<string, number>();
   /**
    * What the tab's session supports, known after `start`. The host fails closed on a minor seat when any is false:
    * `fetch` (the network hold), `autoAttach` (paused popups) or `page` (navigation events).
@@ -146,6 +206,7 @@ export class LinkNavigationGuard {
     this.page.mainFrame = tree?.frameTree?.frame?.id;
     this.page.current = tree?.frameTree?.frame?.url ?? "";
     this.capabilities.fetch = await this.cdp.send("Fetch.enable", DOCUMENTS).then(() => true, () => false);
+    this.page.fetchHeld = this.capabilities.fetch;
     if (this.options.interceptPopups) {
       await this.cdp.send("Runtime.enable").catch(() => undefined);
       await this.cdp.send("Runtime.addBinding", { name: BINDING }).catch(() => undefined);
@@ -153,10 +214,11 @@ export class LinkNavigationGuard {
       await this.cdp.send("Runtime.evaluate", { expression: POPUP_INTERCEPT }).catch(() => undefined);
     }
     if (this.cdp.sendIn) {
-      const auto = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true };
-      const page = await this.cdp.send("Target.setAutoAttach", auto).then(() => true, () => false);
-      const root = this.cdp.sendRoot ? await this.cdp.sendRoot("Target.setAutoAttach", auto).then(() => true, () => false) : false;
+      const page = await this.cdp.send("Target.setAutoAttach", AUTO_ATTACH).then(() => true, () => false);
+      const root = this.cdp.sendRoot ? await this.cdp.sendRoot("Target.setAutoAttach", AUTO_ATTACH).then(() => true, () => false) : false;
       this.capabilities.autoAttach = page || root;
+      // The page session's auto-attach is what brings out-of-process iframes in (paused); the root's brings popups.
+      this.page.framesAttached = page;
     }
   }
 
@@ -194,7 +256,13 @@ export class LinkNavigationGuard {
       if (msg.k === "form") {
         // A form aimed at another window was stopped: report it (rate-limited), never replay it.
         const t = this.now();
-        if (t - this.lastFormNotice >= FORM_NOTICE_MS) { this.lastFormNotice = t; this.options.onFormStopped?.(url); }
+        let origin = url; try { origin = new URL(url).origin; } catch { /* keep the address */ }
+        const last = this.lastFormNotice.get(origin);
+        if (last === undefined || t - last >= FORM_NOTICE_MS) {
+          this.lastFormNotice.set(origin, t);
+          if (this.lastFormNotice.size > 50) this.lastFormNotice.delete(this.lastFormNotice.keys().next().value as string);
+          this.options.onFormStopped?.(url);
+        }
         return;
       }
       if (msg.k !== "open") return;
@@ -202,10 +270,38 @@ export class LinkNavigationGuard {
       this.onPopup(url, allowed);
       return;
     }
-    if (event.method === "Target.attachedToTarget" && !event.sessionId && this.cdp.sendIn) {
+    if (event.method === "Target.attachedToTarget" && this.cdp.sendIn) {
+      const sid: string = p.sessionId, info = p.targetInfo ?? {};
+      // The session that auto-attached it: the page, the root, or a popup or frame the guard already holds.
+      const parent = event.sessionId ? this.children.get(event.sessionId) : event.root ? undefined : this.page;
+      if (info.type === "iframe" && parent) {
+        // #4128: an out-of-process iframe (its first load was decided in its container). On a minor seat its later
+        // loads and redirect hops are held in its own session, and its own iframes are attached the same way; the
+        // hold goes in before it runs (sent in order, resume last). Adults: let go, as before.
+        if (this.options.decideFrame) {
+          const state = frameState("frame", "", sid, info.targetId, parent);
+          this.children.set(sid, state);
+          this.stats.frames++;
+          const sendIn = this.cdp.sendIn;
+          await Promise.all([
+            // Page events too: without the network hold, a commit is the fallback (sent back to about:blank).
+            sendIn(sid, "Page.enable"),
+            sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
+            sendIn(sid, "Target.setAutoAttach", AUTO_ATTACH).then(() => { state.framesAttached = true; }),
+            p.waitingForDebugger ? sendIn(sid, "Runtime.runIfWaitingForDebugger") : undefined,
+          ].map((r) => Promise.resolve(r).catch(() => undefined)));
+          return;
+        }
+        if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
+        return;
+      }
+      if (event.sessionId) {
+        // Anything else a popup or frame attached (a worker): let it run.
+        if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
+        return;
+      }
       // Layer 2: a target this page created (root or page auto-attach). A popup gets the page's main-frame rules for
       // its whole life, installed before it runs; a target that is not this page's popup is let go at once.
-      const sid: string = p.sessionId, info = p.targetInfo ?? {};
       const mine = info.type === "page" && info.targetId !== this.cdp.targetId && (!event.root || !this.cdp.targetId || info.openerId === this.cdp.targetId);
       if (event.root && !mine) {
         if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
@@ -214,17 +310,19 @@ export class LinkNavigationGuard {
       }
       if (mine) {
         this.stats.popups++;
-        const state = frameState(this.page.current, sid, info.targetId, true);
-        this.popups.set(sid, state);
+        const state = frameState("popup", this.page.current, sid, info.targetId);
+        this.children.set(sid, state);
         // Sent together, in order, with the resume last: a session processes its commands in order, so the hold is in
         // place before the popup runs. Awaiting each reply first would deadlock a `noopener` popup, whose
         // `Page.enable` does not answer until the popup is resumed.
         const sendIn = this.cdp.sendIn;
         await Promise.all([
           sendIn(sid, "Page.enable"),
-          sendIn(sid, "Fetch.enable", DOCUMENTS),
+          sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
           // The same popup paths inside the popup, on a minor seat (a popup must not open a further popup unseen).
           this.options.interceptPopups ? sendIn(sid, "Page.addScriptToEvaluateOnNewDocument", { source: POPUP_INTERCEPT_NO_BINDING }) : undefined,
+          // A popup's own out-of-process iframes (#4128), on a minor seat.
+          this.options.decideFrame ? sendIn(sid, "Target.setAutoAttach", AUTO_ATTACH).then(() => { state.framesAttached = true; }) : undefined,
           p.waitingForDebugger ? sendIn(sid, "Runtime.runIfWaitingForDebugger") : undefined,
         ].map((r) => Promise.resolve(r).catch(() => undefined)));
         return;
@@ -232,9 +330,15 @@ export class LinkNavigationGuard {
       if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
       return;
     }
-    if (event.method === "Target.detachedFromTarget" && !event.sessionId && typeof p.sessionId === "string") { this.popups.delete(p.sessionId); return; }
-    const state = event.sessionId ? this.popups.get(event.sessionId) : event.root ? undefined : this.page;
+    if (event.method === "Target.detachedFromTarget" && typeof p.sessionId === "string") { this.children.delete(p.sessionId); return; }
+    const state = event.sessionId ? this.children.get(event.sessionId) : event.root ? undefined : this.page;
     if (!state) return;
+    if (event.method === "Page.frameNavigated" && p.frame?.parentId) { await this.subframeCommitted(state, p.frame); return; }
+    if (event.method === "Page.frameDetached" && p.reason === "swap" && this.options.decideFrame && !state.fetchHeld && !state.framesAttached) {
+      // A frame of this session went out of process, where nothing here can hold or watch it: fail closed.
+      this.options.onFrameUnheld?.();
+      return;
+    }
     if (event.method === "Page.frameNavigated" && p.frame && !p.frame.parentId) {
       state.mainFrame = p.frame.id; state.current = p.frame.url ?? state.current;
       if (state === this.page) this.options.onCommit?.(state.current);
@@ -257,8 +361,9 @@ export class LinkNavigationGuard {
       // A popup refused before it showed anything is closed.
       if (state !== this.page && state.popupFirst && state.targetId) await this.cdp.send("Target.closeTarget", { targetId: state.targetId }).catch(() => undefined);
     };
-    const mainFrame = !state.mainFrame || p.frameId === state.mainFrame;
-    if (!mainFrame || p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
+    if (p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
+    // #4128: a subframe document (an iframe in this page or popup, or any document of an out-of-process iframe).
+    if (state.kind === "frame" || (state.mainFrame && p.frameId !== state.mainFrame)) { await this.subframeRequest(state, requestId, url, p.frameId); return; }
     const redirectFrom = typeof p.redirectedRequestId === "string" ? state.hops.get(p.redirectedRequestId) : undefined;
     state.hops.set(requestId, url);
     if (state.hops.size > 200) state.hops.delete(state.hops.keys().next().value as string);
@@ -275,6 +380,45 @@ export class LinkNavigationGuard {
     }
     const allowed = await this.hold(url, go, stop);
     if (first && !redirect) { state.popupFirst = false; this.onPopup(url, allowed); }
+  }
+
+  /**
+   * #4128 — the subframe rule (minor seats): a document of another origin than the top page it is drawn in is decided
+   * by `decideFrame`, with no dialog; every load and every redirect hop is judged the same way. Refused: the request
+   * fails (`BlockedByClient`, the frame shows Chromium's blocked page) and the page stays. Fail closed: when the
+   * container cannot attach its out-of-process iframes, a cross-site frame's later loads could not be held, so a
+   * cross-site subframe is refused there even when the list admits it. Same-origin frames, and adults, load.
+   */
+  /**
+   * #4128 fail closed when this session has no network hold (a minor seat only): a cross-site subframe that committed
+   * off the list is sent back to `about:blank` (`Page.navigate` with its frameId; for an out-of-process iframe this is
+   * its own session). It may have loaded for a moment, which is why the network hold is the rule and this the fallback.
+   * If the frame cannot be sent back, the host closes the tab.
+   */
+  private async subframeCommitted(state: FrameState, frame: { id?: string; url?: string }): Promise<void> {
+    const url = frame.url ?? "";
+    if (!this.options.decideFrame || state.fetchHeld || !/^https?:/i.test(url) || sameOrigin(url, topOf(state).current)) return;
+    let allowed = false;
+    try { allowed = await this.options.decideFrame(url); } catch { allowed = false; }
+    if (allowed) return;
+    this.stats.framesRefused++;
+    const ok = await this.sendTo(state, "Page.navigate", { url: "about:blank", frameId: frame.id }).then(() => true, () => false);
+    if (!ok) this.options.onFrameUnheld?.();
+  }
+
+  private async subframeRequest(state: FrameState, requestId: string, url: string, frameId: unknown): Promise<void> {
+    const go = () => this.sendTo(state, "Fetch.continueRequest", { requestId });
+    const top = topOf(state);
+    if (!this.options.decideFrame || sameOrigin(url, top.current)) { this.stats.continued++; await go(); return; }
+    let allowed = false;
+    // Allowing a cross-site frame is safe only if its later loads can be held too. An out-of-process iframe moving
+    // itself is held right here (its own session). A new frame inside this session is held later only if this
+    // session attaches its out-of-process iframes.
+    const ownMove = state.kind === "frame" && frameId === state.targetId;
+    if (ownMove || state.framesAttached) { try { allowed = await this.options.decideFrame(url); } catch { allowed = false; } }
+    if (allowed) { this.stats.continued++; await go(); return; }
+    this.stats.framesRefused++;
+    await this.sendTo(state, "Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => undefined);
   }
 }
 

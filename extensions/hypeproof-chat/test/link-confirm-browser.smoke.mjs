@@ -141,6 +141,24 @@ try {
     if (req.url.startsWith('/meta')) { res.end(`<title>M</title><meta http-equiv="refresh" content="0;url=${B}/hitmeta">`); return; }
     // Popups that open on this site first and leave for B afterwards (verify-3928).
     if (req.url.startsWith('/go302')) { res.statusCode = 302; res.setHeader('location', `${B}/hitp302`); res.end(); return; }
+    // verify-r027 on #4187: <base target> is the effective target of a link or form with none of its own.
+    // verify-r027 on #4187: a form inside a shadow root (open, closed, declarative). Its submit event is not composed.
+    if (req.url.startsWith('/shadowpage')) { const f = (id) => `<form method="post" action="${B}/hit${id}" target="_blank"><button style="display:block;width:200px;height:40px">${id}</button></form>`;
+      res.end(`<title>S</title><div id="sho" style="width:200px;height:40px"></div><div id="shc" style="width:200px;height:40px"></div><div id="shd" style="width:200px;height:40px"><template shadowrootmode="closed">${f('shadowd')}</template></div>
+        <script>document.getElementById('sho').attachShadow({mode:'open'}).innerHTML=${JSON.stringify(f('shadowo'))};document.getElementById('shc').attachShadow({mode:'closed'}).innerHTML=${JSON.stringify(f('shadowc'))};</script>`); return; }
+    // verify-r027 round 3: a renamed iframe, an empty target under a base, and a later listener changing the page.
+    if (req.url.startsWith('/namepage')) { res.end(`<title>N</title><base target="_blank"><iframe name="fr2" style="width:60px;height:30px"></iframe>
+      <form method="post" action="/hitrenamed" target="fr2"><button id="rnf" style="display:block;padding:12px">form to the renamed frame's old name</button></form>
+      <a id="rnl" href="/hitrenamedlink" target="fr2" style="display:block;padding:12px">link to the old name</a>
+      <a id="emp" href="${B}/hitempty" target="" style="display:block;padding:12px">empty target under base</a>
+      <form method="post" action="${B}/hitemptyform" target=""><button id="empf" style="display:block;padding:12px">empty-target form under base</button></form>
+      <script>frames[0].name='zz'</script>`); return; }
+    if (req.url.startsWith('/tocpage')) { res.end(`<title>T</title><iframe name="inner" style="width:60px;height:30px"></iframe>
+      <form id="toc1" method="post" action="/go302" target="inner"><button id="toc1b" style="display:block;padding:12px">frame removed after the check</button></form>
+      <form id="toc2" method="post" action="${B}/hittoc2"><button id="toc2b" style="display:block;padding:12px">base added after the check</button></form>
+      <script>document.getElementById('toc1').addEventListener('submit',function(){document.querySelector('iframe[name=inner]').remove()});
+      document.getElementById('toc2').addEventListener('submit',function(){var b=document.createElement('base');b.target='_blank';document.head.appendChild(b)});</script>`); return; }
+    if (req.url.startsWith('/basepage')) { res.end(`<title>Base</title><base target="_blank"><a id="bl" href="${B}/hitbase" style="display:block;padding:12px">base link</a><form method="post" action="${B}/hitbaseform"><button id="bf" style="display:block;padding:12px">base form</button></form><a id="bown" href="/hitbaseown" target="_self" style="display:block;padding:12px">own _self</a>`); return; }
     if (req.url.startsWith('/plocate')) { res.end(`<title>P</title><script>setTimeout(function(){location.href='${B}/hitploc'},50)</script>`); return; }
     res.end(`<title>A</title>
       <a id="go" href="${B}/hitlink" style="display:block;padding:12px">link</a>
@@ -152,6 +170,23 @@ try {
       <form id="f" method="post" action="${B}/hitform"><button id="fb" style="display:block;padding:12px">post</button></form>
       <button id="det" onclick="var a=document.createElement('a');a.href='${B}/hitdet';a.target='_blank';a.click()" style="display:block;padding:12px">detached anchor</button>
       <button id="fsub" onclick="var f=document.createElement('form');f.method='post';f.action='${B}/hitfsub';f.target='_blank';document.body.appendChild(f);f.submit()" style="display:block;padding:12px">form.submit</button>
+      <iframe name="inner" style="width:80px;height:40px"></iframe>
+      <form id="fin" method="post" action="/hitinner" target="inner"><button id="finb" style="display:block;padding:12px">form into the page's named iframe</button></form>
+      <button id="fins" onclick="HTMLFormElement.prototype.submit.call(document.getElementById('fin'))" style="display:block;padding:12px">script submit into the named iframe</button>
+      <a id="lin" href="/hitinner-link" target="inner" style="display:block;padding:12px">link into the named iframe</a>
+      <form id="finx" method="post" action="${B}/hitinnerx" target="inner"><button id="finxb" style="display:block;padding:12px">cross-site form into the named iframe</button></form>
+      <form id="fnone" method="post" action="/hitnone" target="nosuch"><button id="fnoneb" style="display:block;padding:12px">form to a name no frame has</button></form>
+      <form id="ft" method="post" action="/hitself-t"><input name="target" value="shadow"><button id="ftb" style="display:block;padding:12px">self form, field named target</button></form>
+      <form id="fa" method="post" action="/hitself-a"><input name="action" value="shadow"><button id="fab" style="display:block;padding:12px">self form, field named action</button></form>
+      <form id="fs" method="post" action="/hitself-s"><input name="submit" value="shadow"><button id="fsb" style="display:block;padding:12px">self form, field named submit</button></form>
+      <button id="fts" onclick="HTMLFormElement.prototype.submit.call(document.getElementById('ft'))" style="display:block;padding:12px">script submit, field named target</button>
+      <button id="ftr" onclick="document.getElementById('ft').requestSubmit()" style="display:block;padding:12px">script requestSubmit, field named target</button>
+      <button id="fss" onclick="HTMLFormElement.prototype.submit.call(document.getElementById('fs'))" style="display:block;padding:12px">script submit, field named submit</button>
+      <form id="fov" method="post" action="/hitoverride" target="_blank"><button id="fovb" formtarget="_self" style="display:block;padding:12px">_self button in a _blank form</button></form>
+      <a id="lcase" href="/hitcase-link" target="_Self" style="display:block;padding:12px">_Self link</a>
+      <form id="fcase" method="post" action="/hitcase-form" target="_SELF"><button id="fcaseb" style="display:block;padding:12px">_SELF form</button></form>
+      <form id="fbt" method="post" action="${B}/hitbt" target="_blank"><input name="target" value="_self"><button id="fbtb" style="display:block;padding:12px">blank form, field named target</button></form>
+      <form id="fea" method="post" action="${B}/hitfea" target="_blank"><button id="feab" formaction="" style="display:block;padding:12px">empty formaction</button></form>
       <form id="fact" method="post" action="${B}/hitfact" target="_blank"><input name="action" value="shadow"><button id="factb" style="display:block;padding:12px">form named action</button></form>
       <button id="p302" onclick="window.open('/go302')" style="display:block;padding:12px">popup then 302</button>
       <button id="ploc" onclick="window.open('/plocate')" style="display:block;padding:12px">popup then location</button>
@@ -206,6 +241,74 @@ try {
     // shadowing form.action: still stopped, and reported with the real address.
     hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#factb'); await settle(900);
     ok(!reachedB('hitfact') && formStops.length === 1 && formStops[0] === `${Bo}/hitfact`, `a clicked form to another window is stopped and reported (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    // verify-r027 on #4182: a field named "target", "action" or "submit" must not change what the guard reads. A form
+    // aimed at this window submits normally, by a real click and by script; one aimed at another window is still
+    // stopped, and a submitter's empty formaction means the document's own address (HTML spec).
+    const reachedA = (path) => hits.includes(`127.0.0.1/${path}`);
+    for (const [sel, path, how] of [['#ftb', 'hitself-t', 'a click, field named target'], ['#fab', 'hitself-a', 'a click, field named action'], ['#fsb', 'hitself-s', 'a click, field named submit'],
+      ['#fts', 'hitself-t', 'submit() by script, field named target'], ['#ftr', 'hitself-t', 'requestSubmit() by script, field named target'], ['#fss', 'hitself-s', 'submit() by script, field named submit']]) {
+      hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt(sel); await settle(900);
+      ok(reachedA(path) && formStops.length === 0, `a form aimed at this window submits (${how}): ${JSON.stringify(hits)} stops ${JSON.stringify(formStops)}`);
+    }
+    // A same-origin form or link aimed at a named iframe of this page is an in-page pattern (verify-3928 on #4128).
+    for (const [sel, path, how] of [['#finb', 'hitinner', 'a clicked form'], ['#fins', 'hitinner', 'submit() by script'], ['#lin', 'hitinner-link', 'a link']]) {
+      hits.length = 0; formStops.length = 0; studioOpened.length = 0; shift += 10_000; await fresh(); await clickAt(sel); await settle(900);
+      ok(reachedA(path) && formStops.length === 0 && studioOpened.length === 0, `${how} into the page's named iframe goes through, in the page (${JSON.stringify(hits)} stops ${JSON.stringify(formStops)} studio ${JSON.stringify(studioOpened)})`);
+    }
+    // A submitter's formtarget overrides its form's target: a _self button in a _blank form submits in place.
+    hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#fovb'); await settle(900);
+    ok(reachedA('hitoverride') && formStops.length === 0, `formtarget=_self in a _blank form submits in place (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    // Browsing-context keywords are ASCII case-insensitive (HTML spec): _Self and _SELF are this window.
+    for (const [sel, path] of [['#lcase', 'hitcase-link'], ['#fcaseb', 'hitcase-form']]) {
+      hits.length = 0; formStops.length = 0; studioOpened.length = 0; const nd = decisions.length; shift += 10_000; await fresh(); await clickAt(sel); await settle(900);
+      ok(reachedA(path) && formStops.length === 0 && studioOpened.length === 0 && decisions.length === nd, `${sel}: a mixed-case _self target stays in the page (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    }
+    // <base target="_blank">: layer 1 sees the effective target. The link goes to the binding (allowed, Studio opens it),
+    // the form is stopped and reported, and a link with its own _self target stays in the page.
+    const base = async () => { await b.send('Page.navigate', { url: A.replace(/\/a$/, '/basepage') }); await settle(500); };
+    allow = true; hits.length = 0; studioOpened.length = 0; await base(); await clickAt('#bl'); await settle(900);
+    ok(studioOpened.some((u) => u.endsWith('/hitbase')), `a link under <base target=_blank> is replaced by layer 1 (${JSON.stringify(studioOpened)} ${JSON.stringify(hits)})`);
+    allow = false; hits.length = 0; formStops.length = 0; shift += 10_000; await base(); await clickAt('#bf'); await settle(900);
+    ok(!reachedB('hitbaseform') && formStops[0] === `${Bo}/hitbaseform`, `a form under <base target=_blank> is stopped and reported (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    hits.length = 0; studioOpened.length = 0; await base(); await clickAt('#bown'); await settle(900);
+    ok(reachedA('hitbaseown') && studioOpened.length === 0, `a link with its own _self under <base target=_blank> stays in the page (${JSON.stringify(hits)})`);
+    // The browser resolves a named target by the frame's browsing-context name: after frames[0].name='zz' the old
+    // attribute name "fr2" is a new window (here under <base target=_blank> too). An empty target is no target.
+    const page = async (p2) => { await b.send('Page.navigate', { url: A.replace(/\/a$/, p2) }); await settle(500); };
+    allow = false;
+    for (const [sel, id] of [['#rnf', 'hitrenamed'], ['#rnl', 'hitrenamedlink'], ['#emp', 'hitempty'], ['#empf', 'hitemptyform']]) {
+      hits.length = 0; formStops.length = 0; studioOpened.length = 0; const nd = decisions.length, np = guard.stats.popups; shift += 10_000; await page('/namepage'); await clickAt(sel); await settle(1000);
+      // Layer 1's signal: a form is reported; a link goes to the binding (a decision with no popup target created).
+      const layer1 = sel.endsWith('f') ? formStops.length === 1 : decisions.length > nd && guard.stats.popups === np;
+      ok(!hits.some((h) => h.endsWith(`/${id}`)) && layer1, `${sel}: layer 1 sees it as another window and nothing is sent (${JSON.stringify(hits)} stops ${JSON.stringify(formStops)} popups ${guard.stats.popups - np})`);
+    }
+    // Time of check: a page listener that runs after layer 1's check removes the named frame or adds a base target.
+    // Layer 1 does not see the change; layer 2 holds the window that opens, so nothing reaches the other site.
+    for (const [sel, id] of [['#toc1b', 'hitp302'], ['#toc2b', 'hittoc2']]) {
+      hits.length = 0; shift += 10_000; await page('/tocpage'); await clickAt(sel); await settle(1300);
+      ok(!reachedB(id), `${sel}: a page that changes the target after the check still sends nothing to the other site (layer 2) (${JSON.stringify(hits)})`);
+    }
+    // A learner's real click on a submit button of a _blank form inside a shadow root: the submit event does not leave
+    // the root, so layer 1 listens in every root (attachShadow is wrapped before the page runs). Refused: nothing is
+    // sent, whichever layer stops it; and layer 1 reports it for open and closed roots made by script.
+    const shadow = async () => { await b.send('Page.navigate', { url: A.replace(/\/a$/, '/shadowpage') }); await settle(500); };
+    for (const [sel, id, reported] of [['#sho', 'shadowo', true], ['#shc', 'shadowc', true], ['#shd', 'shadowd', false]]) {
+      allow = false; hits.length = 0; formStops.length = 0; shift += 10_000; await shadow(); await clickAt(sel); await settle(1100);
+      ok(!reachedB(`hit${id}`), `${id}: a _blank form in a shadow root sends nothing when refused (${JSON.stringify(hits)})`);
+      if (reported) ok(formStops[0] === `${Bo}/hit${id}`, `${id}: layer 1 stops and reports it (${JSON.stringify(formStops)})`);
+    }
+    hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#finxb'); await settle(900);
+    ok(!reachedB('hitinnerx') && formStops[0] === `${Bo}/hitinnerx`, `a cross-site form into the named iframe is still stopped (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#fnoneb'); await settle(900);
+    ok(!reachedA('hitnone') && formStops.length === 1, `a same-site form to a name no frame has (a new window) is still stopped (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#fbtb'); await settle(900);
+    ok(!reachedB('hitbt') && formStops[0] === `${Bo}/hitbt`, `a form aimed at another window with a field named target is still stopped (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#feab'); await settle(900);
+    ok(!reachedB('hitfea') && formStops.length === 1 && formStops[0] === A, `an empty formaction reports the document's address (${JSON.stringify(formStops)})`);
+    // The cap is per action origin: a stop to one site does not hide a stop to another within the window.
+    formStops.length = 0; shift += 10_000; await fresh();
+    await ev(`(()=>{var f=document.createElement('form');f.action='/x';f.target='_blank';document.body.appendChild(f);f.submit();f.action='${Bo}/y';f.submit()})()`); await settle(400);
+    ok(formStops.length === 2, `stops to two origins within the window are both reported (${JSON.stringify(formStops)})`);
     // A page looping submit() gets one report per window, not a flood.
     formStops.length = 0; shift += 10_000; await fresh();
     await ev(`(()=>{var f=document.createElement('form');f.action='${Bo}/hitloop';f.target='_blank';document.body.appendChild(f);for(var i=0;i<20;i++)f.submit()})()`); await settle(400);
@@ -238,6 +341,11 @@ try {
           if (!a) ok(!reachedB(path), `auto-attach only, ${label}: refused, nothing reached the other site (${JSON.stringify(hits)})`);
           else ok(reachedB(path), `auto-attach only, ${label}: allowed, it went on (${JSON.stringify(hits)}; decisions ${JSON.stringify(decisions.slice(-2))}; stats ${JSON.stringify(g2.stats)})`);
         }
+      }
+      // Shadow-root forms with layer 2 alone: the paused popup holds them (no minor-seat bypass without layer 1).
+      for (const [sel, id] of [['#sho', 'shadowo'], ['#shc', 'shadowc'], ['#shd', 'shadowd']]) for (const a of [false, true]) {
+        allow = a; hits.length = 0; await b.send('Page.navigate', { url: A.replace(/\/a$/, '/shadowpage') }); await settle(500); await clickAt(sel); await settle(1300);
+        ok(a ? reachedB(`hit${id}`) : !reachedB(`hit${id}`), `auto-attach only, ${id} form: ${a ? 'allowed, it went on' : 'refused, nothing reached the other site'} (${JSON.stringify(hits)})`);
       }
       g2.dispose();
     }

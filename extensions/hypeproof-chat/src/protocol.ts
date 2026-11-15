@@ -173,6 +173,11 @@ export interface ChatConfig {
   textSize?: import('./textSize').TextSize;
   /** CGP-SHELL-R-019: lesson tips are shown on this device (false only after 팁 그만 보기). */
   lessonTips?: boolean;
+  /**
+   * CGP-VOICE-R-019: the microphone this computer records from; absent for the system default. Local only: the
+   * label can name a person, so it is never logged, sent to the Service or put in a problem report.
+   */
+  micInput?: { id: string; label: string };
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
   /**
@@ -200,7 +205,9 @@ export interface ChatConfig {
   activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
     /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
-    free?:boolean};
+    free?:boolean;
+    /** #4179: an account-owned seat served as `trial` (reflectionSeat.ts). Presentation only: shows 나의 질문 in the task rail; the entry still checks the account and session. */
+    accountSeat?:boolean};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** REQ-L12 ⑫ — trial carry-over offer or the read-only trial transcript; absent unless the Service advertises it. */
   carryover?: import('./trialCarryoverHelpers').CarryoverView;
@@ -328,6 +335,8 @@ export interface ResolvedProfile {
   activity_id?: string;
   /** Presentation only; derived from authenticated Service access, never grants authority. */
   activity_kind?: "trial" | "personal" | "classroom";
+  /** Service #536 (#4179): `"account"` when a signed-in account owns this seat; `activity_kind` stays `trial`. Presentation only; absent on an older Service. */
+  seat_owner?: "account";
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
   /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */
@@ -823,6 +832,8 @@ export type WebviewMessage = (
   | { type: "setTextSize"; size: string }
   /** CGP-SHELL-R-019: the learner turned lesson tips off (팁 그만 보기) or back on. */
   | { type: "setLessonTips"; on: boolean }
+  /** CGP-VOICE-R-019 — the learner picked a microphone (null: 시스템 기본값); the host keeps it for this computer. */
+  | { type: "setMicInput"; choice: { id: string; label: string } | null }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }

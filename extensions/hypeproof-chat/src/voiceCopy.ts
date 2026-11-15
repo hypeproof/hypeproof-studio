@@ -117,3 +117,23 @@ export const RECOVER_TYPE = "글로 쓰기";
 /** R-014: why a control is off while the other one holds the microphone. */
 export const DICTATE_BLOCKED_BY_CONVERSATION = "음성 대화 중에는 받아쓰기를 쓸 수 없어요";
 export const CONVERSATION_BLOCKED_BY_DICTATION = "받아쓰기가 끝나면 쓸 수 있어요";
+
+// CGP-VOICE-R-019 / D-015 (REQ-CGPV-23 / DES-CGPV-23): choosing the microphone, in the settings dialog.
+export const MIC_SETTING_LABEL = "마이크";
+export const MIC_SYSTEM_DEFAULT = "시스템 기본값";
+export const MIC_NOT_CONNECTED = "연결되지 않은 마이크";
+export const MIC_NUMBERED = (n: number) => `마이크 ${n}`;
+export const MIC_CHOSEN = "고른 마이크";
+export const MIC_SETTING_HINT = "받아쓰기와 음성 대화에 쓸 마이크예요.";
+export const MIC_SETTING_HIDDEN = "마이크를 한 번 허용하면 이름을 보고 고를 수 있어요.";
+export const MIC_SETTING_NONE = "마이크를 찾을 수 없어요";
+export const MIC_SETTING_MISSING = "고른 마이크가 연결되어 있지 않아요. 다시 연결하면 그 마이크로 받아써요.";
+export const MIC_TEST = "마이크 시험";
+export const MIC_TEST_STOP = "시험 멈추기";
+export const MIC_TEST_LISTENING = "말해 보세요. 5초 동안 들어요.";
+export const MIC_TEST_HEARD = "소리가 들려요.";
+export const MIC_TEST_SILENT = "소리가 들리지 않았어요. 마이크가 켜져 있는지 확인해 주세요.";
+// At capture time: the chosen microphone is not connected. Nothing records until the learner picks the default.
+export const MIC_MISSING = "선택한 마이크가 연결되어 있지 않아요";
+export const RECOVER_USE_DEFAULT = "기본 마이크로 녹음";
+export const CONVERSATION_MIC_MISSING = "선택한 마이크가 연결되어 있지 않아 멈췄어요. 대화 설정에서 마이크를 바꾸거나 글로 계속할 수 있어요.";
