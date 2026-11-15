@@ -17788,6 +17788,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/voice-conversation-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-recovery-table.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-level-meter.smoke.mjs"
         }
       ]
     },
@@ -18934,6 +18940,9 @@
         },
         {
           "path": "apps/studio-native/scripts/apple-upload.sh"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-push-config.py"
         }
       ]
     },
@@ -18958,6 +18967,9 @@
         },
         {
           "path": "apps/studio-native/tests/test_native_workflow_source.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_apple_push_config.py"
         }
       ]
     },
@@ -20019,6 +20031,215 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/lesson-skill-cards.test.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-ACCOUNT-QUESTION-ENTRY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION",
+        "ST-REQ-MEMBER-APPROVAL"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Account question entry — #4111"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-ACCOUNT-QUESTION-ENTRY",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACCOUNT-QUESTION-ENTRY"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Account question entry — #4111"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ACCOUNT-QUESTION-ENTRY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-ACCOUNT-QUESTION-ENTRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/accountCards.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountGreeting.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/teamProductLoop.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AccountQuestionCard.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/AccountQuestion.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/AccountQuestionView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeTeamModel.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeAccountCard.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeApprovalCard.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ProductExperience.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/ProductExperienceView.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeProductExperience.java"
+        },
+        {
+          "path": "apps/studio-native/PUSH.md"
+        },
+        {
+          "path": "apps/studio-native/android/app/build.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativePush.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioMessagingService.java"
+        },
+        {
+          "path": "apps/studio-native/ios/App/AccountPushView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudio-Push.entitlements.example"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/AccountPush.swift"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-push-config.py"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ACCOUNT-QUESTION-ENTRY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACCOUNT-QUESTION-ENTRY",
+        "ST-IMP-ACCOUNT-QUESTION-ENTRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/account-cards.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/team-product-loop.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/account-question-entry.test.tsx"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountQuestionTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeTeamModelTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/TeamEntryJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/ios/App/TeamEntryFixture.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ProductExperienceTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeProductExperienceTest.java"
+        },
+        {
+          "path": "apps/studio-native/scripts/collect-native-journeys.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_journey_evidence.py"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativePushTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift"
+        },
+        {
+          "path": "apps/studio-native/tests/test_apple_push_config.py"
         }
       ]
     }

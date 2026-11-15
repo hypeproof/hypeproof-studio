@@ -28,7 +28,11 @@ public class DeviceSignInHttpTest {
                 var model=new ReflectionModel(store,new NativeDeviceSignIn(target,wire,NativeDeviceSignIn.MONOTONIC),wire,worker,ui::add,()->{});
                 model.restore();model.edit("보낸 생각 🙂");assertTrue(model.send());
                 String id=model.state.request.getString("id");model.edit("응답을 기다리며 쓰는 다른 초안");
-                worker.one();ui.remove().run();server.check();
+                worker.one();
+                // The real HTTP call posts an observation and then its result.
+                // Consume both in FIFO order before asserting the terminal state.
+                while(!ui.isEmpty())ui.remove().run();
+                server.check();assertFalse("the HTTP result must be consumed",model.busy);
                 assertEquals(sample.code(),sample.message(),model.error);
                 assertEquals(originalAccount,model.credentials);assertEquals(originalAccount,store.loadCredentials());
                 var saved=store.load("A");assertEquals(id,saved.request.getString("id"));assertEquals("local",saved.status());

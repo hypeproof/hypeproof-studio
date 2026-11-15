@@ -633,7 +633,7 @@ console.log("artifact provenance — round 6: no code path can produce a learner
 await t("lock: the label table, the event kinds and the host-write actors have no learner-change entry", () => {
   for (const file of ["../src/artifactProvenance.ts", "../src/artifactProvenanceView.ts", "../src/chatPanelProvider.ts", "../webview-ui/src/ArtifactProvenanceList.tsx", "../webview-ui/src/TaskWorkspace.tsx"]) {
     const src = fs.readFileSync(new URL(file, import.meta.url), "utf8");
-    // Save subscriptions are locked by the import graph (test/artifact-provenance-imports.smoke.mjs, #4124), not by text.
+    // Save subscriptions are locked by test/artifact-provenance-saves.smoke.mjs (allowed files + reviewed save paths), not by text.
     for (const banned of ["내가 고침", "learner_changed", "learner_save", "LearnerEditTracker"]) {
       if (src.includes(banned)) throw new Error(`${file} still contains ${banned}`);
     }

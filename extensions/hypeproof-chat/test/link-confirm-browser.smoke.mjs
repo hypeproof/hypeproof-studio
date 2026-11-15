@@ -152,6 +152,7 @@ try {
       <form id="f" method="post" action="${B}/hitform"><button id="fb" style="display:block;padding:12px">post</button></form>
       <button id="det" onclick="var a=document.createElement('a');a.href='${B}/hitdet';a.target='_blank';a.click()" style="display:block;padding:12px">detached anchor</button>
       <button id="fsub" onclick="var f=document.createElement('form');f.method='post';f.action='${B}/hitfsub';f.target='_blank';document.body.appendChild(f);f.submit()" style="display:block;padding:12px">form.submit</button>
+      <form id="fact" method="post" action="${B}/hitfact" target="_blank"><input name="action" value="shadow"><button id="factb" style="display:block;padding:12px">form named action</button></form>
       <button id="p302" onclick="window.open('/go302')" style="display:block;padding:12px">popup then 302</button>
       <button id="ploc" onclick="window.open('/plocate')" style="display:block;padding:12px">popup then location</button>
       <button id="a302" onclick="var a=document.createElement('a');a.href='/go302';a.target='_blank';a.click()" style="display:block;padding:12px">same-site anchor popup then 302</button>
@@ -161,6 +162,7 @@ try {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const A = `http://127.0.0.1:${server.address().port}/a`;
   const reachedB = (path) => hits.includes(`localhost/${path}`);
+  const Bo = `http://localhost:${server.address().port}`;
   try {
     await b.send('Page.enable');
     const decisions = []; let allow = false;
@@ -175,8 +177,8 @@ try {
         return { dispose: () => { off(); offRoot(); } };
       },
     };
-    const popups = [], studioOpened = [];
-    const guard = new LinkNavigationGuard(port, async (url) => { decisions.push(url); return allow; }, { onPopup: (url, ok2) => popups.push([url, ok2]), interceptPopups: true, openPopup: (url) => { studioOpened.push(url); if (!/\/(go302|plocate)$/.test(url)) void fetch(url).catch(() => {}); } });
+    const popups = [], studioOpened = [], formStops = []; let shift = 0;
+    const guard = new LinkNavigationGuard(port, async (url) => { decisions.push(url); return allow; }, { onPopup: (url, ok2) => popups.push([url, ok2]), interceptPopups: true, now: () => Date.now() + shift, onFormStopped: (url) => formStops.push(url), openPopup: (url) => { studioOpened.push(url); if (!/\/(go302|plocate)$/.test(url)) void fetch(url).catch(() => {}); } });
     const fresh = async () => { await b.send('Page.navigate', { url: A }); await settle(500); };
     await fresh();
     await guard.start();
@@ -197,8 +199,17 @@ try {
     await tryIt('#ifr', 'hitiframe', 'window.open from a script-made frame (round the replacement: held by auto-attach)');
     await tryIt('#det', 'hitdet', 'a detached anchor with target=_blank and a.click() (the wrapped prototype)');
     // form.submit with target=_blank: stopped outright (a POST is never replayed), refused or allowed.
-    for (const a of [false, true]) { allow = a; hits.length = 0; await fresh(); await clickAt('#fsub'); await settle(900);
-      ok(!reachedB('hitfsub'), `form.submit to another window is stopped (${a ? 'allowed' : 'refused'}): ${JSON.stringify(hits)}`); }
+    for (const a of [false, true]) { allow = a; hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#fsub'); await settle(900);
+      ok(!reachedB('hitfsub'), `form.submit to another window is stopped (${a ? 'allowed' : 'refused'}): ${JSON.stringify(hits)}`);
+      ok(formStops.length === 1 && formStops[0] === `${Bo}/hitfsub`, `and the stop is reported to the host with its address (F4): ${JSON.stringify(formStops)}`); }
+    // A learner's real click on a form aimed at another window (the submit-event path), with a field named "action"
+    // shadowing form.action: still stopped, and reported with the real address.
+    hits.length = 0; formStops.length = 0; shift += 10_000; await fresh(); await clickAt('#factb'); await settle(900);
+    ok(!reachedB('hitfact') && formStops.length === 1 && formStops[0] === `${Bo}/hitfact`, `a clicked form to another window is stopped and reported (${JSON.stringify(hits)} ${JSON.stringify(formStops)})`);
+    // A page looping submit() gets one report per window, not a flood.
+    formStops.length = 0; shift += 10_000; await fresh();
+    await ev(`(()=>{var f=document.createElement('form');f.action='${Bo}/hitloop';f.target='_blank';document.body.appendChild(f);for(var i=0;i<20;i++)f.submit()})()`); await settle(400);
+    ok(formStops.length === 1 && !reachedB('hitloop'), `twenty submit() calls give one report (${formStops.length})`);
     // window.open('/go302') is replaced: no popup at all; refused, nothing is sent; allowed, the address goes to Studio,
     // which opens it as its own tab (a guarded tab, where the 302 hop is held like any tab's; checked by layer 2 below).
     for (const a of [false, true]) { allow = a; hits.length = 0; studioOpened.length = 0; await fresh(); await clickAt('#p302'); await settle(900);

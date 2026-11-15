@@ -24,6 +24,8 @@ import { parseStartSettingWrite, startSettingsView, themeState, themeWrites, typ
 import { TEXT_SIZE_KEY } from "./textSize";
 import type { ActivityResume } from './studioNavigation';
 import { MemberApprovalController, parseApprovalPending } from './memberApproval';
+import { AccountCardsController } from './accountCards';
+import { TeamProductLoop } from './teamProductLoop';
 import { isChildSeat, childRefusalNow } from "./childProfile";
 
 /**
@@ -119,6 +121,8 @@ export class StartPage {
   private reflectionEntering = false;
   private openingChat?: vscode.WebviewPanel;
   private memberApprovals?: MemberApprovalController;
+  private questionCards?: AccountCardsController;
+  private teamProduct?: TeamProductLoop;
   private memberAccount?: string;
   private memberSession?: string;
   private memberProbe = 0;
@@ -129,6 +133,23 @@ export class StartPage {
     private githubSource?: GithubContinueSource,
     private accounts?: AccountSession,
   ) {
+    if (accounts?.questionCardRequest) this.questionCards = new AccountCardsController({
+      identity: () => accounts.approvalIdentity(),
+      request: (identity,key,action,answer) => accounts.questionCardRequest(identity,key,action,answer),
+      uuid: randomUUID, changed: () => { if (this.panel) void this.refresh(); },
+      observed: (type,journey) => { void this.teamProduct?.observe(type,journey); },
+    });
+    if (accounts?.productLoopRequest) this.teamProduct = new TeamProductLoop({
+      identity: () => accounts.approvalIdentity(), request: (identity,route,body) => accounts.productLoopRequest(identity,route,body),
+      load: async account => context.globalState.get('hypeproof.productEvents.'+account,[]),
+      save: async (account,events) => context.globalState.update('hypeproof.productEvents.'+account,events),
+      paused: async account => context.globalState.get('hypeproof.productEventsPaused.'+account,false),
+      pause: async (account,paused) => context.globalState.update('hypeproof.productEventsPaused.'+account,paused),
+      pendingFocus: async account => context.globalState.get('hypeproof.questionFocus.'+account),
+      saveFocus: async (account,intent) => context.globalState.update('hypeproof.questionFocus.'+account,intent),
+      changed: () => { if(this.panel)void this.refresh(); }, questionsChanged: async () => { await this.questionCards?.refresh(); },
+      uuid: randomUUID, version: context.extension.packageJSON.version,
+    });
     if (accounts) this.memberApprovals = new MemberApprovalController({
       identity: () => accounts.approvalIdentity(), request: (identity,id,decision) => accounts.approvalRequest(identity,id,decision), uuid: randomUUID,
       load: async accountID => {
@@ -161,15 +182,17 @@ export class StartPage {
         || (this.reflectionEntry.waiting && account?.status === 'signedOut' && !account.busy))) this.reflectionEntry = undefined;
     const memberAccount = account?.status === 'signedIn' ? account.account?.id : undefined;
     const changedMember = memberAccount!==this.memberAccount;
-    if(changedMember || !memberAccount) { this.memberAccount=memberAccount; this.memberSession=undefined; this.memberApprovals?.invalidate(); }
+    if(changedMember || !memberAccount) { this.memberAccount=memberAccount; this.memberSession=undefined; this.memberApprovals?.invalidate(); this.questionCards?.invalidate(); this.teamProduct?.invalidate(); }
     const probe=++this.memberProbe;
     if(memberAccount && this.accounts?.approvalSessionKey) void this.accounts.approvalSessionKey().then(session=>{
       if(probe!==this.memberProbe || this.memberAccount!==memberAccount) return;
       if(session!==this.memberSession || changedMember) {
-        this.memberSession=session; this.memberApprovals?.invalidate();
+        this.memberSession=session; this.memberApprovals?.invalidate(); this.questionCards?.invalidate(); this.teamProduct?.invalidate();
         if(session) void this.memberApprovals?.discover();
+        if(session) void this.questionCards?.refresh();
+        if(session) void this.teamProduct?.refresh();
       }
-    }).catch(()=>{ if(probe===this.memberProbe) { this.memberSession=undefined; this.memberApprovals?.invalidate(); } });
+    }).catch(()=>{ if(probe===this.memberProbe) { this.memberSession=undefined; this.memberApprovals?.invalidate(); this.questionCards?.invalidate(); this.teamProduct?.invalidate(); } });
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
     if (this.panel) void this.refresh();
     void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
@@ -889,6 +912,8 @@ export class StartPage {
     // Account-bound cards are read after settings/profile awaits so an older render
     // cannot put a previous account's card back after logout or a new session.
     if (this.memberApprovals) state.memberApprovals = this.memberApprovals.view();
+    if (this.questionCards) state.questionCard = this.questionCards.view();
+    if (this.teamProduct) state.teamProduct = this.teamProduct.view();
     if (this.accounts) state.account = this.accounts.view();
     await this.panel?.webview.postMessage({ type: "startState", state });
     if (this.panel) this.maybeRefill(running);
@@ -925,6 +950,10 @@ export class StartPage {
 
   private async handle(msg: StartRequest, continuation?: () => boolean, reflection?: ReflectionEntry): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (msg.type === 'teamProductConsent') { await this.teamProduct?.consent(msg.binding,msg.granted); return; }
+    if (msg.type === 'teamQuestionFocus') { await this.teamProduct?.focus(msg.binding,msg.choice); return; }
+    if (msg.type === 'questionCardRefresh') { await this.questionCards?.refresh(); return; }
+    if (msg.type === 'questionCardAct') { await this.questionCards?.act(msg.binding,msg.key,msg.action,msg.answer); return; }
     if (msg.type === 'openPersonalReflection') { await this.openPersonalReflectionEntry(); return; }
     if (msg.type === 'accountActivate' && this.reflectionEntry) { await this.continuePersonalReflection(msg.passId); return; }
     if (!continuation && !['startReady', 'accountRefresh', 'accountReopen', 'accountCopyLink'].includes(msg.type)) this.reflectionEntry = undefined;

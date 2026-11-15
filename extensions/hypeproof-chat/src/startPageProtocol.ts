@@ -13,6 +13,8 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  questionCard?: import('./accountCards').QuestionView;
+  teamProduct?: import('./teamProductLoop').TeamProductView;
   memberApprovals?: import('./memberApproval').ApprovalView;
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
@@ -105,6 +107,10 @@ export interface FreeStartView {
   refillsAt?: number;
 }
 export type StartRequest =
+  | { type: 'teamProductConsent'; binding: string; granted: boolean }
+  | { type: 'teamQuestionFocus'; binding: string; choice: import('./teamProductLoop').QuestionFocus }
+  | { type: 'questionCardRefresh' }
+  | { type: 'questionCardAct'; binding: string; key: string; action: import('./accountCards').CardAction; answer?: import('./accountCards').CardAnswer }
   | { type: 'memberApprovalRefresh' }
   | { type: 'memberApprovalDecision'; id: string; requestDigest: string; choice: import('./memberApproval').ApprovalChoice }
   | { type: "startReady" }

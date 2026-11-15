@@ -169,7 +169,7 @@ test('p0CaseIds reads the real casebook: every active desktop P0, leaving iPhone
   assert.ok(ids.length > 0);
   assert.ok(ids.includes('BB-001'));
   for (const c of cases) assert.equal(ids.includes(c.id), (c.targets ?? ['desktop']).includes('desktop') && c.priority === 'P0' && c.status !== '자동화됨');
-  assert.deepEqual(p0CaseIds(cases, {target: 'ios'}), ['BB-033', 'BB-034', 'BB-035', 'BB-036', 'BB-037']);
+  assert.deepEqual(p0CaseIds(cases, {target: 'ios'}), ['BB-033', 'BB-034', 'BB-035', 'BB-036', 'BB-037', 'BB-039']);
   assert.equal(casebookEvidence({number: 9, head: HEAD, p0: []}).ok, true);
 });
 

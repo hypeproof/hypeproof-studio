@@ -204,12 +204,18 @@ t("Service refusals are calm: cap verbatim with no retry; unreadable gets the so
   id = posted("voiceTranscribe").at(-1)!.requestId;
   await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "unreadable", message: "소리가 잘 들리지 않았어요. 다시 말해 볼까요?", retry: true });
   ok(all((e) => e.textContent.includes("소리가 잘 들리지 않았어요. 다시 말해 볼까요?")).length > 0, "the softer line");
+  // An unreadable clip is never resent (the same silence, the same failure, paid again): it asks to speak again.
+  ok(!byText("다시 보내기") && byText("다시 말하기"), "unreadable: 다시 말하기, never 다시 보내기");
+  await act(() => click(byText("닫기") as never));
+  await press();
+  id = posted("voiceTranscribe").at(-1)!.requestId;
+  await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "network", message: "인터넷 연결을 확인해 주세요. 글로는 계속 이야기할 수 있어요.", retry: true });
   // retry sends the SAME clip from memory; the recovered text needs an explicit insert
   await act(() => click(byText("다시 보내기") as never));
   const again = posted("voiceTranscribe");
-  eq(again.length, 3, "one more send");
-  eq(again[2].audio, again[1].audio, "the clip kept in memory is the one retried");
-  await hostSays({ type: "voiceTranscribeResult", requestId: again[2].requestId, ok: true, text: "다시 들은 문장" });
+  eq(again.length, 4, "one more send");
+  eq(again[3].audio, again[2].audio, "the clip kept in memory is the one retried");
+  await hostSays({ type: "voiceTranscribeResult", requestId: again[3].requestId, ok: true, text: "다시 들은 문장" });
   eq(rig.inserted, [], "recovered text is not inserted by itself");
   await act(() => click(byText("메시지에 넣기") as never));
   eq(rig.inserted, ["다시 들은 문장"], "inserted on the explicit press");

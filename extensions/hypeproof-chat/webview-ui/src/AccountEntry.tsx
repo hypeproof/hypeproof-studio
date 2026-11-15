@@ -2,6 +2,7 @@ import type { AccountView } from '../../src/accountSession';
 import type { StartRequest } from '../../src/startPageProtocol';
 import { ChatIcon } from './ChatDetails';
 import { SIGN_IN_LINK_COPY } from '../../src/signInLink';
+import { accountGreeting } from '../../src/accountGreeting';
 /** Credentials stay in the extension host; this view receives display fields and emits intents. */
 export function AccountEntry({ account, checking, post }: { account: AccountView; checking: boolean; post: (message: StartRequest) => void }) {
   const disabled = checking || account.busy;
@@ -21,7 +22,7 @@ export function AccountEntry({ account, checking, post }: { account: AccountView
       </div>}
       <button className="studio-text-button" onClick={() => post({type:'accountCancel'})}>로그인 취소</button>
     </> : account.status === 'signedIn' ? <>
-      <div className="studio-account-identity"><strong>{account.account?.display_name} 님</strong><span>{account.account?.email}</span></div>
+      <div className="studio-account-identity"><strong>{accountGreeting(account)}</strong><span>{account.account?.email}</span></div>
       <h3>내 이용권</h3>
       {!account.passes?.length && <p className="studio-help">아직 이 계정에 받은 이용권이 없어요. 이용권을 받으면 이 계정으로 로그인한 컴퓨터에서 사용할 수 있어요.</p>}
       {account.passes?.map(pass => {

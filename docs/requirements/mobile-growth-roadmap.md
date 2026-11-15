@@ -44,6 +44,44 @@ M3 user test: a cohort participant shares deliberately, receives peer feedback, 
 
 ## Delivery boundaries
 
+### Account question entry — #4111
+
+Owner: jayleekr. Extend the existing native and desktop products under #3767;
+account identity is not membership, and observations of usage are not evidence of human growth.
+
+| ID | Required behavior | Evidence boundary |
+|---|---|---|
+| MENT-01 | Greet the current signed-in account using its verified Service display name; omit an unknown name. Clear the greeting and private cards on account/session changes without discarding conversation drafts. | MENT-T01/T02, two-account and delayed-response controls. |
+| MENT-02 | Present existing account questions and eligible approval requests through their respective Service contracts. A question choice never becomes a GitHub approval. Existing notebook, classroom and desktop work stay intact. | MENT-T01/T02 and existing MAI controls. |
+| MENT-03 | A deliberate focus selection may request one question. Persist its immutable intent before POST, retain it across unknown outcomes, and validate the matching source/revision receipt before clearing it. Refresh/restart never creates an AI turn or approval. | MENT-T03, actual transport plus persistence failure/restart controls. |
+| MENT-04 | Content-free usage observations require explicit optional consent; refusal leaves question and approval use available. Keep account-bound immutable event IDs, bounded queues and safe retry. Never collect raw audio, transcript, question/answer text, credentials or arbitrary analytics properties. | MENT-T04, opt-out/race/identity/replay controls; installed emission separately. |
+| MENT-05 | Optional push notifications use the current device registration and a generic notice. Opening one reauthenticates and fetches current authorized data; no action in a notification approves or sends a question. Revocation, invalid tokens, unknown provider results and retry limits are explicit. | MENT-T05; provider acceptance and actual device receipt are separate. |
+| MENT-06 | Source, controlled UI/HTTP, installed platform, live account/provider delivery and human acceptance are reported separately. Failed login, stale pending work and voice re-listening remain release blockers for the affected path. | MENT-T06 and existing M1/MAI release gates. |
+
+One visible question, optional short choices and an always-available conversation entry keep the
+screen focused. Philosophy informs perspective-taking and reflection; it does not become a forced
+identity questionnaire or a numeric score of a person. The same existing desktop is used when a
+chosen idea needs files, tools and a software outcome. Quiet cached-history refresh continues
+reconciliation without transient progress in an already ready conversation; initial/manual loading
+and errors remain visible. This does not change send authority, request IDs or polling.
+
+The client requires Service `team-product-api` line `1` in the shared release
+dependency ledger. That line proves compatible source, not enabled operation:
+0091/0092 schema, team-event/push flags, verified membership and provider readiness
+must be checked separately before activating the corresponding experience.
+Starting choices require current-account capability metadata. Missing, stale or
+rejected metadata hides those choices and blocks trigger submission while keeping
+pending intent and normal conversation intact. Capability availability is separate
+from optional measurement consent: declining measurement does not disable questions.
+Notification permission is also a separate explicit choice. An unconfigured
+provider remains visibly unavailable; a late permission/token callback after
+logout or disable cannot register for the previous account.
+The existing TestFlight environment defaults push configuration off. Enabling it
+requires a matching App Store distribution profile with production APNs; the
+exported signed app must carry the expected app/team entitlements and enabled
+configuration before upload. Qualification preserves the existing candidate/run
+gate and upload receipt and does not prove provider acceptance or device receipt.
+
 The existing Mac desktop is the sole desktop product. The previous Catalyst preview is superseded and no longer built or uploaded; its local data is preserved. Mobile parity means the essential user outcomes, not replicating a desktop IDE on a phone. Foundry owns versioned execution and verification; existing platform CI and release engines remain the executors. Keep Foundry/policy/adapter/product versions distinct. READY, merged, signed, uploaded, available to testers, installed and user-accepted are separate states.
 
 Foundry's active Ubuntu control plane and registered desktop runner are owned by another session. Do not take over that session, change its pins or relabel its runs as mobile development. Mobile registration/adapter admission is a tracked prerequisite. Signing keys remain in the release environment, outside model workspaces.
@@ -160,6 +198,15 @@ bounded memory-only enum/timing record can be deliberately shared for diagnosis;
 it contains no audio, conversation content, identity or credentials. Actual OS
 playback callbacks, synthetic next capture and physical Korean continuation are
 separate evidence; this hardening alone does not establish the incident's cause.
+
+For iPhone microphone routing (#4107), admit Bluetooth HFP inputs alongside the
+system-selected built-in or wired microphone without forcing a preferred port.
+Keep capture in its preparing phase until an active input has a valid format and
+the audio engine has started. Missing input is not empty recognition: stop safely,
+preserve words and offer text recovery. Playback still runs with capture off.
+The manual diagnostic record may include only a route category, never a device
+name or identifier. Built-in, wired and HFP capture/playback/capture, disconnect
+and Stop require separate physical acceptance; simulator speech is not that proof.
 
 Conversation settings use an explicitly presented native sheet. Opening it,
 closing it or swiping it away must not stop an active voice turn. Refresh and

@@ -17,6 +17,20 @@ import CryptoKit
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
+    static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
+    static var pendingPush: Bool { enabled && JourneyConfiguration.scenario == "push-registration-held" }
+    private static var pendingPushStarted = false
+    static func startPendingPushRegistration(_ controller: AccountPushController?) {
+        guard pendingPush, !pendingPushStarted, let controller else { return }
+        pendingPushStarted = true
+        // Synthetic permission/token only: retain the actual controller, private
+        // preference file, authenticated HTTP adapter and published-state path.
+        guard controller.enable() else { return }
+        Task { await controller.register(String(repeating: "d", count: 64)) }
+    }
+    static func pendingPushObserved(busy: Bool) {
+        if pendingPush { JourneyTransport.store.observePendingPush(busy: busy) }
+    }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
@@ -28,6 +42,10 @@ import CryptoKit
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
+    static func synchronizationStarted(automatic: Bool) {
+        if periodicVoice { JourneyTransport.store.synchronizationStarted(automatic: automatic) }
+    }
+    static func finishSecondSpeech() { if periodicVoice { JourneyTransport.store.finishSecondSpeech() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
         guard enabled else { return }
         JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
@@ -69,6 +87,27 @@ import CryptoKit
                        stopAfterEmpty: @escaping @MainActor () -> Void = {}) -> Task<Void, Never>? {
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
+        if periodicVoice && capture == 2 {
+            return Task { @MainActor in
+                let text = "I can send a second spoken thought"
+                do {
+                    // Keep recognition active until a genuine periodic GET is
+                    // held and the test delivers this external speech event.
+                    deliver(text, false)
+                    for revision in 1...50 {
+                        try await Task.sleep(nanoseconds: 400_000_000)
+                        try Task.checkCancellation()
+                        if JourneyTransport.store.secondSpeechMayFinish() {
+                            JourneyTransport.store.finishedSpeech()
+                            deliver(text, true)
+                            JourneyTransport.store.deliveredSpeech()
+                            return
+                        }
+                        deliver(text + String(repeating: ".", count: revision), false)
+                    }
+                } catch { /* Real Stop/background cancels this producer. */ }
+            }
+        }
         if JourneyConfiguration.scenario == "voice-empty-results" {
             return Task { @MainActor in
                 do {
@@ -120,7 +159,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -139,6 +178,16 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         do {
+            if let response = try Self.store.beginHeldPushRegistration(request) {
+                delayedResponse = response
+                Task { @MainActor in
+                    NativePushCenter.shared.received(["hps": ["schema": "hps-push/1",
+                        "delivery_id": JourneyStore.pushDeliveryID, "kind": "question",
+                        "id": "fixture-question", "revision": 1]])
+                }
+                waitForPushObservation(deadline: ProcessInfo.processInfo.systemUptime + 8)
+                return
+            }
             // Hold only the desktop discovery response, after validating and
             // recording its actual authenticated request. The production HTTP
             // deadline or app teardown owns cancellation; no fixture retry.
@@ -165,6 +214,18 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         stopLock.lock(); defer { stopLock.unlock() }
         guard !stopped else { return true }
         return try Self.store.beginHeldDesktopList(request, id: historyID)
+    }
+    private func waitForPushObservation(deadline: TimeInterval) {
+        stopLock.lock(); let cancelled = stopped; stopLock.unlock()
+        guard !cancelled else { return }
+        if Self.store.releaseObservedPush() { complete(); return }
+        if ProcessInfo.processInfo.systemUptime >= deadline {
+            delayedResponse = (599, ["error": "fixture_push_observation_timeout"]); complete(); return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.waitForPushObservation(deadline: deadline) }
+        stopLock.lock(); delayed = work; let stoppedBeforeSchedule = stopped; stopLock.unlock()
+        if stoppedBeforeSchedule { work.cancel(); return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05, execute: work)
     }
     private func waitForCancelAcknowledgement(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
@@ -264,6 +325,7 @@ private struct JourneySnapshot: Codable {
     var approvalDecisionChoice: String?
 }
 private final class JourneyStore: @unchecked Sendable {
+    static let pushDeliveryID = "11111111-1111-4111-8111-111111111111"
     private let lock = NSLock()
     private let defaults = UserDefaults.standard
     private let key = "native-journey-server-" + JourneyConfiguration.namespace
@@ -281,6 +343,12 @@ private final class JourneyStore: @unchecked Sendable {
     private var historyBarrierTimeouts = 0
     private var historyBarrierCompletions = 0
     private var historyBarrierCancellations = 0
+    private var automaticSynchronization = false
+    private var periodicHistoryHolds = 0
+    private var secondSpeechReleaseRequests = 0
+    private var secondSpeechDelivered = false
+    private var pushEvents: [String] = []
+    private var pushInstallation: String?
     init() {
         let key = "native-journey-server-" + JourneyConfiguration.namespace
         value = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(JourneySnapshot.self, from: $0) } ?? JourneySnapshot()
@@ -327,10 +395,35 @@ private final class JourneyStore: @unchecked Sendable {
             "history_barrier_timeouts": historyBarrierTimeouts,
             "history_barrier_completions": historyBarrierCompletions,
             "history_barrier_cancellations": historyBarrierCancellations,
+            "history_sync_automatic": automaticSynchronization,
+            "periodic_history_holds": periodicHistoryHolds,
+            "active_history_reads": activeHistoryReads.count,
+            "second_speech_release_requests": secondSpeechReleaseRequests,
             "logout_requests": value.paths.filter { $0 == "POST /v1/auth/logout" }.count,
             "logout_during_history": logoutDuringHistory,
+            "push_events": pushEvents,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+    }
+    func beginHeldPushRegistration(_ request: URLRequest) throws -> (Int, [String: Any])? {
+        guard JourneyConfiguration.scenario == "push-registration-held", request.httpMethod == "PUT",
+              request.url?.path.hasPrefix("/v1/me/push-devices/") == true else { return nil }
+        let response = try respond(request)
+        guard response.0 == 200 else { throw URLError(.badServerResponse) }
+        lock.lock(); defer { lock.unlock() }
+        pushEvents.append("registration-held")
+        return response
+    }
+    func observePendingPush(busy: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        guard pushEvents == ["registration-held"], busy else { return }
+        pushEvents.append("notification-observed-busy")
+    }
+    func releaseObservedPush() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard pushEvents == ["registration-held", "notification-observed-busy"] else { return false }
+        pushEvents.append("registration-released")
+        return true
     }
     func beginHeldResponse(_ request: URLRequest) throws -> Bool {
         guard JourneyConfiguration.scenario.hasPrefix("response-stop"), request.httpMethod == "POST",
@@ -375,14 +468,31 @@ private final class JourneyStore: @unchecked Sendable {
         value.historyReads += 1
         let queuedVoice = JourneyConfiguration.scenario == "queued-voice" && value.historyReads == 2
         let logout = JourneyConfiguration.scenario == "logout-sync" && historyArmed
-        guard queuedVoice || logout else { return false }
+        let periodicVoice = JourneyConfiguration.scenario == "voice-periodic-poll"
+            && automaticSynchronization && value.accepted.count == 1
+            && value.speechCaptures == 2 && periodicHistoryHolds == 0
+        guard queuedVoice || logout || periodicVoice else { return false }
         if logout { historyArmed = false; historyReleased = false }
+        if periodicVoice { periodicHistoryHolds += 1 }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
     }
     func historyMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
+        if JourneyConfiguration.scenario == "voice-periodic-poll" { return secondSpeechDelivered }
         return JourneyConfiguration.scenario == "logout-sync" ? historyReleased : speechDelivered
+    }
+    func synchronizationStarted(automatic: Bool) {
+        lock.lock(); defer { lock.unlock() }; automaticSynchronization = automatic
+    }
+    func finishSecondSpeech() {
+        lock.lock(); defer { lock.unlock() }
+        guard JourneyConfiguration.scenario == "voice-periodic-poll", automaticSynchronization,
+              !activeHistoryReads.isEmpty, value.speechCaptures == 2, value.accepted.count == 1 else { return }
+        secondSpeechReleaseRequests += 1
+    }
+    func secondSpeechMayFinish() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return secondSpeechReleaseRequests == 1
     }
     func armHistory() {
         lock.lock(); defer { lock.unlock() }; historyArmed = true
@@ -410,6 +520,9 @@ private final class JourneyStore: @unchecked Sendable {
         // Release only after the real voice callback has synchronously queued
         // its durable send. UI automation latency cannot outrun a fixed delay.
         lock.lock(); defer { lock.unlock() }; speechDelivered = true
+        if JourneyConfiguration.scenario == "voice-periodic-poll", value.speechCaptures == 2 {
+            secondSpeechDelivered = true
+        }
     }
     func callback(_ url: URL) throws -> URL {
         lock.lock(); defer { save(); lock.unlock() }
@@ -543,6 +656,26 @@ private final class JourneyStore: @unchecked Sendable {
         default: break
         }
         guard request.value(forHTTPHeaderField: "Authorization") == "Bearer " + accessToken else { return (401, ["error": "account_required"]) }
+        if JourneyConfiguration.scenario == "push-registration-held", path.hasPrefix("/v1/me/push-devices/") {
+            let parts = path.split(separator: "/")
+            guard parts.count >= 4, UUID(uuidString: String(parts[3]))?.uuidString.lowercased() == String(parts[3]) else { return (400, ["error": "invalid_fixture_installation"]) }
+            let installation = String(parts[3])
+            if method == "PUT", parts.count == 4, pushInstallation == nil,
+               Set(body.keys) == Set(["schema", "platform", "token", "permission"]),
+               body["schema"] as? String == "hps-push-device/1", body["platform"] as? String == "ios",
+               body["token"] as? String == String(repeating: "d", count: 64), body["permission"] as? String == "granted" {
+                pushInstallation = installation
+                return (200, ["schema": "hps-push-device/1", "id": installation, "active": true, "generation": 1])
+            }
+            if method == "POST", parts.count == 5, parts[4] == "opened", pushInstallation == installation,
+               Set(body.keys) == Set(["schema", "delivery_id"]), body["schema"] as? String == "hps-push-open/1",
+               body["delivery_id"] as? String == Self.pushDeliveryID,
+               pushEvents == ["registration-held", "notification-observed-busy", "registration-released"] {
+                pushEvents.append("opened")
+                return (200, ["recorded": true, "evidence_kind": "client_observed"])
+            }
+            return (409, ["error": "unexpected_fixture_push_request"])
+        }
         switch (method, path) {
         case ("GET", "/v1/me"):
             return (200, ["account": ["id": accountID, "status": "active"], "session_id": sessionID])

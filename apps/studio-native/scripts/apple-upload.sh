@@ -19,6 +19,8 @@ python3 "$control_scripts/verify-native-candidate.py" request --candidate-root "
 internal_only=$(python3 -c 'import json,sys; print("true" if json.load(open(sys.argv[1]))["distribution"]["testflight_internal_only"] else "false")' "$RUNNER_TEMP/native-upload-preflight.json")
 case "$internal_only" in true|false) ;; *) echo 'Unreadable distribution decision' >&2; exit 2 ;; esac
 export NATIVE_TESTFLIGHT_INTERNAL_ONLY="$internal_only"
+push_enabled=${HPS_IOS_PUSH_ENABLED:-false}
+case "$push_enabled" in true|false) ;; *) echo 'HPS_IOS_PUSH_ENABLED must be true or false' >&2; exit 2 ;; esac
 evidence="$PWD/../evidence/apple-$platform"
 mkdir -p "$evidence"
 git rev-parse HEAD > "$evidence/source.txt"
@@ -79,6 +81,10 @@ profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$private/profile.plist"
 profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$private/profile.plist")
 profile_team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$private/profile.plist")
 test "$profile_team" = "$APPLE_DEVELOPER_TEAM_ID"
+python3 "$control_scripts/apple-push-config.py" prepare --platform "$platform" \
+  --enabled "$push_enabled" --profile "$private/profile.plist" --team "$APPLE_DEVELOPER_TEAM_ID" \
+  --template "$candidate_root/apps/studio-native/ios/App/HPStudio-Push.entitlements.example" \
+  --entitlements "$private/push.entitlements" --output "$evidence/push-configuration.json"
 if [ "$platform" = macos ]; then
   # A MAC_APP_STORE profile archives but export rejects it for Catalyst.
   # MAC_CATALYST_APP_STORE carries both iOS and macOS application identifiers.
@@ -110,17 +116,28 @@ destination='generic/platform=iOS'
 if [ "$platform" = macos ]; then destination='generic/platform=macOS,variant=Mac Catalyst'; fi
 archive="$private/HPStudio.xcarchive"
 build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+# Only these fixed settings may alter push signing. No arbitrary Xcode arguments.
+set --
+if [ "$push_enabled" = true ]; then
+  set -- CODE_SIGN_ENTITLEMENTS="$private/push.entitlements" \
+    HPS_APNS_ENVIRONMENT=production INFOPLIST_KEY_HPSPushConfigured=YES
+fi
 xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Release \
   -destination "$destination" -archivePath "$archive" -derivedDataPath "$private/DerivedData" \
   DEVELOPMENT_TEAM="$APPLE_DEVELOPER_TEAM_ID" CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$identity" PROVISIONING_PROFILE_SPECIFIER="$profile_name" \
-  CURRENT_PROJECT_VERSION="$build_number" archive > "$evidence/archive.log" 2>&1
+  CURRENT_PROJECT_VERSION="$build_number" "$@" archive > "$evidence/archive.log" 2>&1
 xcodebuild -exportArchive -archivePath "$archive" -exportOptionsPlist "$private/ExportOptions.plist" \
   -exportPath "$private/export" > "$evidence/export.log" 2>&1
 extension=ipa; upload_type=ios
 if [ "$platform" = macos ]; then extension=pkg; upload_type=macos; fi
 package=$(find "$private/export" -maxdepth 1 -name "*.$extension" -print -quit)
 test -s "$package"
+if [ "$push_enabled" = true ]; then
+  python3 "$control_scripts/apple-push-config.py" verify --platform "$platform" \
+    --profile "$private/profile.plist" --team "$APPLE_DEVELOPER_TEAM_ID" --package "$package" \
+    --private-dir "$private" --output "$evidence/push-configuration.json"
+fi
 shasum -a 256 "$package" > "$evidence/package-sha256.txt"
 printf '%s\n' "$build_number" > "$evidence/build-number.txt"
 export API_PRIVATE_KEYS_DIR="$private"
