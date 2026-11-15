@@ -38,6 +38,28 @@ public class ConversationHistoryTest {
     private File failureDirectory;
     private Throwable firstFailure;
     private final JSONArray imeObservations=new JSONArray();
+    private final JSONArray refreshObservations=new JSONArray();
+    private volatile String refreshPhase="setup";
+    private final AtomicBoolean holdTimedOut=new AtomicBoolean();
+    private final CountDownLatch holdFinished=new CountDownLatch(1);
+    private final AtomicInteger reflectionReads=new AtomicInteger();
+
+    private synchronized void observeRefresh(String phase,JSONObject details) {
+        if(refreshObservations.length()>=128)return;
+        try {refreshObservations.put(new JSONObject().put("phase",phase).put("test_phase",refreshPhase)
+            .put("elapsed_ms",SystemClock.elapsedRealtime()).put("thread",Thread.currentThread().getName()).put("details",details));}
+        catch(JSONException problem){Log.e("StudioFailureEvidence","Refresh observation failed",problem);}
+    }
+    private synchronized JSONArray refreshEvidence()throws JSONException{return new JSONArray(refreshObservations.toString());}
+    private void assertHoldHealthy(){assertFalse("controlled response released within 10 seconds",holdTimedOut.get());}
+    private void saveRefreshEvidence(){
+        try {
+            File dir=new File(context.getExternalFilesDir(null),"evidence");if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Cannot create refresh evidence directory");
+            JSONObject evidence=new JSONObject().put("test",testName.getMethodName()).put("hold_timed_out",holdTimedOut.get())
+                .put("reflection_reads",reflectionReads.get()).put("events",refreshEvidence());
+            Files.write(new File(dir,testName.getMethodName()+"-refresh.json").toPath(),evidence.toString(2).getBytes(StandardCharsets.UTF_8));
+        }catch(Exception problem){Log.e("StudioFailureEvidence","Refresh evidence write failed",problem);}
+    }
 
     // Espresso calls this before the exception unwinds into JUnit's @After.
     // TestWatcher.failed would run too late to observe the original activity.
@@ -49,7 +71,7 @@ public class ConversationHistoryTest {
             if(!failureDirectory.mkdirs())throw new java.io.IOException("Cannot create failure evidence directory");
             String message=String.valueOf(error.getMessage());
             JSONObject state=new JSONObject().put("phase","before_teardown").put("test",testName.getMethodName())
-                .put("elapsed_ms",SystemClock.elapsedRealtime()).put("error_class",error.getClass().getName())
+                .put("elapsed_ms",SystemClock.elapsedRealtime()).put("error_class",error.getClass().getName()).put("refresh_observations",refreshEvidence()).put("hold_timed_out",holdTimedOut.get())
                 .put("error_message",message.substring(0,Math.min(message.length(),4096))).put("scenario_state",app==null?"absent":app.getState().name());
             if(app!=null)try {
                 app.onActivity(activity->{try {
@@ -106,6 +128,7 @@ public class ConversationHistoryTest {
             captureFailure(error);
             ConversationHistoryTest.<RuntimeException>rethrowOriginal(error);
         });
+        QuestionActivity.testMenuObservation=details->observeRefresh("menu_"+details.optString("phase"),details);
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("history-account","history-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         reply.set(snapshot(0,79,1));ReflectionState state=new ReflectionState("history-account");state.apply(reply.get());state.draft="지켜야 하는 초안";store.save(state);
@@ -113,20 +136,37 @@ public class ConversationHistoryTest {
             NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"history-account","history-session");
             if(accountRead!=null)return accountRead;
             if(body!=null)posts.incrementAndGet();assertEquals("/me/reflection",path);
-            if(delay.compareAndSet(true,false)){entered.countDown();assertTrue("controlled response released",release.await(10,TimeUnit.SECONDS));}
+            int read=reflectionReads.incrementAndGet();observeRefresh("reflection_entered",new JSONObject().put("read",read).put("is_get",body==null));
+            if(delay.compareAndSet(true,false)){
+                observeRefresh("hold_entered",new JSONObject().put("read",read));entered.countDown();
+                try {
+                    if(!release.await(10,TimeUnit.SECONDS)){
+                        holdTimedOut.set(true);observeRefresh("hold_timed_out",new JSONObject().put("read",read));
+                        // Fail on the test thread; an AssertionError here kills the
+                        // process before Espresso can preserve the primary failure.
+                        throw new IOException("controlled response release timed out");
+                    }
+                    observeRefresh("hold_released",new JSONObject().put("read",read));
+                }finally{holdFinished.countDown();}
+            }
+            observeRefresh("reflection_returned",new JSONObject().put("read",read));
             JSONObject next=reply.get();return new NativeDeviceSignIn.Reply(200,Map.of("state",next.getJSONObject("state"),"opening",next.getString("opening"),"hint",next.getString("hint")));
         };
     }
     @After public void cleanup(){
         release.countDown();
         try {
-            if(app!=null)app.close();
+            if(app!=null)try{app.close();}catch(Throwable problem){
+                if(firstFailure==null){captureFailure(problem);ConversationHistoryTest.<RuntimeException>rethrowOriginal(problem);}
+                else firstFailure.addSuppressed(problem);
+            }
             if(failureDirectory!=null)try {
                 writeFailureJson("after-teardown.json",new JSONObject().put("phase","after_teardown")
                     .put("elapsed_ms",SystemClock.elapsedRealtime()).put("scenario_state",app==null?"absent":app.getState().name()));
             }catch(Exception problem){Log.e("StudioFailureEvidence","Teardown evidence write failed: "+problem.getClass().getName());}
         } finally {
             QuestionActivity.testTransport=null;
+            QuestionActivity.testMenuObservation=null;
             if(context!=null)Espresso.setFailureHandler(new DefaultFailureHandler(context));
         }
     }
@@ -159,7 +199,23 @@ public class ConversationHistoryTest {
         for(int i=0;i<100;i++){AtomicBoolean shown=new AtomicBoolean();app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();shown.set(insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});if(shown.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();observeIme("visible");return;}Thread.sleep(50);}
         AssertionError failure=new AssertionError("actual IME did not appear");captureFailure(failure);throw failure;
     }
-    private void refresh(){onView(withContentDescription("메뉴")).perform(click());onView(withText("대화 다시 확인")).inRoot(isDialog()).perform(click());}
+    private void refresh(){
+        refreshPhase="menu_tap";observeRefresh("menu_tap_requested",new JSONObject());
+        onView(withContentDescription("메뉴")).perform(new androidx.test.espresso.ViewAction(){
+            public org.hamcrest.Matcher<View> getConstraints(){return click().getConstraints();}
+            public String getDescription(){return "one menu click with non-consuming touch observation";}
+            public void perform(androidx.test.espresso.UiController ui,View view){
+                view.setOnTouchListener((target,event)->{
+                    try{observeRefresh("menu_touch",new JSONObject().put("action",event.getActionMasked()).put("x",event.getX()).put("y",event.getY()).put("attached",target.isAttachedToWindow()).put("window_focus",target.hasWindowFocus()).put("pressed",target.isPressed()));}catch(JSONException ignored){}
+                    return false;
+                });
+                try{click().perform(ui,view);}finally{view.setOnTouchListener(null);}
+            }
+        });
+        refreshPhase="refresh_item_tap";observeRefresh("refresh_item_tap_requested",new JSONObject());
+        onView(withText("대화 다시 확인")).inRoot(isDialog()).perform(click());
+        observeRefresh("refresh_item_tap_completed",new JSONObject());assertHoldHealthy();
+    }
     private record Reading(String text,int y){}
     private void collect(View view,List<TextView> out){if(view instanceof TextView)out.add((TextView)view);if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++)collect(((ViewGroup)view).getChildAt(i),out);}
     private Reading readingIn(View root){
@@ -176,11 +232,22 @@ public class ConversationHistoryTest {
         app.close();app=null;launch();onView(withText(words(79))).check(matches(isDisplayed()));assertEquals("지켜야 하는 초안",store.load("history-account").draft);assertEquals(0,posts.get());screenshot("android-history-reopened-latest");
     }
     @Test public void delayedRolloverKeepsEarlierReadingUntilExplicitLatest()throws Exception{
+        try {
         launch();onView(withText(words(79))).check(matches(isDisplayed()));delay.set(true);refresh();assertTrue(entered.await(5,TimeUnit.SECONDS));
+        if(InstrumentationRegistry.getArguments().getString("historyHoldTimeoutControl","false").equals("true")){
+            refreshPhase="negative_unreleased_hold";
+            assertTrue("unreleased hold worker returns before diagnostic join ends",holdFinished.await(12,TimeUnit.SECONDS));
+            assertHoldHealthy();fail("unreleased hold must fail the test");
+        }
+        refreshPhase="earlier_reading_swipes";
         onView(withContentDescription("대화 기록")).perform(swipeDown(),swipeDown(),swipeDown());Reading kept=reading();assertNotEquals(words(79),kept.text());
+        assertHoldHealthy();refreshPhase="release_rollover";
         reply.set(snapshot(2,81,2));release.countDown();ready();assertEquals(2,store.load("history-account").revision);assertEquals(80,store.load("history-account").messages.length());assertReading(kept);
         onView(withText("최신 메시지")).check(matches(isCompletelyDisplayed())).perform(click());onView(withText(words(81))).check(matches(isDisplayed()));
         reply.set(snapshot(4,83,3));refresh();ready();onView(withText(words(83))).check(matches(isDisplayed()));assertEquals("지켜야 하는 초안",store.load("history-account").draft);assertEquals(0,posts.get());screenshot("android-history-latest-follow");
+        assertHoldHealthy();
+        }catch(Throwable failure){captureFailure(failure);ConversationHistoryTest.<Exception>rethrowOriginal(failure);}
+        finally{release.countDown();observeRefresh("test_finally_release",new JSONObject());saveRefreshEvidence();}
     }
     @Test public void acknowledgedLongLocalWordsKeepTheirReadingAnchor()throws Exception{
         String words="길게 남겨 둔 미확인 생각을 다시 읽고 있어요.\n".repeat(60).trim();
