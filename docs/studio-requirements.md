@@ -9082,6 +9082,13 @@ CGP-LEARN-R-007) / PI#3: animated blocks start paused, play is the learner's exp
   - 멈춤 keeps the current frame. 한 단계 moves one frame, playing or not. Play stops on the last frame.
   - When motion is reduced, by the host's `workbench.reduceMotion` or the OS `prefers-reduced-motion` (`motion.ts`), 재생 is not
     offered, a running play stops on its frame, 한 단계 stays, and the tokens.css override zeroes transitions.
+  - A hidden page (another tab, a minimised window) stops play on its frame, and play does not resume by itself.
+  - Focus never drops to the page. 재생 and 멈춤 are one button whose label changes. An unavailable button stays focusable
+    (`aria-disabled`, not `disabled`) and does nothing. When reduced motion removes 재생 / 멈춤 while it has focus, focus
+    moves to 한 단계.
+  - There are no key shortcuts. This differs from stage_stepper's ←/→ on purpose: a stepper stage is a page of instructor
+    text the learner turns, while a frame is a step of motion. The three buttons are one Tab stop each, and Enter or Space
+    on a focused button already does each action.
 - **Not in this row:** an animated block type. The catalog is unchanged; the first one needs a Service catalog version and an
   owner decision on its content.
 - **Evidence.**
