@@ -38,6 +38,7 @@ REQUIRED = {
     'MENT-T01-inbox': 'testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft',
     'MENT-T02-question': 'testExplicitStartingChoiceRendersRealCardAndAnswerWithoutSharingConsent',
     'MENT-T04-consent': 'testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry',
+    'MENT-T05-push-idle': 'testNotificationReceivedDuringRegistrationOpensOnceWhenRegistrationFinishes',
 }
 CLASSES = {name: ('TeamEntryUITests' if requirement.startswith('MENT-') else 'StudioJourneyTests')
            for requirement, name in REQUIRED.items()}

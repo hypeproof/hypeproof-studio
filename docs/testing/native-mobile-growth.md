@@ -446,6 +446,14 @@ Source/parser checks are not App, installed-device, live-auth or physical-ASR PA
 | MENT-T05 | MENT-05 | Register, rotate, revoke and open a generic notice using a current account/device generation. Controlled provider calls do not count as a received device notification. |
 | MENT-T06 | MENT-06 | Pin app/source/platform evidence and check actual login, voice re-listening and approval authority before marking the affected release available/accepted. |
 
+`MENT-T05-push-idle` is a required iOS App journey. It holds the actual authenticated
+registration request, delivers a synthetic notification while registration is busy,
+and releases the response only after the view observes that pending reference.
+The question must open without a second tap, with one registration and one opened
+receipt, and no automatic question answer or conversation send. Missing or skipped
+execution blocks the native candidate. The transport and APNs notification are
+synthetic; a passing journey does not establish physical push delivery.
+
 Desktop controls: `account-cards.smoke.mjs`, `team-product-loop.smoke.mjs`,
 `account-question-entry.test.tsx`, and existing personal-reflection/member-approval host/UI controls.
 Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
