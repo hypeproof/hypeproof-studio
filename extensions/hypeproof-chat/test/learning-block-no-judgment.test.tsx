@@ -54,7 +54,9 @@ const UX = {
   retry_button: { enabled: false, show_counter: false },
 };
 /** One step per block kind, in the Service's order; the step text is the instructor's and is drawn outside the block. */
-const STEPS = MATERIAL_KINDS.map((kind, i) => ({ id: `s${i + 1}`, title: `${i + 1}단계`, instructions: "해 보기", hint: "", acceptance: "직접 확인", ui: kind }));
+// stage_stepper draws only with its required stages (CGP-LEARN-R-005); box_spacing's params default when absent.
+const PARAMS: Record<string, unknown> = { stage_stepper: { stages: [{ title: "첫 단계", sentence: "무엇이 바뀌는지 봐요." }, { title: "둘째 단계", sentence: "다시 살펴봐요." }] } };
+const STEPS = MATERIAL_KINDS.map((kind, i) => ({ id: `s${i + 1}`, title: `${i + 1}단계`, instructions: "해 보기", hint: "", acceptance: "직접 확인", ui: kind, ...(PARAMS[kind] ? { ui_version: 1, ui_params: PARAMS[kind] } : {}) }));
 const LESSON = {
   course_id: "c1", version: "m2026.10.28-1", sha256: "a".repeat(64),
   content: { schema: "hps-session-design/1", title: "자료 수업", audience: "초등", duration_minutes: 40, objective: "목표", prerequisites: "", starter: "", steps: STEPS },
