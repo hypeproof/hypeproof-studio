@@ -45,7 +45,7 @@ final class AccountPushTests: XCTestCase {
         var account: MemberApprovalIdentity? = .init(accountID: "A", sessionID: "session-A"), bytes: Data?, fail = false, calls: [String] = []
         let load: () throws -> AccountPushPreference = { if let bytes { return try JSONDecoder().decode(AccountPushPreference.self, from: bytes) }; return .init() }
         let make: () -> AccountPushController = { AccountPushController(identity: { account }, load: load, save: { if fail { throw CocoaError(.fileWriteOutOfSpace) }; bytes = try JSONEncoder().encode($0) }, call: { _, method, id, _ in calls.append(method + " " + id); throw URLError(.networkConnectionLost) }, changed: { _ in }) }
-        var controller = make(); await controller.register(String(repeating: "ab", count: 32)); XCTAssertTrue(calls.isEmpty())
+        var controller = make(); await controller.register(String(repeating: "ab", count: 32)); XCTAssertTrue(calls.isEmpty)
         fail = true; XCTAssertFalse(controller.enable()); fail = false; XCTAssertTrue(controller.enable()); let id = try load().installation
         await controller.register(String(repeating: "ab", count: 32)); XCTAssertFalse(controller.view.status.contains("켰어요"))
         controller = make(); await controller.register(String(repeating: "cd", count: 32)); XCTAssertEqual(calls, ["PUT " + id, "PUT " + id]); XCTAssertFalse(String(data: bytes!, encoding: .utf8)!.contains("token"))

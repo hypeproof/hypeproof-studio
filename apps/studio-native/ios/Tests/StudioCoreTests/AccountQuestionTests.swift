@@ -60,7 +60,7 @@ final class AccountQuestionTests: XCTestCase {
         }, load: { _ in try await service.accountQuestion("fixture-access") }, act: { _, key, action, body in
             try await service.accountQuestionAction(key, action: action, body: body, token: "fixture-access")
         }, startingAvailable: { _ in true }, changed: { _ in })
-        await controller.refresh(); XCTAssertEqual(controller.view.card?.prompt, "어디에서 막혔나요?"); XCTAssertTrue(posts.isEmpty())
+        await controller.refresh(); XCTAssertEqual(controller.view.card?.prompt, "어디에서 막혔나요?"); XCTAssertTrue(posts.isEmpty)
         await controller.presented("growth:choice-a"); await controller.presented("growth:choice-a")
         XCTAssertEqual(posts.count, 1); XCTAssertTrue(posts[0].0.hasSuffix("/shown"))
         controller.pick("method"); controller.edit("직접 쓴 답"); XCTAssertEqual(posts.count, 1)
