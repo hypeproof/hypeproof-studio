@@ -1224,10 +1224,57 @@ final class StudioSignInBoundaryTests: XCTestCase {
         // The system asks once before sharing sign-in state with the website.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let consent = springboard.alerts.buttons["Continue"]
-        if consent.waitForExistence(timeout: 30) { consent.tap() }
+        let consentStarted = ProcessInfo.processInfo.systemUptime
+        let consentDeadline = consentStarted + 30
+        var sawConsent = false
+        var stableFrame: CGRect?
+        var stableSince: TimeInterval?
+        var observations: [String] = []
+        let ready = NSPredicate { _, _ in
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now < consentDeadline else { return false }
+            let exists = consent.exists
+            sawConsent = sawConsent || exists
+            let enabled = exists && consent.isEnabled
+            let hittable = enabled && consent.isHittable
+            let frame = exists ? consent.frame : .zero
+            let window = app.windows.firstMatch.frame
+            let inWindow = !frame.isEmpty && !frame.isInfinite && !frame.isNull
+                && !window.isEmpty && window.contains(frame)
+            let sampledAt = ProcessInfo.processInfo.systemUptime
+            if observations.count < 32 {
+                observations.append("elapsed=\(sampledAt - consentStarted) exists=\(exists) enabled=\(enabled) hittable=\(hittable) frame=\(frame) window=\(window)")
+            }
+            guard sampledAt < consentDeadline, hittable, inWindow else {
+                stableFrame = nil; stableSince = nil
+                return false
+            }
+            if stableFrame != frame {
+                stableFrame = frame; stableSince = sampledAt
+                return false
+            }
+            return sampledAt - (stableSince ?? sampledAt) >= 0.25
+        }
+        let consentReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: consent)],
+                                         timeout: max(0, consentDeadline - ProcessInfo.processInfo.systemUptime))
+        let readiness = XCTAttachment(string: observations.joined(separator: "\n"))
+        readiness.name = "live-sign-in-consent-readiness"; readiness.lifetime = .keepAlways; add(readiness)
+        if sawConsent {
+            attach(consentReady == .completed ? "live-sign-in-consent-before-tap" : "live-sign-in-consent-not-ready", springboard)
+            XCTAssertEqual(consentReady, .completed, "The system consent must become enabled, hittable and stable within the original observation budget.")
+            // Diagnostics and AX reads must not reset the budget or authorize a stale frame.
+            let currentFrame = consent.frame
+            let currentReady = consent.exists && consent.isEnabled && consent.isHittable
+                && currentFrame == stableFrame && app.windows.firstMatch.frame.contains(currentFrame)
+                && ProcessInfo.processInfo.systemUptime < consentDeadline
+            if !currentReady { attach("live-sign-in-consent-changed-before-tap", springboard) }
+            XCTAssertTrue(currentReady, "The observed system consent must still be ready for the single tap.")
+            consent.tap()
+        }
         let browser = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
         let presented = browser.wait(for: .runningForeground, timeout: 60)
         attach("live-sign-in-browser", browser)
+        if !presented { attach("live-sign-in-consent-after-browser-failure", springboard) }
         XCTAssertTrue(presented, "The real system sign-in browser session must open after the live Service start.")
         let page = NSPredicate(format: "label CONTAINS[c] 'hypeproof' OR value CONTAINS[c] 'hypeproof' OR label CONTAINS[c] 'google' OR label CONTAINS[c] 'sign in' OR label CONTAINS[c] '로그인'")
         let loaded = browser.descendants(matching: .any).matching(page).firstMatch.waitForExistence(timeout: 45)
