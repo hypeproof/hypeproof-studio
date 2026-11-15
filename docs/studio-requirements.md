@@ -3618,7 +3618,10 @@ against the slice's label set (AI/Studio/올림/기록 없음 only). Cases cover
   `previewProvider.ts`; any other file fails. In those files every save callback must be inline, and everything it can
   reach must be a reviewed node: a module with no import route to provenance, a listed function with its reason, or a
   listed call. A reviewed cut, such as the preview's webview message handler, is a call that does not run on the save.
-  Anything the walk cannot resolve fails. It is a closed, reviewed graph rather than a proof over the whole program, and
+  Anything the walk cannot resolve fails, and so do: every `vscode` call that is not individually reviewed;
+  `executeCommand` always; `new` of anything but a built-in or a class from a module with no route; a function or method
+  passed as a value (`.then(fn)`, an object literal holding it); an unreviewed getter; and a reviewed name that is not
+  declared exactly once with a body. It is a closed, reviewed graph rather than a proof over the whole program, and
   planted negatives cover every case the earlier lock missed;
 - the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
 - the hash cache and skipped Python environments.
@@ -9716,9 +9719,12 @@ catches what the checks above cannot see: a shell command that builds the path a
     - A task's folder is removed when the task is archived or moved. The folder is renamed to a `.purge-…` tombstone at
       once, before the handler moves on, and only the tombstone is deleted afterwards, so a turn right after a restore
       writes into a fresh folder the late delete cannot reach. A tombstone a crash left behind is removed at the next
-      prune. If the rename is refused (EPERM/EBUSY, as on Windows with an open handle), nothing is deleted in place: the
-      task is marked (`.pending-purge-<task>`, with the purge time) and the next prune retries the rename, moves copies
-      stamped after the purge (a restored task's new turns) back, and removes the rest. Tombstones and marks are not
+      prune. If the rename is refused (EPERM/EBUSY, as on Windows with an open handle), nothing is deleted in place.
+      The task is marked (`.pending-purge-<task>`) with the exact file names it held at purge time and the tombstone name
+      to use. The next prune retries: it renames the folder to that tombstone, moves every unlisted file back (a restored
+      task's new turns, whatever their stamps), deletes only the listed names, and removes the tombstone only once it is
+      empty and then the mark. No clock is used. A crash at any step leaves the mark and the tombstone, and the next prune
+      resumes; a tombstone a mark names is never swept whole. Tombstones and marks are not
       counted in the originals cap. A host without global storage, or a seat without a memory scope, archives and moves
       as before with nothing to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move,
       refused move, the race, the tombstone sweep, a refused rename and its retry, the originals count, and the no-op

@@ -53,29 +53,91 @@ try {
     assert.ok(fs.existsSync(keep));
   });
 
-  await t('a refused rename (EPERM/EBUSY) never deletes in place: the task is marked, and the next prune retries it', async () => {
-    const base = path.join(top, 'refused'), scope = 'd'.repeat(24), dir = path.join(base, scope, 'task-5');
-    const stampAt = (ms) => new Date(ms).toISOString().replace(/[:.]/g, '-');
-    const purgedAt = Date.now() - 5_000;
-    const old = seed(dir, `${stampAt(purgedAt - 60_000)}-1-before-archive.md`, '보관 전 사본\n');
+  // ─── a refused rename (EPERM/EBUSY): marked with the exact names, retried at prune, resumable after a crash ───
+  const refused = (code = 'EPERM') => ({ rename: () => { throw Object.assign(new Error(code), { code }); } });
+  const busyRetry = { rename: async () => { throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' }); } };
+  const markOf = (scopeDir, task) => JSON.parse(fs.readFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + task), 'utf8'));
+  const stampAt = (ms) => new Date(ms).toISOString().replace(/[:.]/g, '-');
+
+  await t('a refused rename never deletes in place: the mark names the exact files and the tombstone; a refused retry keeps everything', async () => {
+    const base = path.join(top, 'refused'), scope = 'd'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-5');
+    const old = seed(dir, `${stampAt(Date.now() - 60_000)}-1-before-archive.md`, '보관 전 사본\n');
+    const orig = seed(dir, `${ORIGINAL_PREFIX}${stampAt(Date.now() - 60_000)}-2-k.md`, '보관 전 원본\n');
     for (const code of ['EPERM', 'EBUSY']) {
-      await purgeTaskQuarantine(base, scope, 'task-5', { rename: () => { throw Object.assign(new Error(code), { code }); }, now: () => purgedAt });
-      assert.ok(fs.existsSync(old), `${code}: nothing is deleted from the live folder`);
-      assert.ok(fs.existsSync(path.join(base, scope, PURGE_PENDING_PREFIX + 'task-5')), `${code}: the task is marked for the next prune`);
+      await purgeTaskQuarantine(base, scope, 'task-5', refused(code));
+      assert.ok(fs.existsSync(old) && fs.existsSync(orig), `${code}: nothing is deleted from the live folder`);
     }
-    // The task is restored and a new turn writes a copy; the next prune is refused again: everything stays, still marked.
-    const fresh = seed(dir, `${stampAt(Date.now())}-2-after-restore.md`, '새 턴의 사본\n');
-    await pruneQuarantine(base, Date.now(), { rename: async () => { throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' }); } });
-    assert.ok(fs.existsSync(old) && fs.existsSync(fresh), 'a refused retry deletes nothing');
-    assert.ok(fs.existsSync(path.join(base, scope, PURGE_PENDING_PREFIX + 'task-5')), 'and keeps the mark');
-    // The next prune can rename: the copy from before the purge goes, the new turn's copy comes back, the mark is gone.
+    const mark = markOf(scopeDir, 'task-5');
+    assert.deepEqual(mark.files, [path.basename(orig), path.basename(old)].sort(), 'the mark lists exactly what the folder held at purge time');
+    assert.ok(mark.tomb.startsWith(PURGE_TOMBSTONE_PREFIX) && !('at' in mark), 'and the tombstone name, with no clock in it');
+    // Restore + new turn; the next prune is refused again: everything stays, still marked.
+    const fresh = seed(dir, `${stampAt(Date.now())}-3-after-restore.md`, '새 턴의 사본\n');
+    await pruneQuarantine(base, Date.now(), busyRetry);
+    assert.ok(fs.existsSync(old) && fs.existsSync(orig) && fs.existsSync(fresh), 'a refused retry deletes nothing');
+    assert.ok(fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-5')), 'and keeps the mark');
+    // The next prune can rename: only the listed files go; the new turn's copy is back; nothing else is left.
     await pruneQuarantine(base);
-    assert.equal(fs.existsSync(old), false, 'the copy from before the purge is gone');
+    assert.ok(!fs.existsSync(old) && !fs.existsSync(orig), 'the listed files are gone');
     assert.equal(fs.readFileSync(fresh, 'utf8'), '새 턴의 사본\n', 'the restored task\'s new copy is kept');
-    assert.deepEqual(fs.readdirSync(path.join(base, scope)), ['task-5'], 'no mark and no tombstone are left');
+    assert.deepEqual(fs.readdirSync(scopeDir), ['task-5'], 'no mark and no tombstone are left');
     // ENOENT is not a refusal: nothing to purge, no mark.
     await purgeTaskQuarantine(base, scope, 'never-there');
-    assert.equal(fs.existsSync(path.join(base, scope, PURGE_PENDING_PREFIX + 'never-there')), false);
+    assert.equal(fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'never-there')), false);
+  });
+
+  await t('the clock steps back after the purge: a restored task\'s new copy stamped earlier than the purge is still kept', async () => {
+    const base = path.join(top, 'clockback'), scope = '2'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-6');
+    const old = seed(dir, `${stampAt(Date.now())}-1-before.md`, '보관 전\n');
+    await purgeTaskQuarantine(base, scope, 'task-6', refused());
+    // The clock stepped back 5 s: the new turn's copy carries an EARLIER stamp than the purge-time copy.
+    const fresh = seed(dir, `${stampAt(Date.now() - 5_000)}-2-after-restore.md`, '시계가 뒤로 간 뒤의 사본\n');
+    await pruneQuarantine(base);
+    assert.ok(!fs.existsSync(old), 'the purge-time copy goes');
+    assert.equal(fs.readFileSync(fresh, 'utf8'), '시계가 뒤로 간 뒤의 사본\n', 'the new copy stays: the decision is by name, not by time');
+  });
+
+  await t('a crash after the retry renamed the folder (before any move-back) resumes at the next prune; nothing is lost', async () => {
+    const base = path.join(top, 'crash-rename'), scope = '3'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-7');
+    const old = path.basename(seed(dir, `${stampAt(Date.now())}-1-before.md`, '보관 전\n'));
+    await purgeTaskQuarantine(base, scope, 'task-7', refused());
+    const freshName = path.basename(seed(dir, `${stampAt(Date.now())}-2-after.md`, '새 사본\n'));
+    // Simulate the crash: the retry's rename happened, nothing else did (no move-back, the mark still there).
+    const { tomb } = markOf(scopeDir, 'task-7');
+    fs.renameSync(dir, path.join(scopeDir, tomb));
+    // A prune whose rename would now get ENOENT for the task folder must NOT drop the mark and remove the tombstone whole.
+    await pruneQuarantine(base);
+    assert.equal(fs.readFileSync(path.join(dir, freshName), 'utf8'), '새 사본\n', 'the unlisted copy was moved back from the tombstone');
+    assert.ok(!fs.existsSync(path.join(dir, old)) && !fs.existsSync(path.join(scopeDir, tomb)), 'the listed copy and the tombstone are gone');
+    assert.deepEqual(fs.readdirSync(scopeDir), ['task-7'], 'the mark is gone too');
+  });
+
+  await t('a crash during the move-back resumes: what is still in the tombstone is moved back, never deleted', async () => {
+    const base = path.join(top, 'crash-move'), scope = '4'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-8');
+    const old = path.basename(seed(dir, `${stampAt(Date.now())}-1-before.md`, '보관 전\n'));
+    await purgeTaskQuarantine(base, scope, 'task-8', refused());
+    const a = path.basename(seed(dir, `${stampAt(Date.now())}-2-a.md`, '새 A\n')), b = path.basename(seed(dir, `${stampAt(Date.now())}-3-b.md`, '새 B\n'));
+    const { tomb } = markOf(scopeDir, 'task-8');
+    // The crash: renamed, then only A was moved back.
+    fs.renameSync(dir, path.join(scopeDir, tomb)); fs.mkdirSync(dir); fs.renameSync(path.join(scopeDir, tomb, a), path.join(dir, a));
+    await pruneQuarantine(base);
+    assert.equal(fs.readFileSync(path.join(dir, a), 'utf8'), '새 A\n'); assert.equal(fs.readFileSync(path.join(dir, b), 'utf8'), '새 B\n', 'B, still in the tombstone at the crash, is moved back');
+    assert.ok(!fs.existsSync(path.join(dir, old)), 'the listed copy is gone');
+    assert.deepEqual(fs.readdirSync(scopeDir), ['task-8']);
+  });
+
+  await t('a tombstone a mark names, still holding an unlisted file it cannot move back, is never removed whole', async () => {
+    const base = path.join(top, 'stuck'), scope = '5'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-9');
+    seed(dir, `${stampAt(Date.now())}-1-before.md`);
+    await purgeTaskQuarantine(base, scope, 'task-9', refused());
+    const name = path.basename(seed(dir, `${stampAt(Date.now())}-2-new.md`, '새 사본\n'));
+    const { tomb } = markOf(scopeDir, 'task-9');
+    fs.renameSync(dir, path.join(scopeDir, tomb));
+    // The same name already exists in a re-created task folder (it cannot be moved back over it).
+    seed(dir, name, '다른 바이트\n');
+    await pruneQuarantine(base); await pruneQuarantine(base);
+    assert.equal(fs.readFileSync(path.join(scopeDir, tomb, name), 'utf8'), '새 사본\n', 'the unlisted file stays in the tombstone');
+    assert.equal(fs.readFileSync(path.join(dir, name), 'utf8'), '다른 바이트\n', 'and the live file is not overwritten');
+    assert.ok(fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-9')), 'the mark is kept, so the tombstone is never swept');
   });
 
   await t('originals in a tombstone (or a marked task) are not counted against the cap', async () => {
