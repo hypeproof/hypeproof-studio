@@ -58,7 +58,7 @@ const seat = ({ profile, runtimeName = 'agent-sdk', instructor = false, script =
   const runtime = {
     connections,
     sdk: async a => {
-      sdkCalls.push({ userText: a.userText, memoryContext: a.memoryContext, history: a.history });
+      sdkCalls.push({ userText: a.userText, memoryContext: a.memoryContext, history: a.history, ephemeralSession: a.ephemeralSession === true });
       for (const [name, isError] of script(turns++)) {
         const id = `toolu_${++toolSeq}`;
         a.onActivity?.({ kind: 'tool_use', id, name, input: { command: 'npm test' } });
@@ -136,6 +136,8 @@ try {
       assert.equal(calls.length, 5, `control: every turn reached the runtime (${run.sdkCalls.length} sdk, ${run.proxyCalls.length} proxy)`);
       assert.deepEqual(calls.map(carries), [false, false, false, true, false], `the fourth request only (retries in a turn count once); tool lines: ${JSON.stringify(run.posts.filter(m => m.type === 'toolLog').map(m => [m.entry?.label, m.entry?.state]).slice(0, 8))}`);
       const fourth = calls[3];
+      // verify-4219: on agent-sdk the hint turn runs as an ephemeral session, so the line never lands in the CLI's session file.
+      if (!minor) assert.deepEqual(calls.map(c => c.ephemeralSession), [false, false, false, true, false], 'only the hint turn is ephemeral (no memory or temporary task here)');
       assert.ok(!fourth.userText.includes('[관찰]'), "never in the learner's text (the Service records the last user message)");
       assert.ok(!ctx(fourth).includes('Exit code') && !ctx(fourth).includes('learner-name') && !ctx(fourth).includes('npm test'), 'a count only: no error text, path or command');
       const saved = JSON.stringify(run.history) + JSON.stringify(run.spooled) + JSON.stringify(run.posts);

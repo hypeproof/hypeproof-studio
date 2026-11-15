@@ -158,6 +158,22 @@ function convRig(devices) {
   const gone = convRig({ value: [B] });
   gone.loop.start(); await gone.flush();
   assert.deepEqual([gone.calls.length, gone.loop.state.phase, gone.loop.state.note], [0, 'stopped', CONVERSATION_MIC_MISSING], 'a missing microphone stops the conversation with its line, never the default');
+  // verify-4197: the stop offers 기본 마이크로 녹음, as dictation does; one press restarts this session with the default.
+  assert.equal(gone.loop.state.recovery, 'use_default', 'the stop carries its one recovery action');
+  gone.loop.start({ useDefault: true }); await gone.flush();
+  assert.deepEqual(gone.calls, [{ audio: true }], 'the default microphone, once pressed');
+  assert.notEqual(gone.loop.state.phase, 'stopped', 'the conversation runs');
+  assert.equal(gone.loop.state.recovery, undefined, 'the action is gone while it runs');
+  await gone.tick(1000); gone.end(); await gone.flush();
+  gone.loop.host({ type: 'voiceTranscribeResult', requestId: gone.clips[0].id, ok: true, text: '대답' });
+  gone.loop.host({ type: 'streamStart', streamId: 's1', messageId: 'a1', userMessageId: 'u1' });
+  gone.loop.host({ type: 'streamChunk', streamId: 's1', delta: '좋아요.' });
+  gone.loop.host({ type: 'streamEnd', streamId: 's1' });
+  gone.utterances.at(-1).onend(); await gone.tick(0); await gone.flush();
+  assert.deepEqual(gone.calls, [{ audio: true }, { audio: true }], 'every turn of that session uses the default');
+  gone.loop.stop();
+  gone.loop.start(); await gone.flush();
+  assert.deepEqual([gone.calls.length, gone.loop.state.recovery], [2, 'use_default'], 'a new ordinary start asks again: the stored choice is kept');
 }
 
 // ---- the host ----
@@ -171,7 +187,11 @@ assert.match(body, /globalState\.update\(MIC_INPUT_KEY, next \?\? undefined\)/, 
 assert.match(body, /postConfig\(\)/, 'the chat gets the new choice');
 assert.doesNotMatch(body, /console\.|log\(|telemetry|report|fetch|serviceFetch/i, 'never logged, reported or sent');
 assert.match(src, /\.\.\.\(micInput \? \{ micInput \} : \{\}\)/, 'the config carries it only when set (unchanged config otherwise)');
-assert.doesNotMatch(src, /setKeysForSync\([^)]*MIC_INPUT_KEY/, 'never synced between computers');
+// verify-4197: the guard also catches optional calls (setKeysForSync?.(…)) and spacing.
+const SYNC = /setKeysForSync\s*(\?\.)?\s*\([^)]*(MIC_INPUT_KEY|micInput)/;
+assert.match('this.context.globalState.setKeysForSync?.([MIC_INPUT_KEY])', SYNC, 'control: the guard sees an optional call');
+assert.match('globalState.setKeysForSync ( ["hypeproofChat.micInput"] )', SYNC, 'control: and spacing and the literal key');
+assert.doesNotMatch(src, SYNC, 'never synced between computers');
 assert.equal(MIC_INPUT_KEY, 'hypeproofChat.micInput');
 for (const f of ['problemReport.ts', 'problemReportHost.ts', 'reportProblem.ts', 'reportProblemHelpers.ts', 'studioDoctorHost.ts', 'voiceHost.ts']) {
   let text = '';
