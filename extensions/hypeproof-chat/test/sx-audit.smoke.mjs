@@ -249,6 +249,9 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
     ["확인함 12", "bare_number"],
     // The stage position is allowed only with 단계: the bare ratio is still a number with no explanation.
     ["진행 2 / 4", "bare_number"],
+    // …and a number next to 단계 still cannot carry a score (the allowance needs exactly "N / M 단계").
+    ["단계 점수 3 / 5", "bare_number"],
+    ["3 / 5점", "points"],
   ];
   for (const [sample, rule] of negatives) {
     const r = auditRegionText(sample, { region: "work" });
