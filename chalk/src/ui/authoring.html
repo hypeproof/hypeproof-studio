@@ -284,13 +284,13 @@ function changed(){dirty=true;$('completion').textContent='';controls();}
 function discard(){return !dirty||confirm('저장하지 않은 편집을 바꿀까요? 필요한 내용은 먼저 내보내세요.');}
 function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!globalThis.chalkConnection?.current?.connected)throw Error('위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
 function step(data={id:'step-'+crypto.randomUUID().slice(0,8),title:'',instructions:'',hint:'',acceptance:''}){const f=document.createElement('fieldset');f.className='step';for(const [key,label] of Object.entries({id:'단계 ID',title:'단계 제목',instructions:'안내·실습',hint:'힌트',acceptance:'완료 기준'})){const l=document.createElement('label');l.textContent=label;const e=document.createElement(key==='id'||key==='title'?'input':'textarea');e.dataset.field=key;e.value=data[key]??'';l.append(e);if(key==='id')l.hidden=true;f.append(l);}stepTeaching(f,data);for(const [label,action] of [['위로',()=>f.previousElementSibling?.before(f)],['아래로',()=>f.nextElementSibling?.after(f)],['삭제',()=>f.remove()]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();changed();};f.append(b);}$('steps').append(f);}
-function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));const s={...carriedStep.get(own.id),...own,...stepTeachingValue(f)};if((s.ui??'')!==(f.dataset.uiOrig??'')){delete s.ui_version;delete s.ui_params;}return s;}),...assistantValue(name),...startersField(),...skillCardsField(),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...(lessonApprovalPreset?{approval_preset:lessonApprovalPreset}:{}),...learningValue()};}
+function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));const s={...carriedStep.get(own.id),...own,...stepTeachingValue(f)};if((s.ui??'')!==(f.dataset.uiOrig??'')){delete s.ui_version;delete s.ui_params;}return Object.assign(s,blockParamsValue(f));}),...assistantValue(name),...startersField(),...skillCardsField(),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...(lessonApprovalPreset?{approval_preset:lessonApprovalPreset}:{}),...learningValue()};}
 function carry(c){carriedTop=Object.fromEntries(Object.entries(c).filter(([k])=>!formKeys.includes(k)));carriedStep=new Map((c.steps||[]).map(s=>[s.id,Object.fromEntries(Object.entries(s).filter(([k])=>!stepFormKeys.includes(k)))]));}
 function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();lessonApprovalPreset=typeof c.approval_preset==='string'&&c.approval_preset?c.approval_preset:undefined;renderApproval();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';$('assistant_role').value=typeof c.assistant?.role==='string'?c.assistant.role:'';lessonTone=typeof c.assistant?.tone==='string'&&c.assistant.tone?c.assistant.tone:undefined;renderTone();setStarters(c.starters);styleSync();renderSkillRows();setSkillCards(c.skill_cards);skillSync();setLinkBaseline(c);renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
 async function call(path,method='GET',body,draftSave=false){let r,j;
 try{r=await fetch(path,{method,redirect:'error',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});j=await r.json();}
 catch(e){if(draftSave)throw Error('저장 결과를 확인하지 못했습니다. 입력한 내용은 이 화면에 남아 있습니다. 내용을 바꾸지 말고 ‘초안 저장’을 다시 눌러 주세요.');throw e;}
-if(!r.ok){const detail=typeof j.error==='string'?j.error:j.error?.type==='validation'&&typeof j.error.message==='string'?j.error.message:JSON.stringify(j.error||j);const learningHint=r.status===400&&/learning/.test(detail)?' — 미션·주차·완료 조건을 확인하세요(점수·등급은 넣을 수 없습니다). 편집은 보존됐습니다.':'';const approvalHint=r.status===400&&/approval_preset/.test(detail)?' — 이 수업의 AI가 묻는 방식은 지금 고를 수 없는 값입니다. ‘AI가 묻는 방식’에서 다른 방식이나 기본을 고른 뒤 저장하세요. 편집은 보존됐습니다.':'';const nameHint=r.status===400&&detail==='invalid session-design fields'&&$('assistant_name').value.trim()?' — 이 Service 버전은 수업별 AI 이름을 아직 받지 않습니다. 이름을 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':'';const styleUsed=!!($('assistant_role').value.trim()||lessonTone||[...document.querySelectorAll('.ai-starter')].some(e=>e.value.trim()));const styleOld=r.status===400&&styleUsed&&/^invalid (session-design|assistant) fields$/.test(detail);const styleHint=styleOld?' — 이 Service 버전은 AI 역할·말투·시작 문장을 아직 받지 않습니다. 세 가지를 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':r.status===400&&/assistant[.]role/.test(detail)?' — AI 역할을 확인하세요(한 줄, 80자 이내, 보이지 않는 문자·줄바꿈 불가). 편집은 보존됐습니다.':r.status===400&&/assistant[.]tone/.test(detail)?' — 이 수업의 AI 말투는 지금 고를 수 없는 값입니다. ‘AI 말투’에서 다른 말투나 코호트 기본을 고른 뒤 저장하세요. 편집은 보존됐습니다.':r.status===400&&/starters/.test(detail)?' — 시작 문장을 확인하세요(최대 4개, 한 줄 80자 이내, 같은 문장 중복 불가, 빈 칸은 저장되지 않습니다). 편집은 보존됐습니다.':'';const skillHint=r.status===400?skillCardHint(detail):'';throw Object.assign(Error(`HTTP ${r.status}: ${detail}`+(r.status===409?' — 편집은 보존됐습니다. 내보낸 뒤 저장본을 다시 열어 비교하세요.':'')+learningHint+approvalHint+(styleOld?'':nameHint)+styleHint+skillHint),{status:r.status,data:j});}return j;}
+if(!r.ok){const detail=typeof j.error==='string'?j.error:j.error?.type==='validation'&&typeof j.error.message==='string'?j.error.message:JSON.stringify(j.error||j);const learningHint=r.status===400&&/learning/.test(detail)?' — 미션·주차·완료 조건을 확인하세요(점수·등급은 넣을 수 없습니다). 편집은 보존됐습니다.':'';const approvalHint=r.status===400&&/approval_preset/.test(detail)?' — 이 수업의 AI가 묻는 방식은 지금 고를 수 없는 값입니다. ‘AI가 묻는 방식’에서 다른 방식이나 기본을 고른 뒤 저장하세요. 편집은 보존됐습니다.':'';const nameHint=r.status===400&&detail==='invalid session-design fields'&&$('assistant_name').value.trim()?' — 이 Service 버전은 수업별 AI 이름을 아직 받지 않습니다. 이름을 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':'';const styleUsed=!!($('assistant_role').value.trim()||lessonTone||[...document.querySelectorAll('.ai-starter')].some(e=>e.value.trim()));const styleOld=r.status===400&&styleUsed&&/^invalid (session-design|assistant) fields$/.test(detail);const styleHint=styleOld?' — 이 Service 버전은 AI 역할·말투·시작 문장을 아직 받지 않습니다. 세 가지를 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':r.status===400&&/assistant[.]role/.test(detail)?' — AI 역할을 확인하세요(한 줄, 80자 이내, 보이지 않는 문자·줄바꿈 불가). 편집은 보존됐습니다.':r.status===400&&/assistant[.]tone/.test(detail)?' — 이 수업의 AI 말투는 지금 고를 수 없는 값입니다. ‘AI 말투’에서 다른 말투나 코호트 기본을 고른 뒤 저장하세요. 편집은 보존됐습니다.':r.status===400&&/starters/.test(detail)?' — 시작 문장을 확인하세요(최대 4개, 한 줄 80자 이내, 같은 문장 중복 불가, 빈 칸은 저장되지 않습니다). 편집은 보존됐습니다.':'';const skillHint=r.status===400?skillCardHint(detail):'';const stepUi=r.status===400?stepUiError(j):null;throw Object.assign(Error(`HTTP ${r.status}: ${detail}`+(r.status===409?' — 편집은 보존됐습니다. 내보낸 뒤 저장본을 다시 열어 비교하세요.':'')+learningHint+approvalHint+(styleOld?'':nameHint)+styleHint+skillHint+(stepUi?.hint??'')),{status:r.status,data:j,...(stepUi?{field:stepUi.el}:{})});}return j;}
 // CGP-AGENT-R-020 — a Service refusal of a skill card names the card and the field in Korean.
 function skillCardHint(detail){const m=/skill_cards(?:\[(\d+)\](?:\.(name|summary|prompt))?)?/.exec(String(detail));if(!m)return '';const no=m[1]===undefined?'':' '+(Number(m[1])+1)+'번',field={name:'이름',summary:'한 줄 설명',prompt:'시작 프롬프트'}[m[2]]??'';const why=/link/.test(detail)?'링크(https:// 등)는 넣을 수 없습니다':/at most \d+ lines/.test(detail)?'줄 수가 너무 많습니다':/at most \d+ characters/.test(detail)?'글자 수가 너무 많습니다':/duplicates/.test(detail)?'앞의 카드와 이름이 같습니다':/at most \d+ items/.test(detail)?'카드는 최대 6개입니다':'한 줄로, 보이지 않는 문자 없이 적어 주세요';return ' — 학생 스킬 카드'+no+(field?'의 '+field:'')+'을(를) 확인하세요: '+why+'. 편집은 보존됐습니다.';}
 // The page lock disables the editor, which drops focus; a check that names a field hands it back once the lock is released.
@@ -301,7 +301,7 @@ $('copy-student').onclick=()=>window.chalkCopyFeedback($('copy-student'),()=>$('
 $('clear-student').onclick=()=>{window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('delivery-status').textContent='화면에서 지웠습니다. 이미 발급한 코드의 권한은 만료까지 유지됩니다.';};
 globalThis.chalkConnection?.onChange(c=>{if(!c.connected)clearConnection();});
 $('editor').oninput=changed;
-for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';renderApproval();renderTone();controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
+for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';renderApproval();renderTone();blockSurfaces();controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
 $('forget').onclick=()=>{clearConnection();status('수업 설정을 비웠습니다. 편집 내용은 남아 있습니다.');};
 $('new').onclick=()=>run(async()=>{if(!$('cohort').value||!$('profile').value)throw Error('먼저 수업 설정을 선택하세요.');if(!discard())return;$('course').value='course-'+crypto.randomUUID();$('version').value='';clearReadiness();$('completion').textContent='';scope();render({steps:[]});const filled=frPrefill();step();revision=0;bound=identity();pending=null;dirty=true;status(filled?'새 강의 — 기본 대상으로 ‘대상’과 ‘대상 단계’를 채웠습니다. 이 강의에 맞게 고치고 저장하세요.':'새 강의 — 커리큘럼을 작성하고 저장하세요.');$('title').focus();});
 $('import').onchange=()=>run(async()=>{const f=$('import').files[0];if(!f)return;if(f.size>1024*1024)throw Error('파일은 1 MiB 이하여야 합니다.');const j=JSON.parse(await f.text());const items=j.schema==='hps-authoring-batch/1'?j.courses:[j];if(!Array.isArray(items)||!items.length||items.some(x=>!x.course_id||x.content?.schema!=='hps-session-design/1'||!Array.isArray(x.content.steps)))throw Error('지원하는 강의 초안 파일이 아닙니다.');batch=items;$('courses').replaceChildren(new Option('가져올 강의를 선택하세요',''),...items.map((c,i)=>new Option(c.content.title,String(i))));status('강의를 선택한 뒤 편집하고 저장하세요.');});
@@ -521,7 +521,7 @@ const skillCardsLine=a=>Array.isArray(a)&&a.length?a.map((c,i)=>(i+1)+'. '+(c?.n
 $('skill-cards-list').addEventListener('input',e=>{e.target?.removeAttribute?.('aria-invalid');skillSync();});
 renderSkillRows();skillSync();
 renderTone();
-$('features-load').onclick=()=>run(async()=>{const catalog=await call(scope()+'/features/'+encodeURIComponent($('profile').value.trim()));featureCatalogue=catalog;featureCatalogueScope=identity();renderFeatures();renderApproval();renderTone();renderSkillRows();skillSync();$('features-status').textContent='이 코호트가 가진 기능 '+catalog.choices.length+'개 · 고른 기능만 남고 나머지는 이 수업에서 꺼집니다. 새 권한은 생기지 않습니다.';});
+$('features-load').onclick=()=>run(async()=>{const catalog=await call(scope()+'/features/'+encodeURIComponent($('profile').value.trim()));featureCatalogue=catalog;featureCatalogueScope=identity();renderFeatures();renderApproval();blockSurfaces();renderTone();renderSkillRows();skillSync();$('features-status').textContent='이 코호트가 가진 기능 '+catalog.choices.length+'개 · 고른 기능만 남고 나머지는 이 수업에서 꺼집니다. 새 권한은 생기지 않습니다.';});
 $('add').onclick=()=>{step();changed();};
 async function saveDraft(expected=revision){if(bound!==identity()||revision===null)throw Error('먼저 초안을 선택하세요.');learningCheck();styleCheck();skillCheck();const path=scope();const b={expected_revision:expected,profile_id:$('profile').value.trim(),content:content()};const signature=JSON.stringify([path,b]);if(pending?.signature!==signature)pending={signature,id:crypto.randomUUID()};const d=await call(path,'PUT',{...b,request_id:pending.id},true);revision=d.revision;dirty=false;pending=null;$('version').value='';$('completion').textContent='';status('저장했습니다. revision '+revision);if(candidateVersion)await loadReadiness();assistProbe();}
 $('editor').onsubmit=e=>{e.preventDefault();run(()=>saveDraft());};
@@ -731,6 +731,83 @@ frSummary();if(!frRead())frShow();
 // kinds this Studio draws. An existing value the form does not offer is kept as it is and named, never dropped or faked.
 const HELP_LABELS={demonstrate:'시연 보기',hint:'힌트 받기',co_edit:'함께 수정',independent:'직접 해보기'};
 const SURFACES={'':'대화로 진행 (기본)',criterion_form:'확인 기준 적기 양식',decision_form:'결정과 이유 적기 양식'};
+// CGP-LEARN-R-005 / CGP-LEARN-R-006 — the two blocks an instructor sets up: box_spacing (the preset it starts from) and
+// stage_stepper (the stages the learner steps through). They are offered only when the Service's served step-ui catalog
+// (the features read) lists them in a shape this page can edit: before that read, or on a Service without them, a save
+// would be refused. A learner on an older Studio sees Studio's "not supported yet" notice, so the choice says so.
+const BLOCK_SURFACES={box_spacing:'상자 여백 탐색',stage_stepper:'단계 넘겨 보기'};
+const BLOCK_OPTION_NOTE=' — 학생 Studio 최신 버전 필요';
+const BLOCK_NOTE='학생 Studio를 최신으로 업데이트해야 보여요. 좌석별 Studio 버전은 ‘수업 운영’ 화면의 버전 칸(‘업데이트 필요’ 표시)에서 확인할 수 있어요.';
+const ownOf=(o,k)=>o&&typeof o==='object'&&Object.prototype.hasOwnProperty.call(o,k)?o[k]:undefined;// own keys only
+const surfaceLabel=u=>Object.prototype.hasOwnProperty.call(SURFACES,u)?SURFACES[u]:Object.prototype.hasOwnProperty.call(BLOCK_SURFACES,u)?BLOCK_SURFACES[u]:null;
+function blockSpec(kind,version){
+ if(!Object.prototype.hasOwnProperty.call(BLOCK_SURFACES,kind)||featureCatalogueScope!==identity())return null;
+ const t=ownOf(featureCatalogue?.step_ui_catalog?.types,kind),vs=t?Object.keys(t.versions||{}).map(Number).filter(Number.isSafeInteger):[];
+ const v=Number.isSafeInteger(version)?version:vs.length?Math.max(...vs):null,spec=v===null?undefined:ownOf(t?.versions,String(v));
+ if(!spec||typeof spec!=='object')return null;
+ if(kind==='box_spacing'){const presets=Object.entries(spec.presets||{}).filter(([,x])=>typeof x?.label==='string'&&x.label&&x.params&&typeof x.params==='object'&&!Array.isArray(x.params));return presets.length?{kind,version:v,presets}:null;}
+ const st=ownOf(spec.params,'stages'),ti=ownOf(st?.fields,'title'),se=ownOf(st?.fields,'sentence'),ok=n=>Number.isSafeInteger(n)&&n>0;
+ return st?.kind==='text_list'&&ok(st.minItems)&&ok(st.maxItems)&&st.maxItems>=st.minItems&&ok(ti?.maxLength)&&ok(se?.maxLength)&&Object.keys(st.fields).length===2?{kind,version:v,min:st.minItems,max:st.maxItems,title:ti.maxLength,sentence:se.maxLength}:null;
+}
+// The work-surface choices for one step: the fixed kinds, then each block the catalog serves. A stored value the list does
+// not offer is kept and named, never dropped.
+function fillSurfaces(f,want){const us=f.querySelector('[data-ui]'),read=featureCatalogueScope===identity()&&!!featureCatalogue;
+ const opts=Object.entries(SURFACES).map(([v,t])=>new Option(t,v));
+ for(const [v,t] of Object.entries(BLOCK_SURFACES))if(blockSpec(v))opts.push(new Option(t+BLOCK_OPTION_NOTE,v));
+ if(want&&!opts.some(o=>o.value===want))opts.push(new Option(Object.prototype.hasOwnProperty.call(BLOCK_SURFACES,want)?'저장된 값 유지: '+BLOCK_SURFACES[want]+(read?' (이 Service에서 아직 고칠 수 없음)':' (‘수업 기능 목록 불러오기’ 뒤에 고칠 수 있음)'):'지원 전 값 유지: '+want+' (Studio에서 아직 열 수 없음)',want));
+ us.replaceChildren(...opts);us.value=want||'';}
+// The settings editor under the choice. It is rebuilt only when the type (or its version) changes, and what was typed for a
+// type being left is kept on the step, so switching back does not lose it.
+function blockEditor(f){const box=f.querySelector('[data-ui-params]');if(!box)return;
+ const ui=f.querySelector('[data-ui]').value,carried=carriedStep.get(f.querySelector('[data-field=id]')?.value)||{},same=(f.dataset.uiOrig??'')===ui;
+ const spec=blockSpec(ui,same?carried.ui_version:undefined),key=spec?ui+'@'+spec.version:'';
+ f.querySelector('[data-block-note]').hidden=!spec;
+ if(box.dataset.editor===key)return;
+ if(box._spec)(f._blockDraft||(f._blockDraft={}))[box._spec.kind]=blockParamsRead(box);
+ box.dataset.editor=key;box._spec=spec;box.replaceChildren();box.hidden=!spec;if(!spec)return;
+ const start=f._blockDraft?.[ui]??(same&&carried.ui_params&&typeof carried.ui_params==='object'?carried.ui_params:null);
+ const edited=()=>{changed();uiChip(f);};
+ if(spec.kind==='box_spacing'){
+  const eq=(a,b)=>JSON.stringify(Object.entries(a||{}).sort())===JSON.stringify(Object.entries(b||{}).sort());
+  const l=document.createElement('label');l.textContent='시작 상태 — 학생 화면의 상자가 처음 보이는 모습';const s=document.createElement('select');s.dataset.blockPreset='';
+  const opts=spec.presets.map(([k,x])=>new Option(x.label,k));let pick=start?spec.presets.find(([,x])=>eq(x.params,start))?.[0]:(spec.presets.find(([k])=>k==='default')||spec.presets[0])[0];
+  if(start&&pick===undefined){opts.unshift(new Option('지금 값 유지 (직접 설정)',''));s._keep=start;pick='';}
+  s.replaceChildren(...opts);s.value=pick;s.onchange=()=>{clearFieldError(s);edited();};l.append(s);box.append(l);return;}
+ const fs=document.createElement('fieldset');fs.className='block-stages';const lg=document.createElement('legend');lg.textContent='단계 목록 — 학생이 한 단계씩 넘겨 봐요';
+ const count=document.createElement('p');count.className='counter';count.dataset.stageCount='';
+ const ol=document.createElement('ol');ol.className='stage-rows';const add=document.createElement('button');add.type='button';add.dataset.stageAdd='';add.textContent='단계 추가';
+ const sync=()=>{const rows=[...ol.children];count.textContent=rows.length+' / '+spec.max+'단계';add.disabled=rows.length>=spec.max;
+  rows.forEach((li,i)=>{li.querySelector('[data-stage-legend]').textContent=(i+1)+'단계';li.querySelector('[data-stage-remove]').disabled=rows.length<=spec.min;for(const e of li.querySelectorAll('[data-stage]'))e.nextElementSibling.textContent=e.value.length+'/'+e.maxLength;});};
+ const row=v=>{const li=document.createElement('li'),g=document.createElement('fieldset');g.className='stage-row';const h=document.createElement('legend');h.dataset.stageLegend='';g.append(h);
+  for(const [k,label,max] of [['title','제목',spec.title],['sentence','한 문장',spec.sentence]]){const w=document.createElement('label');w.className='stage-field';const t=document.createElement('span');t.textContent=label+' ('+max+'자 이내)';
+   const e=document.createElement('input');e.dataset.stage=k;e.maxLength=max;e.autocomplete='off';e.value=typeof v?.[k]==='string'?v[k]:'';const c=document.createElement('small');c.className='counter';c.id='stage-count-'+crypto.randomUUID().slice(0,8);e.setAttribute('aria-describedby',c.id);
+   e.oninput=()=>{clearFieldError(e);sync();edited();};w.append(t,e,c);g.append(w);}
+  const rm=document.createElement('button');rm.type='button';rm.dataset.stageRemove='';rm.textContent='이 단계 빼기';
+  rm.onclick=()=>{const next=li.nextElementSibling||li.previousElementSibling;li.remove();sync();edited();(next?.querySelector('[data-stage]')||add).focus();};g.append(rm);li.append(g);return li;};
+ const given=Array.isArray(start?.stages)?start.stages:[];
+ ol.append(...given.map(row));while(ol.children.length<spec.min)ol.append(row());
+ add.onclick=()=>{if(ol.children.length>=spec.max)return;const li=row();ol.append(li);sync();edited();li.querySelector('[data-stage]').focus();};
+ fs.append(lg,count,ol,add);box.append(fs);sync();}
+function blockParamsRead(box){const spec=box._spec;if(!spec)return undefined;
+ if(spec.kind==='box_spacing'){const s=box.querySelector('[data-block-preset]');return s.value===''?s._keep:{...spec.presets.find(([k])=>k===s.value)[1].params};}
+ return {stages:[...box.querySelectorAll('.stage-rows>li')].map(li=>({title:li.querySelector('[data-stage=title]').value.trim(),sentence:li.querySelector('[data-stage=sentence]').value.trim()}))};}
+function blockParamsValue(f){const box=f.querySelector('[data-ui-params]'),v=box?._spec?blockParamsRead(box):undefined;return v?{ui_params:v}:{};}
+function blockSurfaces(){for(const f of document.querySelectorAll('.step')){fillSurfaces(f,f.querySelector('[data-ui]').value);blockEditor(f);}uiChips();}
+// A Service refusal of a block setting (400 invalid_step_ui, `field` = steps.<id>.ui_params…) is shown at the matching input.
+const STEP_UI_WHY=[[/at most (\d+) characters/,m=>m[1]+'자 이내로 줄여 주세요'],[/at least (\d+) items/,m=>'단계를 '+m[1]+'개 이상 만들어 주세요'],[/at most (\d+) items/,m=>'단계는 '+m[1]+'개까지 만들 수 있어요'],[/link/,()=>'링크(https:// 등)는 넣을 수 없어요'],[/surrounding whitespace/,()=>'앞뒤 공백을 지워 주세요'],[/single line/,()=>'한 줄로, 보이지 않는 문자 없이 적어 주세요'],[/readable character/,()=>'읽을 수 있는 글자를 넣어 주세요'],[/must not be empty|is required|must be a string/,()=>'비어 있어요. 내용을 적어 주세요']];
+function clearFieldError(el){if(!el?._fieldError)return;el._fieldError.remove();el.setAttribute('aria-describedby',(el.getAttribute('aria-describedby')||'').split(' ').filter(x=>x&&x!==el._fieldError.id).join(' '));if(!el.getAttribute('aria-describedby'))el.removeAttribute('aria-describedby');el.removeAttribute('aria-invalid');el._fieldError=null;}
+function markFieldError(el,why){clearFieldError(el);const e=document.createElement('small');e.className='field-error';e.id='field-error-'+crypto.randomUUID().slice(0,8);e.textContent='확인 필요: '+why;
+ (el.dataset.stage!==undefined?el.nextElementSibling:el).after(e);el.setAttribute('aria-invalid','true');el.setAttribute('aria-describedby',[e.id,...(el.getAttribute('aria-describedby')||'').split(' ').filter(Boolean)].join(' '));el._fieldError=e;}
+function stepUiError(j){if(j?.reason!=='invalid_step_ui'||typeof j.field!=='string')return null;
+ const m=/^steps\.(.+?)\.ui(?:_params(?:\.([A-Za-z_]+)(?:\[(\d+)\](?:\.([A-Za-z_]+))?)?)?|_version)?$/.exec(j.field);if(!m)return null;
+ const f=[...document.querySelectorAll('.step')].find(x=>x.querySelector('[data-field=id]')?.value===m[1]);if(!f)return null;
+ for(const x of document.querySelectorAll('.step [aria-invalid="true"]'))clearFieldError(x);
+ const box=f.querySelector('[data-ui-params]'),row=m[3]===undefined?null:box?.querySelectorAll('.stage-rows>li')[Number(m[3])]??null;
+ const el=(row&&m[4]?row.querySelector('[data-stage="'+m[4]+'"]'):null)||row?.querySelector('[data-stage]')||(m[2]&&box?.querySelector('[data-block-preset]'))||(m[2]==='stages'&&box?.querySelector('[data-stage]'))||f.querySelector('[data-ui]');
+ const msg=typeof j.error==='string'&&j.error.startsWith(j.field+' ')?j.error.slice(j.field.length+1):'';
+ const hit=STEP_UI_WHY.map(([re,say])=>[re.exec(msg),say]).find(([x])=>x),why=m[2]&&m[2]!=='stages'?'이 설정은 지금 쓸 수 없어요. 시작 상태를 다시 고르세요':hit?hit[1](hit[0]):'적은 내용을 확인해 주세요';
+ const what=row?'단계 목록 '+(Number(m[3])+1)+'번의 '+(m[4]==='title'?'제목':m[4]==='sentence'?'한 문장':'내용'):m[2]==='stages'?'단계 목록':m[2]?'시작 상태':'학생 작업 화면';
+ markFieldError(el,why);return {el,hint:' — ‘'+(f.querySelector('[data-field=title]')?.value.trim()||'제목 없음')+'’ 단계 · '+what+': '+why+'. 편집은 보존됐습니다.'};}
 function stepTeaching(f,data){
  const box=document.createElement('fieldset');box.className='step-help';const lg=document.createElement('legend');lg.textContent='도움 방식 — 학생이 이 단계에서 고를 수 있는 것';box.append(lg);
  const allowed=data.help?.allowed||[];
@@ -739,10 +816,11 @@ function stepTeaching(f,data){
  const note=document.createElement('small');note.textContent='아무것도 고르지 않으면 이 단계는 도움 방식 선택 없이 진행합니다. 도움 방식은 AI가 돕는 방법이며 도구 권한을 바꾸지 않습니다.';box.append(note);
  f.append(box);syncDefault(box,data.help?.default);
  const ul=document.createElement('label');ul.textContent='학생 작업 화면';const us=document.createElement('select');us.dataset.ui='';
- for(const [v,t] of Object.entries(SURFACES))us.append(new Option(t,v));
- if(data.ui&&!Object.prototype.hasOwnProperty.call(SURFACES,data.ui)){const o=new Option('지원 전 값 유지: '+data.ui+' (Studio에서 아직 열 수 없음)',data.ui);us.append(o);}
- us.value=data.ui||'';us.onchange=()=>{changed();uiChip(f);};ul.append(us);f.append(ul);
- f.dataset.uiOrig=data.ui||'';const chip=document.createElement('small');chip.className='ui-chip';chip.dataset.uiChip='';f.append(chip);uiChip(f);
+ us.onchange=()=>{clearFieldError(us);changed();blockEditor(f);uiChip(f);};ul.append(us);f.append(ul);
+ f.dataset.uiOrig=data.ui||'';const chip=document.createElement('small');chip.className='ui-chip';chip.dataset.uiChip='';f.append(chip);
+ const bn=document.createElement('small');bn.className='block-note';bn.dataset.blockNote='';bn.textContent=BLOCK_NOTE;bn.hidden=true;
+ const params=document.createElement('div');params.className='block-params';params.dataset.uiParams='';params.hidden=true;f.append(bn,params);
+ fillSurfaces(f,data.ui||'');blockEditor(f);uiChip(f);
 }
 // CGP-LEARN-R-004 / DES-CGP-LEARN-04 — the step's block reference, for the instructor only: "type · v1 · 기본". A pinned
 // version (carried from a reused or reopened version) is shown as pinned; otherwise the catalog's latest, which the Service
@@ -753,8 +831,8 @@ function uiChip(f){const chip=f.querySelector('[data-ui-chip]');if(!chip)return;
  const pinned=same&&Number.isSafeInteger(carried.ui_version)?carried.ui_version:null;
  const vs=cat?Object.keys(cat.versions||{}).map(Number).filter(Number.isSafeInteger):[],latest=vs.length?Math.max(...vs):null,ver=pinned??latest;
  if(ver===null){chip.textContent=ui+' · 버전은 확정할 때 고정';return;}
- const spec=own(cat?.versions,String(ver)),params=same&&carried.ui_params?carried.ui_params:{},eq=(a,b)=>JSON.stringify(Object.entries(a||{}).sort())===JSON.stringify(Object.entries(b||{}).sort());
- const preset=spec?Object.values(spec.presets||{}).find(p=>eq(p.params,params))?.label??'직접 설정':'기본';
+ const spec=own(cat?.versions,String(ver)),params=blockParamsValue(f).ui_params??(same&&carried.ui_params?carried.ui_params:{}),eq=(a,b)=>JSON.stringify(Object.entries(a||{}).sort())===JSON.stringify(Object.entries(b||{}).sort());
+ const preset=Array.isArray(params.stages)?'단계 '+params.stages.length+'개':spec?Object.values(spec.presets||{}).find(p=>eq(p.params,params))?.label??'직접 설정':'기본';
  chip.textContent=ui+' · v'+ver+' · '+preset+(pinned===null?' (확정할 때 고정)':'');}
 function uiChips(){for(const f of document.querySelectorAll('.step'))uiChip(f);}
 function syncDefault(box,want){const ds=box.querySelector('[data-help-default]'),on=[...box.querySelectorAll('[data-help-mode]')].filter(i=>i.checked).map(i=>i.dataset.helpMode),keep=want??ds.value;ds.replaceChildren(...on.map(m=>new Option(HELP_LABELS[m],m)));ds.disabled=!on.length;ds.value=on.includes(keep)?keep:on[0]??'';}
@@ -793,7 +871,7 @@ const REASON_WORDS={steps_not_visited:'Studio에서 열어 보지 않은 단계�
 const FIELD_WORDS={audience:'대상',objective:'목표',starter:'시작 예제·자료',prerequisites:'선수 조건',duration_minutes:'시간(분)'},STEP_TEXT_WORDS={title:'제목',instructions:'안내',hint:'힌트',acceptance:'완료 기준'};
 function candidateOK(){return bound===identity()&&!!candidateVersion&&!!readiness&&readiness.version===candidateVersion;}
 const helpWords=h=>h?h.allowed.map(m=>HELP_LABELS[m]||m).join('·')+' (처음: '+(HELP_LABELS[h.default]||h.default)+')':'도움 방식 선택 없음';
-const surfaceWords=u=>u===null||u===undefined?SURFACES['']:(Object.prototype.hasOwnProperty.call(SURFACES,u)?SURFACES[u]:u+' (Studio 미지원)');
+const surfaceWords=u=>u===null||u===undefined?SURFACES['']:(surfaceLabel(u)??u+' (Studio 미지원)');
 function impactLines(i){const out=[];const st=i.steps;
  if(st.added.length)out.push('새로 생기는 단계: '+st.added.join(', '));if(st.removed.length)out.push('없어지는 단계: '+st.removed.join(', ')+' — 그 단계의 진행·제출 기록은 이전 기준 기록으로 남습니다');if(i.order_changed)out.push('단계 순서가 바뀝니다');
  for(const t of i.text||[])out.push((FIELD_WORDS[t.field]||t.field)+': ‘'+t.from+'’ → ‘'+t.to+'’');
@@ -891,7 +969,7 @@ function clearConnection(){
  $('completion').textContent='';settings=[];$('setting').replaceChildren(new Option('선택하세요',''));$('setting-label').hidden=true;
  $('cohort').value='';$('profile').value='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('version-view').textContent='';$('version-approval').textContent='';
  $('connection-status').textContent='Lab 로그인으로 연결하면 선택 가능한 수업 설정이 나옵니다.';
- modelCatalogue=undefined;featureCatalogue=undefined;renderApproval();controls();
+ modelCatalogue=undefined;featureCatalogue=undefined;renderApproval();blockSurfaces();controls();
 }
 // The connection status only lists candidate cohort IDs. The existing server endpoint verifies
 // the signature, revocation and scope; only its returned profiles become choices.
@@ -1227,6 +1305,18 @@ body{max-width:var(--ds-c-chalk-authoring-size-97);margin:0 auto!important;paddi
 .counter{color:var(--hp-mute)}
 /* CGP-LEARN-R-004 / DES-CGP-LEARN-04 — the instructor-only block chip under the work-surface select. */
 .ui-chip{display:inline-block;margin-block:var(--ds-c-chalk-authoring-space-13) var(--ds-c-chalk-authoring-space-2);padding-block:var(--ds-c-chalk-authoring-space-14);padding-inline:var(--ds-c-chalk-authoring-space-2);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-control-line);border-radius:var(--ds-c-chalk-authoring-radius-10);font-size:var(--ds-c-chalk-authoring-type-17);color:var(--hp-text-2)}
+/* CGP-LEARN-R-005 / R-006 — block settings under the work-surface choice: 44px controls, counters under each field, the
+   refusal next to the input it names (text first, never colour alone). */
+.block-note{display:block;margin-block:var(--ds-c-chalk-authoring-space-13);font-size:var(--ds-c-chalk-authoring-type-17);color:var(--hp-text-2)}
+.block-params select,.block-params input{box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);width:100%}
+.block-stages{display:grid;gap:var(--ds-c-chalk-authoring-space-2);margin:0;min-width:0}
+.stage-rows{list-style:none;margin:0;padding:0;display:grid;gap:var(--ds-c-chalk-authoring-space-2)}
+.stage-row{display:grid;gap:var(--ds-c-chalk-authoring-space-13);margin:0;min-width:0}
+.stage-field{display:grid;gap:var(--ds-c-chalk-authoring-space-13)}
+.block-stages button{min-height:var(--ds-c-chalk-authoring-size-8);min-width:var(--ds-c-chalk-authoring-size-8);justify-self:start}
+.block-params .counter,.block-params legend,.stage-field>span{font-size:var(--ds-c-chalk-authoring-type-17)}
+.field-error{display:block;font-size:var(--ds-c-chalk-authoring-type-17);color:var(--hp-text)}
+.step [aria-invalid="true"]{outline:var(--ds-c-chalk-authoring-size-3) solid var(--hp-accent);outline-offset:var(--ds-c-chalk-authoring-size-3)}
 /* CGP-ART-R-004 / DES-ART-04 — the plan view. The plan is light-only paper; a marked section shows a 1px outline (≥3:1 on the
    paper) under the pointer (innermost mark only) and on focus. "이 부분 고치기" follows focus — Tab, a click or a tap — never hover
    alone, because Chalk reveals no action on hover (REQ-CHALK-ROW-ACTIONS). Logical properties only. */

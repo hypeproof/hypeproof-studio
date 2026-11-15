@@ -9773,6 +9773,9 @@ catches what the checks above cannot see: a shell command that builds the path a
       resumes; a tombstone a mark names is never swept whole. The mark is written atomically (a temp file, then a rename),
       a second refused purge adds its names to the first's, and while any mark-like file of a task exists (a mark, a torn
       or unreadable one, or a temp file) no tombstone of that task is swept: an unreadable mark means keep everything.
+      The mark is removed only when nothing it lists is left. A temp file of its write is removed after 10 minutes. A
+      pinned tombstone's copies still age out by the seven-day retention (by the stamp in each name), and an unreadable
+      mark older than the retention goes once no tombstone of its task is left.
       Known limits:
       - New bytes written under a name the mark lists are deleted with it. That needs a same-millisecond name collision
         (names carry a stamp and a per-turn counter) or a foreign writer in Studio's storage.
