@@ -33,6 +33,7 @@ import CryptoKit
         if pendingPush { JourneyTransport.store.observePendingPush(busy: busy) }
     }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
+    static var accessDenied: Bool { enabled && JourneyConfiguration.scenario == "access-denied" }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
     private(set) static var emptyStopBoundary: [String: Any] = [:]
@@ -41,10 +42,13 @@ import CryptoKit
         emptyStopBoundary = ["active": active, "phase": phase]
     }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
-    static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
+    static func holdNextHistory() { if logoutSync || accessDenied { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
+    static func failedDraftRestoreAttempt(eligible: Bool) { if accessDenied { JourneyTransport.store.failedDraftRestoreAttempt(eligible: eligible) } }
+    static func failedDraftHistoryApplied() { if accessDenied { JourneyTransport.store.failedDraftHistoryApplied() } }
+    static func failedDraftRestored() { if accessDenied { JourneyTransport.store.failedDraftRestored() } }
     static func synchronizationStarted(automatic: Bool) {
-        if periodicVoice || queuedVoice {
+        if periodicVoice || queuedVoice || accessDenied {
             JourneyTransport.store.synchronizationStarted(automatic: automatic)
         }
     }
@@ -254,7 +258,7 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     private func waitForSpeech(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
         guard !cancelled else { Self.store.cancelHistory(historyID); return }
-        if Self.store.historyMayFinish() { complete(historyOutcome: JourneyConfiguration.scenario == "logout-sync" ? .explicitRelease : .speech); return }
+        if Self.store.historyMayFinish() { complete(historyOutcome: ["logout-sync", "access-denied"].contains(JourneyConfiguration.scenario) ? .explicitRelease : .speech); return }
         if ProcessInfo.processInfo.systemUptime >= deadline {
             complete(historyOutcome: .timeout); return
         }
@@ -347,6 +351,9 @@ private final class JourneyStore: @unchecked Sendable {
     private var historyBarrierCompletions = 0
     private var historyBarrierCancellations = 0
     private var automaticSynchronization = false
+    private var failedDraftRestoreAttempts: [Bool] = []
+    private var restoredFailedDrafts = 0
+    private var failedDraftHistoryApplications = 0
     private var periodicHistoryHolds = 0
     private var secondSpeechReleaseRequests = 0
     private var secondSpeechDelivered = false
@@ -400,6 +407,9 @@ private final class JourneyStore: @unchecked Sendable {
             "history_barrier_cancellations": historyBarrierCancellations,
             "history_sync_automatic": automaticSynchronization,
             "periodic_history_holds": periodicHistoryHolds,
+            "restored_failed_drafts": restoredFailedDrafts,
+            "failed_draft_restore_attempts": failedDraftRestoreAttempts,
+            "failed_draft_history_applications": failedDraftHistoryApplications,
             "active_history_reads": activeHistoryReads.count,
             "second_speech_release_requests": secondSpeechReleaseRequests,
             "logout_requests": value.paths.filter { $0 == "POST /v1/auth/logout" }.count,
@@ -474,11 +484,12 @@ private final class JourneyStore: @unchecked Sendable {
         let queuedVoice = JourneyConfiguration.scenario == "queued-voice"
             && !automaticSynchronization && value.historyReads >= 2 && value.delayedHistoryReads == 0
         let logout = JourneyConfiguration.scenario == "logout-sync" && historyArmed
+        let failedDraft = JourneyConfiguration.scenario == "access-denied" && historyArmed && automaticSynchronization
         let periodicVoice = JourneyConfiguration.scenario == "voice-periodic-poll"
             && automaticSynchronization && value.accepted.count == 1
             && value.speechCaptures == 2 && periodicHistoryHolds == 0
-        guard queuedVoice || logout || periodicVoice else { return false }
-        if logout { historyArmed = false; historyReleased = false }
+        guard queuedVoice || logout || periodicVoice || failedDraft else { return false }
+        if logout || failedDraft { historyArmed = false; historyReleased = false }
         if periodicVoice { periodicHistoryHolds += 1 }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
@@ -486,7 +497,22 @@ private final class JourneyStore: @unchecked Sendable {
     func historyMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
         if JourneyConfiguration.scenario == "voice-periodic-poll" { return secondSpeechDelivered }
-        return JourneyConfiguration.scenario == "logout-sync" ? historyReleased : speechDelivered
+        return ["logout-sync", "access-denied"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
+    }
+    func failedDraftRestoreAttempt(eligible: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        if failedDraftRestoreAttempts.count < 8 { failedDraftRestoreAttempts.append(eligible) }
+    }
+    func failedDraftHistoryApplied() {
+        lock.lock(); defer { lock.unlock() }
+        if restoredFailedDrafts > 0 { failedDraftHistoryApplications += 1 }
+    }
+    func failedDraftRestored() {
+        lock.lock(); defer { lock.unlock() }
+        guard JourneyConfiguration.scenario == "access-denied" else { return }
+        restoredFailedDrafts += 1
+        // Observe the completed disk write; release only the synthetic GET.
+        historyReleased = true
     }
     func synchronizationStarted(automatic: Bool) {
         lock.lock(); defer { lock.unlock() }; automaticSynchronization = automatic

@@ -87,6 +87,9 @@ jobs:
       - name: Workflow shells declare bash on Windows runners
         if: ${{ !cancelled() }}
         run: python3 scripts/check-workflow-shells.py
+      - name: Desktop smoke scope trusted-base controls
+        if: ${{ !cancelled() }}
+        run: python3 scripts/ci/test_desktop_smoke_scope.py
       - name: Design token manifest
         if: ${{ !cancelled() }}
         run: node --test scripts/test/design-tokens-manifest.test.mjs
@@ -316,12 +319,60 @@ jobs:
             extensions/hypeproof-chat/webview-ui/dist \
             || { echo "::error title=Residual branding in the shipped extension::'codium'/'VSCodium' would ship (build-mac's verify-branding.sh check 5 would fail the release). Reword the comment or string listed above."; exit 1; }
 
+  # #3864: this job installs no App/browser dependency. Only the immutable base
+  # classifier can exclude smoke; unknown scope and first adoption run everything.
+  extension-smoke-scope:
+    name: extension / smoke scope
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    outputs:
+      run_smoke: ${{ steps.scope.outputs.run_smoke }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify complete source diff with trusted base
+        id: scope
+        env:
+          SCOPE_EVENT: ${{ github.event_name }}
+          SCOPE_BASE: ${{ github.event.pull_request.base.sha || github.sha }}
+          SCOPE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          SCOPE_CHECKOUT: ${{ github.sha }}
+        run: |
+          trusted="$RUNNER_TEMP/desktop-smoke-scope.py"
+          receipt="$RUNNER_TEMP/desktop-smoke-scope.json"
+          if git cat-file -e "$SCOPE_BASE:scripts/ci/desktop-smoke-scope.py" 2>/dev/null; then
+            git show "$SCOPE_BASE:scripts/ci/desktop-smoke-scope.py" > "$trusted"
+            python3 "$trusted" classify --event "$SCOPE_EVENT" --base "$SCOPE_BASE" --head "$SCOPE_HEAD" --checkout "$SCOPE_CHECKOUT" --receipt "$receipt"
+          else
+            # First rollout cannot use this PR's new code to exclude its tests.
+            python3 - "$receipt" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          value = {key: os.environ['SCOPE_' + key.upper()] for key in ('event', 'base', 'head', 'checkout')}
+          value.update(schema='hps-desktop-smoke-bootstrap/1', decision='FULL')
+          Path(sys.argv[1]).write_text(json.dumps(value, sort_keys=True) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output: output.write('run_smoke=true\n')
+          print('FULL: trusted-base classifier unavailable; no exclusion allowed')
+          PY
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-smoke-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-smoke-scope.json
+          if-no-files-found: error
+          retention-days: 14
+
   # The extension's `npm test` chain, split across six parallel runners (#3417).
   # One runner took 65-77 min; scripts/run-smoke-shard.mjs reads the same chain
   # from package.json and splits it by measured duration
   # (test/smoke-durations.json). Reproduce one shard locally with
   # `node scripts/run-smoke-shard.mjs --shard 3/6`; `npm test` still runs everything.
   extension-test-shard:
+    needs: extension-smoke-scope
+    if: ${{ !cancelled() && needs.extension-smoke-scope.outputs.run_smoke != 'false' }}
     name: extension / smoke (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
     strategy:
@@ -364,20 +415,48 @@ jobs:
           FOCUS_REQUIRE_BROWSER: "1"
         run: node scripts/run-smoke-shard.mjs --shard ${{ matrix.shard }}/6
 
-  # The single `extension / smoke` result, under the name it has always had, so
-  # anything keyed on that check name keeps working. It fails unless every shard passed.
+  # Preserve the required check name. A skipped matrix is accepted only after
+  # recomputing its exact receipt from complete Git objects and trusted base code.
   extension-test:
     name: extension / smoke
+    timeout-minutes: 5
     if: always()
-    needs: extension-test-shard
+    needs: [extension-smoke-scope, extension-test-shard]
     runs-on: ubuntu-latest
     steps:
-      - name: Every smoke shard passed
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-smoke-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-smoke-scope
+      - name: Validate scope and every selected smoke shard
         env:
+          SCOPE_EVENT: ${{ github.event_name }}
+          SCOPE_BASE: ${{ github.event.pull_request.base.sha || github.sha }}
+          SCOPE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          SCOPE_CHECKOUT: ${{ github.sha }}
+          SCOPE_RESULT: ${{ needs.extension-smoke-scope.result }}
           SHARDS: ${{ needs.extension-test-shard.result }}
         run: |
-          echo "smoke shards: $SHARDS"
-          test "$SHARDS" = "success"
+          trusted="$RUNNER_TEMP/desktop-smoke-scope.py"
+          receipt="$RUNNER_TEMP/desktop-smoke-scope/desktop-smoke-scope.json"
+          if git cat-file -e "$SCOPE_BASE:scripts/ci/desktop-smoke-scope.py" 2>/dev/null; then
+            git show "$SCOPE_BASE:scripts/ci/desktop-smoke-scope.py" > "$trusted"
+            python3 "$trusted" verify --event "$SCOPE_EVENT" --base "$SCOPE_BASE" --head "$SCOPE_HEAD" --checkout "$SCOPE_CHECKOUT" --receipt "$receipt" --scope-result "$SCOPE_RESULT" --shards "$SHARDS"
+          else
+            python3 - "$receipt" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          expected = {key: os.environ['SCOPE_' + key.upper()] for key in ('event', 'base', 'head', 'checkout')}
+          expected.update(schema='hps-desktop-smoke-bootstrap/1', decision='FULL')
+          if json.loads(Path(sys.argv[1]).read_text()) != expected or os.environ['SCOPE_RESULT'] != 'success' or os.environ['SHARDS'] != 'success':
+              raise SystemExit('Unproven scope requires all six successful smoke shards and a matching receipt')
+          print('All six desktop smoke shards passed (no trusted-base exclusion classifier)')
+          PY
+          fi
 
   # The Windows leg for the extension smokes whose verdict depends on the host
   # (ADR 0011 rollout, WP A1). Every other job here runs on Ubuntu, where a

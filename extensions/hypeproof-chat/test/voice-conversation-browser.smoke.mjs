@@ -155,6 +155,26 @@ try {
  await send({type:'voiceTranscribeResult',requestId:held.requestId,ok:true,text:'늦은 전사'});await drain();assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);assert.equal(await live(),0);await noMarker('scope switch stopped the session');controls.push('scope switch fences stale transcription without send');
  hold=false;held=null;await send({type:'config',config});await drain();refusal=true;
  await click('자동 음성 대화 시작');await speech();await wait(async()=>/한도/.test(await label()),'authoritative refusal');assert.equal(await live(),0);assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);await noMarker('the cap refusal stopped the session');controls.push('Service cap refusal stops with zero automatic retry');
+ // CGP-VOICE-R-019 (verify-4197): the chosen microphone is not connected. The conversation opens nothing, stops with its line
+ // and one action, 기본 마이크로 녹음, which opens the default ({audio:true}) for this session; the stored choice is not touched.
+ refusal=false;
+ await b.evaluate(`window.__constraints=[];{const g=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);navigator.mediaDevices.getUserMedia=c=>{window.__constraints.push(c);return g(c)}};navigator.mediaDevices.enumerateDevices=async()=>[{kind:'audioinput',deviceId:'${'b'.repeat(64)}',label:'내장 마이크'}]`);
+ const chosen={...config,micInput:{id:'a'.repeat(64),label:'USB 헤드셋'}};
+ await send({type:'config',config:chosen});await drain();
+ const postsBefore=await b.evaluate('window.__posts.length');
+ await click('자동 음성 대화 시작');
+ await wait(async()=>/연결되어 있지 않아 멈췄어요/.test(await label()),'missing microphone stop');
+ assert.equal(await live(),0,'nothing opened');assert.deepEqual(await b.evaluate('window.__constraints'),[],'no getUserMedia at all');
+ {const rect=await b.evaluate(`(()=>{const e=[...document.querySelectorAll('[aria-label="자동 음성 대화"] button')].find(x=>x.textContent.trim()==='기본 마이크로 녹음');if(!e||e.disabled)return null;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+  assert(rect,'the stop offers 기본 마이크로 녹음');
+  await b.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...rect});await b.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...rect});await drain();}
+ await wait(async()=>await live()===1,'the default microphone opened');
+ assert.deepEqual(await b.evaluate('window.__constraints'),[{audio:true}],'exactly the default');
+ assert.equal(await b.evaluate(`window.__posts.slice(${postsBefore}).filter(m=>m.type==='setMicInput').length`),0,'the stored choice is kept');
+ await b.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true,cancelable:true}))`);await drain();
+ await wait(async()=>await live()===0,'stopped');
+ await send({type:'config',config});await drain();
+ controls.push('missing microphone: the conversation stops with 기본 마이크로 녹음, which opens only the default');
  const unack={...config,profile:{...config.profile,profile_id:'unacknowledged-internal-profile'}};
  fixture.current.h.cachedProfile=unack.profile;
  await send({type:'config',config:unack});await drain();await click('자동 음성 대화 시작');

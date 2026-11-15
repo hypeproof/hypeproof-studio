@@ -205,8 +205,11 @@ t("마이크 시험: 5 s from the chosen microphone, the real level, heard / not
   eq(status(), "말해 보세요. 5초 동안 들어요.");
   await advance(500);
   ok(bar() && bar().getAttribute("aria-hidden") === "true" && bar().getAttribute("data-level") === "0.60", "the real level, decorative");
-  await advance(MIC_TEST_MS);
-  eq([status(), rig.tracksStopped, rig.meter.closed, timers.length], ["소리가 들려요.", 1, 1, 0], "heard; tracks stopped, meter closed, no timer left");
+  // verify-4197: a hard deadline. Still listening 1 ms before 5000 ms from the start, finished at 5000 ms, never after.
+  await advance(MIC_TEST_MS - 500 - 1);
+  eq([status(), rig.tracksStopped], ["말해 보세요. 5초 동안 들어요.", 0], "listening at 4999 ms");
+  await advance(1);
+  eq([status(), rig.tracksStopped, rig.meter.closed, timers.length], ["소리가 들려요.", 1, 1, 0], "heard at 5000 ms; tracks stopped, meter closed, no timer left");
   ok(byText("마이크 시험") && !bar(), "back to the press, no bar");
   eq([posted("voiceTranscribe").length, posted("setMicInput").length], [0, 0], "nothing sent");
 

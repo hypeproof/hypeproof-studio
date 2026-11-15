@@ -6,7 +6,11 @@ import type { ReadAloud } from './voiceReadAloud.ts';
 import { CONVERSATION_MIC_MISSING } from './voiceCopy.ts';
 
 export type ConversationPhase = 'idle' | 'starting' | 'listening' | 'transcribing' | 'answering' | 'speaking' | 'stopped';
-export interface ConversationView { phase: ConversationPhase; note: string }
+export interface ConversationView {
+  phase: ConversationPhase; note: string;
+  /** R-019: the stop's one recovery action. `use_default`: the chosen microphone is not connected; 기본 마이크로 녹음 restarts with the default. */
+  recovery?: 'use_default';
+}
 export interface VoiceConversationEnv {
   recorder: DictationEnv;
   /** Uses the SAME captured stream. Returns cleanup; never opens a second microphone. */
@@ -34,6 +38,8 @@ export class VoiceConversation {
   private text = '';
   private ended = false;
   private timer: unknown = null;
+  /** R-019: this session records with the system default (기본 마이크로 녹음); the stored choice is untouched. */
+  private useDefault = false;
   readonly recorder: DictationRecorder;
   private readonly env: VoiceConversationEnv;
   constructor(env: VoiceConversationEnv) {
@@ -69,7 +75,11 @@ export class VoiceConversation {
         env.transcribe(this.request, clip);
       },
       // R-019: the chosen microphone is not connected: stop and say so; a conversation never falls back silently.
-      onFailure: kind => this.stop(kind === 'mic_missing' ? CONVERSATION_MIC_MISSING : '녹음을 마치지 못했어요. 마이크 권한을 확인하거나 글로 계속해 주세요.'),
+      onFailure: kind => {
+        if (kind !== 'mic_missing') { this.stop('녹음을 마치지 못했어요. 마이크 권한을 확인하거나 글로 계속해 주세요.'); return; }
+        this.stop(CONVERSATION_MIC_MISSING);
+        this.view = { ...this.view, recovery: 'use_default' }; this.env.changed(this.view);
+      },
     });
   }
   get active(): boolean { return ACTIVE.has(this.view.phase); }
@@ -83,8 +93,10 @@ export class VoiceConversation {
     this.clearDeadline(); const generation = this.generation;
     this.timer = this.env.recorder.setTimeout(() => { if (this.current(generation)) this.stop('응답을 확인하지 못해 멈췄어요. 대화 기록을 확인해 주세요. 자동으로 다시 보내지 않아요.'); }, ms);
   }
-  start(): void {
+  /** `useDefault` (R-019 기본 마이크로 녹음): every turn of this session records with the system default. */
+  start(options: { useDefault?: boolean } = {}): void {
     if (this.active || !this.env.ready() || !this.env.speech.available) return;
+    this.useDefault = options.useDefault === true;
     this.generation++; this.scope = this.env.scope();
     this.capture();
   }
@@ -94,7 +106,7 @@ export class VoiceConversation {
     if (this.env.speech.getStatus().kind === 'playing') { this.stop('읽어 주기가 끝난 뒤 음성 대화를 시작해 주세요.'); return; }
     this.endpoint = false; this.request = this.user = this.stream = this.answer = null; this.text = ''; this.ended = false;
     this.set('starting', '마이크를 준비하고 있어요.');
-    void this.recorder.start();
+    void this.recorder.start({ useDefault: this.useDefault });
   }
   /** Cancels only owned audio work. An already submitted text request remains in normal history. */
   stop(note = '음성 대화를 멈췄어요. 글로 계속할 수 있어요.'): void {

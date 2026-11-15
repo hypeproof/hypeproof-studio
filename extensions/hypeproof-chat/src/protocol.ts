@@ -682,7 +682,7 @@ export type WebviewMessage = (
   | {type:'selectFunding';id:string}
   /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
   | {type:'carryoverDecision';decision:'confirm'|'decline'}
-  | {type:'requestBudget';note:string}
+  | {type:'requestBudget';note?:string;reason?:string}
   | { type: 'observationOpen' }
   /**
    * SX-45 rule 2 — a learning event is made **only by a webview form submission**.
@@ -937,6 +937,8 @@ export type WebviewMessage = (
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
+  /** CGP-KNOW-R-011 — open one listed 내 작품 file: HTML in the preview, anything else in an editor tab. */
+  | { type: "myWorksOpen"; requestId: string; path: string }
   /** CGP-KNOW-D-016 — the info popover of one listed work-folder file; answered once per request id. */
   | { type: "artifactInfoRequest"; requestId: string; path: string }
   // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
@@ -1088,6 +1090,8 @@ export type HostMessage = (
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
   | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
+  /** CGP-KNOW-R-011 — the open's outcome; a refusal carries the one line the drawer shows. */
+  | { type: "myWorksOpened"; requestId: string; ok: boolean; error?: string }
   | { type: "artifactInfo"; requestId: string; info: import("./artifactProvenanceView").ArtifactInfo | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }

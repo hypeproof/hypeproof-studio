@@ -445,6 +445,12 @@ revision barrier reads the actual applied model cache, not a transport completio
 guess. These seams compile out of Release. The existing admission-denied journey
 now models Service persistence before 403 and retains the failed user event, reason
 and identity; its former pre-persistence local-retry shortcut is not evidence.
+The same admission journey arms a real periodic history GET before one explicit
+failed-draft restore. The response releases only after the account-cache write
+succeeds; assertions observe its later application, retained draft on relaunch,
+and unchanged submitted IDs. The original `!syncing` eligibility must fail this
+held-read control. This is a deterministic regression contract, not proof that a
+historical tap failed for that reason; the old run had no handler-entry trace.
 
 New App journeys and changed AX diagnostics require actual hosted Xcode execution.
 Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.

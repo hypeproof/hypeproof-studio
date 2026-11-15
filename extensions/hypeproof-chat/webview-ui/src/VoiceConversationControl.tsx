@@ -13,6 +13,7 @@ import { windowOutputMute } from '../../src/voiceOutputMute';
 import { readServedVoice } from '../../src/voiceServed';
 import { windowVoiceLiveTask } from '../../src/voiceLiveTask';
 import { nativeComposing } from './imeGuard';
+import { RECOVER_USE_DEFAULT } from '../../src/voiceCopy';
 
 export function voiceConversationScope(config: ChatConfig | undefined): string {
   return JSON.stringify([config?.activity?.id, config?.taskWorkspace?.activeTaskId, config?.profile?.profile_id, config?.profile?.access_identity?.scope]);
@@ -109,10 +110,10 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
   useLayoutEffect(() => { if (!served || turn.interrupted) loop.current?.stop(); }, [served, turn.interrupted]);
 
   if (!served || !speech) return null;
-  const start = () => {
+  const start = (useDefault = false) => {
     const requestedScope = scope;
     voice.gate(() => {
-      if (requestedScope === voiceConversationScope(latest.current.config) && ready()) loop.current?.start();
+      if (requestedScope === voiceConversationScope(latest.current.config) && ready()) loop.current?.start({ useDefault });
     }, true);
   };
   return <div className="hps-voice-note" role="group" aria-label="자동 음성 대화">
@@ -122,5 +123,7 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
       <ChatIcon kind={active ? 'stop' : 'level'} /> {active ? '중지' : '음성 대화'}
     </button>
     <span role="status">{view.note || '말이 끝나면 자동으로 보내고, 답을 읽은 뒤 다시 들어요. 중지하면 마이크가 꺼져요.'}</span>
+    {/* R-019: the chosen microphone is not connected. One press restarts this conversation with the default; the choice stays. */}
+    {!active && view.recovery === 'use_default' && <button type="button" className="hps-voice-link" disabled={!ready() || !speech.available} onClick={() => start(true)}>{RECOVER_USE_DEFAULT}</button>}
   </div>;
 }

@@ -17,6 +17,14 @@
   - *Where.* The page, every popup and every out-of-process iframe session gets Fetch patterns for those types (Chromium reports `fetch` and EventSource as XHR) on minor seats only. A frame is judged by the top document it is drawn in.
   - *Notice.* One quiet line per tab per 10 s, no dialog: "이 페이지가 다른 사이트로 정보를 보내려 해서 막았어요."
   - *Without the network hold* (`Fetch.enable` rejected) there is no request-level fallback, so these requests are not held. This is documented, not coded.
+  - *What "loopback" means* (verify-3928 on #4214; one helper, `isLoopbackHost`, for both the top-page check and the target check, and the same in core, #4216):
+    - `localhost` and every `*.localhost` (RFC 6761), with or without a trailing dot;
+    - 127.0.0.0/8 in any spelling the URL parser normalises;
+    - `::1` and IPv4-mapped `::ffff:127.x.y.z`;
+    - `0.0.0.0` and `::`, decided as loopback because Chromium sends them to this machine.
+  - *Redirects.* A hop from a loopback or listed address to an off-list site is refused at the hop.
+  - *Leaving the page.* A keepalive `fetch` or `sendBeacon` fired on `pagehide` arrives after the next page committed. Within 3 s of leaving a loopback page, a request that names no other initiator (its Origin or Referer is the old page's, or it has neither) is judged as the old page's and refused. The next page's own requests name it and are unaffected. Known corner (verify-r027 on #4222): if a confirmed off-list, non-loopback next page sends a same-origin fetch or XHR within those 3 s under a no-referrer policy (no Origin, no Referer), it is judged as the old page's and refused. That errs closed, and only on minor seats; next pages on the lesson list, assets and adults are unaffected. A possible later fix ties the judgement to the old document's loaderId or frameId instead of the window.
+  - *Workers.* A dedicated worker's requests are paused in its page's session and held like the page's own. Shared and service workers are separate targets the guard does not attach: their requests are NOT held. This is an expected residual pinned by tests and part of the #4209 core-patch scope (core's `webRequest` sees worker requests; the optional second commit).
   - *WebSocket: in Jay's scope, NOT yet covered.* Jay's 2026-11-15 decision includes WebSocket, but this slice does not hold it. The Fetch domain rejects a WebSocket resource type, and `Network.setBlockedURLs` did not stop the handshake in the snts probe.
     - No page-script `WebSocket` wrapper (coordinator, 2026-11-15): workers and service workers bypass it, and it would read as coverage it is not.
     - Planned fix: block ws/wss upgrades to off-list hosts for minor seats in the safe session's `webRequest`, through a `vscodium-base/patches/` core patch.
@@ -25,7 +33,9 @@
     - From a loopback top, all four types to an off-list site send nothing: from the page, from same-origin and cross-site frames, and from a popup. Each refusal is reported.
     - Images, CSS and CDN scripts from that site load. The lesson list, loopback-to-loopback and same-origin requests go on. A non-loopback page and an adult seat are unaffected.
     - Red first: the page, frame and popup cases reached the off-list site on a0ca56902.
-    - Expected residual: a WebSocket to an off-list host still connects. This is pinned, to be flipped when the core patch lands.
+    - Expected residuals: a WebSocket, a shared worker's fetch and a service worker's fetch to an off-list host still go. These are pinned, to be flipped when the core patch lands.
+    - Also pinned: the 302 hop, keepalive fetch and sendBeacon on `pagehide` (to a loopback and to a non-loopback next page), and a dedicated worker's fetch, all refused, with an adult-seat control for the workers.
+    - `link-confirm-host` section 15 has loopback-spelling vectors (29 cases).
     - `link-confirm-host` section 14 covers the patterns (minor seats only), the refusal and its line, the 10 s cap, and the positive controls.
 - **Tests.** `test/subframe-hold-browser.smoke.mjs` (31 checks): real cross-site origins `a.test`/`b.test`/`c.test` with `--site-per-process`, and a recorder that counts every hit and a refusal per case.
   - Refused (no request reaches b.test): static, script-made and redirected frames; an admitted out-of-process frame that the page re-points or that moves itself off the list; a nested frame; frames in a popup.

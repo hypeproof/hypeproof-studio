@@ -1,5 +1,6 @@
 import {useState,useEffect,useRef,useId} from 'react';
 import type {ChatConfig,WebviewMessage} from '../../src/protocol';
+import type {AccessChoiceView,BudgetRequestPolicy} from '../../src/accessClient';
 /** The usage panel's state words; the chat header (AccessHeader) reads the same ones. */
 export const stateLabels:Record<string,string>={ready:'사용 가능',ended:'이용 기간 종료',paused:'일시정지',review_required:'사용량 확인 필요',exhausted:'남은 자원 부족',not_configured:'이용 한도 설정 대기',external_unknown:'외부 공급자 사용량 미확인'};
 const meterLabels:Record<string,string>={'tokens:input':'입력 토큰','tokens:output':'출력 토큰','tokens:cache_read':'캐시 읽기 토큰','tokens:cache_write':'캐시 쓰기 토큰','tokens:cache_write:5m':'5분 캐시 토큰','tokens:cache_write:1h':'1시간 캐시 토큰','requests:count':'요청 수','browser:seconds':'브라우저 초','computer:seconds':'컴퓨터 초','execution:seconds':'실행 초','storage:byte-seconds':'저장 byte·초'};
@@ -43,10 +44,15 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
    <p className="hps-access-muted">모델·Effort·도구에 따라 사용량이 달라집니다. 응답이 끊기면 비용을 확인할 때까지 예약이 남을 수 있습니다.</p>
    <p>한도에 도달해도 중지, 기존 파일과 결과 열람·내보내기는 계속할 수 있습니다.</p>
    {choice.pending_request&&<p role="status"><span className="hps-budget-request-state">{choice.pending_request.state==='pending'?'요청함 · 강사 검토 대기':'요청 처리 · '+(choice.pending_request.resolution??'처리 내용 미확인')}</span></p>}
-   {a.status==='ready'&&choice.can_request&&choice.pending_request?.state!=='pending'&&<div className="hps-budget-request-notice">
-    {(choice.state==='exhausted'||choice.resources.some(r=>r.meter==='requests:count'&&Number.isSafeInteger(r.limit)&&r.limit>0&&Number.isSafeInteger(r.remaining)&&r.remaining>=0&&r.remaining/r.limit<=0.1))&&<p>남은 사용량이 부족해요. 선생님께 추가 사용을 요청할 수 있어요.</p>}
-    <BudgetRequestForm key={choice.id} post={post}/>
-   </div>}
+   {a.status==='ready'&&choice.can_request&&choice.pending_request?.state!=='pending'&&(choice.request_policy===undefined
+    ? <div className="hps-budget-request-notice">
+     {lowAllowance(choice)&&<p>남은 사용량이 부족해요. 선생님께 추가 사용을 요청할 수 있어요.</p>}
+     <BudgetRequestForm key={choice.id} post={post}/>
+    </div>
+    : choice.request_policy&&lowAllowance(choice)&&<div className="hps-budget-request-notice">
+     <p>남은 사용량이 부족해요. 선생님께 추가 사용을 요청할 수 있어요.</p>
+     <PolicyRequestForm key={choice.id} policy={choice.request_policy} post={post}/>
+    </div>)}
   </>}
   {view&&<small>확인 시각 {new Date(view.as_of).toLocaleString()}{view.truncated?' · 일부 이용권만 표시':''}</small>}
   {a.notice&&<p role="status">{a.notice}</p>}<button type="button" onClick={()=>post({type:'refreshAccess'})}>사용량 새로고침</button>
@@ -58,7 +64,42 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
  </details>;
 }
 
-/** Service currently requires a reason. Keep it explicit until its contract permits omission. */
+/**
+ * DES-SHELL-29: the request sits inside the low-allowance notice, at 10% or less of any metered allowance or when the
+ * choice is exhausted. (The older form without a Service policy keeps showing whenever a request is possible.)
+ */
+export function lowAllowance(choice:AccessChoiceView):boolean{
+ return choice.state==='exhausted'||choice.resources.some(r=>Number.isSafeInteger(r.limit)&&r.limit>0&&Number.isSafeInteger(r.remaining)&&r.remaining>=0&&r.remaining/r.limit<=0.1);
+}
+
+/**
+ * CGP-SHELL-R-030: the Service names the fixed reasons, whether this seat may also write a note (never on a minor
+ * seat) and when the next request is accepted. A minor seat must pick a reason; an adult may pick, write, both or neither.
+ */
+function PolicyRequestForm({policy,post}:{policy:BudgetRequestPolicy;post:(m:WebviewMessage)=>void}){
+ const [reason,setReason]=useState<string|null>(null),[note,setNote]=useState('');const composing=useRef(false);const counter=useId(),wait=useId();
+ // The clock is read on every render (a new policy may arrive at any time); the timer only re-renders at the end.
+ const [,setTick]=useState(0);
+ const until=policy.cooldown_until,now=Date.now();
+ const cooling=until!==null&&until>now;
+ useEffect(()=>{if(!cooling)return;const t=setTimeout(()=>setTick(n=>n+1),Math.min(until!-Date.now()+50,600_000));return()=>clearTimeout(t);});
+ const tooLong=note.length>policy.note_max,missing=!policy.note&&reason===null;
+ const disabled=cooling||tooLong||missing;
+ return <form onSubmit={e=>{e.preventDefault();if(composing.current||disabled)return;post({type:'requestBudget',...(reason?{reason}:{}),...(policy.note&&note.trim()?{note}:{})});}}>
+  <fieldset className="hps-budget-request-reasons">
+   <legend>요청 이유{policy.note?' (선택)':''}</legend>
+   {policy.reasons.map(r=><label key={r.id}><input type="radio" name="hps-budget-reason" value={r.id} checked={reason===r.id} onChange={()=>setReason(r.id)}/>{r.label}</label>)}
+  </fieldset>
+  {policy.note&&<><label>하고 싶은 말 (선택)<input type="text" value={note} onChange={e=>setNote(e.target.value)} maxLength={policy.note_max} aria-describedby={counter}
+   onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
+   onKeyDown={e=>{if(e.key==='Enter'&&(composing.current||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229))e.preventDefault();}}/></label>
+   <small id={counter}>{note.length} / {policy.note_max}자</small></>}
+  {cooling&&<p id={wait} role="status">방금 요청했어요. {new Date(until!).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} 이후에 다시 요청할 수 있어요.</p>}
+  <button type="submit" disabled={disabled} aria-describedby={cooling?wait:undefined}>선생님께 더 요청하기</button>
+ </form>;
+}
+
+/** An older Service without a request policy requires a written reason; kept for it until every Service serves the policy. */
 function BudgetRequestForm({post}:{post:(m:WebviewMessage)=>void}) {
  const [note,setNote]=useState('');const composing=useRef(false);const counter=useId();
  return <form onSubmit={e=>{e.preventDefault();if(composing.current||!note.trim()||note.length>200)return;post({type:'requestBudget',note});}}>

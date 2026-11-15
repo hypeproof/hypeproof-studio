@@ -7,14 +7,15 @@ Audit (origin/main 797cb1700, built on #4164 55e8ae6e2): nothing listed devices,
 - **Unplugged: follow the row, no silent fallback** (coordinator's decision).
   - The register says it falls back "only on explicit choice", and recording from a microphone the learner did not choose is the worse surprise. When the chosen microphone is absent at capture time, nothing opens. Dictation shows `선택한 마이크가 연결되어 있지 않아요` with one action, `기본 마이크로 녹음`; one press records that once with the default.
   - The stored choice is kept, so plugging the device back in uses it again, and the next press asks again. An `OverconstrainedError` or `NotFoundError` on the exact constraint reads the same way. The picker shows `연결되지 않은 마이크`.
-  - The voice conversation stops with `선택한 마이크가 연결되어 있지 않아 멈췄어요. 대화 설정에서 마이크를 바꾸거나 글로 계속할 수 있어요.`: an automatic loop never switches microphones on its own, and its one recovery is the settings dialog or text.
+  - The voice conversation stops with `선택한 마이크가 연결되어 있지 않아 멈췄어요. 대화 설정에서 마이크를 바꾸거나 글로 계속할 수 있어요.`, and the automatic loop never switches microphones on its own.
+  - After verify-4197 the stop also carries the same one action as dictation, `기본 마이크로 녹음`: one press restarts that conversation with the default (`{ audio: true }`) for every turn of that session. The stored choice is kept, and the next ordinary start asks again.
 - **Changing it mid-session**: a recording in progress keeps its microphone, and the next recording uses the new one. A voice conversation picks it up at its next listening turn: the same session, with the previous turn's tracks already stopped (VO-29).
 - **Permission (#4001)**:
   - Opening the row never asks for the microphone. Before the microphone was allowed once, Chromium lists inputs without ids. The row then offers only `시스템 기본값` (plus a stored choice by its stored label) and says `마이크를 한 번 허용하면 이름을 보고 고를 수 있어요.`.
   - Labels appear after a grant. The list refreshes on `devicechange` and after a test. The register's "마이크 1/2" numbering is used only when the browser gives ids without labels.
 - **마이크 시험** (DES-CGPV-23 "live input meter", coordinator: build now):
   - It runs only on an explicit press, behind the voice disclosure and the same microphone explainer as dictation.
-  - It listens to the chosen microphone for at most 5 s with #4164's `webAudioLevelMeter`. The bar is decorative and `aria-hidden`, with none under reduced motion. The result is in words: `소리가 들려요.` or `소리가 들리지 않았어요. …`, heard meaning a peak of at least -45 dB.
+  - It listens to the chosen microphone for at most 5 s with #4164's `webAudioLevelMeter`. The end is a 5000 ms timer, not the 120 ms level poll, which overshot to 5,065 ms in verify-4197. The bar is decorative and `aria-hidden`, with none under reduced motion. The result is in words: `소리가 들려요.` or `소리가 들리지 않았어요. …`, heard meaning a peak of at least -45 dB.
   - Nothing is recorded, sent or kept. The tracks are stopped and the context closed when it ends, on 시험 멈추기, when the dialog closes and on a hide.
 - **Where**: the personal settings dialog and the lesson-seat dialog (the access chip), only where dictation is served, for adult and minor seats alike. An unserved seat draws nothing and touches no browser API.
 - **Copy** (agent-written): `마이크`, `시스템 기본값`, `연결되지 않은 마이크`, `마이크 N`, the hints, `마이크 시험` / `시험 멈추기`, the two results, `선택한 마이크가 연결되어 있지 않아요`, `기본 마이크로 녹음`.

@@ -72,6 +72,20 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
   }, []);
   useDialogFocus(dialog, { open: true, kind: 'modal', keepFocusOnDismiss: true, opener, fallback, onDismiss: close });
 
+  // CGP-KNOW-R-011 — a row opens its file (the host decides how, and may refuse with one line).
+  const [openLine, setOpenLine] = useState('');
+  const opening = useRef(new Set<string>());
+  const reveal = (path: string) => {
+    const requestId = `open-${Date.now().toString(36)}-${(++requestSeq).toString(36)}`;
+    opening.current.add(requestId);
+    setOpenLine('');
+    postToHost({ type: 'myWorksOpen', requestId, path });
+  };
+  useEffect(() => onHostMessage(message => {
+    if (message.type !== 'myWorksOpened' || !opening.current.delete(message.requestId)) return;
+    if (message.ok) close(); else setOpenLine(message.error ?? '');
+  }), []);
+
   useEffect(() => onHostMessage(message => {
     if (message.type !== 'artifactThumbnail') return;
     const key = asked.current.get(message.requestId);
@@ -130,6 +144,7 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
           </label>
           {query && <button type="button" className="tw-quiet" onClick={() => { setSearch({ scope: scopeKey, query: '' }); searchInput.current?.focus(); }}>검색 지우기</button>}
           {note(`현재 목록에서 ${entries.length}개 / ${files.entries.length}개`, true)}
+          <p className="tw-works-note" role="status" data-testid="my-works-open-line">{openLine}</p>
           {entries.length === 0 && note('일치하는 파일이 없어요. 다른 검색어를 넣거나 검색을 지워 주세요.')}
           <ul className="tw-works-list" aria-label="내 작품 파일">{entries.map(entry => {
             const { name, folder } = worksName(entry.path);
@@ -137,6 +152,7 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
             const src = thumbs[key] ?? null;
             const image = IMAGE_FILE.test(entry.path);
             return <li key={entry.path} className="tw-works-item" data-provenance={entry.kind}>
+              <button type="button" className="tw-works-reveal" aria-label={`${entry.path} 열기, ${entry.label}`} onClick={() => reveal(entry.path)}>
               <span className="tw-works-thumb" aria-hidden="true" {...(image ? { 'data-thumb-path': entry.path, 'data-thumb-key': key } : {})}>
                 {src ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} /> : <ChatIcon kind={worksGlyph(entry.path)} size={20} />}
               </span>
@@ -148,6 +164,7 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
                   {entry.at ? <time dateTime={new Date(entry.at).toISOString()}>마지막 기록 {when.format(entry.at)}</time> : <span>바뀐 때 기록 없음</span>}
                 </span>
               </span>
+              </button>
             </li>;
           })}</ul>
           {files.more > 0 && note(`파일 ${files.more}개는 더 있어서 여기에 다 보여 주지 못했어요.`)}
