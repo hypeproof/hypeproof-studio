@@ -479,7 +479,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 /* Personal account preview: a single primary sign-in action and plain pass choices. */
 .studio-account { border-bottom: var(--ds-c-studio-start-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-start-boundary-8)); padding-bottom: var(--ds-c-studio-start-space-5); margin-bottom: var(--ds-c-studio-start-space-2); }
 .studio-account h3 { font-size: calc(var(--ds-c-studio-start-type-13) + var(--hp-font-step)); margin: var(--ds-c-studio-start-space-19) 0 var(--ds-c-studio-start-space-2); }
-.studio-account-identity { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-13); }
+.studio-account-identity { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-13); font-size: calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); }
 .studio-account-identity span, .studio-account-pass > span { font-size: calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .studio-account-pass { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-12); padding: var(--ds-c-studio-start-space-19) 0; }
 .studio-account-pass .studio-choice { margin-top: var(--ds-c-studio-start-space-13); }
