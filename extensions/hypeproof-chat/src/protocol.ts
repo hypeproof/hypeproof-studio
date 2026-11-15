@@ -682,7 +682,7 @@ export type WebviewMessage = (
   | {type:'selectFunding';id:string}
   /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
   | {type:'carryoverDecision';decision:'confirm'|'decline'}
-  | {type:'requestBudget';note:string}
+  | {type:'requestBudget';note?:string;reason?:string}
   | { type: 'observationOpen' }
   /**
    * SX-45 rule 2 — a learning event is made **only by a webview form submission**.
