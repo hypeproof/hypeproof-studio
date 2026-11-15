@@ -227,11 +227,11 @@ try {
       await send({ type: 'voiceTranscribeResult', requestId: clip[0].requestId, ok: true, text: '고양이 사진을 넣어 줘' });
       assert.equal(await b.evaluate(`${composer}.value`), '고양이 사진을 넣어 줘', `${label}: transcript in the composer`);
       assert.equal(await b.evaluate(`window.__posts.filter(m=>m.type==='sendMessage').length`), 0, `${label}: never auto-sent`);
-      // A retryable failure (network) with the clip kept: its line, 44px 다시 보내기.
+      // A retryable failure (network, the host's NETWORK copy, voiceHost.ts) with the clip kept: its line, 44px 다시 보내기.
       await b.evaluate(`window.__media=0`);
       await click('.hps-voice-mic'); await settle(900); await click('.hps-voice-mic'); await settle(400);
       const second = await b.evaluate(`window.__posts.filter(m=>m.type==='voiceTranscribe').at(-1)`);
-      await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'network', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
+      await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'network', message: '인터넷 연결을 확인해 주세요. 글로는 계속 이야기할 수 있어요.', retry: true });
       const notice = '.hps-voice-note[role="status"]';
       assert.equal(await b.evaluate(`document.querySelectorAll('${notice}').length`), 1, `${label}: exactly one manual dictation status`);
       const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-primary`, close: `${notice} .hps-voice-link`, icon: `${notice} svg[data-icon="alert"]`, text: `${notice} .hps-voice-failure-text`, box: '.hps-input textarea' });
@@ -241,7 +241,7 @@ try {
       assert.equal(await b.evaluate(`document.querySelector('${notice} .hps-voice-primary').textContent`), '다시 보내기', `${label}: the retryable cause offers 다시 보내기`);
       assert.ok(note.items.icon && Math.abs(note.items.icon.w - 20) <= 0.5 && note.items.text.fs >= 13.99, `${label}: alert icon 20px, sentence 14px`);
       assert.ok(Math.abs(note.items.box.h - idleInput.h) <= 4, `${label}: the text box keeps its height with the failure line (${idleInput.h} -> ${note.items.box.h})`);
-      assert.ok((await b.evaluate(`document.querySelector('${notice}').textContent`)).includes('소리가 잘 들리지 않았어요. 다시 말해 볼까요?'), `${label}: the softer line`);
+      assert.ok((await b.evaluate(`document.querySelector('${notice}').textContent`)).includes('인터넷 연결을 확인해 주세요. 글로는 계속 이야기할 수 있어요.'), `${label}: the network line, as the host wrote it`);
 
       // Disclosure sheet (a first use): fits a 320x480 / 480x480 viewport without scrolling and has one 시작하기 (DES-CGPV-04).
       await load('ok', 480);
