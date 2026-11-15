@@ -1336,7 +1336,7 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Rows: only rows whose behaviour exists are drawn: 글자 크기 (CGP-DS-R-009 text size), 움직임 줄이기 (`workbench.reduceMotion`) and 알림 (`hypeproofChat.osTaskNotices`, default off). 화면 밝기(테마), 팁 보기 and 내 작업 내보내기 wait for REQ-SHELL-16 / 19 / 28: drawing them now would be switches that do nothing. The cap stays six and the order follows REQ-SHELL-14.
 - 고급 설정: hidden and host-refused for a minor cohort (`isMinorProfile`, which fails closed on an unknown tier, on the connected or previewed profile) and for a free start answered under14. With no seat and no under-14 answer it stays, because the start page "설정" reached the editor for adult/staff setup before this row. This is a navigation guard, not a security boundary: the editor's own menu entry and shortcut are out of scope.
 - Surface: the existing chat settings dialog (`ChatPreferences`) is reused instead of the DES-SHELL-13 right-side sheet; the sheet geometry is CGP-SHELL-D-013's row.
-- Text size row: the stored size is the personal-chat size (classroom chat keeps the base size), so the row says "혼자 하는 활동의 대화 글자 크기예요." for every seat.
+- Text size row: the stored size is the personal-chat size (classroom chat keeps the base size), so the row says "혼자 하는 활동의 대화 글자 크기예요." for every seat. Superseded 2026-11-14 by CGP-SHELL-R-017: the size applies to every chat seat and the start page, and the row says "대화와 시작 화면의 글자 크기예요.".
 - Default state: on for every seat; no new data flow, no new permission; notices stay off until the learner turns them on.
 
 ## DEC-SHELL-D013: learner settings sheet geometry (CGP-SHELL-D-013, 2026-10-27, agent-selected conservative implementation)
@@ -2322,6 +2322,22 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
 
+## CGP-LEARN-R-011 (a)(b) / CGP-LEARN-D-011: report a learning block to the class instructor (2026-11-15)
+
+Confirmed by Jay: no. These are agent choices; the coordinator set the scope (the report half of the row, Service then Chalk then Studio).
+
+- **Channel (agent choice).** The report is a classroom-ops event `material_report` on the learner's existing class connection, not `/v1/report`. `/v1/report` goes to the operator and fans out to Discord and the GitHub triage job; the class connection reaches the run's own instructor and nobody else. `classroom_shares` was not used either: its kind CHECK would need a migration, and Service deploys are blocked on migrations. ops event kinds are validated in code, so no migration is needed.
+- **No learner text, for any seat (agent choice; deviates from DES-CGP-LEARN-11's optional 0–300 field).** The ops board's contract is that a learner's words never reach it (the evidence event carries provenance only). An adult-only field would break that for the same board, and a minor seat must not get a new free-text field. The learner picks one of three reasons: `wrong` 내용이 틀려요, `broken` 열리지 않아요, `unclear` 이해하기 어려워요. The optional field stays deferred until Jay decides whether it should exist and through which consented path.
+- **Block identity (agent choice, revised after verify-3956).** Course, lesson version, step, block type and pinned version, all checked by the Service (catalog and the seat's lesson). There is no params digest: a client-chosen hex was a 32-byte free-text channel to the instructor, and the frozen lesson version already pins the params. The host builds the identity from the served lesson; the webview sends a step and a reason only.
+- **Who sees the item (agent choice).** Only a window with a live class connection (inbox run present, not offline, not ended) to a Service that names `material_report`. Without one there is no instructor to reach, so the item is not drawn. Instructor windows and rehearsals never draw it. If the outbox refuses or the connection drops after the item was drawn, the learner is told it was not sent or not confirmed.
+- **Inline, not modal (DES-CGP-LEARN-11).** A row under the card head, the same in-flow placement as the menu. The reasons are native radios, so arrow keys work without custom handling. The actions are quiet buttons (SX-04).
+- **Instructor side (agent choice).** Chalk `/manage` lists reports in the seat drawer as "자료 신고", after the evidence. The only control is "확인함", on the existing review route (`coach` capability, revision CAS). There is no seat-list badge yet, so an instructor finds reports by opening the seat. That is a follow-up candidate.
+- **Reaches the run instructor first (agent choice; the row says "lesson owner").** The report goes to the class run's instructors, who can differ from the course author. The run instructor is the person who can act during the class (pause, tell the learner, use another block), and the run board already carries the seat. A course-level list for the author, across runs, is not built. It needs a new author-facing route and a decision on aggregating reports from several runs. It is a follow-up candidate.
+- **Flood limits (coordinator; numbers are agent choices).** One report per block version per learner on a seat, and at most 5 accepted per learner in any 24 h. Both are enforced by the Service inside the INSERT statement, so concurrent windows cannot both pass. A repeat gets "이미 선생님께 전달한 자료예요", and the cap gets its own line telling the learner to speak to the teacher.
+- **No false "sent" (coordinator).** Studio says "선생님께 전달했어요" only after the Service's sync answer names that event's seq as accepted. It offers the item only after the Service names `material_report` in `event_kinds`, so before the Service change is deployed the item does not appear. A missing answer is "확인하지 못했어요", never sent.
+- **Ids from the lesson only (agent choice, found while listing the visible fields).** The Service checks course, version and step against the lesson the seat runs. An id-shaped field (`[A-Za-z0-9_-]`, up to 128 characters) could otherwise carry a minor's words, such as `teacher_is_mean`, to the instructor. The visible fields are listed in the classroom-admin row "Material report".
+- **Not covered:** a real installed App, a real class run end to end, and a real screen reader.
+
 ## CGP-ART-R-023 gap: 폴더에서 보기 on the deck PDF result (2026-11-14, #4057 §7.2)
 
 Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 on the PDF result, reveal the exported file inside the seat's served root, reuse the existing reveal path and its path-safety checks, and never reveal anything outside the root. The choices below are the agent's.
@@ -2403,6 +2419,132 @@ Requirement: `docs/studio-requirements.md` "Microphone explainer before the OS p
 - **Place (agent choice).** The card sits in the dictation status area above the text box, where every other dictation note already appears. It is inline, not a modal, and `허용하기` takes focus, so a keyboard user can answer at once.
 - **Not changed.** There is no new flag, policy or seat rule, and the served-voice gate and disclosure come first, as before. Nothing is stored or logged. `VoicePanel.tsx` and `voiceAgentStatus.ts` are untouched. `DictationControl.tsx` is also touched by open #3928, but only on separate lines (and one shared return line).
 - **Not covered.** The macOS bundle's purpose string (VSCodium default). A real OS prompt; the scripted env stands in for it. A screen reader.
+
+## CGP-KNOW-R-028 / CGP-KNOW-D-028: per-task memory switches (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Task memory switches" (REQ-STUDIO-TASK-MEMORY-SWITCHES).
+
+- **Place (agent choice).** The switches sit in the personal settings dialog, under the memory list, not in the rail's
+  per-task menu. That menu is a `role="menu"` holding only `옮기기`, and native checkboxes do not belong in a menu. The
+  dialog already shows the activity's memory, and DES-KNOW-46 asks for native checkboxes with visible labels.
+- **Defaults (agent choice).** Both are on, which is today's behaviour. DEC-01 keeps memory always on, and no profile key
+  serves per-task defaults, so none is invented. A served default can be read later without changing the ledger.
+- **Lock (agent choice).** "쓰기 locks after the first send" is read as: once the task has any message. The host decides
+  it from the task's message count, and the webview cannot unlock it.
+- **Keep off covers:** the `remember` tool, the one memory write path, and the SDK runtime's file tools aimed at
+  `.hypeproof/memory/`.
+- **Shell (agent choice).** The SDK runtime also denies any shell command that names `.hypeproof` while keep or use is
+  off. This is a coarse, deny-only check, chosen over parsing shell syntax.
+- **Path check (verifier should-fix).** File-tool targets are compared after the real path of their deepest existing
+  folder is resolved, with case folded on macOS and Windows, so case variants and symlinked folders count.
+- **Read side (verifier should-fix).** With use off, the SDK's `Read`, `Grep`, `Glob` and `NotebookRead` are denied on
+  the memory folder or on a pattern that names `.hypeproof`.
+- **Known gaps (agent choice: state them rather than claim more).**
+  - Write side: quote or escape splitting, interpreter one-liners, names built at run time, the local runtime's shell,
+    and a `Write` through a dangling symlink. These are covered once #4059 (#4014's turn-end check) lands.
+  - Read side: the same shell forms, ancestor searches whose pattern does not name the folder, the local runtime. These
+    stay open, and the row stays partially met for reads.
+- **Storage.** `workspaceState`, booleans per scope and task. Nothing leaves the device.
+- **Seats.** Minors on personal and trial activities get the same switches, because memory is on for them too (DEC-02).
+  Class, lesson and instructor seats have no memory store and so no switches.
+- Confirmed by Jay: no.
+
+## #4014: turn-end memory-folder check for keep-off tasks (2026-11-14, agent-selected)
+
+Closes the shell gap left by CGP-KNOW-R-028 without a policy change. It is host-side only, and it builds on the switches.
+
+- **When.** Only turns that begin with keep off: a snapshot at turn start and a compare in the turn's own `finally`,
+  for every runtime.
+- **What happens to changes (agent choice).** Nothing is deleted:
+  - additions are moved into the extension's global storage (`memory-quarantine/<scope hash>/`);
+  - changes are put back, with the turn's version quarantined;
+  - deletions are restored from the snapshot.
+  A put-back is written beside the file and renamed over it, never left half-written.
+- **Whose change (agent choice).** Every `ActivityMemory` change is journaled synchronously, and so is the learner's
+  editor save of a memory file. Those are left alone; everything else in a keep-off turn is attributed to the turn.
+  No question is asked, because the journal already covers every path Studio itself writes through.
+- **Snapshot bounds (verifier should-fix: fail closed).** Every name is listed, up to 10,000, so new names are always
+  moved out. Contents are read for 250 entries, memory-named first, up to the item size; the rest are tracked by name
+  only (told in the turn).
+- **Studio's last state wins (verifier should-fix).** The journal keeps bytes, so a learner's save survives a later
+  shell overwrite in the same turn. Editor saves are journaled from disk (BOM and CRLF safe).
+- **Not covered, named:** background processes the turn started that write after it ended.
+- **Quarantine bounds (agent choice, coordinator's privacy constraint).**
+  - It is scoped per OS account (global storage), per seat activity (a keyed hash of its scope) and per task, with modes
+    0700/0600.
+  - Three pools per activity (verifier rounds 5 and 6). The learner's own displaced bytes (`orig-…`) are protected: never
+    removed by count, at most 1,000, and at that cap an item is left and reported rather than an original dropped (bytes
+    that exist nowhere else are kept past it). Copies of what the turn wrote: 200 and that many items' bytes, oldest
+    first. Moved files: 200, oldest first. Equal stamps are ordered by name.
+  - A stamp more than 60 s ahead counts as oldest, one within 60 s is clamped to now. Known residual, not handled: a
+    real entry written while the clock ran more than 60 s fast is removed at the next prune after the clock is corrected.
+  - It is kept seven days at most, applied at every check and at activation.
+  - A task's folder is purged when the task is archived or moved.
+  - It is never uploaded or logged.
+  - It is named in the SHELL-R-027 deletion docs as a local copy that a deletion request does not reach.
+- **The line names only the count:** `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`
+
+## CGP-SHELL-R-017: text size beyond personal chat (2026-11-14, agent-selected)
+
+Requirement: REQ-SHELL-17 (`domains/settings-account-shell.md`), DES-SHELL-16; `docs/studio-requirements.md` CGP-DS-R-009 paragraph. Audit of main (29ab2d366): the choice was stored and the shell was marked in every seat, but the 2px/4px step was scoped to the personal shell, and the start page stored the choice without applying it.
+
+- **Scope.** The step rule now matches every chat shell (`.hps-shell[data-text-size]`), so the classroom chat follows it, and with it every help sheet drawn inside the chat (키보드 단축키, 새로운 기능, the lesson tip, the classroom help request), because they size with the `--hp-font-*` tokens. The lesson, help-request and approval panels (`.hp-rail-lesson`, 15px) were a fixed size; they now add the step too, which is 0 outside a chat shell or the start page. So do the mission header's sentence (`.hp-mission-sentence`, the classroom learner's main line) and the lesson material cards (`.hp-material-title`, `.hp-material-state`), found by the verifier on #4121; the reach smoke now renders a classroom seat with a lesson. The personal workspace's task rail and heading sit outside the chat shell and keep their sizes, as CGP-DS-R-009 shipped them. The start page root carries the choice too; each of its font sizes is its token plus `--hp-font-step`, and the `--hp-font-*` tokens are re-declared on `.studio-start`. Text-size rules stay in `chatDetails.css` and `start.css`; no colour token changes.
+- **Known difference, kept as shipped (coordinator direction; Jay can overrule).** REQ-SHELL-17 and DES-SHELL-16 ask for body text 15/17/20 px and the label 보통. Studio ships 16/18/20 px and 기본 (CGP-DS-R-009, CGP-DS-R-008: 16px is the body step of the type scale, and DEC-29's 14px floor sits under it). Moving the base to 15px would shrink every learner's text, and renaming the label would change shipped copy; neither is done here.
+- **Where a classroom learner sets it.** A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so the start page 설정 sheet is its picker. The row's note changes from "혼자 하는 활동의 대화 글자 크기예요." to "대화와 시작 화면의 글자 크기예요." (agent copy).
+- **Narrow windows.** At 아주 크게 every surface fits a 320 px pane and a 640 px pane at 200% zoom. In a 320 px pane at 200% (160 CSS px) the start page footer tagline (만들기 · 검토하기 · 내 것으로) would run past the window, so it may wrap at that width; at the base size it still fits on one line. The lesson tip's 입력창에 넣기 action may wrap there too, instead of widening the shell.
+- **Not covered.** The entry screen drawn before the start page connects (`.studio-disconnected`; it has no settings yet), the separate automation, local-review and skill-store webviews, a real installed app and a screen reader.
+- Confirmed by Jay: no.
+
+## CGP-SHELL-R-019 / CGP-SHELL-D-018: turning lesson tips off (2026-11-14, agent-selected; one clause parked)
+
+Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-021 / D-021, which are built (#2767, #2972). The only tip is the served step's Chalk-authored hint (owner decision above, "CGP-CHAT-R-021: lesson tip source and action"), so there is no Studio tip catalogue to write or review. Never while a turn streams and one tip at a time are MET; D-018's 13px and 24px give way to the 14px and 44px floors, as D-021 already does. Missing: "팁 그만 보기 stops all tips until re-enabled".
+- Preference (agent choice; per seat after coordinator review): globalState `hypeproofChat.lessonTips` holds `{ off: [seat…] }`, keyed by the collapsed-blocks seat id (`collapseSeat`, #4050/#4064), because classroom PCs are shared: one learner turning tips off must not hide them for the next. A seat not listed sees tips; an empty seat keeps its choice in memory only. Bounded to 200 seats, never synced, logged or sent; a corrupt value never removes help. The key and `LessonTipsPreference` are exported from vscode-free `src/lessonTips.ts` for the start page's 팁 보기 row.
+- Action (agent choice): a third quiet button `팁 그만 보기` (muted ink, no underline, 44px) after `입력창에 넣기`. It hides only the tip row. The lesson's steps, instructions, mission header, 힌트 보기 and anything required by the instructor are untouched.
+- Reversibility (agent copy; revised after verify-r027): right after the press the row says `팁을 껐어요. 여기 다시 켜기로 언제든 다시 켤 수 있어요.` with `다시 켜기` focused (role=status). It is never one-way: afterwards, and after a reload, a hinted step shows the quiet `팁을 꺼 두었어요.` with `다시 켜기` in the tip's place (no live region). A lesson seat's 설정 gear opens the app settings, and its in-chat settings dialog opens only from the access chip, so that quiet line is the always-present way back. The dialog also gets a lasting `팁 보기` checkbox (agent copy: hint `수업 단계의 도움말을 입력창 위에 보여 줘요.`). The start page row (CGP-SHELL-R-014) follows on the host's `lessonTipsState()` / `setLessonTips()`.
+- Race (verify-r027): the host takes the seat only after the config build's staleness return.
+- Parked (needs Jay): REQ-SHELL-19's "at most once per session and only after an observed trigger (e.g. 3 failed runs)". It contradicts the owner decision to show a step's hint from the start; gating instructor-written help behind three failures changes the lesson. Recommendation: keep hints shown from the start. If triggered help is wanted, add a separate Chalk-authored field (for example `hint_after_failures`) through a Service schema change, never Studio copy, with "once per session" applying only to it.
+- Default state: tips on for everyone (unchanged). No flag, policy, Service or minor-seat change.
+- Not covered: a real installed App and a screen reader: NOT RUN.
+- Confirmed by Jay: no.
+
+## CGP-AGENT-R-031 / CGP-AGENT-D-027: busy banner before send (2026-11-14)
+
+Confirmed by Jay: no. These are agent choices within the rows, and the coordinator set the constraints: no flag on the public health, authenticated seats only, derived from existing signals, no provider names, never block sending.
+
+- **Signal (agent choice).** It counts the upstream failures learner turns already meet at the Service's four failure sites: 429, 529, 5xx and unreachable, not a learner's own Stop. Busy is 4 or more in the current minute and the two before it, memoised per isolate for 20 s (hypeproof-service#465). Two sources were rejected:
+  - The provider breaker covers only the OpenAI router path, and when it is open the fallback still serves the turn.
+  - The heartbeat runs every 15 minutes, so the banner would stay up long after recovery.
+- **Route (agent choice).** It is a new authenticated `GET /v1/service-status` → `{busy}`, not a `/v1/profile` field. Studio reads the profile at start, not on a timer, and the profile route runs gate checks and builds a large body.
+- **Asking (coordinator constraints; the numbers are agent choices).** The panel asks on mount, back in view, on focus, and once a minute, but only while the view is visible and the window is focused. The host asks at most once a minute. Errors double the wait up to 15 minutes. A 404 (no such route) stops asking for that seat until its token or the Service address changes; a 401 or 403 backs off like an error, because a 403 session_inactive clears when the class opens with the same token; a remount re-posts the last answer without a new request. Fail quiet: only a confirmed `true` shows the banner.
+- **Service cost (coordinator).** Failures are counted per isolate and written to KV at most once per 12 s per isolate, into one window key. A read is one KV get behind a 20 s memo. A failed KV write is dropped.
+- **Copy.** "AI가 지금 붐벼요", the row's own text only. A second clause ("답이 늦을 수 있어요.") wrapped to two lines at 320 px beside the icon and the 44px close, and DES-CGP-AGENT-66 asks for one line.
+- **Close (agent choice within "dismissible per session", revised after verify-r027).** Closing hides the banner for that busy episode, and focus returns to the composer. The host keeps the closed state with the last answer, so a remount (a task switch) re-posts it closed; panel state alone was lost on every remount. The episode ends only on a healthy answer (a 200 with `busy: false`), so the next busy episode shows the banner again; an error answer (network, 5xx, 401, 403) hides the banner but does not end the episode (verify-r027 low note). A time window was rejected: it would hide a new busy episode that starts within it. A healthy answer removes the banner on its own.
+- **Instructor and issuer seats (after verify-r027).** The host does not ask for them, because the route answers 401 to an issuer token every time, so they would back off forever. The check uses instructor mode or the issuer token's unverified shape; it only saves a request and grants nothing.
+- **Not covered:** the installed app against the deployed Service, and a real screen reader.
+
+## CGP-AGENT-R-020 / CGP-AGENT-D-017: learner skill cards (2026-11-14)
+
+Confirmed by Jay: yes for the scope (2026-11-14): a learner-facing skill card authored in Chalk, frozen with the lesson version, and Studio showing only these cards and never the coach's SKILL.md or `Profile.skills`. The rest are agent choices, approved by the coordinator.
+
+- **Contract.** `skill_cards` is an optional key on `hps-session-design/1`, following the DEC-30 starters pattern: omitted when empty, never coach data (hypeproof-service#488). The caps are 6 cards, name 30, summary 80, and prompt 300 units over at most 6 lines.
+- **No links.** There is one `hasLink` rule in the Service, in Chalk and in the Studio reader, narrowed for coding lessons (verify-r027). NFKC and the colon look-alikes come first. Then `<scheme>://`, a known scheme directly followed by `:` (marks stripped, Cyrillic/Greek look-alikes folded), a bare `http:`/`https:`, `www.` plus a domain, and `//` plus a host are refused. Coding text with colons passes, `Q:답` included. One case list (`chalk/test/fixtures/link-cases.json`, copied byte-for-byte into the Service with a sha256 pin) is checked on every side. Only values a write introduces are checked; starters get it on new writes only.
+- **Minors.** Cards are served as authored on minor seats, under the starters' safe-text rules.
+- **Shelf.** It is collapsed by default and stays after the first message, because a skill is useful at any point, unlike a starter. It shows one "써 보기" button and nothing else: the dropped "보기" source view is the reason the design row was rewritten. Instructor surfaces draw no shelf.
+- **Rows rewritten.** REQ-CGP-AGENT-36, DES-CGP-AGENT-36 and their register rows now describe the Chalk-authored card instead of a SKILL.md source view.
+- **Not covered:** the installed app against the deployed Service, and a real screen reader.
+
+## CGP-VOICE-R-014 / R-015 / D-010 / D-012: dictation control and failures by cause (2026-11-15, agent-selected)
+
+Audit of main (c2be35060): distinct names, a single microphone owner, per-cause lines (with the Service's own sentences), the permission card and Esc cancel were already built. Gaps: the disabled control gave no reason; most causes offered only `닫기`; `starting` had no words and no cancel; no input level; no icon; too short never went away.
+- Refusal (R-014, agent copy): the disabled control's name and tooltip carry `음성 대화 중에는 받아쓰기를 쓸 수 없어요` / `받아쓰기가 끝나면 쓸 수 있어요`; Alt+Shift+M during a conversation shows the same line and asks for no microphone.
+- One recovery per cause (R-015, agent copy `다시 보내기` / `다시 말하기` / `글로 쓰기`, chosen by cause in `src/dictationRecovery.ts`). `다시 보내기` follows policy 3 for every seat, minors included: the clip is memory only, dropped after transcription, on dismiss, task or seat switch, window hide or 10 minutes, never on disk. The coordinator first asked for minors to get no resend; policy 3 (all seats via D4) already allows the in-memory retry and main ships it, so the policy was followed and this is recorded here. `닫기` stays as the quiet second button; DES-CGPV-18's "one action" is read as one recovery action.
+- Starting (D-010): `마이크를 켜는 중이에요` with `취소`, no spinner (an unbounded indicator is not allowed, and the OS prompt has no known length). The register's `받아쓰는 중` wording is not adopted; the shipped `듣고 있어요` stays.
+- Input level (D-010): decorative and `aria-hidden`; an `AnalyserNode` on the same stream, never connected to the output; only the current level is read (one reused block, no samples kept); disconnected and its context closed when recording ends; not drawn under reduced motion. The retry keep-timer now runs on the control's own clock (the same injected timers as the recorder).
+- Placement (D-012, agent choice): the failure line stays in the composer's notice slot above the text box, not "under composer" as DES-CGPV-18 says. Every composer notice (class off, the microphone explainer, the permission card, recording) lives in that one slot; putting dictation failures alone below the input card would split one notice area into two and move the line away from the button that caused it.
+- Auto-dismiss (D-012): only too short, after 8 s, and not while focus is inside the line. The timer is keyed on the line's id, so a parent re-render (a streaming answer) does not restart it (verify-r004).
+- Expired copy (verify-r004): when the kept clip goes while its line is shown, `다시 보내기` becomes `다시 말하기` in place; a press under the `다시 보내기` label never opens the microphone (a stale press only updates the label).
+- Unchanged: no flag, policy, Service or minor-seat change; no audio stored or logged; the text flow and the voice conversation's own lines.
+- Not covered: a real microphone, the packaged app and a screen reader: NOT RUN.
 - Confirmed by Jay: no.
 
 ## CGP-LEARN-R-006 / R-005 (D-006 / D-005): the parametric blocks in Studio (2026-11-15, agent-selected)

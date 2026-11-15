@@ -1,15 +1,23 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, collapseBlock, collapsedFor, collapsedStateFrom, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_REPORT_REASONS, MATERIAL_REPORT_REASON_WORDS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, collapseBlock, collapsedFor, collapsedStateFrom, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type MaterialReportReason, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
 import { ChatIcon, type IconKind } from "./ChatDetails";
+import { CopyFeedback } from "./CopyFeedback";
 import { imeComposing } from "./imeGuard";
-import { patchWebviewState, readWebviewState } from "./vscode";
+import { onHostMessage, patchWebviewState, readWebviewState } from "./vscode";
 import { BoxSpacingBlock, StageStepperBlock } from "./ParamBlocks";
 import { boxCaption, boxEdit, boxReset, boxUndo, stageLabel, type BoxHistory, type BoxValues } from "../../src/blockParams";
 import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
 type Step = Lesson["content"]["steps"][number];
+
+/** CGP-LEARN-R-011 — what the report row says when the Service did not take the report. "sent" is never said for these. */
+const REPORT_FAILED: Partial<Record<string, string>> = {
+  not_sent: "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요.",
+  capped: "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요.",
+  unconfirmed: "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시 뒤 다시 보내 보세요.",
+};
 
 /** CGP-LEARN-D-001 — the 자료 card's 48px thumbnail icon for each block kind (the card's title is MATERIAL_TEXT's). */
 const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
@@ -47,6 +55,11 @@ export function LessonStepPanel(props: {
   post: (m: WebviewMessage) => void;
   /** CGP-LEARN-R-011 (c) — the seat the collapsed set belongs to (lessonFocus.ts collapseSeat). */
   seat: string;
+  /**
+   * CGP-LEARN-R-011 (a) — this window has a live class connection to a Service that stores material reports (the inbox
+   * view says so), so a report has an instructor to reach. Otherwise the 자료 메뉴 has no report item at all.
+   */
+  canReport?: boolean;
 }) {
   const { lesson, step, post } = props;
   const choices = helpChoices(step), surface = surfaceOf(step);
@@ -63,8 +76,8 @@ export function LessonStepPanel(props: {
   const blockOpen = !!openBlocks[blockKey];
   // CGP-LEARN-R-011 (c) / CGP-LEARN-D-011 — "접기" in the card's 자료 메뉴 puts the block away for this learner; "다시 보기" brings it
   // back as it was (open or closed). The set lives in the webview's own state, so it survives a hide/show re-mount in this
-  // session; it is never posted to the host: not work, not a report, not an observation event. The report item of DES-CGP-LEARN-11
-  // ("자료가 틀린 것 같아요") is not built yet; the menu is where it will go.
+  // session; it is never posted to the host: not work, not a report, not an observation event. The menu's other item, the report
+  // (R-011 (a)), is below.
   // The set is stored with its seat, and a seat sees only its own. When another learner signs in on the same window, the
   // previous learner's set is cleared from the webview state, not just hidden.
   const [stored, setStored] = useState(() => collapsedStateFrom(readWebviewState<{ lessonBlocksCollapsed: unknown }>().lessonBlocksCollapsed));
@@ -98,6 +111,26 @@ export function LessonStepPanel(props: {
   }, [blockCollapsed]);
   useLayoutEffect(() => { if (menuOpen) menuPanel.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus({ preventScroll: true }); }, [menuOpen]);
   const closeMenu = (restoreFocus: boolean) => { setMenuFor(""); if (restoreFocus) menuButton.current?.focus({ preventScroll: true }); };
+  // CGP-LEARN-R-011 (a) / D-011 — "자료가 틀린 것 같아요" opens inline in the open card (not a modal): three reason chips, no text
+  // field for any seat, and 선생님께 보내기. The host builds the block identity from the served lesson and sends it on the class
+  // connection; the toast "선생님께 전달했어요" appears only after the Service accepted it. Not an evidence event, no transcript.
+  const [reportFor, setReportFor] = useState(""), [reportReason, setReportReason] = useState<MaterialReportReason | "">("");
+  type ReportState = "sending" | "sent" | "already" | "capped" | "unconfirmed" | "not_sent";
+  const [reportState, setReportState] = useState<{ key: string; state: ReportState } | null>(null);
+  const reportOpen = !!props.canReport && reportFor === blockKey;
+  const reportPanel = useRef<HTMLDivElement>(null);
+  const openReport = () => { setMenuFor(""); setReportReason(""); setReportState(null); setReportFor(blockKey); };
+  const closeReport = (restoreFocus: boolean) => { setReportFor(""); setReportReason(""); if (restoreFocus) menuButton.current?.focus({ preventScroll: true }); };
+  useLayoutEffect(() => { if (reportOpen) reportPanel.current?.querySelector<HTMLInputElement>('input[type="radio"]')?.focus({ preventScroll: true }); }, [reportOpen]);
+  useEffect(() => onHostMessage((m) => {
+    if (m.type !== "materialReportResult" || m.sha256 !== lesson.sha256) return;
+    const k = JSON.stringify([lesson.course_id, lesson.version, lesson.sha256, m.stepId]);
+    setReportState((cur) => cur && cur.key === k && cur.state === "sending" ? { key: k, state: m.state } : cur);
+    if (m.state === "sent" || m.state === "already") { setReportFor((f) => (f === k ? "" : f)); setReportReason(""); menuButton.current?.focus({ preventScroll: true }); }
+  }), [lesson.course_id, lesson.version, lesson.sha256]);
+  const sent = reportState?.key === blockKey && (reportState.state === "sent" || reportState.state === "already");
+  useEffect(() => { if (!sent) return; const t = setTimeout(() => setReportState(null), 4000); return () => clearTimeout(t); }, [sent]);
+  const sendReport = () => { if (!reportReason || reportState?.state === "sending") return; setReportState({ key: blockKey, state: "sending" }); post({ type: "materialReport", stepId: step.id, reason: reportReason }); };
   const effective = chosen ?? (choices.includes(step.help?.default as HelpMode) ? (step.help!.default as HelpMode) : null);
 
   // The host holds the focus for the NEXT turn; a running turn keeps what it started with.
@@ -204,19 +237,19 @@ export function LessonStepPanel(props: {
       <div className="hp-block-card-body" hidden>{content}</div>
     </section>
   ) : (
-    <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-block-menu={menuOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
+    <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-block-menu={menuOpen ? "" : undefined} data-block-report={reportOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
       aria-labelledby={ids + "t"} aria-describedby={ids + "h"}>
       <div className="hp-block-card-head">
         <span className="hp-block-card-thumb"><ChatIcon kind={BLOCK_ICONS[material.kind]} size={20} /><span className="hp-block-card-kicker">자료</span></span>
         <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
         <button type="button" className="hp-cta-quiet" aria-expanded={blockOpen} aria-controls={ids + "b"} data-block-toggle=""
-          onClick={() => { setMenuFor(""); setOpenBlocks((o) => ({ ...o, [blockKey]: !blockOpen })); }}>{blockOpen ? "닫기" : "열어 보기"}</button>
+          onClick={() => { setMenuFor(""); setReportFor(""); setOpenBlocks((o) => ({ ...o, [blockKey]: !blockOpen })); }}>{blockOpen ? "닫기" : "열어 보기"}</button>
         {/* CGP-LEARN-D-011 — the 자료 메뉴 is on the open card only, after 닫기. The closed card keeps DES-CGP-LEARN-01's one row (a
             fourth head column leaves the title no width in a 280px rail), and the open card gains no height (a row of its own
             pushes the caption under the mission header at 480px / 200 %). */}
         {blockOpen && <button ref={menuButton} type="button" className="hp-cta-quiet hp-block-menu-toggle" data-block-menu-toggle="" aria-label={"자료 메뉴: " + materialText.title}
           aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? ids + "m" : undefined}
-          onClick={() => setMenuFor(menuOpen ? "" : blockKey)}
+          onClick={() => { setReportFor(""); setMenuFor(menuOpen ? "" : blockKey); }}
           onKeyDown={(e) => { if (!menuOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); setMenuFor(blockKey); } }}>
           <ChatIcon kind="dots" size={20} />
         </button>}
@@ -235,8 +268,30 @@ export function LessonStepPanel(props: {
           const next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
           items[next].focus({ preventScroll: true });
         }}>
+        {props.canReport && <button type="button" role="menuitem" tabIndex={-1} data-block-report-open="" onClick={openReport}>자료가 틀린 것 같아요</button>}
         <button type="button" role="menuitem" tabIndex={-1} data-block-collapse="" aria-label={"접기: " + materialText.title} onClick={() => setBlockCollapsed(true)}>접기</button>
       </div>}
+      {reportOpen && <div ref={reportPanel} className="hp-block-report" role="group" aria-labelledby={ids + "r"} data-block-report-panel=""
+        onKeyDown={(e) => { if (e.key === "Escape" && !imeComposing(e)) { e.preventDefault(); e.stopPropagation(); closeReport(true); } }}>
+        <p id={ids + "r"} className="hp-block-report-title">어떤 점이 이상한가요?</p>
+        <div className="hp-block-report-reasons" role="radiogroup" aria-labelledby={ids + "r"}>
+          {MATERIAL_REPORT_REASONS.map((r) => (
+            <label key={r} className="hp-block-report-reason">
+              <input type="radio" name={ids + "reason"} value={r} checked={reportReason === r} data-report-reason={r} onChange={() => setReportReason(r)} />
+              {MATERIAL_REPORT_REASON_WORDS[r]}
+            </label>
+          ))}
+        </div>
+        <p className="hp-block-report-note">어떤 자료인지와 고른 이유만 선생님께 가요. 대화 내용은 가지 않아요.</p>
+        <div className="hp-block-report-actions">
+          <button type="button" className="hp-cta-quiet" data-report-send="" disabled={!reportReason || reportState?.key === blockKey && reportState.state === "sending"} onClick={sendReport}>
+            {reportState?.key === blockKey && reportState.state === "sending" ? "보내는 중…" : "선생님께 보내기"}
+          </button>
+          <button type="button" className="hp-cta-quiet" data-report-cancel="" onClick={() => closeReport(true)}>취소</button>
+        </div>
+        {reportState?.key === blockKey && REPORT_FAILED[reportState.state] && <p className="hp-block-report-failed" role="status" data-report-result={reportState.state}>{REPORT_FAILED[reportState.state]}</p>}
+      </div>}
+      {sent && <CopyFeedback failed={false} className="hp-block-report-sent">{reportState?.state === "already" ? "이미 선생님께 전달한 자료예요" : "선생님께 전달했어요"}</CopyFeedback>}
       <div className="hp-block-card-body" id={ids + "b"} hidden={!blockOpen}>
         <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
         {content}

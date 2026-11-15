@@ -69,6 +69,27 @@ export interface DictationEnv {
   now(): number;
   setTimeout(fn: () => void, ms: number): unknown;
   clearTimeout(handle: unknown): void;
+  /**
+   * CGP-VOICE-D-010: a decorative input-level meter on the recording stream. It reads the current level only
+   * (no samples are kept), is never connected to the speakers, and is closed when the recording ends.
+   * Absent (tests, or no Web Audio): no meter.
+   */
+  levelMeter?(stream: StreamLike): LevelMeter | null;
+}
+
+export interface LevelMeter {
+  /** The current input level, 0..1, from the stream's RMS. */
+  read(): number;
+  close(): void;
+}
+
+/** RMS of one block of time-domain samples, mapped to 0..1 (-60 dB is 0, 0 dB is 1). */
+export function levelOf(samples: ArrayLike<number>): number {
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  const rms = samples.length ? Math.sqrt(sum / samples.length) : 0;
+  const db = 20 * Math.log10(Math.max(rms, 1e-10));
+  return Math.min(1, Math.max(0, (db + 60) / 60));
 }
 
 export interface Clip {
@@ -134,6 +155,7 @@ export class DictationRecorder {
   private startedAt = 0;
   private mime: (typeof DICTATION_MIME_CANDIDATES)[number] | null = null;
   private keep = true;
+  private meter: LevelMeter | null = null;
   /** Bumped on every start and cancel so a late callback from an older clip cannot act. */
   private generation = 0;
 
@@ -143,13 +165,26 @@ export class DictationRecorder {
 
   get current(): DictationState { return this.state; }
 
+  /** D-010: the current input level while recording, or null (no meter, or not recording). */
+  level(): number | null {
+    if (this.state !== "recording" || !this.meter) return null;
+    try { return this.meter.read(); } catch { return null; }
+  }
+
   private set(state: DictationState) {
     if (this.state === state) return;
     this.state = state;
     this.cb.onState(state);
   }
 
+  private closeMeter() {
+    const meter = this.meter;
+    this.meter = null;
+    try { meter?.close(); } catch { /* already closed */ }
+  }
+
   private release() {
+    this.closeMeter();
     if (this.timer !== null) { this.env.clearTimeout(this.timer); this.timer = null; }
     for (const track of this.stream?.getTracks() ?? []) { try { track.stop(); } catch { /* already stopped */ } }
     this.stream = null;
@@ -199,6 +234,7 @@ export class DictationRecorder {
       return;
     }
     this.startedAt = this.env.now();
+    try { this.meter = this.env.levelMeter?.(stream) ?? null; } catch { this.meter = null; }
     this.set("recording");
     // The hard stop: whatever the learner does, the clip ends before the Service's limit.
     this.timer = this.env.setTimeout(() => { if (generation === this.generation) this.stop(); }, DICTATION_STOP_AT_MS);
@@ -225,6 +261,7 @@ export class DictationRecorder {
   private finish(generation: number) {
     if (generation !== this.generation || (this.state !== "recording" && this.state !== "stopping")) return;
     this.set("stopping");
+    this.closeMeter();
     const recorder = this.recorder;
     // The microphone closes now; the recorder still flushes what it has into `onstop`.
     for (const track of this.stream?.getTracks() ?? []) { try { track.stop(); } catch { /* ignore */ } }

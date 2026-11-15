@@ -38,6 +38,13 @@
 .hps-voice-time { color: var(--hp-text-muted-default); font-variant-numeric: tabular-nums; }
 .hps-voice-limit { color: var(--hp-text-muted-default); }
 .hps-voice-recovered { white-space: pre-wrap; }
+/* CGP-VOICE-D-010: the decorative input level while recording (aria-hidden; the words carry the state). Not drawn
+   under reduced motion (DictationControl), and it never transitions. */
+.hps-voice-level { display: inline-block; inline-size: calc(var(--hp-control-min) * 1.5); block-size: var(--hp-space-2); border-radius: var(--hp-radius-full); background: var(--hp-bg-control-pressed); overflow: hidden; flex-shrink: 0; }
+.hps-voice-level > span { display: block; block-size: 100%; inline-size: calc(var(--hps-voice-level, 0) * 100%); background: var(--hp-ring-focus-default); transition: none; }
+/* CGP-VOICE-D-012 / R-015: a failure line: the alert icon, one sentence, one recovery action and 닫기. */
+.hps-voice-failure > .hps-icon { flex-shrink: 0; color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); }
+.hps-voice-failure-text { flex: 1 1 calc(var(--hp-control-md) * 4); min-inline-size: 0; }
 .hps-voice-btns { display: flex; flex-wrap: wrap; gap: var(--hp-space-2) var(--hp-space-3); }
 .hps-voice-link, .hps-voice-primary {
   min-height: var(--hp-control-min); min-width: var(--hp-control-min); padding: 0 var(--hp-space-3);
@@ -86,6 +93,9 @@
 
 @media (forced-colors: active) {
   .hps-input .hps-voice-mic, .hps-voice-note { border-color: ButtonText; }
+  .hps-voice-level { background: Canvas; border: var(--ds-c-studio-styles-size-3) solid CanvasText; }
+  .hps-voice-level > span { background: Highlight; }
+  .hps-voice-failure > .hps-icon { color: CanvasText; }
   .hps-voice-primary, .hps-voice-disclosure-start { border: var(--ds-c-studio-styles-size-3) solid ButtonText; }
 }
 

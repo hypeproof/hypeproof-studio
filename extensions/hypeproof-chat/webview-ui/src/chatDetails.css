@@ -335,6 +335,16 @@ body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-
 /* CGP-SHELL-R-028: 내 작업 내보내기 shares the entry style (44px, caption >=14px) and keeps a border in forced colours. */
 .hps-preferences .hps-open-shortcuts, .hps-preferences .hps-export-work { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
 @media (forced-colors: active) { .hps-preferences .hps-export-work { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; } }
+/* CGP-KNOW-R-028 / DES-KNOW-46: the open task's two memory switches. Native checkboxes with visible labels, each row
+   a 44px target, every word at the caption step, the lock glyph and its reason as text (never the disabled grey alone). */
+.hps-task-memory { margin: 0; padding-block: var(--ds-c-studio-chatdetails-space-2); padding-inline: 0; border: 0; border-block-end: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); font-size: var(--hp-font-caption); }
+.hps-task-memory > legend { padding: 0; font-weight: var(--hp-weight-strong); font-size: var(--hp-font-caption); }
+.hps-task-memory-row { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); min-block-size: var(--ds-c-studio-chatdetails-size-8); cursor: pointer; }
+.hps-task-memory-row > input { flex: none; margin: 0; inline-size: var(--ds-c-studio-chatdetails-space-5); block-size: var(--ds-c-studio-chatdetails-space-5); }
+.hps-task-memory-row:has(input:disabled) { cursor: default; }
+.hps-preferences .hps-task-memory-hint, .hps-preferences .hps-task-memory-lock { margin-block: 0 var(--ds-c-studio-chatdetails-space-1); font-size: var(--hp-font-caption); }
+.hps-preferences .hps-task-memory-lock { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); color: var(--vscode-foreground, inherit); }
+.hps-task-memory-lock > svg { flex: none; }
 /* CGP-SHELL-R-027 / DES-SHELL-26: the deletion request. Every word at the caption step (>=14px), every
    control 44px tall, the chip carries an icon AND a word in the theme foreground (never colour alone),
    the row and the hold reason wrap at 320px instead of truncating. */
@@ -392,12 +402,13 @@ body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-
 /* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
 .hps-shell[data-chat-detail="personal"] .hps-msg-body { word-break: keep-all; }
 
-/* CGP-DS-R-009 / CGP-DS-R-008: chat text size in personal chat (the picker lives in 대화 설정). The
-   shell sets the step; every --hp-text-* size inside it follows (tokens.css), so 크게 / 아주 크게 add
-   2px / 4px to the body, the composer, reply choices and every caption alike. Control heights and
-   44px targets do not change (min-heights only). */
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-7); }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-13); }
+/* CGP-DS-R-009 / CGP-DS-R-008 / CGP-SHELL-R-017: chat text size in every chat seat, personal and
+   classroom (the pickers live in 대화 설정 and in the start page 설정 sheet). The shell sets the step;
+   every --hp-font-* size inside it follows (tokens.css), so 크게 / 아주 크게 add 2px / 4px to the body,
+   the composer, reply choices, the help sheets (단축키, 새로운 기능), lesson tips, the classroom help
+   request and every caption alike. Control heights and 44px targets do not change (min-heights only). */
+.hps-shell[data-text-size="large"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-7); }
+.hps-shell[data-text-size="xlarge"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-13); }
 
 /* CGP-DS-R-008 (REQ-STUDIO-TYPE-SCALE, DEC-29): learner text in the personal chat reads at 14px or
    more. The shell's own size is the caption step, so text that only inherits follows the step too.

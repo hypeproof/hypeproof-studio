@@ -103,6 +103,7 @@ import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMod
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, isInsideFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { freeBytesAt, lowDiskKey, lowDiskNotice, lowDiskThresholdBytes, LOW_DISK_SETTING, type LowDiskNotice, type Statfs } from './lowDisk';
+import { askServiceStatus, nextServiceStatusAt } from './serviceStatus';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED, FOLDER_CONSENT_TIMED_OUT } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -156,7 +157,7 @@ import { logsAvailable, readSessionLogs } from "./reportLogsHost";
 import { collectReportMetadata } from "./reportProblem";
 import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
 import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
-import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { acceptFocus, acceptWork, collapseSeat, materialReportPayload, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -314,6 +315,7 @@ import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./b
 import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLockOf, browserSettingsReverts, browserSettingsWritable, BROWSER_SETTINGS_REWRITE_MS, externalLinkDialog, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
+import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
@@ -394,6 +396,7 @@ import {
   pendingCloseLabel,
   WRITE_TOOL_NAMES,
   resolveInstructorTokenFromSecrets,
+  looksLikeIssuerTokenUnverified,
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
 import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
@@ -418,6 +421,10 @@ import { MEMORY_REMEMBER_TURN_CAP, type MemoryRememberHost } from "./memoryRemem
 import { MEMORY_WRITE_COPY, isMemoryWriteId, memoryWriteLabel } from "./memoryWriteLine";
 import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
+import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
+import { insideFolder } from "./memoryPathCheck";
+import { watchMemoryEditorSaves } from "./memoryEditorSaves";
+import { FOLDER_GUARD_COPY, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder, type Snapshot } from "./memoryFolderGuard";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
@@ -1121,9 +1128,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               renameUndone = await store.undoRename(held.undo).then(() => true, () => false);
             }
           }
-          else if (msg.type === 'taskArchive') await store.archiveTask(msg.taskId, expected);
+          else if (msg.type === 'taskArchive') { await store.archiveTask(msg.taskId, expected); void this.purgeTaskMemoryQuarantine(msg.taskId); }
           else if (msg.type === 'taskRestore') await store.restoreTask(msg.id, expected);
-          else if (msg.type === 'taskMove') moved = await this.moveTask(store, msg.id, msg.destination, expected);
+          else if (msg.type === 'taskMove') { moved = await this.moveTask(store, msg.id, msg.destination, expected); void this.purgeTaskMemoryQuarantine(msg.id); }
           this.orchestratorState = undefined;
           // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
           if (leaving) this.endTaskCommandAllows();
@@ -1903,6 +1910,81 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     })();
     this.lowDiskRun = run;
     void run.finally(() => { if (this.lowDiskRun === run) this.lowDiskRun = undefined; if (rerun) void this.refreshLowDisk(); });
+    return run;
+  }
+  /**
+   * CGP-AGENT-R-031 — the Service's busy signal for the banner above the composer. Asked only for a
+   * signed-in participant seat on the Service: a local coach has no Service to ask, and an instructor or issuer
+   * seat would only get the route's 401. An unchanged state is not re-posted; concurrent asks share one request.
+   */
+  private serviceStatusPosted: string | undefined;
+  private serviceStatusRun: Promise<void> | undefined;
+  /** Not before this time (normal minute, or backoff after errors). */
+  private serviceStatusNextAt = 0;
+  private serviceStatusErrors = 0;
+  /** The Service and token a 404 came back for: that Service has no such route, so this seat is not asked again. */
+  private serviceStatusUnserved: string | undefined;
+  /** Test seams: the fetch used to ask (undefined = the global fetch) and the clock. */
+  serviceStatusFetch: Parameters<typeof askServiceStatus>[0] | undefined;
+  serviceStatusNow: (() => number) | undefined;
+  /** The last answer, re-posted to a remounted panel without asking the Service again. */
+  private serviceStatusLast: boolean | undefined;
+  /**
+   * The learner closed the banner for THIS busy episode. Kept here, not in the panel, so a remount (a task switch) does
+   * not bring it back. It ends when the Service reads not busy, so the next busy episode shows the banner again.
+   */
+  private serviceStatusDismissed = false;
+  /**
+   * A remount (a task switch, the panel coming back) re-posts the last state and never adds a Service request of its
+   * own: it asks only once the interval has passed. A seat the route does not serve is asked again only after its token
+   * or the Service address changes.
+   */
+  resetServiceStatus(): void { this.serviceStatusPosted = undefined; }
+  private async postServiceStatus(busy: boolean): Promise<void> {
+    const dismissed = busy && this.serviceStatusDismissed === true;
+    const key = JSON.stringify([busy, dismissed]);
+    if (key === this.serviceStatusPosted) return;
+    if (await this.post({ type: "serviceStatus", busy, dismissed }) !== false) this.serviceStatusPosted = key;
+  }
+  /** The banner's close button: hidden for this busy episode, across remounts, until the Service reads not busy. */
+  async dismissServiceStatus(): Promise<void> {
+    if (this.serviceStatusLast !== true) return;
+    this.serviceStatusDismissed = true;
+    await this.postServiceStatus(true);
+  }
+  refreshServiceStatus(): Promise<void> {
+    if (this.serviceStatusRun) return this.serviceStatusRun;
+    const run = (async () => {
+      try {
+        const repost = async () => { if (this.serviceStatusLast !== undefined) await this.postServiceStatus(this.serviceStatusLast); };
+        const now = (this.serviceStatusNow ?? Date.now)();
+        const proxyUrl = this.proxyUrl();
+        const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
+        const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
+        // An instructor or issuer seat: the route answers 401 to an issuer token every time, so asking would only back
+        // off forever. Not a gate (the Service decides what a token may do); it only saves a request that cannot succeed.
+        const staff = this._instructorMode?.isInstructor === true || looksLikeIssuerTokenUnverified(token);
+        const seat = `${proxyUrl}\n${token ?? ""}`;
+        if (this.serviceStatusUnserved === seat) { await repost(); return; }
+        if (this.serviceStatusUnserved !== undefined) { this.serviceStatusUnserved = undefined; this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; }
+        if (!staff && now < (this.serviceStatusNextAt ?? 0)) { await repost(); return; }
+        const answer = staff ? { busy: false, outcome: 'skipped' as const } : await askServiceStatus(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof askServiceStatus>[0]), { proxyUrl, token });
+        // `?? 0`: a test harness built with Object.create skips the field initialisers.
+        this.serviceStatusErrors = answer.outcome === 'error' ? (this.serviceStatusErrors ?? 0) + 1 : 0;
+        if (answer.outcome === 'unserved') this.serviceStatusUnserved = seat;
+        // No token yet, or a staff seat, is not a verdict on the seat: ask again on the next request.
+        this.serviceStatusNextAt = answer.outcome === 'skipped' || answer.outcome === 'unserved' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
+        this.serviceStatusLast = answer.busy;
+        // Only a confirmed healthy answer ends the busy episode. An error (network, timeout, 5xx, 401, 403) reads as not busy
+        // and hides the banner, but it is no verdict on the episode, so a closed banner stays closed when busy is seen again.
+        if (answer.outcome === 'ok' && !answer.busy) this.serviceStatusDismissed = false;
+        await this.postServiceStatus(answer.busy);
+      } catch (error) {
+        console.warn('[serviceStatus] check failed', error);
+      }
+    })();
+    this.serviceStatusRun = run;
+    void run.finally(() => { if (this.serviceStatusRun === run) this.serviceStatusRun = undefined; });
     return run;
   }
   /** A send while the folder is missing is held: the text goes back to the composer, the notice is shown, no turn starts. */
@@ -3668,6 +3750,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(setFolderConsentPresenter(folder => this.folderConsentRequest.ask(folder)));
     context.subscriptions.push(onFolderConsentChanged(() => { this.endTaskCommandAllows(); void this.postConfig().catch(() => {}); }));
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
+    // CGP-KNOW-R-028 follow-up (#4014) — the learner's editor saves of memory files (memoryEditorSaves.ts).
+    const memorySaves = watchMemoryEditorSaves();
+    if (memorySaves) context.subscriptions.push(memorySaves);
+    // The quarantine's retention and caps are applied at activation too (a window closed for a week starts clean).
+    try { void pruneQuarantine(this.memoryQuarantineBase()).catch(() => undefined); } catch { /* no global storage yet: the next guard run prunes */ }
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
     context.subscriptions.push(setProblemSink(facts => this.noteProblem(facts)));
     // REQ-STUDIO-DOCTOR — background checks: once ~60 s after startup, after failures, before a report is sent.
@@ -5547,6 +5634,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       classHeld: this.isClassUpdateHeld(),
       chatIdleMs: Date.now() - this.lastActivityAt,
     };
+  }
+
+  /**
+   * CGP-SHELL-R-019 — the 팁 보기 choice of the seat the chat currently belongs to, for the start page's
+   * settings row (CGP-SHELL-R-014), which has no lesson context of its own. One seat derivation, here.
+   */
+  lessonTipsState(): { on: boolean; seat: string } {
+    return { on: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)), seat: this.lessonTips.currentSeat };
+  }
+
+  /**
+   * CGP-SHELL-R-019 — turn this seat's tips on or off and refresh the chat. The result says what happened, so a
+   * caller can tell the learner: `stored` (kept for this seat), `memory-only` (no seat is known yet, e.g. before
+   * the first config, or an empty seat: it lasts only for this window) or `refused` (not a boolean: nothing changes).
+   */
+  async setLessonTips(on: unknown): Promise<"stored" | "memory-only" | "refused"> {
+    if (typeof on !== "boolean") return "refused";
+    const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), on);
+    if (next) await this.context.globalState.update(LESSON_TIPS_KEY, next);
+    await this.postConfig();
+    return next ? "stored" : "memory-only";
   }
 
   refreshConfig(): Promise<void> {
@@ -7698,6 +7806,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const activity = activityConnections(this.context)?.scope;
     if (!binding || !personalMemoryActivity(activityConnections(this.context)?.current, profile)) return null;
     if (!memoryNoticeSeen(this.context.workspaceState.get(MEMORY_NOTICE_KEY), activity)) return null;
+    // CGP-KNOW-R-028 — "이 작업에서 기억 쓰기" off: this task's requests carry no memory at all.
+    if (!this.taskMemorySwitches(binding.scope, this.activeTaskId()).use) return null;
     const items = await new ActivityMemory(binding.root).contextItems().catch(() => null);
     const after = this.activityMemoryBinding;
     if (!items || !after || after.scope !== binding.scope || after.root !== binding.root || activityConnections(this.context)?.scope !== activity) return null;
@@ -7745,8 +7855,137 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private rememberedNames = new Map<string, Set<string>>();
   private rememberTurnWrites = new Map<string, number>();
-  private memoryWriteRefusal(binding: { root: string }, streamId: string): string | null {
-    return this.folderWriteRefusalFor(path.join(binding.root, ".hypeproof", "memory"), streamId);
+  private memoryWriteRefusal(binding: { root: string; scope?: string }, streamId: string): string | null {
+    const folder = this.folderWriteRefusalFor(path.join(binding.root, ".hypeproof", "memory"), streamId);
+    if (folder) return folder;
+    // CGP-KNOW-R-028 — "이 작업을 기억에 남기기" off for the task the turn began in (or, read again now, for that task):
+    // no memory write from it, whatever the runtime. Turning it off mid-turn stops the next write too.
+    const scope = binding.scope ?? this.activityMemoryBinding?.scope;
+    const task = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
+    if (scope && !this.taskMemorySwitches(scope, task).keep) return TASK_MEMORY_COPY.keepRefusal;
+    return null;
+  }
+  /**
+   * CGP-KNOW-R-028 — the coach's own file tools (Write, Edit, MultiEdit, NotebookEdit) writing into the activity's
+   * `.hypeproof/memory/`, and any shell command that names `.hypeproof`, while this task's keep switch is off: refused
+   * like the remember tool. The shell check is a string check (see the requirement's "not covered").
+   */
+  memoryFolderWriteRefusal(streamId: string, toolName: string, input: unknown): string | null {
+    const writeTool = ["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(toolName);
+    const readTool = ["Read", "Grep", "Glob", "NotebookRead"].includes(toolName);
+    const shell = toolName === "Bash";
+    if (!writeTool && !readTool && !shell) return null;
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    if (!binding || !input || typeof input !== "object") return null;
+    const fields = input as Record<string, unknown>;
+    const sw = this.taskMemorySwitches(binding.scope, this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId());
+    if (sw.keep && sw.use) return null;
+    if (shell) {
+      // Coarse and deny-only: a shell command that names `.hypeproof` (any case) is refused while keep is off (writes)
+      // or use is off (reads such as cat). Quote or escape splitting, interpreters and names built at run time are not
+      // caught here (the requirement's status); the turn-end folder check covers the write side.
+      if (typeof fields.command !== "string" || !/\.hypeproof/i.test(fields.command)) return null;
+      return !sw.keep ? TASK_MEMORY_COPY.keepRefusal : TASK_MEMORY_COPY.useRefusal;
+    }
+    const folder = path.join(binding.root, ".hypeproof", "memory");
+    const targets = [fields.file_path, fields.notebook_path, fields.path].filter((v): v is string => typeof v === "string" && path.isAbsolute(v));
+    // A search's own pattern may aim at the folder from an ancestor (`path` the work folder, glob `.hypeproof/**`).
+    const aims = readTool && [fields.pattern, fields.glob].some(v => typeof v === "string" && /\.hypeproof/i.test(v));
+    if (!aims && !targets.some(t => insideFolder(folder, t))) return null;
+    if (writeTool && !sw.keep) return TASK_MEMORY_COPY.keepRefusal;
+    if (readTool && !sw.use) return TASK_MEMORY_COPY.useRefusal;
+    return null;
+  }
+  /**
+   * CGP-KNOW-R-028 follow-up (#4014) — a turn that begins in a task whose keep switch is off takes a snapshot of the
+   * activity's memory folder; at its end whatever it added, changed or deleted, except Studio's own changes, is put back
+   * (`revertTurnChanges`), the turn's versions kept in the extension's global storage, and one line says so in that turn.
+   */
+  private memoryFolderGuards?: Map<string, { root: string; scope: string; task: string | null; at: number; snap: Snapshot }>;
+  private memoryQuarantineBase(): string {
+    return path.join(this.context.globalStorageUri.fsPath, "memory-quarantine");
+  }
+  private memoryQuarantineScope(scope: string): string {
+    return createHash("sha256").update(`hps-memory-quarantine/1\0${scope}`).digest("hex").slice(0, 24);
+  }
+  async startMemoryFolderGuard(streamId: string): Promise<void> {
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    const task = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
+    if (!binding || this.taskMemorySwitches(binding.scope, task).keep) return;
+    const at = Date.now();
+    const snap = await snapshotMemoryFolder(binding.root).catch(() => null);
+    if (snap) (this.memoryFolderGuards ??= new Map()).set(streamId, { root: binding.root, scope: binding.scope, task, at, snap });
+  }
+  async endMemoryFolderGuard(streamId: string): Promise<{ reverted: number; kept: number; failed: number; unchecked: boolean } | null> {
+    const guard = this.memoryFolderGuards?.get(streamId);
+    if (!guard) return null;
+    this.memoryFolderGuards!.delete(streamId);
+    const lines: Array<[string, "done" | "error"]> = [];
+    const base = this.memoryQuarantineBase();
+    const quarantine = path.join(base, this.memoryQuarantineScope(guard.scope), guard.task && /^[A-Za-z0-9_-]{1,128}$/.test(guard.task) ? guard.task : "no-task");
+    const result = await revertTurnChanges(guard.root, guard.snap, guard.at, quarantine);
+    await pruneQuarantine(base).catch(() => undefined);
+    if (result.reverted) lines.push([FOLDER_GUARD_COPY.reverted(result.reverted), "done"]);
+    if (result.failed) lines.push([FOLDER_GUARD_COPY.failed(result.failed), "error"]);
+    if (result.unchecked) lines.push([FOLDER_GUARD_COPY.unchecked, "error"]);
+    // Counts only, never content or file names. Shown in the turn and kept with it (its items were saved before this ran).
+    for (const [label, state] of lines) {
+      const id = randomId();
+      this.postToolLog(streamId, { id, icon: "🔒", label, state });
+      await this.appendHistory([{ id, role: "tool", content: "", createdAt: Date.now(), tool: { icon: "🔒", label, state } }]).catch(() => undefined);
+    }
+    return result;
+  }
+  /**
+   * The quarantine of one task goes with it: archived or moved to another activity (a refused move throws before this,
+   * so it keeps it). The handler does not wait for the delete, but the task folder is renamed away before this returns control
+   * (purgeTaskQuarantine), so a new turn in a restored task writes into a fresh folder. It never throws or rejects:
+   * the archive or move has already happened, and the task handler's own flow (its result, the rename undo, the
+   * switch) must run exactly as without it (task-workspace-host). A host without global storage has nothing to purge.
+   */
+  private async purgeTaskMemoryQuarantine(taskId: unknown): Promise<void> {
+    try {
+      const scope = this.activityMemoryBinding?.scope ?? activityConnections(this.context)?.scope;
+      if (typeof taskId !== "string" || !scope) return;
+      await purgeTaskQuarantine(this.memoryQuarantineBase(), this.memoryQuarantineScope(scope), taskId);
+    } catch { /* nothing to purge */ }
+  }
+  /** CGP-KNOW-R-028 — the task each turn began in, so a task switch mid-turn cannot move its writes. */
+  private taskMemoryStreams?: Map<string, string | null>;
+  private activeTaskId(): string | null {
+    return this.currentTaskStore?.()?.getView().activeTaskId ?? null;
+  }
+  private taskMemoryLedger() {
+    try { return acceptTaskMemory(this.context.workspaceState.get(TASK_MEMORY_KEY)); } catch { return acceptTaskMemory(null); }
+  }
+  private taskMemorySwitches(scope: string, taskId: string | null) {
+    return switchesFor(this.taskMemoryLedger(), scope, taskId);
+  }
+  /**
+   * CGP-KNOW-R-028 / DES-KNOW-46 — the two switches for the open task, where the memory store exists (the R-005
+   * binding) and the task is an ordinary one: a temporary task keeps its own rule (nothing written, R-029).
+   */
+  taskMemoryView(): TaskMemoryView | undefined {
+    if (this._instructorMode?.isInstructor !== false || this.inTemporaryTask()) return undefined;
+    const binding = this.activityMemoryBinding;
+    const view = this.currentTaskStore?.()?.getView();
+    const taskId = view?.activeTaskId;
+    const task = taskId ? view?.tasks.find(t => t.id === taskId) : undefined;
+    if (!binding || !taskId || !task) return undefined;
+    const sw = this.taskMemorySwitches(binding.scope, taskId);
+    return { taskId, use: sw.use, keep: sw.keep, useLocked: useLocked(task.messageCount) };
+  }
+  private async setTaskMemory(msg: { taskId?: unknown; use?: unknown; keep?: unknown }): Promise<void> {
+    const view = this.taskMemoryView();
+    const binding = this.activityMemoryBinding;
+    // Only the open task, only where the switches are drawn; the lock is the host's, from the task's own messages.
+    if (!view || !binding || msg.taskId !== view.taskId) { await this.postConfig(); return; }
+    const change: { use?: boolean; keep?: boolean } = {};
+    if (msg.use !== undefined) change.use = msg.use as boolean;
+    if (msg.keep !== undefined) change.keep = msg.keep as boolean;
+    const result = setSwitches(this.taskMemoryLedger(), binding.scope, view.taskId, change, view.useLocked);
+    if (result.ok) await this.context.workspaceState.update(TASK_MEMORY_KEY, result.ledger);
+    await this.postConfig();
   }
   memoryRememberHostFor(streamId: string): MemoryRememberHost | undefined {
     const pinned = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
@@ -8748,6 +8987,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "turnReviewRequest": this.postTurnReview(); return;
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
       case "lowDiskRequest": if (msg.mount === true) this.lowDiskPosted = undefined; await this.refreshLowDisk(); return;
+      case "serviceStatusRequest": if (msg.mount === true) this.resetServiceStatus(); await this.refreshServiceStatus(); return;
+      case "serviceStatusDismiss": await this.dismissServiceStatus(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
@@ -8755,6 +8996,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "activityMemoryRequest": await this.postActivityMemory(); return;
       case "memoryWriteUndo": await this.runMemoryWriteUndo(msg); return;
+      case "taskMemorySet": await this.setTaskMemory(msg); return;
       case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
       case "memoryNoticeRequest": case "memoryNoticeAck": await this.answerMemoryNotice(msg, source); return;
       case "memoryUseRequest": await this.runMemoryUse(msg); return;
@@ -9082,6 +9324,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.globalState.update(TEXT_SIZE_KEY, normalizeTextSize(msg.size));
         await this.postConfig();
         return;
+      case "setLessonTips":
+        // CGP-SHELL-R-019 — one learner's choice, kept per seat on this computer (shared classroom PCs); an
+        // empty seat keeps it in memory only. Written only from a boolean; nothing leaves this computer.
+        if (typeof msg.on !== "boolean") return;
+        await this.setLessonTips(msg.on);
+        return;
       case "setLearnerNickname": {
         // CGP-KNOW-R-032 — the host's check is the authoritative one: the seat must offer the field
         // and the value must pass the same screen the field ran. A refused value changes nothing.
@@ -9405,6 +9653,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.workspaceState.update("hps.lessonWork", { ...all, [lesson.sha256]: { ...(all[lesson.sha256] ?? {}), [saved.stepId]: saved.work } });
         this.spool?.recordWorkflow({ event: "lesson_work_saved", payload: { lesson_version: lesson.version, step_id: saved.stepId, kind: saved.work.kind } });
         await this.post({ type: "lessonWorkState", sha256: lesson.sha256, work: this.lessonWorkFor(lesson.sha256) });
+        return;
+      }
+      // CGP-LEARN-R-011 — "자료가 틀린 것 같아요". Only a block the served lesson draws on that step, and one of three reasons;
+      // it goes to the class board over the classroom-ops outbox (ids only, no text). The answer is the Service's own outcome.
+      case "materialReport": {
+        const lesson = this.cachedProfile?.lesson;
+        const payload = materialReportPayload(lesson, msg);
+        // "sent" only after the Service accepted it (or already holds the same report); a queued report is not sent.
+        let outcome: string = "not_sent";
+        if (payload) { try { outcome = (await this.opsObserver?.materialReport?.(payload)) ?? "not_sent"; } catch { outcome = "not_sent"; } }
+        const state = outcome === "accepted" ? "sent" : outcome === "duplicate" ? "already" : outcome === "capped" ? "capped" : outcome === "unconfirmed" ? "unconfirmed" : "not_sent";
+        if (lesson) await this.post({ type: "materialReportResult", sha256: lesson.sha256, stepId: msg.stepId, state });
         return;
       }
       // AE-01 (#554) — the learner's own goal and completion criteria for this lesson revision. Kept on this device beside
@@ -9860,6 +10120,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
     if (temporaryTurn) (this.temporaryStreams ??= new Set()).add(streamId);
+    // CGP-KNOW-R-028 — the task this turn belongs to, for the keep switch.
+    this.taskMemoryStreams ??= new Map();
+    this.taskMemoryStreams.set(streamId, this.activeTaskId());
+    await this.startMemoryFolderGuard(streamId);
+    while (this.taskMemoryStreams.size > 64) this.taskMemoryStreams.delete(this.taskMemoryStreams.keys().next().value as string);
     if (memoryTurn) { this.memoryTurns ??= new Map(); this.memoryTurns.set(streamId, { scope: memoryTurn.scope, used: memoryTurn.used }); }
     // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
     // policy: the details list is where each request's agent and model are shown.
@@ -10661,6 +10926,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             onDelta,
             onRefusal,
             onActivity,
+            // CGP-KNOW-R-028 — keep-off refusals for the coach's own file tools and shell, before the policy.
+            memoryFolderRefusal: (toolName: string, input: unknown) => this.memoryFolderWriteRefusal(streamId, toolName, input),
             // #580 — SDK-path usage: the assistant message is the per-request unit
             // (one record even when a single API response arrives split across several
             // messages, via requestKey dedupe), and the result message is the turn
@@ -10930,6 +11197,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await Promise.race([Promise.allSettled(pendingReveals), new Promise((r) => { timer = setTimeout(r, 10_000); })]);
         clearTimeout(timer);
       }
+      // CGP-KNOW-R-028 follow-up (#4014) — a keep-off turn's memory folder is put back before the turn closes.
+      await this.endMemoryFolderGuard(streamId).catch(() => undefined);
       await this.endTurnRestore(turnRestorePoint, streamId, messageId, assistantText);
       this.delegationControls.delete(streamId);
       this.activeStreams.delete(streamId);
@@ -11893,6 +12162,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     for (const id of ids) await this.lessonChanges?.seen(id).catch(() => false);
   }
 
+  /**
+   * CGP-SHELL-R-019 — the 팁 보기 choice of the seat the current config was built for. Created on first use, so a
+   * provider made without the constructor (host test harnesses build one with Object.create) never throws in postConfig.
+   */
+  private lessonTipsPref: LessonTipsPreference | undefined;
+  private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
+
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
     // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
@@ -12000,7 +12276,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const visibleClassWindow = classWindow && classNoticeId && this.context.globalState?.get(classWindowReceiptKey(classNoticeId)) !== true
       ? { ...classWindow, noticeId: classNoticeId } : null;
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
+    // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
+    // A different seat starts with tips on; an in-memory choice does not carry over to it.
+    const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
+    // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
+    this.lessonTips.forSeat(tipsSeat);
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
@@ -12046,10 +12327,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
+        lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
         ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
+        // CGP-KNOW-R-028 — the open task's two memory switches (absent: no store, a temporary task, an instructor).
+        ...(!isInstructor && this.taskMemoryView?.() ? { taskMemory: this.taskMemoryView()! } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.

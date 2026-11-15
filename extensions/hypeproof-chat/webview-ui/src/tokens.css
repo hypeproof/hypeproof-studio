@@ -105,8 +105,8 @@
   --hp-dur-runner-hop: var(--ds-c-studio-tokens-size-88);
   --hp-dur-runner-puff: var(--ds-c-studio-tokens-size-89);
   --hp-dur-runner-blink: var(--ds-c-studio-tokens-size-90);
-  /* CGP-DS-R-008 — the text-size step (CGP-DS-R-009): 0px here; the personal chat shell sets 2px
-   * for 크게 and 4px for 아주 크게 (chatDetails.css). */
+  /* CGP-DS-R-008 — the text-size step (CGP-DS-R-009, CGP-SHELL-R-017): 0px here; every chat shell
+   * sets 2px for 크게 and 4px for 아주 크게 (chatDetails.css), and so does the start page (start.css). */
   --hp-font-step: var(--ds-c-studio-tokens-size-91);
   /* CGP-DS-R-010 (REQ-CGP-DS-11, DES-06) — the 4px spacing unit and the control-height ladder.
    * New and changed spacing is a multiple of --hp-space (calc(var(--hp-space) * n)). A control's
@@ -142,10 +142,11 @@
  * substituted where it is declared and inherited as a value, so the size tokens are declared on
  * .hps-shell too: there they pick up the shell's own --hp-font-step and every token-sized text in
  * the chat grows with the learner's text-size choice instead of fighting it
- * (test/type-scale.smoke.mjs). Line heights: 1.5 for labels, 1.65 for Hangul prose.
+ * (test/type-scale.smoke.mjs). The start page root (.studio-start) re-declares them for the same
+ * reason: it carries the text-size step too (CGP-SHELL-R-017). Line heights: 1.5 for labels, 1.65 for Hangul prose.
  * CGP-DS-D-005 (DES-CGP-DS-09) completes the scale: 14 / 16 / 18 / 22 / 28px, two weights (400 and
  * 600, never 500, 650 or the user agent's bold) and Hangul tracking 0 (never negative). */
-:root, .hps-shell {
+:root, .hps-shell, .studio-start {
   --hp-font-caption: calc(var(--ds-c-studio-tokens-size-18) + var(--hp-font-step));   /* labels, metadata, captions, controls */
   --hp-font-body: calc(var(--ds-c-studio-tokens-size-30) + var(--hp-font-step));      /* message bodies, the composer */
   --hp-font-lead: calc(var(--ds-c-studio-tokens-size-52) + var(--hp-font-step));      /* the empty-chat greeting, answer h2/h3 */

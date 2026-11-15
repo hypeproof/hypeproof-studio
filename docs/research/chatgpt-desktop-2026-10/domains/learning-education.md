@@ -277,6 +277,8 @@ The Studio side is the next paragraph. No real type has params yet, so (a) is pr
 
 REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 Studio side (2026-11-14): REQ-STUDIO-LEARNING-BLOCK-PIN in `docs/studio-requirements.md`. Studio draws a block only at a pinned version it renders (v1 today, with an unpinned lesson meaning v1). Any other version gets the unsupported notice, and the learner's text never shows a type id or a version.
 
+REQ-CGP-LEARN-11 / DES-CGP-LEARN-11 status (2026-11-15, CGP-LEARN-R-011 / D-011): implemented except the optional learner text field (deferred, below). (c), "접기", is REQ-STUDIO-LEARNING-BLOCK-COLLAPSE (`docs/studio-requirements.md`).
+
 REQ-CGP-LEARN-05 / 06 and DES-CGP-LEARN-05 / 06 status (2026-11-15): Service and Studio are done; Chalk authoring is next.
 - Service: hypeproof-service #509 adds box_spacing v1 and #510 adds stage_stepper v1 with `text_list`, which Jay approved for this scope.
 - Studio draws both as REQ-STUDIO-LEARNING-BLOCK-PARAMS (`docs/studio-requirements.md`).
@@ -285,8 +287,11 @@ REQ-CGP-LEARN-05 / 06 and DES-CGP-LEARN-05 / 06 status (2026-11-15): Service and
 REQ-CGP-LEARN-11 / DES-CGP-LEARN-11 status (2026-11-14, CGP-LEARN-R-011 / D-011): **partial**. Only (c), "접기", is implemented, in Studio, as REQ-STUDIO-LEARNING-BLOCK-COLLAPSE (`docs/studio-requirements.md`).
 - The open card's 자료 메뉴, after 닫기, has "접기". Collapsed, the card is one row, "접은 자료: <title>" with "다시 보기", which restores it open.
 - The state is per lesson version and step, local to the webview, and kept across a re-mount. It is never posted to the host and is not an evidence event.
-- Open: (a) and (b), the "자료가 틀린 것 같아요" report and its arrival in the lesson instructor's Chalk view. The existing `/v1/report` reaches the operator, not the lesson's instructor, so this needs a Service and Chalk route.
-- Open: the optional 0–300 learner field. For a minor cohort it must not add a new free-text field beyond the existing report caps.
+- (a) and (b), report half (2026-11-15): REQ-STUDIO-LEARNING-BLOCK-REPORT in `docs/studio-requirements.md`, the classroom-admin row "Material report", and the hypeproof-service classroom-ops `material_report` event.
+  - The 자료 메뉴 gains "자료가 틀린 것 같아요" while the window has a live class connection. It opens inline with three reason chips (내용이 틀려요 / 열리지 않아요 / 이해하기 어려워요), and the toast is "선생님께 전달했어요".
+  - The payload is lesson course, version, step, block type, pinned version, a params digest and the reason. There is no transcript.
+  - The run's instructor sees it in Chalk `/manage` as "자료 신고", with "확인함". It goes over the class connection, not `/v1/report`, so it never reaches the operator, Discord or GitHub.
+- Deferred: the optional 0–300 learner text field, for every seat. The class board never carries a learner's words, so (a)'s "optional learner text" is not built (decisions.md CGP-LEARN-R-011 (a)).
 
 REQ-CGP-LEARN-10 / DES-CGP-LEARN-10 status (2026-11-14, CGP-LEARN-R-010 / D-010): implemented in Studio as REQ-STUDIO-LEARNING-BLOCK-RESET-UNDO (`docs/studio-requirements.md`).
 - "처음으로" restores the preset, which is empty fields for every drawn block today.
