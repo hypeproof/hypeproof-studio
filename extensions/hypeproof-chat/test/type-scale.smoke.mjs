@@ -466,6 +466,7 @@ const SHARED_LEARNER = [
   ".hps-roll-hint", ".hps-roll-original", ".hps-roll-cancel", ".hps-error-banner-title", ".hps-error-banner-msg",
   ".hps-error-banner-retry, .hps-error-banner-dismiss, .hps-error-banner-report", ".hps-error-banner-rid", ".hps-update-banner-title",
   ".hps-update-banner-sub", ".hps-update-banner-notes", ".hps-update-banner-toggle", ".hps-update-banner-install, .hps-update-banner-dismiss",
+  ".hps-rehearsal-route, .hps-rehearsal-checklist",
   ".hps-ai-disclosure", ".hps-page-notice", ".hps-element-context", ".hps-stop-notice", ".hps-turn-review", ".hps-tool-log-line", ".hps-effort",
   ".hps-access", ".hps-verify", ".hps-verify-ai", ".hps-publish", ".hps-publish-note, .hps-publish-timing", ".hps-publish-declare legend",
   ".hps-evidence", ".hps-evidence-meta", ".hps-trial-end-card-fact", ".hps-trial-end-card-primary", ".hps-trial-end-card-personal, .hps-trial-end-card-escape",
