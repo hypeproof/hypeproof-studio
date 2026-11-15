@@ -19,7 +19,7 @@ const dir = fileURLToPath(new URL('../webview-ui/', import.meta.url));
 const app = await build({ entryPoints: [dir + 'src/main.tsx'], bundle: true, platform: 'browser', format: 'iife', outdir: 'start-assets', write: false, loader: { '.svg': 'dataurl', '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl' }, logLevel: 'silent' });
 const css = app.outputFiles.find((f) => f.path.endsWith('.css')).text, js = app.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const shots = process.env.HPS_SHOTS; if (shots) fs.mkdirSync(shots, { recursive: true });
-const adultView = { rows: ['textSize', 'theme', 'reduceMotion', 'notices', 'export'], textSize: 'base', theme: 'dark', reduceMotion: 'auto', notices: false, advanced: true };
+const adultView = { rows: ['textSize', 'theme', 'reduceMotion', 'notices', 'tips', 'export'], textSize: 'base', theme: 'dark', reduceMotion: 'auto', notices: false, tips: true, tipsWindowOnly: false, advanced: true };
 const until = async (b, expr, what) => { for (let n = 0; n < 100; n++) { const v = await b.evaluate(expr); if (v) return v; await new Promise((r) => setTimeout(r, 20)); } throw Error('timed out: ' + what); };
 const b = await launch(bin);
 try {
@@ -49,7 +49,7 @@ try {
     if (!forced) assert.ok(m.colors.every((c) => c === m.primary), 'title, row names and choices use the start page text colour: ' + L);
     assert.ok(!m.sent.some((t) => /Settings$/.test(t)), 'opening the sheet posts no settings-editor request: ' + L);
     assert.ok(m.rows.length <= 6, 'at most six rows: ' + L);
-    assert.deepEqual(m.rows, ['글자 크기', '화면 밝기', '움직임 줄이기', '알림'], 'the host-named rows in requirement order: ' + L);
+    assert.deepEqual(m.rows, ['글자 크기', '화면 밝기', '움직임 줄이기', '알림', '팁 보기'], 'the host-named rows in requirement order: ' + L);
     assert.equal(m.advanced, seat === 'adult' ? 1 : 0, '고급 설정 only when the host allows it: ' + L);
     assert.equal(m.focus, '설정 닫기', 'focus moves into the sheet: ' + L);
     for (const t of m.targets) { assert.ok(t.h >= 44, `44px target ${t.t}: ` + L); assert.ok(t.inside, `target inside the sheet ${t.t}: ` + L); }
@@ -74,14 +74,15 @@ try {
       const pick=(sel,value)=>{const s=d.querySelector(sel);Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,value);s.dispatchEvent(new Event('change',{bubbles:true}));};
       pick('select[name="studio-text-size"]','xlarge');
       pick('select[name="studio-reduce-motion"]','on');
-      d.querySelector('input[type="checkbox"]').click();})()`);
+      d.querySelector('#studio-notices').click();d.querySelector('#studio-tips').click();})()`);
     const posted = await b.evaluate(`JSON.stringify(window.sent)`);
-    assert.deepEqual(JSON.parse(posted), [{ type: 'startSetting', key: 'textSize', value: 'xlarge' }, { type: 'startSetting', key: 'reduceMotion', value: 'on' }, { type: 'startSetting', key: 'notices', value: true }], label);
+    assert.deepEqual(JSON.parse(posted), [{ type: 'startSetting', key: 'textSize', value: 'xlarge' }, { type: 'startSetting', key: 'reduceMotion', value: 'on' }, { type: 'startSetting', key: 'notices', value: true }, { type: 'startSetting', key: 'tips', value: false }], label);
     // The selects keep their names and descriptions, and the modal traps Tab (checked by what the page reports, not by markup).
-    const names = await b.evaluate(`JSON.stringify(['studio-text-size','studio-reduce-motion','studio-notices'].map(id=>{const e=document.getElementById(id),d=e.getAttribute('aria-describedby');return {id,names:[...e.labels].map(l=>l.textContent.trim()).filter(Boolean),desc:d?document.getElementById(d)?.textContent.trim():null}}))`);
+    const names = await b.evaluate(`JSON.stringify(['studio-text-size','studio-reduce-motion','studio-notices','studio-tips'].map(id=>{const e=document.getElementById(id),d=e.getAttribute('aria-describedby');return {id,names:[...e.labels].map(l=>l.textContent.trim()).filter(Boolean),desc:d?document.getElementById(d)?.textContent.trim():null}}))`);
     const named = JSON.parse(names);
-    assert.deepEqual(named.map((n) => n.names), [['글자 크기'], ['움직임 줄이기'], ['알림']], 'each control is named by its row label: ' + label);
+    assert.deepEqual(named.map((n) => n.names), [['글자 크기'], ['움직임 줄이기'], ['알림'], ['팁 보기']], 'each control is named by its row label: ' + label);
     assert.ok(named[0].desc && named[2].desc, 'text size and notices keep their description: ' + label);
+    assert.match(named[3].desc ?? '', /^수업 단계의 도움말을 입력창 위에 보여 줘요\. 대화의 '팁 그만 보기'와 같은 설정이에요\.$/, '팁 보기 says what it is and that it is the chat\'s switch: ' + label);
     const tab = async (modifiers = 0) => { for (const type of ['rawKeyDown', 'keyUp']) await b.send('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers }); };
     await b.evaluate(`document.querySelector('dialog.studio-settings header button').focus()`);
     for (let i = 0; i < 8; i++) { await tab(); assert.ok(await b.evaluate(`!!document.activeElement.closest('dialog.studio-settings')`), 'Tab stays inside the sheet: ' + label); }
@@ -112,5 +113,11 @@ try {
   await b.evaluate(`[...document.querySelectorAll('.studio-nav button')].find(x=>x.textContent==='설정').click()`);
   await until(b, `document.querySelector('dialog.studio-settings')?.open`, 'sheet opens');
   assert.deepEqual(JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('dialog.studio-settings .studio-settings-row > label:first-child')].map(l=>l.textContent))`)), ['알림'], 'only the rows the host names');
+  // 팁 보기 follows the host's state (the chat's choice): off, with no seat known yet, says it lasts for this window.
+  await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'1.0.0',settings:${JSON.stringify({ ...adultView, rows: ['tips'], tips: false, tipsWindowOnly: true })}}}}))`);
+  await until(b, `document.getElementById('studio-tips')?.checked===false`, 'the tips switch follows the host');
+  assert.equal(await b.evaluate(`document.getElementById('studio-settings-tips-hint').textContent`), "수업 단계의 도움말을 입력창 위에 보여 줘요. 대화의 '팁 그만 보기'와 같은 설정이에요. 아직 수업 좌석이 정해지지 않아서 이 창에서만 기억해요.", 'no seat: the hint says it lasts for this window');
+  await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'1.0.0',settings:${JSON.stringify({ ...adultView, rows: ['tips'], tips: true })}}}}))`);
+  await until(b, `document.getElementById('studio-tips')?.checked===true`, 'turned back on from the chat, the open sheet shows it');
   console.log('PASS start settings sheet: 설정 opens the learner right-side sheet (320-400px, full height, 48px one-line rows, <=6 host rows, 고급 설정 adult-only), posts validated choices, 44px/14px, Escape returns focus, 320/800/1420 both themes + forced colours');
 } finally { await b.close(); }

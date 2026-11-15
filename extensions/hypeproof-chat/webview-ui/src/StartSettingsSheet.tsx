@@ -57,6 +57,16 @@ export function StartSettingsSheet({ open, onClose, opener, view }: { open: bool
       </div>
       <p id="studio-settings-notice-hint" className="studio-settings-hint">{C.noticesLabel} {C.noticesHint}</p>
     </>}
+    {rows.includes("tips") && <>
+      <div className="studio-settings-row">
+        <label htmlFor="studio-tips">{C.tips}</label>
+        <label className="studio-settings-check" htmlFor="studio-tips">
+          <input id="studio-tips" type="checkbox" checked={v.tips} aria-describedby="studio-settings-tips-hint"
+            onChange={event => postToHost({ type: "startSetting", key: "tips", value: event.currentTarget.checked })} />
+        </label>
+      </div>
+      <p id="studio-settings-tips-hint" className="studio-settings-hint">{C.tipsHint}{v.tipsWindowOnly ? " " + C.tipsWindowHint : ""}</p>
+    </>}
     {rows.includes("export") && <>
       <button type="button" className="studio-settings-row studio-settings-action" aria-describedby="studio-settings-export-hint"
         onClick={() => { onClose(); postToHost({ type: "startExportMyWork" }); }}>{C.export}</button>

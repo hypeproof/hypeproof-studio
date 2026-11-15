@@ -5829,8 +5829,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), on);
     if (next) await this.context.globalState.update(LESSON_TIPS_KEY, next);
     await this.postConfig();
+    this.emitLessonTipsChanged();
     return next ? "stored" : "memory-only";
   }
+
+  /** CGP-SHELL-R-014 — the start page's 팁 보기 row follows this choice; any press (either surface) or a seat switch fires. */
+  private readonly lessonTipsListeners = new Set<() => void>();
+  onLessonTipsChanged(listener: () => void): () => void {
+    this.lessonTipsListeners.add(listener);
+    return () => { this.lessonTipsListeners.delete(listener); };
+  }
+  private emitLessonTipsChanged(): void { for (const l of [...this.lessonTipsListeners]) { try { l(); } catch { /* a listener never breaks the chat */ } } }
 
   refreshConfig(): Promise<void> {
     return (async () => {
@@ -12482,7 +12491,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const micInput = readMicChoice(this.context.globalState?.get(MIC_INPUT_KEY));
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
+    const tipsSeatChanged = this.lessonTips.currentSeat !== tipsSeat;
     this.lessonTips.forSeat(tipsSeat);
+    if (tipsSeatChanged) this.emitLessonTipsChanged();
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();

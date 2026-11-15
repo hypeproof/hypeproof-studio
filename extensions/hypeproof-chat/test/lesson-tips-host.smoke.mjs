@@ -65,6 +65,14 @@ assert.match(setBody, /return next \? "stored" : "memory-only";/, 'the caller le
 { const p = new LessonTipsPreference(); assert.equal(p.write({ off: [] }, false), undefined, 'no seat yet: nothing to store'); assert.equal(p.on({ off: [] }), false, 'but the window honours it'); }
 assert.match(setBody, /if \(next\) await this\.context\.globalState\.update\(LESSON_TIPS_KEY, next\)/, 'only a seat stores anything');
 assert.match(src, /lessonTipsState\(\): \{ on: boolean; seat: string \} \{\s*return \{ on: this\.lessonTips\.on\(this\.context\.globalState\?\.get\(LESSON_TIPS_KEY\)\), seat: this\.lessonTips\.currentSeat \};/, 'the start page reads the same seat and state');
+// CGP-SHELL-R-014: the start page's 팁 보기 row follows every change, from either surface, and a seat switch.
+assert.match(src, /await this\.postConfig\(\);\s*this\.emitLessonTipsChanged\(\);\s*return next \? "stored" : "memory-only";/, 'setLessonTips (both surfaces) tells the start page after the chat redrew');
+assert.match(src, /const tipsSeatChanged = this\.lessonTips\.currentSeat !== tipsSeat;\s*this\.lessonTips\.forSeat\(tipsSeat\);\s*if \(tipsSeatChanged\) this\.emitLessonTipsChanged\(\);/, 'a seat switch tells the start page too');
+assert.match(src, /onLessonTipsChanged\(listener: \(\) => void\): \(\) => void \{/, 'the start page can subscribe');
+const sp = readFileSync(new URL('../src/startPage.ts', import.meta.url), 'utf8');
+assert.match(sp, /tips: this\.chat\.lessonTipsState\?\.\(\),/, 'the start page reads the chat\'s own state and seat');
+assert.match(sp, /write\.key === "tips"\) \{ if \(await this\.chat\.setLessonTips\?\.\(write\.value\) === "refused"\)/, 'and writes through the chat\'s setLessonTips, never its own store');
+assert.match(sp, /this\.chat\.onLessonTipsChanged\?\.\(\(\) => \{ if \(this\.panel\) void this\.refresh\(\); \}\);/, 'and redraws on every change');
 { const p = new LessonTipsPreference(); p.forSeat(A); assert.equal(p.currentSeat, A, 'currentSeat is the seat of the last config'); }
 assert.match(src, /const tipsSeat = collapseSeat\(\{ activityId: profile\?\.activity_id, entryId, localActivityId: activity\?\.id \}\);/, 'the seat is the collapsed-blocks seat');
 // The seat is taken only by a build that survived the staleness check (a stale build must not point a press at the old seat).

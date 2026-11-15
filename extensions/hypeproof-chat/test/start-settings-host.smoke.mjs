@@ -16,11 +16,12 @@ const { startSettingsView, parseStartSettingWrite, advancedSettingsAllowed, STAR
 assert.equal(START_SETTING_ROWS.length, START_SETTINGS_MAX_ROWS, 'REQ-SHELL-14 names six rows');
 const J = (x) => JSON.parse(JSON.stringify(x)); // vm realm → this realm
 const base = J(startSettingsView({ textSize: 'large', reduceMotion: 'on', notices: true, profileMinor: false, age: undefined }));
-assert.deepEqual([...base.rows], ['textSize', 'theme', 'reduceMotion', 'notices', 'export'], 'only rows whose behaviour exists, in the requirement order (theme from CGP-SHELL-R-016, export from #4088, no tips before SHELL-R-019)');
-assert.ok(!base.rows.includes('tips'), 'a 팁 보기 row would be a switch with nothing behind it');
+assert.deepEqual([...base.rows], ['textSize', 'theme', 'reduceMotion', 'notices', 'tips', 'export'], 'the six rows REQ-SHELL-14 names, in its order (theme from CGP-SHELL-R-016, export from #4088, tips from CGP-SHELL-R-019)');
 assert.ok(base.rows.length <= 6, 'at most six rows');
 assert.ok(base.rows.length <= 6);
-assert.deepEqual({ ...base, rows: 0 }, { rows: 0, textSize: 'large', theme: 'dark', reduceMotion: 'on', notices: true, advanced: true });
+assert.deepEqual({ ...base, rows: 0 }, { rows: 0, textSize: 'large', theme: 'dark', reduceMotion: 'on', notices: true, tips: true, tipsWindowOnly: true, advanced: true }, 'no chat state: tips on, window only');
+assert.deepEqual([startSettingsView({ textSize: 'base', reduceMotion: 'auto', notices: false, tips: { on: false, seat: 'A' }, profileMinor: false, age: undefined })].map((v) => [v.tips, v.tipsWindowOnly])[0], [false, false], 'a seat that turned tips off');
+assert.equal(startSettingsView({ textSize: 'base', reduceMotion: 'auto', notices: false, tips: { on: 'no', seat: 'A' }, profileMinor: false, age: undefined }).tips, true, 'only a real false turns tips off');
 const odd = startSettingsView({ textSize: 'huge', reduceMotion: true, notices: 'yes', profileMinor: null, age: undefined });
 assert.equal(odd.textSize, 'base'); assert.equal(odd.reduceMotion, 'auto'); assert.equal(odd.notices, false, 'only a real true turns notices on');
 assert.equal(advancedSettingsAllowed({ profileMinor: true, age: '14+' }), false, 'minor profile: no 고급 설정');
@@ -32,6 +33,8 @@ for (const bad of [null, 'x', {}, { key: 'textSize', value: 'Large' }, { key: 't
 assert.deepEqual(J(parseStartSettingWrite({ type: 'startSetting', key: 'textSize', value: 'xlarge' })), { key: 'textSize', value: 'xlarge' });
 assert.deepEqual(J(parseStartSettingWrite({ key: 'reduceMotion', value: 'off' })), { key: 'reduceMotion', value: 'off' });
 assert.deepEqual(J(parseStartSettingWrite({ key: 'notices', value: false })), { key: 'notices', value: false });
+assert.deepEqual(J(parseStartSettingWrite({ key: 'tips', value: false })), { key: 'tips', value: false });
+for (const bad of [{ key: 'tips', value: 'false' }, { key: 'tips', value: 0 }, { key: 'tips' }]) assert.equal(parseStartSettingWrite(bad), null, 'refused: ' + JSON.stringify(bad));
 const { themeState, themeWrites, HP_DARK_THEME, HP_LIGHT_THEME } = S.exports;
 assert.equal(themeState({ colorTheme: HP_DARK_THEME, explicitTheme: undefined, autoDetect: false }), 'dark', 'the shipped default is HP Dark');
 assert.equal(themeState({ colorTheme: HP_LIGHT_THEME, explicitTheme: HP_LIGHT_THEME, autoDetect: false }), 'light');
@@ -42,7 +45,7 @@ for (const c of ['dark', 'light', 'system']) assert.ok(J(themeWrites(c)).every((
 assert.deepEqual(J(themeWrites('light')), [{ section: 'window', key: 'autoDetectColorScheme', value: false }, { section: 'workbench', key: 'colorTheme', value: 'HypeProof Studio Light' }]);
 assert.deepEqual(J(themeWrites('system')), [{ section: 'window', key: 'autoDetectColorScheme', value: true }], 'system leaves the theme setting alone');
 assert.deepEqual(J(parseStartSettingWrite({ key: 'theme', value: 'system' })), { key: 'theme', value: 'system' });
-console.log('PASS start settings helper: six named rows, four available, normalized view, minor gate, hostile writes refused');
+console.log('PASS start settings helper: six named rows, all six available, normalized view, minor gate, hostile writes refused');
 
 // ── host: the real StartPage ──
 const bundle = await build({ stdin: { contents: "export * from './src/startPage.ts';", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
@@ -66,6 +69,18 @@ const vscode = {
 };
 const M = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { module: M, exports: M.exports, require: (id) => id === 'vscode' ? vscode : require(id), console, Buffer, AbortSignal, URL, process, TextEncoder, fetch: async () => new Response('{}', { status: 404 }) });
+// CGP-SHELL-R-014 / R-019 — the chat side of 팁 보기, built from the exact class and calls the provider uses
+// (LessonTipsPreference; setLessonTips writes, posts the chat config and fires onLessonTipsChanged; lesson-tips-host pins the
+// provider source). Both surfaces share it, so a press on either is seen by the other.
+const { LessonTipsPreference, LESSON_TIPS_KEY } = await import('../src/lessonTips.ts');
+const tipsPref = new LessonTipsPreference(), tipsListeners = new Set();
+let chatTipsPosts = 0;
+const tipsChanged = () => { for (const l of tipsListeners) l(); };
+chat.lessonTipsState = () => ({ on: tipsPref.on(global.get(LESSON_TIPS_KEY)), seat: tipsPref.currentSeat });
+chat.setLessonTips = async (on) => { if (typeof on !== 'boolean') return 'refused'; const next = tipsPref.write(global.get(LESSON_TIPS_KEY), on); if (next) global.set(LESSON_TIPS_KEY, next); chatTipsPosts++; tipsChanged(); return next ? 'stored' : 'memory-only'; };
+chat.onLessonTipsChanged = (l) => { tipsListeners.add(l); return () => tipsListeners.delete(l); };
+const chatConfigBuild = (seat) => { const changed = tipsPref.currentSeat !== seat; tipsPref.forSeat(seat); if (changed) tipsChanged(); };
+const ticks = () => new Promise((r) => setTimeout(r, 20));
 const page = new M.exports.StartPage(ctx, chat, async () => false);
 page.panel = { webview: { postMessage: async (m) => { states.push(m.state); } } };
 const last = () => states.at(-1).settings;
@@ -140,4 +155,31 @@ const exportsBefore = chat.exports, commandsBefore = commands.length;
 for (const bad of [{ type: 'startExportMyWork ' }, { type: 'exportMyWork' }, { type: 'startSetting', key: 'export', value: true }]) await page.handle(bad);
 assert.equal(chat.exports, exportsBefore, 'only the exact message runs the export');
 assert.equal(commands.length, commandsBefore, 'and it runs no command');
+// CGP-SHELL-R-014 — 팁 보기 and the chat's 팁 그만 보기 / 다시 켜기 are one choice, in both directions, without a reload.
+current = adult;
+assert.equal(tipsListeners.size, 1, 'the start page listens to the chat\'s tips choice');
+await page.handle({ type: 'startSetting', key: 'textSize', value: 'base' });
+assert.deepEqual([last().rows.includes('tips'), last().tips, last().tipsWindowOnly], [true, true, true], 'no seat yet: tips on, window only');
+await page.handle({ type: 'startSetting', key: 'tips', value: false });
+assert.equal(global.get(LESSON_TIPS_KEY), undefined, 'no seat: nothing stored');
+assert.deepEqual([chat.lessonTipsState().on, last().tips, chatTipsPosts], [false, false, 1], 'start page → chat: the chat now shows tips off and redrew');
+chatConfigBuild('A'); await ticks();
+assert.deepEqual([last().tips, last().tipsWindowOnly], [true, false], 'a seat is known: its own choice (on), and an in-memory choice did not carry over');
+await page.handle({ type: 'startSetting', key: 'tips', value: false });
+assert.deepEqual(global.get(LESSON_TIPS_KEY), { off: ['A'] }, 'seat A: stored for A');
+assert.deepEqual([chat.lessonTipsState().on, last().tips], [false, false], 'start page → chat (seat A)');
+const statesBefore = states.length;
+await chat.setLessonTips(true); await ticks();
+assert.ok(states.length > statesBefore, 'chat → start page: the open sheet is redrawn');
+assert.deepEqual([last().tips, global.get(LESSON_TIPS_KEY)], [true, { off: [] }], 'chat 다시 켜기 → the sheet shows tips on');
+await chat.setLessonTips(false); await ticks();
+assert.equal(last().tips, false, 'chat 팁 그만 보기 → the sheet shows tips off');
+chatConfigBuild('B'); await ticks();
+assert.equal(last().tips, true, 'seat B on the same window starts with tips on');
+chatConfigBuild('A'); await ticks();
+assert.equal(last().tips, false, 'back to seat A: still off');
+const tipsBefore = [chatTipsPosts, JSON.stringify(global.get(LESSON_TIPS_KEY))];
+for (const bad of [{ key: 'tips', value: 'true' }, { key: 'tips', value: 1 }]) await page.handle({ type: 'startSetting', ...bad });
+assert.deepEqual([chatTipsPosts, JSON.stringify(global.get(LESSON_TIPS_KEY))], tipsBefore, 'a forged tips write changes nothing');
+console.log('PASS start settings tips: one choice with the chat in both directions, per seat, window-only with no seat');
 console.log('PASS start settings host: no direct editor path, writes land in their stores, hostile writes refused, minor seats never reach 고급 설정');
