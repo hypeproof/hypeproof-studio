@@ -115,6 +115,10 @@ import { modelEchoVerdict, modelEchoNotice, describeModelEcho, type ModelEchoInp
 type ModelEchoContext = Omit<ModelEchoInput, 'resolved'>;
 import * as vscode from "vscode";
 import * as path from "path";
+import { domainToUnicode } from "node:url";
+import { LINK_CONFIRM_COPY, LinkConfirmRequest, type LinkConfirmPrompt } from "./linkConfirm";
+import { LinkNavigationGuard } from "./linkNavigationGuard";
+import { openStudioTab, studioTabs } from "./studioTabs";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
 import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel, ATTACHED_IMAGE_DIR } from "./attachedImages";
@@ -299,7 +303,7 @@ import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
-import { CdpSession } from "./cdpSession";
+import { CdpSession, type CdpTab } from "./cdpSession";
 import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
 import { DOWNLOAD_ACTION_COPY, downloadPolicy, resolveDownloadedFile, type DownloadNotice } from "./browserDownloads";
 import { LiveServer } from "./liveServer";
@@ -312,7 +316,7 @@ import { isWriteToolName, writePathLine, writePathEntries, writeScopeKeys, write
 import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLockOf, browserSettingsReverts, browserSettingsWritable, BROWSER_SETTINGS_REWRITE_MS, externalLinkDialog, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
+import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLockOf, browserSettingsReverts, browserSettingsWritable, BROWSER_SETTINGS_REWRITE_MS, LinkOpenLimiter, linkHostDisplay, type LinkSource, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
@@ -1048,7 +1052,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const owned = previous && previous.taskId === msg.taskId && previous.activityId === activityId && previous.tab.url === previous.url && (vscode.window.browserTabs ?? []).includes(previous.tab) ? previous : undefined;
           let tab: vscode.BrowserTab;
           if (owned?.url === msg.url) { tab = owned.tab; await this.revealBrowserTab(tab); }
-          else tab = await vscode.window.openBrowserTab(msg.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+          else tab = await openStudioTab(msg.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
           if (!stillCurrent()) {
             if (tab !== owned?.tab && tab.url === msg.url) await Promise.resolve(tab.close()).catch(() => {});
             return;
@@ -2945,7 +2949,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const base = await this.liveServer.ensure(root);
       const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
       try {
-        tab = await vscode.window.openBrowserTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
+        tab = await openStudioTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
         channel = await this.deckPdfAttach(tab);
       } catch { this.postPageNotice(DECK_PDF_COPY.openFailed); return; }
       const result = await exportDeckPdf(channel.send, {
@@ -3027,7 +3031,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const base = await this.liveServer.ensure(root);
       const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
       try {
-        tab = await vscode.window.openBrowserTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
+        tab = await openStudioTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
         channel = await this.deckPdfAttach(tab);
       } catch { return done(PAGE_PDF_COPY.openFailed); }
       const result = await exportPagePdf(channel.send, { expectedUrl: url });
@@ -3807,6 +3811,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (d) context.subscriptions.push(d);
     }
     this.registerBrowserDownloads(context);
+    this.registerBrowserLinkGuards(context);
     const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
     if (annotationClose) context.subscriptions.push(annotationClose);
     // The preview server stops when the last tab showing it closes; it is never stopped at turn end.
@@ -5401,43 +5406,170 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const url = await this.inboxSource?.inboxLink(msg.objectId, msg.url, msg.generation); if (!url) return;
     if (msg.action === "copy") await vscode.env.clipboard.writeText(url); else await this.openLearnerLink(url);
   }
+  /** CGP-SHELL-R-026 — the confirm dialog (LinkConfirmDialog in the chat webview); one prompt at a time per seat scope. */
+  private linkConfirmRequestInstance?: LinkConfirmRequest;
+  private get linkConfirmRequest(): LinkConfirmRequest {
+    return (this.linkConfirmRequestInstance ??= new LinkConfirmRequest({
+      scope: () => JSON.stringify([this.writeApprovalScope(), this.profileGeneration]),
+      present: async (prompt) => {
+        if (!prompt) return this.post({ type: "linkConfirmPrompt", prompt: null });
+        // The chat is where the dialog is drawn: bring it forward first (a link from the preview or the browser panel).
+        if (!(this.editorChat?.visible || this.view?.visible)) await Promise.resolve(vscode.commands.executeCommand("hypeproof-chat.panel.focus")).catch(() => undefined);
+        if (!(this.editorChat?.visible || this.view?.visible)) return false;
+        return this.post({ type: "linkConfirmPrompt", prompt });
+      },
+    }));
+  }
+  /** CGP-SHELL-R-026 — a page in the preview may ask to open at most one link per 2 s (the host is the boundary). */
+  private previewLinkLimiterInstance?: LinkOpenLimiter;
+  private get previewLinkLimiter(): LinkOpenLimiter { return (this.previewLinkLimiterInstance ??= new LinkOpenLimiter(2000)); }
   /**
-   * CGP-ART-R-008 — the one exit for links a learner clicks in chat. Minor cohorts stay in the
-   * integrated browser; others confirm the host before the system browser opens. CGP-ART-D-008:
-   * the learner's own loopback preview opens in the integrated browser with no dialog, and when the
-   * served profile marks the seat minor with a non-empty allowlist (`safeLinkEnforced`), a link outside
-   * that allowlist does not navigate and the chat panel shows the blocked notice. The persist:hp-safe session
-   * (`scripts/patches/core/hps-safe-session.patch`) is off by default until a real-device check, so this host check is
-   * the allowlist enforcement that is on; without a loaded profile it uses this seat's saved copy (REQ-N11).
+   * CGP-ART-R-008 / CGP-SHELL-R-026 — the one exit for every link a learner opens: chat links and citations, instructor
+   * inbox links, Chalk runtime links, links clicked in the preview and navigations the browser panel holds.
+   * `routeExternalLink` decides: loopback opens in the integrated browser with no dialog; a minor (safe session) seat
+   * stays in the integrated browser, with no dialog only for a link the trusted lesson allowlist admits; an adult opens
+   * the system browser, asking first only with `hypeproofChat.confirmExternalLinks`; a link from the preview always asks
+   * (rate-limited here, whatever the page sent). The dialog's 취소, Esc, a timeout or a chat that cannot show it open
+   * nothing. Supersedes CGP-ART-D-008's block for this scope (Jay, 2026-11-14, #4090).
    */
-  async openLearnerLink(raw: unknown): Promise<void> {
-    const route = await this.learnerLinkRoute(raw);
-    if (route.kind === "refuse") return;
-    if (route.kind === "blocked") {
-      // CGP-ART-D-008 (block on): nothing navigates; the chat panel draws the blocked notice with the host.
-      void this.post({ type: "externalLinkBlocked", host: route.host, at: Date.now() });
-      return;
-    }
-    if (route.kind === "integrated") {
+  async openLearnerLink(raw: unknown, source: LinkSource = "chat"): Promise<"opened" | "copied" | "cancelled" | "refused" | "failed"> {
+    if (source === "preview" && !this.previewLinkLimiter.take()) return "refused";
+    const route = await this.learnerLinkRoute(raw, source);
+    if (route.kind === "refuse") return "refused";
+    if (route.kind === "integrated" || route.kind === "system") return this.openRoute(route.kind, route.url);
+    // One dialog at a time: a second request while one is open is refused (it does not stack or replace the open one).
+    if (this.linkConfirmRequest.open) { void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.busy); return "refused"; }
+    const shown = linkHostDisplay(route.host, domainToUnicode);
+    // The id is a single-use random nonce: only the answer to this exact prompt can open it (LinkConfirmRequest).
+    const prompt: LinkConfirmPrompt = { id: crypto.randomUUID(), host: shown.ascii, unicodeHost: shown.unicode, warning: shown.warning, url: route.url, where: route.where, source };
+    const choice = await this.linkConfirmRequest.confirm(prompt);
+    if (choice === "open") return this.openRoute(route.where, route.url);
+    if (choice === "copy") { await vscode.env.clipboard.writeText(route.url); return "copied"; }
+    if (!this.linkConfirmRequest.open && !(this.editorChat?.visible || this.view?.visible)) void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.unavailable);
+    return "cancelled";
+  }
+  /**
+   * CGP-SHELL-R-026 — every browser-panel tab gets a LinkNavigationGuard over its own CDP session, so a link the page
+   * asks to follow to another site goes through the same route and dialog as a chat link. Optional calls: hosts without
+   * the browser API (tests, older builds) get no guard. A tab whose CDP session cannot attach keeps today's behaviour.
+   */
+  private registerBrowserLinkGuards(context: vscode.ExtensionContext): void {
+    const guards = new Map<unknown, { dispose(): void }>();
+    const attach = async (tab: vscode.BrowserTab, isNew: boolean) => {
+      if (guards.has(tab)) return;
+      guards.set(tab, { dispose: () => undefined });
+      // A minor seat fails closed on the two ways round the guard: a tab a page opened (window.open, target=_blank),
+      // and a tab whose page moved to another site before the guard attached. Either is closed and its address goes
+      // through the confirm dialog; 열기 opens it again as a Studio tab. Adults: known gap (decisions.md).
+      // A popup the guard is deciding right now (its dialog is open): wait for that answer before judging the tab.
+      for (let i = 0; isNew && this.linkConfirmRequest.open && i < 1300; i++) await new Promise((r) => setTimeout(r, 100));
+      if (isNew && studioTabs.refused(tab.url)) { void Promise.resolve(tab.close()).catch(() => undefined); guards.delete(tab); return; }
+      if (isNew && !studioTabs.opened(tab.url) && (await this.minorLinkSeat())) { void this.reopenThroughConfirm(tab, tab.url); guards.delete(tab); return; }
       try {
-        await vscode.window.openBrowserTab(route.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+        const cdp = await CdpSession.attach(tab as unknown as CdpTab);
+        // The page's own events, plus its auto-attached popups' (child sessions), each tagged with its session.
+        const port = {
+          send: (method: string, params?: Record<string, unknown>) => cdp.send(method, params),
+          sendIn: (sid: string, method: string, params?: Record<string, unknown>) => cdp.sendIn(sid, method, params),
+          sendRoot: (method: string, params?: Record<string, unknown>) => cdp.sendRoot(method, params),
+          targetId: cdp.targetId,
+          onEvent: (l: (e: { method: string; params: Record<string, any>; sessionId?: string; root?: boolean }) => void) => {
+            const own = cdp.onEvent((e) => l(e)), kids = cdp.onChildEvent((e, sid) => l({ ...e, sessionId: sid })), root = cdp.onRootEvent((e) => l({ ...e, root: true }));
+            return { dispose: () => { own.dispose(); kids.dispose(); root.dispose(); } };
+          },
+        };
+        // A popup the guard let run is a confirmed tab: record it so the new-tab check does not ask again; a refused
+        // one was failed before its first request and closed. On a minor seat the page's popup paths are replaced
+        // first (no popup is created; an allowed address opens as a Studio tab).
+        const minor = await this.minorLinkSeat();
+        // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
+        // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
+        // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
+        let strict = false;
+        const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
+          onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
+          interceptPopups: minor,
+          openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
+          onCommit: (url) => {
+            if (!strict || guard.capabilities.fetch || !/^https?:/i.test(url)) return;
+            void this.allowlistOnly(url).then((ok) => { if (!ok) { void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); } });
+          },
+        });
+        await guard.start();
+        const caps = guard.capabilities;
+        strict = minor && !(caps.fetch && caps.autoAttach && caps.page);
+        guards.set(tab, { dispose: () => { guard.dispose(); void cdp.close().catch(() => undefined); } });
+        if (minor && !caps.page && /^https?:/i.test(tab.url) && !(await this.allowlistOnly(tab.url))) {
+          // No navigation events at all: a tab off the list cannot be watched, so it is closed.
+          void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
+        }
+        const now = guard.currentUrl;
+        if (isNew && /^https?:/i.test(now) && !studioTabs.opened(now) && (await this.minorLinkSeat()) && (await this.learnerLinkRoute(now, "browser")).kind === "confirm") {
+          guards.get(tab)?.dispose(); guards.delete(tab);
+          void this.reopenThroughConfirm(tab, now);
+        }
       } catch {
-        // Fail closed: no system-browser fallback for a safe session.
-        void vscode.window.showInformationMessage("이 링크를 Studio 브라우저에서 열 수 없어요. 강사에게 알려 주세요.");
+        guards.delete(tab);
+        // No CDP session at all: on a minor seat a tab off the list cannot be guarded, so it is closed (fail closed).
+        if (/^https?:/i.test(tab.url) && (await this.minorLinkSeat().catch(() => false)) && !(await this.allowlistOnly(tab.url))) void Promise.resolve(tab.close()).catch(() => undefined);
       }
-      return;
+    };
+    for (const tab of vscode.window.browserTabs ?? []) void attach(tab, false);
+    const opened = vscode.window.onDidOpenBrowserTab?.((tab) => { void attach(tab, true); });
+    const closed = vscode.window.onDidCloseBrowserTab?.((tab) => { guards.get(tab)?.dispose(); guards.delete(tab); });
+    if (opened) context.subscriptions.push(opened);
+    if (closed) context.subscriptions.push(closed);
+    context.subscriptions.push({ dispose: () => { for (const g of guards.values()) g.dispose(); guards.clear(); } });
+  }
+  /**
+   * CGP-SHELL-R-026 fail-closed fallback — the old allowlist block: true only for an address the route opens with no
+   * dialog (loopback or the trusted lesson allowlist). Used for a minor tab whose session cannot hold requests or
+   * start popups paused; such a tab never shows a confirm, it refuses.
+   */
+  private async allowlistOnly(url: string): Promise<boolean> {
+    const route = await this.learnerLinkRoute(url, "browser");
+    if (route.kind === "integrated") return true;
+    if (route.kind === "confirm") void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
+    return false;
+  }
+  /** CGP-SHELL-R-026 — a minor (safe-session) seat, by the same policy the link route uses. */
+  private async minorLinkSeat(): Promise<boolean> {
+    const route = await this.learnerLinkRoute("https://studio.invalid/", "browser");
+    return route.kind === "confirm" && route.where === "integrated";
+  }
+  /** Close a tab that got round the guard and offer its address through the dialog instead (nothing is lost: 열기 reopens it). */
+  private async reopenThroughConfirm(tab: vscode.BrowserTab, url: string): Promise<void> {
+    await Promise.resolve(tab.close()).catch(() => undefined);
+    if (/^https?:\/\//i.test(url)) await this.openLearnerLink(url, "browser");
+  }
+  /**
+   * CGP-SHELL-R-026 — a link the page in a browser-panel tab asked to follow, held by LinkNavigationGuard. True lets the
+   * navigation go on in that tab. Same route as a chat link: loopback, an admitted allowlist link and an adult without
+   * the confirm setting go on with no dialog; otherwise the dialog decides (링크 복사 copies and stays).
+   */
+  async confirmBrowserNavigation(url: string): Promise<boolean> {
+    const route = await this.learnerLinkRoute(url, "browser");
+    if (route.kind === "refuse") return false;
+    if (route.kind !== "confirm") return true;
+    if (this.linkConfirmRequest.open) { void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.busy); return false; }
+    const shown = linkHostDisplay(route.host, domainToUnicode);
+    const choice = await this.linkConfirmRequest.confirm({ id: crypto.randomUUID(), host: shown.ascii, unicodeHost: shown.unicode, warning: shown.warning, url: route.url, where: "integrated", source: "browser" });
+    if (choice === "copy") await vscode.env.clipboard.writeText(route.url);
+    return choice === "open";
+  }
+  /** The two ways a link opens. A safe session never falls back to the system browser. */
+  private async openRoute(where: "integrated" | "system", url: string): Promise<"opened" | "failed"> {
+    if (where === "integrated") {
+      try { await openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }); return "opened"; }
+      catch { void vscode.window.showInformationMessage("이 링크를 Studio 브라우저에서 열 수 없어요. 강사에게 알려 주세요."); return "failed"; }
     }
-    // CGP-ART-D-008: the host is the (bold) message line, middle-ellipsized past 48 characters; the full address is the detail.
-    const dialog = externalLinkDialog(route);
-    const choice = await vscode.window.showWarningMessage(dialog.message, { modal: true, detail: dialog.detail }, "열기", "링크 복사");
-    if (choice === "열기") await vscode.env.openExternal(vscode.Uri.parse(route.url));
-    else if (choice === "링크 복사") await vscode.env.clipboard.writeText(route.url);
+    return (await vscode.env.openExternal(vscode.Uri.parse(url)).then((ok) => ok, () => false)) ? "opened" : "failed";
   }
   /**
    * CGP-ART-R-008 / D-008: one route for every learner link; the served profile turns the minor allowlist block on, the machine
    * setting can only force it off. REQ-N11 (2026-11-05): without a loaded profile this seat's saved copy decides.
    */
-  private async learnerLinkRoute(raw: unknown): Promise<ExternalLinkRoute> {
+  private async learnerLinkRoute(raw: unknown, source: LinkSource = "chat"): Promise<ExternalLinkRoute> {
     const browser = vscode.workspace.getConfiguration("hypeproof.browser");
     const profile = this.cachedProfile;
     const saved = profile ? null : savedLinkSafetyFor(this.context.globalState.get(SAVED_LINK_SAFETY_KEY), linkSeatKey(await this.context.secrets.get(TOKEN_KEY)));
@@ -5445,7 +5577,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // change keeps the lock but drops the saved copy): a lock that says safe stays safe with the served list.
     const lock = browserSettingsLockOf(this.context.globalState.get(BROWSER_SETTINGS_LOCK_KEY));
     const { safety, enforceAllowlist } = learnerLinkPolicy({ profile: profile ?? this.cachedProfile, saved, persistedSafeSession: lock?.safeSession ? true : browser.get<boolean>("safeSession"), persistedAllowlist: lock ? lock.allowlist : browser.get<string[]>("safeAllowlist"), setting: vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled") });
-    return routeExternalLink(raw, safety, { enforceAllowlist });
+    const confirmAdult = vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("confirmExternalLinks") === true;
+    return routeExternalLink(raw, safety, { enforceAllowlist, confirmAdult, source });
   }
   private opsLastArtifact: string | undefined;
   // #751 R3 — why new AI runs are held. Local editing, saving, Stop and export never consult this.
@@ -5525,7 +5658,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       load: async (tab, url) => { const pinned = new BrowserControl(); pinned.setTargetTab(tab); try { return await pinned.loadInPinnedTab(url); } finally { await pinned.dispose(); } },
       close: async (tab) => { await tab.close(); },
       open: async (url) => {
-        const opened = await vscode.window.openBrowserTab(url, { viewColumn: column(), preserveFocus: true });
+        const opened = await openStudioTab(url, { viewColumn: column(), preserveFocus: true });
         this.mcpBrowser ??= new BrowserControl(this.crBrowserOptions()); this.mcpBrowser.setTargetTab(opened);
         return opened;
       },
@@ -7014,7 +7147,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // would open the preview next to that empty group, leaving a blank pane
         // between the chat sidebar and the preview. ViewColumn.One fills the main
         // editor area so the layout is just: chat sidebar | preview.
-        const opened = await vscode.window.openBrowserTab(url, {
+        const opened = await openStudioTab(url, {
           viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One,
           preserveFocus: true,
         });
@@ -7167,7 +7300,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       tabs: () => this.coachBrowserTabs(),
       urlOf: (tab) => tab.url,
       open: async (url) => {
-        const tab = await vscode.window.openBrowserTab(url, {
+        const tab = await openStudioTab(url, {
           viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One,
           preserveFocus: true,
           background: true,
@@ -7256,7 +7389,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // tab just opened is the active one (= rightmost), every following call splits
         // off another column and the workspace narrows. preserveFocus prevents that
         // activation in the first place, and the tab handle drives it without focus.
-        const opened = await vscode.window.openBrowserTab(url, {
+        const opened = await openStudioTab(url, {
           viewColumn:
             this.editorChat ? vscode.ViewColumn.Two : coachTabSlot(url) === "preview" ? vscode.ViewColumn.One : vscode.ViewColumn.Two,
           preserveFocus: true,
@@ -8633,11 +8766,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   chalkOps(): ContractOps {
     return {
       openExternal: async (url) => {
-        const kind = (await this.learnerLinkRoute(url)).kind;
-        if (kind === "refuse") return { ok: false, reason: "refused" };
-        await this.openLearnerLink(url);
-        if (kind === "blocked") return { ok: false, reason: "blocked" };
-        return { ok: true };
+        // CGP-SHELL-R-026: the same exit and dialog as a chat link; only an open counts as ok.
+        const outcome = await this.openLearnerLink(url);
+        return outcome === "opened" ? { ok: true } : { ok: false, reason: outcome };
       },
       openReport: async () => {
         await vscode.commands.executeCommand("hypeproof-chat.reportProblem");
@@ -9030,6 +9161,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpConfirm": await this.helpSource?.confirm(msg.key, msg.id, msg.revision); return;
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "browserApprovalAnswer": this.browserApprovalRequest.respond(msg.id,msg.choice); return;
+      case "linkConfirmAnswer": this.linkConfirmRequest.respond(msg.id, msg.choice); return;
       case "commandApprovalAnswer": this.commandApprovalRequest.respond(msg.id,msg.choice); return;
       case "annotationLeaveAnswer": this._annotationLeaveRequest?.respond(msg.id,msg.discard); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
@@ -12643,7 +12775,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       const base = await this.liveServer.ensure(root);
       const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
-      tab = await vscode.window.openBrowserTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, background: true });
+      tab = await openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, background: true });
       channel = await this.deckPdfAttach(tab);
       return await captureShowPage(channel.send, { expectedUrl: url });
     } catch {

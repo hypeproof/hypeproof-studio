@@ -42,6 +42,9 @@ export class CdpSession {
   private readonly raw: RawCdpSession;
   private msgId = 0;
   private sessionId: string | undefined;
+  private pageTargetId: string | undefined;
+  /** The attached page's target id (CGP-SHELL-R-026: a popup's openerId names it). */
+  get targetId(): string | undefined { return this.pageTargetId; }
   private attaching: Promise<void> | undefined;
   private readonly eventListeners = new Set<(event: CdpEvent) => void>();
   private eventSub: RawCdpDisposable | undefined;
@@ -101,6 +104,33 @@ export class CdpSession {
     };
   }
 
+  /**
+   * CGP-SHELL-R-026 — a command in a CHILD session this page auto-attached (a popup it opened, flatten mode), and the
+   * events of those child sessions with their sessionId. The page's own session keeps using `send` / `onEvent`.
+   */
+  sendIn(sessionId: string, method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<any> {
+    return this.request(method, params, sessionId, timeoutMs);
+  }
+  /** A command on the root session (Target.* for the targets around this tab). */
+  sendRoot(method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<any> {
+    return this.request(method, params, undefined, timeoutMs);
+  }
+  /** Root-session events (no sessionId), e.g. Target.attachedToTarget for a popup auto-attached at the root. */
+  onRootEvent(listener: (event: CdpEvent) => void): RawCdpDisposable {
+    return this.raw.onDidReceiveMessage((raw) => {
+      const m = raw as { id?: unknown; method?: unknown; params?: unknown; sessionId?: unknown };
+      if (!m || m.id !== undefined || typeof m.method !== "string" || m.sessionId !== undefined) return;
+      try { listener({ method: m.method, params: m.params && typeof m.params === "object" ? (m.params as Record<string, any>) : {} }); } catch { /* listener bug */ }
+    });
+  }
+  onChildEvent(listener: (event: CdpEvent, sessionId: string) => void): RawCdpDisposable {
+    return this.raw.onDidReceiveMessage((raw) => {
+      const m = raw as { id?: unknown; method?: unknown; params?: unknown; sessionId?: unknown };
+      if (!m || m.id !== undefined || typeof m.method !== "string" || typeof m.sessionId !== "string" || m.sessionId === this.sessionId) return;
+      try { listener({ method: m.method, params: m.params && typeof m.params === "object" ? (m.params as Record<string, any>) : {} }, m.sessionId); } catch { /* listener bug */ }
+    });
+  }
+
   close(): Promise<void> {
     this.eventSub?.dispose();
     this.eventSub = undefined;
@@ -131,6 +161,7 @@ export class CdpSession {
         throw new Error("CDP: Target.attachToTarget returned no sessionId");
       }
       this.sessionId = sid;
+      this.pageTargetId = page.targetId;
     })();
     try {
       await this.attaching;
