@@ -27,7 +27,7 @@ public class QuestionJourneyTest {
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
-        QuestionActivity.testTransport=(p,b,t,c)->{if(!p.equals("/me/reflection"))throw new IOException("No live endpoint in fixture");return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",2).put("messages",new JSONArray().put(new JSONObject().put("id","fixture-user").put("role","user").put("content","최근에 이웃의 말을 들어줬어요").put("created_at",1000))).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));};
+        QuestionActivity.testTransport=(p,b,t,c)->{NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(p,b,t,"test-account","test-session");if(accountRead!=null)return accountRead;if(!p.equals("/me/reflection"))throw new IOException("No live endpoint in fixture");return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",2).put("messages",new JSONArray().put(new JSONObject().put("id","fixture-user").put("role","user").put("content","최근에 이웃의 말을 들어줬어요").put("created_at",1000))).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));};
     }
     @After public void teardown(){if(app!=null)app.close();QuestionActivity.testTransport=null;}
     private void ready()throws Exception{for(int i=0;i<100;i++){java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);busy.set(((ReflectionModel)field.get(a)).busy);}catch(Exception e){throw new AssertionError(e);}});if(!busy.get())return;Thread.sleep(50);}throw new AssertionError("fixture did not settle");}
@@ -42,6 +42,8 @@ public class QuestionJourneyTest {
         var posted=new java.util.concurrent.CountDownLatch(1);var stopRead=new java.util.concurrent.CountDownLatch(1);var releasePost=new java.util.concurrent.CountDownLatch(1);var postReturned=new java.util.concurrent.CountDownLatch(1);var releaseCancel=new java.util.concurrent.CountDownLatch(1);
         var registered=new java.util.concurrent.atomic.AtomicBoolean();var cancelled=new java.util.concurrent.atomic.AtomicBoolean();var posts=new java.util.concurrent.atomic.AtomicInteger();var cancels=new java.util.concurrent.atomic.AtomicInteger();var request=new java.util.concurrent.atomic.AtomicReference<JSONObject>();
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"test-account","test-session");
+            if(accountRead!=null)return accountRead;
             assertEquals("synthetic-access",bearer);
             if(path.equals("/me/reflection/turns")){
                 posts.incrementAndGet();JSONObject value=new JSONObject().put("id",body.get("id")).put("text",body.get("text")).put("created_at",1000).put("updated_at",1000);request.set(value);posted.countDown();
@@ -73,6 +75,8 @@ public class QuestionJourneyTest {
     @Test public void stopDuringAdmissionFailureShowsMonthlyReasonWithoutPretendingCancellation()throws Exception{
         var posted=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);var request=new java.util.concurrent.atomic.AtomicReference<JSONObject>();var posts=new java.util.concurrent.atomic.AtomicInteger();var cancels=new java.util.concurrent.atomic.AtomicInteger();
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"test-account","test-session");
+            if(accountRead!=null)return accountRead;
             if(path.equals("/me/reflection/turns")){posts.incrementAndGet();request.set(new JSONObject().put("id",body.get("id")).put("text",body.get("text")).put("created_at",1000).put("updated_at",1000));posted.countDown();if(!release.await(12,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("fixture body not released");return new NativeDeviceSignIn.Reply(429,Map.of("error","reflection_monthly_limit"));}
             if(path.endsWith("/cancel")){cancels.incrementAndGet();throw new AssertionError("terminal failure must not cancel");}
             assertEquals("/me/reflection",path);return stopSnapshot(request.get(),"failed");
@@ -127,11 +131,13 @@ public class QuestionJourneyTest {
     private java.util.concurrent.atomic.AtomicInteger loginTransport(boolean denied){
         java.util.concurrent.atomic.AtomicInteger sends=new java.util.concurrent.atomic.AtomicInteger();
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"test-account","test-session");
+            if(accountRead!=null)return accountRead;
             if(path.equals("/auth/device/start"))return new NativeDeviceSignIn.Reply(200,Map.of("device_code","a".repeat(64),"user_code","ABCD-EFGH","verification_uri","https://hypeproof-ai.xyz/studio/connect","verification_uri_complete","https://hypeproof-ai.xyz/studio/connect?code=ABCD-EFGH","expires_in",30,"interval",3));
             if(path.equals("/auth/device/poll"))return denied?new NativeDeviceSignIn.Reply(403,Map.of("error","access_denied")):new NativeDeviceSignIn.Reply(200,Map.of("access_token","synthetic-access","refresh_token","synthetic-refresh","account_id","test-account","session_id","test-session","expires_in",3600));
-            if(path.equals("/me"))return new NativeDeviceSignIn.Reply(200,Map.of("account_id","test-account","session_id","test-session","account_status","active"));
             if(path.equals("/me/reflection/turns"))sends.incrementAndGet();
             if(path.equals("/auth/logout"))return new NativeDeviceSignIn.Reply(200,Map.of());
+            assertTrue("unexpected fixture route: "+path,path.equals("/me/reflection")||path.equals("/me/reflection/turns"));
             return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",0).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
         };return sends;
     }
@@ -236,6 +242,8 @@ public class QuestionJourneyTest {
         store.save(new ReflectionState("test-account"));
         JSONArray messages=new JSONArray();JSONObject[] turn={null};long[] revision={0};
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"test-account","test-session");
+            if(accountRead!=null)return accountRead;
             assertEquals("synthetic-access",bearer);
             synchronized(submitted){
                 if(path.equals("/me/reflection/turns")){
@@ -319,6 +327,8 @@ public class QuestionJourneyTest {
         String original="미확인 원래 문장",different="같은 ID로 온 다른 문장";ReflectionState state=new ReflectionState("test-account");state.draft=original;state.enqueue();store.save(state);String id=state.request.getString("id");
         java.util.concurrent.atomic.AtomicInteger sends=new java.util.concurrent.atomic.AtomicInteger();
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            NativeDeviceSignIn.Reply accountRead=SignedInReadFixture.read(path,body,bearer,"test-account","test-session");
+            if(accountRead!=null)return accountRead;
             if(body!=null)sends.incrementAndGet();assertEquals("/me/reflection",path);
             JSONArray messages=new JSONArray().put(new JSONObject().put("id",id).put("role","user").put("content",different).put("created_at",1000));
             return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",5).put("messages",messages).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
