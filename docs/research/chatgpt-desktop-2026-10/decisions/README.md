@@ -126,6 +126,7 @@ reproduces the former file byte for byte.
 - [CGP-LEARN-R-004](CGP-LEARN-R-004.md): CGP-LEARN-R-004 / CGP-LEARN-D-004: block references pin type, version and params (2026-11-14)
 - [CGP-LEARN-R-005](CGP-LEARN-R-005.md): CGP-LEARN-R-005 (`text_list` param kind)
 - [CGP-LEARN-R-006](CGP-LEARN-R-006.md): CGP-LEARN-R-006 (first parametric type)
+- [CGP-LEARN-R-007](CGP-LEARN-R-007.md): CGP-LEARN-R-007 / D-007: guard + controller; no animated kind yet (2026-11-15, agent-selected)
 - [CGP-LEARN-R-009](CGP-LEARN-R-009.md): CGP-LEARN-R-009 / D-009: narrated diagrams, Service catalog part (2026-11-15)
 - [CGP-LEARN-R-010](CGP-LEARN-R-010.md): CGP-LEARN-R-010 / CGP-LEARN-D-010: reset and undo for a learning block (2026-11-14)
 - [CGP-LEARN-R-011](CGP-LEARN-R-011.md): CGP-LEARN-R-011 (c) / CGP-LEARN-D-011: collapse a learning block, partial (2026-11-14)
