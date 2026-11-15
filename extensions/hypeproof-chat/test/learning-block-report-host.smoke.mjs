@@ -189,4 +189,55 @@ await test("ops host: an outcome that arrives while the report is still being qu
   assert.equal(await h.materialReport({ reason: "wrong" }), "unconfirmed", "another seq's early answer is not this report's");
 });
 
+await test("ops host: a report still being queued when the connection stops never takes an answer from the next connection (R1, R2)", async () => {
+  const Host = await load("classroomOpsHost", "ClassroomOpsHost");
+  Host.REPORT_ANSWER_MS = 200;
+  const stopStubs = { generation: 0, paused: false, applyHold() {}, recoveryWatch: { clear() {} }, automationGate: { reset() {} } };
+  const live = () => true, tick = () => new Promise((r) => setTimeout(r, 10));
+  // R1: report A is in addSeq on the old stream; the connection stops and a new one starts; report B on the new stream
+  // gets seq 1 and the new stream answers seq 1 "accepted". A must end unconfirmed, B accepted.
+  {
+    let releaseA; const gateA = new Promise((r) => { releaseA = r; });
+    const h = Object.assign(Object.create(Host.prototype), stopStubs, { loop: { nudge() {}, stop() {} }, log() {}, inboxChanged() {} });
+    h.outbox = { addSeq: async () => { await gateA; return 1; }, close: async () => {} };
+    h.onReports({ served: true, outcomes: [], rejected: [] }, live);
+    const a = h.materialReport({ reason: "wrong" });
+    await tick();
+    await h.stopConnection();
+    h.outbox = { addSeq: async () => 1, close: async () => {} }; h.loop = { nudge() {}, stop() {} };
+    h.onReports({ served: true, outcomes: [], rejected: [] }, live);
+    const b = h.materialReport({ reason: "broken" });
+    await tick();
+    releaseA(); await tick();
+    h.onReports({ served: true, outcomes: [{ seq: 1, outcome: "accepted" }], rejected: [] }, live);
+    assert.equal(await b, "accepted", "the new stream's report gets its own answer");
+    assert.equal(await a, "unconfirmed", "the old stream's report is never called accepted by the new stream's seq 1");
+  }
+  // R2: an early answer buffered on the old stream (seq 3) does not answer a new stream's seq 3.
+  {
+    const h = Object.assign(Object.create(Host.prototype), stopStubs, { loop: { nudge() {}, stop() {} }, log() {}, inboxChanged() {} });
+    h.outbox = { addSeq: async () => 3, close: async () => {} };
+    h.onReports({ served: true, outcomes: [{ seq: 3, outcome: "accepted" }], rejected: [] }, live);
+    await h.stopConnection();
+    h.outbox = { addSeq: async () => 3, close: async () => {} }; h.loop = { nudge() {}, stop() {} };
+    h.onReports({ served: true, outcomes: [], rejected: [] }, live);
+    assert.equal(await h.materialReport({ reason: "wrong" }), "unconfirmed", "a stale early answer from the old stream is dropped on stop");
+  }
+});
+
+await test("ops host: early answers are bounded (64): the oldest is dropped, a recent one still answers its report (R3)", async () => {
+  const Host = await load("classroomOpsHost", "ClassroomOpsHost");
+  Host.REPORT_ANSWER_MS = 200;
+  const live = () => true;
+  let next = 0;
+  const h = Object.assign(Object.create(Host.prototype), { loop: { nudge() {} }, log() {}, inboxChanged() {} });
+  h.outbox = { addSeq: async () => next };
+  const outcomes = Array.from({ length: Host.REPORT_EARLY_MAX + 6 }, (_, i) => ({ seq: i + 1, outcome: "accepted" }));
+  h.onReports({ served: true, outcomes, rejected: [] }, live);
+  assert.equal(h.reportEarly.size, Host.REPORT_EARLY_MAX, "kept at the cap");
+  next = 1; assert.equal(await h.materialReport({ reason: "wrong" }), "unconfirmed", "the oldest was dropped");
+  next = Host.REPORT_EARLY_MAX + 6; assert.equal(await h.materialReport({ reason: "wrong" }), "accepted", "a recent one still answers");
+  assert.equal(Host.REPORT_EARLY_MAX, 64);
+});
+
 console.log(`learning-block-report-host: ${passed} passed`);

@@ -717,7 +717,9 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     this.generation++; this.inbox = null; this.inboxStore = null;
     this.loop?.stop(); this.runner?.close(); this.loop = null; this.runner = null; this.outbox = null;
     // A report still waiting is not known to have arrived: it is unconfirmed, never sent.
-    this.reportsServed = false; for (const w of [...(this.reportWaits?.values() ?? [])]) w("unconfirmed"); this.reportWaits?.clear(); this.reportEarly?.clear();
+    // Fresh maps, not clear(): a report still being queued on the old stream holds the old map, so the next stream's answers
+    // (whose seqs restart at 1) can never reach it.
+    this.reportsServed = false; for (const w of [...(this.reportWaits?.values() ?? [])]) w("unconfirmed"); this.reportWaits = new Map(); this.reportEarly = new Map();
     // Disconnecting ends the instructor's pause on this device; the Service's own admission still applies.
     this.paused = false; this.stopUnconfirmed = false; this.applyHold();
     this.recoveryWatch.clear(); this.faultClass = null; this.automationGate.reset();
@@ -956,6 +958,9 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const waits = this.reportWaits;
     const seq = await outbox.addSeq("material_report", payload, "student");
     if (seq === null) return "not_sent";
+    // The connection stopped (and maybe reconnected) while the event was being written: its seq belongs to the old stream,
+    // so no answer on the current one is about it. It is unconfirmed, never another report's "accepted".
+    if (this.outbox !== outbox || this.reportWaits !== waits) return "unconfirmed";
     const early = this.reportEarly?.get(seq);
     if (early) { this.reportEarly.delete(seq); return early; }
     const answer = new Promise<MaterialReportOutcome | "unconfirmed">((resolve) => {
