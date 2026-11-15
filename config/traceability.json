@@ -13616,6 +13616,9 @@
           "path": "extensions/hypeproof-chat/src/lessonTips.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/runFailureHint.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
         },
         {
@@ -13643,6 +13646,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/lesson-tips-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/run-failure-hint.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/run-failure-hint-host.smoke.mjs"
         }
       ]
     },
