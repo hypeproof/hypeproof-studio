@@ -54,6 +54,7 @@ public struct VoiceTimeline: Sendable {
         case start, restart, speechPermissionGranted, microphonePermissionGranted
         case speechPermissionRequested, microphonePermissionRequested
         case captureStarting, captureStarted, captureAudioObserved, captureFailed, audioDeactivationFailed
+        case inputBuiltIn, inputWired, inputBluetoothHFP, inputOther, inputUnavailable
         case syntheticCaptureStarted, syntheticPlaybackQueued, syntheticPlaybackFinished
         case playbackQueued, playbackStarted, playbackFinished, playbackCancelled
         case ready, continuationRequested, stalePlaybackCallback

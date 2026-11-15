@@ -31,6 +31,11 @@ jobs:
           retention-days: 14
       - name: Verify trusted native acceptance recipe controls
         run: python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify native journey and release casebook agreement before platform builds
+        run: node --test scripts/release/test/select-cases.test.mjs scripts/release/test/publish-gate.test.mjs
   ios:
     needs: contract
     runs-on: macos-15

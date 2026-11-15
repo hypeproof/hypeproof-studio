@@ -11,7 +11,7 @@ import javax.crypto.*;
 import javax.crypto.spec.GCMParameterSpec;
 
 /** App-private, no-backup files; only Keystore-encrypted credentials survive process death. */
-final class ReflectionStorage implements ReflectionModel.Store {
+final class ReflectionStorage implements ReflectionModel.Store, NativeTeamModel.Store, NativeProductExperience.Store, NativePush.Store {
     private final File directory;
     private final String alias;
     ReflectionStorage(Context context){directory=new File(context.getNoBackupFilesDir(),"reflection");alias=context.getPackageName()+".reflection-account-v1";}
@@ -38,6 +38,27 @@ final class ReflectionStorage implements ReflectionModel.Store {
     }
     public ReflectionState load(String account) throws Exception {byte[] b=read(name(account),4194304);return b==null?new ReflectionState(account):new ReflectionState(account,ReflectionState.decode(b));}
     public void save(ReflectionState state) throws Exception {byte[] bytes=ReflectionState.encode(state.json().toString());if(bytes.length>4194304)throw new IOException("storage_limit");write(name(state.account),bytes);}
+    public JSONArray loadApprovalPending(String account)throws Exception {
+        name(account);byte[] bytes=read("approval-"+account+".json",262144);return bytes==null?new JSONArray():new JSONArray(ReflectionState.decode(bytes));
+    }
+    public void saveApprovalPending(String account,JSONArray pending)throws Exception {
+        name(account);byte[] bytes=ReflectionState.encode(pending.toString());if(pending.length()>50||bytes.length>262144)throw new IOException("storage_limit");write("approval-"+account+".json",bytes);
+    }
+    public JSONObject loadQuestionIntent(String account)throws Exception {
+        name(account);byte[] bytes=read("question-intent-"+account+".json",4096);if(bytes==null)return null;
+        JSONObject value=new JSONObject(ReflectionState.decode(bytes));return value.isNull("intent")?null:value.getJSONObject("intent");
+    }
+    public void saveQuestionIntent(String account,JSONObject intent)throws Exception {
+        name(account);byte[] bytes=ReflectionState.encode(new JSONObject().put("intent",intent==null?JSONObject.NULL:intent).toString());if(bytes.length>4096)throw new IOException("storage_limit");write("question-intent-"+account+".json",bytes);
+    }
+    public JSONObject loadProductExperience(String account)throws Exception {
+        name(account);byte[] bytes=read("product-experience-"+account+".json",32768);return bytes==null?NativeProductExperience.empty():new JSONObject(ReflectionState.decode(bytes));
+    }
+    public void saveProductExperience(String account,JSONObject state)throws Exception {
+        name(account);NativeProductExperience.validate(state);byte[] bytes=ReflectionState.encode(state.toString());if(bytes.length>32768)throw new IOException("storage_limit");write("product-experience-"+account+".json",bytes);
+    }
+    public JSONObject loadPush()throws Exception {byte[] bytes=read("push-device-v1.json",4096);return bytes==null?null:new JSONObject(ReflectionState.decode(bytes));}
+    public void savePush(JSONObject value)throws Exception {byte[] bytes=ReflectionState.encode(value.toString());if(bytes.length>4096)throw new IOException("storage_limit");write("push-device-v1.json",bytes);}
     void exportOriginal(String account,File destination) throws Exception {try(InputStream in=file(name(account)).openRead();OutputStream out=new FileOutputStream(destination)){byte[] chunk=new byte[8192];for(int n;(n=in.read(chunk))!=-1;)out.write(chunk,0,n);}}
     private javax.crypto.SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);

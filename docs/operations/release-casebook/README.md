@@ -126,6 +126,7 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-034 | `testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft` |
 | BB-034 | `testCancelledHistoryStillAllowsTheNextOrdinaryPoll` |
 | BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-035 | `testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft` |
 | BB-035 | `testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry` |
 | BB-035 | `testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop` |
 | BB-035 | `testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped` |
@@ -140,6 +141,18 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-036 | `testEightyMessageWindowFollowsNewTailWithoutInterruptingReading` |
 | BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
 | BB-037 | `testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch` |
+| BB-039 | TeamEntryUITests · `testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft` |
+| BB-039 | TeamEntryUITests · `testExplicitStartingChoiceRendersRealCardAndAnswerWithoutSharingConsent` |
+| BB-039 | TeamEntryUITests · `testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry` |
+| BB-039 | TeamEntryUITests · `testNotificationReceivedDuringRegistrationOpensOnceWhenRegistrationFinishes` |
+
+`BB-039`는 기존 데스크톱과 iOS·Android의 계정 질문 진입을 함께 확인한다.
+수집기는 위 네 `TeamEntryUITests`의 실제 XCTest 시작·성공 기록도 요구한다.
+다른 클래스의 같은 이름, 빌드만 성공한 결과 또는 합성 로그를 제품 실행 증거로
+대체할 수 없다. 플랫폼별 실행 결과와 대화 원문 없는 사용 기록의 명시적 동의,
+기존 초안 보존을 각각 확인한다.
+등록 대기 중 받은 알림 검사는 실제 등록 요청·상태 전환·질문 열기를 검증하지만
+알림 전달은 합성이며 APNs 기기 수신 증거를 대신하지 않는다.
 
 `hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
 상태·저장 경로를 사용하지만 인증 서버·HTTP·마이크 입력은 합성이다. 조건 주도 재생 검사는 실제
