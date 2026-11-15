@@ -6744,32 +6744,69 @@ headless synthetic approval tests do not prove real SDK execution or native focu
 
 ## Request more allowance (CGP-SHELL-D-029)
 
-`REQ-STUDIO-BUDGET-REQUEST` (CGP-SHELL-D-029 / DES-SHELL-29, parent REQ-SHELL-30, P1): when the
-selected funding choice can be requested (`can_request`) and the usage details are authoritative
-(`access.status === 'ready'`), the usage panel shows a "선생님께 더 요청하기" form. At 10% or less
-of the request meter, or when the choice is exhausted, the form sits under the notice "남은 사용량이
-부족해요."
+`REQ-STUDIO-BUDGET-REQUEST` (CGP-SHELL-D-029 / DES-SHELL-29, parent REQ-SHELL-30 / CGP-SHELL-R-030, P1):
+when the selected funding choice can be requested (`can_request`) and the usage details are
+authoritative (`access.status === 'ready'`), the usage panel offers "선생님께 더 요청하기". What the
+form may send comes from the Service's `request_policy` on that choice.
 
-- **Reason is required, up to 200 characters.** The pinned Service rejects a blank reason, so the
-  field is labelled "(필수)" and the button stays disabled until it holds text. The input caps at 200
-  UTF-16 units and a live counter ("N / 200자") sits in a block under it.
-- **Korean IME.** Enter during composition (`compositionstart`, `isComposing` or keyCode 229) neither
-  submits nor reaches the form handler; the draft is kept until the host answers.
-- **Receipt.** The Service record decides: "요청함 · 강사 검토 대기" while pending, or the resolution
-  text once handled. The panel never claims approval it did not receive. The form is keyed by the
-  funding choice, so another choice starts with an empty draft.
-- **Layout (computed, headless Chromium).** The input stays inside the usage panel at 1420, 800 and
-  320 px in the personal and classroom seats, dark and light. The reason input and the button are at
-  least 44px high, the counter and input text are at least 14px, and both controls carry the shared
-  2px focus ring.
-- **Blocked on the Service contract, not built.** The parent REQ-SHELL-30 reason choices (an optional
-  reason, approval/refusal wording picked by the learner) and the 10-minute cooldown between requests
-  need a Service change; the pinned Service has no cooldown and requires a non-blank reason. Studio
-  does not invent either. See `docs/research/chatgpt-desktop-2026-10/decisions/README.md`.
+**With a request policy (CGP-SHELL-R-030).**
 
-Evidence: `budget-request-form.test.tsx` (counter, length boundary, IME guards, retained draft,
-receipt, scope) and `budget-request-layout.test.tsx` (computed layout in headless Chromium; fails
-under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+- **Only inside the low-allowance notice.** The form shows at 10% or less of any metered allowance
+  (`limit > 0`), or when the choice is exhausted, under "남은 사용량이 부족해요. 선생님께 추가 사용을
+  요청할 수 있어요." It does not show above 10%.
+- **Fixed reasons.** The Service names them (하던 작업을 마무리하고 싶어요 / 문제를 고치는 중이에요 /
+  결과를 한 번 더 확인하고 싶어요). Each is a radio row of at least 44px with text of at least 14px, in a
+  fieldset titled "요청 이유".
+- **Minor seat (`note: false`).** There is no text field at all, and the button stays disabled until a
+  reason is picked. Only the reason id is sent. The Service refuses a note from a minor seat (403
+  `budget_request_note_not_allowed`) and stores the reason's label. A profile it cannot resolve
+  counts as a minor seat. No minor-written text reaches the instructor.
+- **Adult seat (`note: true`).**
+  - The reason is optional ("요청 이유 (선택)"), and so is the note ("하고 싶은 말 (선택)", up to
+    `note_max`, 280, with a live "N / 280자" counter). Either, both or neither may be sent.
+  - Whitespace alone is not a note.
+  - The IME guard is the same as the older form.
+- **Repeat block.**
+  - A new request within 10 minutes of the previous one is refused (429 `budget_request_cooldown`).
+  - The form disables the button and says "방금 요청했어요. HH:MM 이후에 다시 요청할 수 있어요." from
+    `cooldown_until`, as a status line the button is described by. It re-enables at that time.
+  - A retry while a request is pending returns the pending request.
+- **Malformed policy.** It parses to `null`, and the form is not offered. It never falls back to the
+  free-text form.
+- **Outbound list (REQ-KNOW-09).** A picked reason is listed as "고른 이유: <label>". A note is listed as
+  "추가 사용이 필요한 이유 (내가 쓴 글)" with its byte size. Nothing is sent on Cancel.
+- **Request side only.** Resolving a request changes no cap, budget or charge.
+
+**Without a request policy (an older Service).** The form is the earlier one:
+- a reason of up to 200 characters, labelled "(필수)";
+- the "N / 200자" counter and the IME guard;
+- shown whenever a request is possible, with the low notice at 10% of the request meter.
+
+**Receipt.** The Service record decides: "요청함 · 강사 검토 대기" while pending, or the resolution text
+once handled. The panel never claims approval it did not receive. The form is keyed by the funding
+choice.
+
+**Not built.** The resolution is free text without a 승인/거절 outcome. Adding one needs a Service
+column, and the approval side is out of scope here.
+
+**Layout (computed, headless Chromium).** In both forms, the controls stay inside the usage panel:
+- at 1420, 800 and 320 px;
+- in the personal and classroom seats;
+- in dark and light.
+
+The older form's input and button are at least 44px high, and its counter and input text are at least
+14px. The minor form has three reason rows of at least 44px, 14px text and no text field. Every control
+carries the shared 2px focus ring.
+
+Evidence:
+- `budget-request-policy.test.tsx`: minor and adult forms, cooldown, low-allowance gate, malformed
+  policy, pending.
+- `access-client.smoke.mjs`: policy parsing, a refused minor note sending zero requests, the bodies,
+  the outbound items, and the 429 copy.
+- `budget-request-form.test.tsx`: the older form.
+- `budget-request-layout.test.tsx`: both forms, computed. It fails under `FOCUS_REQUIRE_BROWSER=1`
+  without a browser.
+- Service: `worker/test/budget-request.test.mjs`.
 
 ## Source-kind labels (CGP-CHAT-R-014)
 

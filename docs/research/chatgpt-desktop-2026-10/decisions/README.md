@@ -149,6 +149,7 @@ reproduces the former file byte for byte.
 - [CGP-SHELL-R-024](CGP-SHELL-R-024.md): CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line (2026-11-11)
 - [CGP-SHELL-R-026](CGP-SHELL-R-026.md): CGP-SHELL-R-026 (minor external links)
 - [CGP-SHELL-R-027](CGP-SHELL-R-027.md): CGP-SHELL-R-027 / CGP-SHELL-D-026: account and data deletion request (2026-11-13, agent-selected)
+- [CGP-SHELL-R-030](CGP-SHELL-R-030.md): CGP-SHELL-R-030: allowance request reasons, minor seats and the repeat block (2026-11-15, agent-selected)
 - [CGP-SHELL-R-034](CGP-SHELL-R-034.md): CGP-SHELL-R-034 / CGP-SHELL-D-033: Chalk seat version column (2026-11-12, DEC-24 floor confirmed by Jay; other choices agent-selected)
 - [CGP-SHELL-R-035](CGP-SHELL-R-035.md): CGP-SHELL-R-035: "새로운 기능" after an update (2026-10-26, agent choice)
 - [CGP-VOICE-D-007](CGP-VOICE-D-007.md): CGP-VOICE-D-007: compact control corner snapping (2026-10-27, agent-selected)

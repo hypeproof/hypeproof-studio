@@ -8,6 +8,8 @@
 //   - input and button are at least 44px high, the button at least 44px wide
 //   - the counter is at least 14px, its own block under the input, with a gap before the button
 //   - the shared 2px solid focus ring on input and button
+// CGP-SHELL-R-030 minor variant (Service request policy, note: false): three fixed-reason rows of at least 44px and
+// 14px text inside the panel, no text field, the radio and the button with the shared ring.
 // Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -31,7 +33,9 @@ const config = (surface: string) => ({
 });
 const choice = { id: 'class-1', label: '수업', source_kind: 'cohort', mode: 'included', active: true, available: true, state: 'ready', ends_at: 1893456000000, can_request: true,
   allowed: { models: [], efforts: [], features: [], runtimes: [] }, resources: [{ meter: 'requests:count', limit: 100, remaining: 5, held: 0, spent: 95, unresolved: 0, overrun: 0, shared: true }] };
-const withAccess = (c: any) => ({ ...c, access: { status: 'ready', selected: 'class-1', view: { schema: 'hps-access-view/1', configured: true, as_of: '2026-10-24T00:00:00Z', choices: [choice] } } });
+// CGP-SHELL-R-030: the minor-seat form the Service policy asks for (three fixed reasons as 44px rows, no text field).
+const MINOR_POLICY = { reasons: [{ id: 'finish_work', label: '하던 작업을 마무리하고 싶어요' }, { id: 'fix_problem', label: '문제를 고치는 중이에요' }, { id: 'check_again', label: '결과를 한 번 더 확인하고 싶어요' }], note: false, note_max: 280, cooldown_until: null };
+const withAccess = (c: any, variant: string) => ({ ...c, access: { status: 'ready', selected: 'class-1', view: { schema: 'hps-access-view/1', configured: true, as_of: '2026-10-24T00:00:00Z', choices: [variant === 'minor' ? { ...choice, request_policy: MINOR_POLICY } : choice] } } });
 
 const measure = `(() => {
   const vw = document.documentElement.clientWidth;
@@ -46,6 +50,21 @@ const measure = `(() => {
   out.panel = box(panel); out.input = box(input); out.counter = box(counter); out.button = box(button);
   out.counterFont = parseFloat(getComputedStyle(counter).fontSize); out.counterDisplay = getComputedStyle(counter).display;
   out.inputFont = parseFloat(getComputedStyle(input).fontSize);
+  return out;
+})()`;
+const measureMinor = `(() => {
+  const vw = document.documentElement.clientWidth;
+  const panel = document.querySelector('.hps-access');
+  const out = { vw, docScroll: document.documentElement.scrollWidth, found: !!panel };
+  if (!panel) return out;
+  panel.open = true;
+  const rows = [...panel.querySelectorAll('.hps-budget-request-reasons label')], button = panel.querySelector('.hps-budget-request-notice form button');
+  out.found = rows.length === 3 && !!button;
+  out.textInputs = panel.querySelectorAll('.hps-budget-request-notice input:not([type="radio"])').length;
+  if (!out.found) return out;
+  const box = (e) => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; };
+  out.panel = box(panel); out.button = box(button); out.rows = rows.map(box);
+  out.rowFonts = rows.map((r) => parseFloat(getComputedStyle(r).fontSize));
   return out;
 })()`;
 
@@ -79,9 +98,10 @@ async function main() {
   const b: any = await launch(bin);
   const results: any[] = [];
   const RING = ['.hps-budget-request-notice input', '.hps-budget-request-notice form button'];
+  const RING_MINOR = ['.hps-budget-request-reasons input[type="radio"]', '.hps-budget-request-notice form button'];
   try {
-    for (const surface of ['personal', 'classroom']) for (const theme of ['dark', 'light']) for (const width of [1420, 800, 320]) {
-      const where = `${surface}/${theme}/${width}`;
+    for (const variant of ['legacy', 'minor']) for (const surface of ['personal', 'classroom']) for (const theme of ['dark', 'light']) for (const width of [1420, 800, 320]) {
+      const where = `${variant}/${surface}/${theme}/${width}`;
       await b.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
       await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
       const { identifier } = await b.send('Page.addScriptToEvaluateOnNewDocument', { source: `
@@ -92,20 +112,21 @@ async function main() {
       try {
         await b.send('Page.navigate', { url: base });
         for (let i = 0; i < 100 && !(await b.evaluate(`!!window.sent && window.sent.some((m) => m.type === 'ready')`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
-        await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'config', config: ${JSON.stringify(withAccess(config(surface)))} } }))`);
+        await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'config', config: ${JSON.stringify(withAccess(config(surface), variant))} } }))`);
         // Personal chat keeps the usage panel in the settings dialog behind the header chip; classroom renders it inline.
         for (let i = 0; i < 50 && !(await b.evaluate(`!!document.querySelector('.hps-access, .hps-access-chip')`)); i++) await new Promise((r) => setTimeout(r, 100));
         if (surface === 'personal') { await b.evaluate(`document.querySelector('.hps-access-chip')?.click()`); for (let i = 0; i < 50 && !(await b.evaluate(`!!document.querySelector('.hps-access')`)); i++) await new Promise((r) => setTimeout(r, 100)); }
         await b.evaluate(`(() => { const d = document.querySelector('.hps-access'); if (d) d.open = true; })()`);
         await new Promise((r) => setTimeout(r, 100));
-        const m = await b.evaluate(measure);
+        const m = await b.evaluate(variant === 'minor' ? measureMinor : measure);
+        m.variant = variant;
         if (m.found) {
           m.ring = {};
-          for (const selector of RING) m.ring[selector] = await b.focusVisibleStyle(selector);
+          for (const selector of variant === 'minor' ? RING_MINOR : RING) m.ring[selector] = await b.focusVisibleStyle(selector);
           await b.evaluate(`document.querySelector('.hps-budget-request-notice').scrollIntoView({ block: 'center' })`);
           if (width !== 320) {
             const shot = await b.send('Page.captureScreenshot', { format: 'png' });
-            writeFileSync(path.join(pngs, `budget-form-${surface}-${width}-${theme}.png`), Buffer.from(shot.data, 'base64'));
+            writeFileSync(path.join(pngs, `budget-form-${variant}-${surface}-${width}-${theme}.png`), Buffer.from(shot.data, 'base64'));
           }
         }
         results.push({ where, ...m });
@@ -120,6 +141,15 @@ async function main() {
     expect(r.found, `${r.where}: the request form does not render`);
     if (!r.found) continue;
     expect(r.docScroll <= r.vw + 0.5, `${r.where}: the page scrolls horizontally (${r.docScroll} > clientWidth ${r.vw})`);
+    if (r.variant === 'minor') {
+      expect(r.textInputs === 0, `${r.where}: a minor seat shows ${r.textInputs} text field(s)`);
+      for (const [i, row] of r.rows.entries()) {
+        expect(row.h >= 43.5, `${r.where}: reason row ${i} is ${Math.round(row.h)}px high, under 44`);
+        expect(row.left >= r.panel.left - 0.5 && row.right <= r.panel.right + 0.5 && row.right <= r.vw + 0.5, `${r.where}: reason row ${i} leaves the panel`);
+        expect(r.rowFonts[i] >= 14, `${r.where}: reason row ${i} text is ${r.rowFonts[i]}px, under 14`);
+      }
+      expect(r.button.h >= 43.5 && r.button.w >= 43.5 && r.button.right <= r.panel.right + 0.5, `${r.where}: the button is ${Math.round(r.button.w)}x${Math.round(r.button.h)}px or leaves the panel`);
+    } else {
     for (const k of ['input', 'counter', 'button']) {
       expect(r[k].left >= r.panel.left - 0.5 && r[k].right <= r.panel.right + 0.5, `${r.where}: the ${k} leaves the panel (${Math.round(r[k].left)}..${Math.round(r[k].right)} of ${Math.round(r.panel.left)}..${Math.round(r.panel.right)})`);
       expect(r[k].right <= r.vw + 0.5, `${r.where}: the ${k} leaves the viewport (right ${Math.round(r[k].right)} of ${r.vw})`);
@@ -130,13 +160,14 @@ async function main() {
     expect(r.inputFont >= 14, `${r.where}: the input text is ${r.inputFont}px, under 14`);
     expect(r.counterDisplay === 'block' && r.counter.top >= r.input.bottom - 0.5, `${r.where}: the counter is not a block under the input`);
     expect(r.button.top - r.counter.bottom >= 4, `${r.where}: only ${Math.round(r.button.top - r.counter.bottom)}px between the counter and the button`);
+    }
     for (const [selector, ring] of Object.entries<any>(r.ring)) {
       expect(ring['outline-style'] === 'solid' && ring['outline-width'] === '2px' && Math.abs(parseFloat(ring['outline-offset'])) === 2 && !/rgba\(0, 0, 0, 0\)/.test(ring['outline-color']),
         `${r.where}: ${selector} focus ring is ${ring['outline-style']} ${ring['outline-width']} ${ring['outline-color']} offset ${ring['outline-offset']}`);
     }
   }
-  assert.equal(results.length, 12, 'every combination ran');
+  assert.equal(results.length, 24, 'every combination ran');
   if (failures.length) throw new Error(failures.join('\n'));
-  console.log('PASS budget request layout computed: input inside the panel, 44px input and button, 14px counter block, 2px ring (personal, classroom x dark, light x 1420, 800, 320)');
+  console.log('PASS budget request layout computed: input inside the panel, 44px input and button, 14px counter block, 2px ring; minor seat: three 44px reason rows, no text field (legacy, minor x personal, classroom x dark, light x 1420, 800, 320)');
 }
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
