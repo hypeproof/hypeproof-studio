@@ -24,7 +24,7 @@ const none=buildSdkGatewayEnv({ANTHROPIC_CUSTOM_HEADERS:'x-hps-funding-source: a
 }
 { // CGP-SHELL-R-030: the Service's request policy. A minor seat sends a fixed reason only; a malformed policy offers nothing.
  const REASONS=[{id:'finish_work',label:'하던 작업을 마무리하고 싶어요'},{id:'fix_problem',label:'문제를 고치는 중이에요'}];
- const MINOR={reasons:REASONS,note:false,note_max:280,cooldown_until:null},ADULT={...MINOR,note:true};
+ const MINOR={reasons:REASONS,note:false,note_max:200,cooldown_until:null},ADULT={...MINOR,note:true};
  const withPolicy=p=>({...view,choices:[{...view.choices[0],request_policy:p}]});
  assert.deepEqual(parseAccessView(structuredClone(withPolicy(MINOR))).choices[0].request_policy,MINOR);
  assert.equal(parseAccessView(structuredClone(view)).choices[0].request_policy,undefined,'an older Service: no policy');
@@ -41,7 +41,7 @@ const none=buildSdkGatewayEnv({ANTHROPIC_CUSTOM_HEADERS:'x-hps-funding-source: a
  assert.deepEqual(shown.items.map(i=>i.name),['고른 이유: 문제를 고치는 중이에요','이용권 번호']);
  assert.equal(await send({},ADULT),true);assert.deepEqual(fetches.at(-1),{source_id:'class:source-1'},'an adult may send neither');
  assert.equal(await send({reason:'finish_work',note:'한 번만 더'},ADULT),true);assert.deepEqual(fetches.at(-1),{source_id:'class:source-1',reason:'finish_work',note:'한 번만 더'});
- await assert.rejects(send({note:'가'.repeat(281)},ADULT),/280자 이내/);
+ await assert.rejects(send({note:'가'.repeat(201)},ADULT),/200자 이내/);
  status=429;reply=JSON.stringify({error:{code:'budget_request_cooldown'}});
  await assert.rejects(send({reason:'finish_work'},MINOR),/10분이 지나면 다시 요청할 수 있어요/);
  status=503;reply='not json';await assert.rejects(send({reason:'finish_work'},MINOR),/보내지 못했습니다/);

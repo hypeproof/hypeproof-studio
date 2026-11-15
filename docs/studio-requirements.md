@@ -6758,16 +6758,20 @@ form may send comes from the Service's `request_policy` on that choice.
   결과를 한 번 더 확인하고 싶어요). Each is a radio row of at least 44px with text of at least 14px, in a
   fieldset titled "요청 이유".
 - **Minor seat (`note: false`).** There is no text field at all, and the button stays disabled until a
-  reason is picked. Only the reason id is sent. The Service refuses a note from a minor seat (403
-  `budget_request_note_not_allowed`) and stores the reason's label. A profile it cannot resolve
-  counts as a minor seat. No minor-written text reaches the instructor.
+  reason is picked. Only the reason id is sent. A note from a minor seat (a released app still sends
+  one) is dropped by the Service: never stored, returned or logged; the request succeeds with the
+  reason's label, or "추가 사용을 요청했어요" when no reason came. A profile it cannot resolve counts as a
+  minor seat. No minor-written text reaches the instructor. This narrows REQ-SHELL-30's optional
+  reason for minor seats (agent choice, privacy; decisions/CGP-SHELL-R-030.md).
 - **Adult seat (`note: true`).**
   - The reason is optional ("요청 이유 (선택)"), and so is the note ("하고 싶은 말 (선택)", up to
-    `note_max`, 280, with a live "N / 280자" counter). Either, both or neither may be sent.
+    `note_max`, 200, with a live "N / 200자" counter). Either, both or neither may be sent.
   - Whitespace alone is not a note.
   - The IME guard is the same as the older form.
 - **Repeat block.**
-  - A new request within 10 minutes of the previous one is refused (429 `budget_request_cooldown`).
+  - A new request within 10 minutes of the previous one is refused (429 `budget_request_cooldown`, its
+    own code); the form reads it as "방금 요청했어요. 10분이 지나면 다시 요청할 수 있어요." Released apps
+    show their generic "추가 사용 요청을 보내지 못했습니다." for it (known limitation).
   - The form disables the button and says "방금 요청했어요. HH:MM 이후에 다시 요청할 수 있어요." from
     `cooldown_until`, as a status line the button is described by. It re-enables at that time.
   - A retry while a request is pending returns the pending request.

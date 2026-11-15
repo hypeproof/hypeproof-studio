@@ -17,7 +17,7 @@ const host=mountPoint() as any, root=createRoot(host);let posted:any[]=[];
 const REASONS=[{id:'finish_work',label:'하던 작업을 마무리하고 싶어요'},{id:'fix_problem',label:'문제를 고치는 중이에요'},{id:'check_again',label:'결과를 한 번 더 확인하고 싶어요'}];
 const res=(remaining:number,limit=100)=>[{meter:'requests:count',limit,remaining,held:0,spent:limit-remaining,unresolved:0,overrun:0,shared:true}];
 const make=(policy:any,over:any={})=>({access:{status:'ready',selected:'class-1',view:{schema:'hps-access-view/1',configured:true,as_of:'2026-11-15T00:00:00Z',choices:[{id:'class-1',label:'수업',source_kind:'cohort',mode:'included',active:true,available:true,state:'ready',ends_at:1,can_request:true,allowed:{models:[],efforts:[],features:[],runtimes:[]},resources:res(5),request_policy:policy,...over}]}}});
-const MINOR={reasons:REASONS,note:false,note_max:280,cooldown_until:null},ADULT={...MINOR,note:true};
+const MINOR={reasons:REASONS,note:false,note_max:200,cooldown_until:null},ADULT={...MINOR,note:true};
 const fire=(target:any,type:string,extra:any={})=>{const event={type,bubbles:true,cancelable:true,defaultPrevented:false,timeStamp:Date.now(),...extra,preventDefault(){this.defaultPrevented=true;},stopPropagation(){}};target.dispatchEvent(event);return event;};
 // Assertions on DOM nodes use ok(!x): equal(node, null) would make node:assert inspect a whole mini-dom tree.
 const render=(config:any)=>act(async()=>root.render(<AccessControl config={structuredClone(config) as ChatConfig} streaming={false} post={m=>posted.push(m)} defaultOpen/>));
@@ -42,7 +42,7 @@ async function main(){
  await check('adult seat: reason and note are optional; neither, note only, and both are posted as written',async()=>{
   await render(make(ADULT));
   assert.equal(texts().length,1);assert.ok(host.querySelector('legend').textContent.includes('(선택)'));
-  assert.ok(host.textContent.includes('0 / 280자'));
+  assert.ok(host.textContent.includes('0 / 200자'));
   assert.ok(!button().hasAttribute('disabled'));await submit();assert.deepEqual(posted.at(-1),{type:'requestBudget'});
   await act(async()=>{texts()[0].value='발표 전에 한 번 더';fire(texts()[0],'input',{data:'더'});});
   await submit();assert.deepEqual(posted.at(-1),{type:'requestBudget',note:'발표 전에 한 번 더'});
