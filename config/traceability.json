@@ -6837,6 +6837,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/subframe-hold-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outbound-hold-browser.smoke.mjs"
         }
       ]
     },
