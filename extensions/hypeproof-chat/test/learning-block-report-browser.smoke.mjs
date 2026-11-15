@@ -121,7 +121,7 @@ try {
     checks += 2;
 
     // "capped" and "unconfirmed" keep the row open, say so, and never show the toast.
-    for (const [state, words] of [['capped', '오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요.'], ['unconfirmed', '선생님께 전달됐는지 아직 확인하지 못했어요. 잠시 뒤 다시 보내 보세요.']]) {
+    for (const [state, words] of [['capped', '오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요.'], ['unconfirmed', '선생님께 전달됐는지 아직 확인하지 못했어요. 잠시 뒤 다시 보내 보세요.'], ['rejected', '이 자료는 선생님께 보낼 수 없었어요. 선생님께 직접 말해 주세요.']]) {
       await ev(`card().querySelector('[data-report-send]').click()`); await settle();
       await ev(`host({type:'materialReportResult',sha256:${JSON.stringify(lesson.sha256)},stepId:${JSON.stringify(stepId)},state:'${state}'})`); await settle();
       assert.deepEqual(await ev(`[!!card().querySelector('[data-block-report-panel]'), card().querySelector('[data-report-result]')?.textContent, (document.querySelector('.hps-copy-toasts')?.textContent ?? '')]`), [true, words, ''], `${tag}: ${state} is said, no toast`);
@@ -132,7 +132,7 @@ try {
     await ev(`host({type:'materialReportResult',sha256:${JSON.stringify(lesson.sha256)},stepId:${JSON.stringify(stepId)},state:'sent'})`); await settle();
     const done = await ev(`[!!card().querySelector('[data-block-report-panel]'), document.activeElement.dataset.blockMenuToggle!==undefined, [...document.querySelectorAll('.hps-copy-live[role="status"]')].map(n=>n.textContent).join('|'), document.querySelector('.hps-copy-toasts')?.textContent ?? '']`);
     assert.deepEqual(done, [false, true, '선생님께 전달했어요', '선생님께 전달했어요'], `${tag}: sent`);
-    assert.equal(await ev(`posted.filter(m=>m.type==='materialReport').length`), 4, `${tag}: four reports in all`);
+    assert.equal(await ev(`posted.filter(m=>m.type==='materialReport').length`), 5, `${tag}: five reports in all`);
     // "already": the Service already holds this learner's report of the block. It closes, and the toast says so.
     await new Promise((r) => setTimeout(r, 4200));
     await ev(`card().querySelector('[data-block-menu-toggle]').click()`); await settle();

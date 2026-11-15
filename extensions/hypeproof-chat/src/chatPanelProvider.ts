@@ -9795,7 +9795,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // "sent" only after the Service accepted it (or already holds the same report); a queued report is not sent.
         let outcome: string = "not_sent";
         if (payload) { try { outcome = (await this.opsObserver?.materialReport?.(payload)) ?? "not_sent"; } catch { outcome = "not_sent"; } }
-        const state = outcome === "accepted" ? "sent" : outcome === "duplicate" ? "already" : outcome === "capped" ? "capped" : outcome === "unconfirmed" ? "unconfirmed" : "not_sent";
+        const state = outcome === "accepted" ? "sent" : outcome === "duplicate" ? "already" : outcome === "capped" ? "capped" : outcome === "unconfirmed" ? "unconfirmed" : outcome === "rejected" ? "rejected" : "not_sent";
         if (lesson) await this.post({ type: "materialReportResult", sha256: lesson.sha256, stepId: msg.stepId, state });
         return;
       }
