@@ -298,7 +298,9 @@ final class StudioJourneyTests: XCTestCase {
                   let value = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
             return (value[key] as? Int ?? 0) >= count
         }, object: node)
-        XCTAssertEqual(XCTWaiter.wait(for: [observed], timeout: 10), .completed, "Observe the actual request boundary before judging readiness.")
+        let result = XCTWaiter.wait(for: [observed], timeout: 10)
+        if result != .completed { readinessFailure("request-boundary-" + key, app: app, queries: [("trace", node)]) }
+        XCTAssertEqual(result, .completed, "Observe the actual request boundary before judging readiness.")
         return try trace(app)
     }
     @MainActor func testPersonalQuestionReadyAndSendWhileDesktopListIsHeld() throws {
@@ -648,7 +650,9 @@ final class StudioJourneyTests: XCTestCase {
         }, object: voice)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
         XCTAssertTrue(syncing.exists, "The voice action must still overlap the held history read.")
-        let before = try trace(app)
+        let before = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertEqual(before["history_sync_automatic"] as? Bool, false, "This journey must hold the explicit Settings refresh, not an earlier quiet poll.")
+        XCTAssertEqual(before["active_history_reads"] as? Int, 1)
         XCTAssertEqual(before["history_barrier_completions"] as? Int, 0)
         XCTAssertEqual(before["history_barrier_timeouts"] as? Int, 0)
         XCTAssertEqual(before["history_barrier_cancellations"] as? Int, 0)
@@ -847,18 +851,23 @@ final class StudioJourneyTests: XCTestCase {
         field(app).tap(); field(app).typeText(words)
         app.buttons["conversationSettings"].tap(); app.buttons["nativeJourneyHoldHistory"].tap()
         XCTAssertTrue(app.buttons["nativeJourneyHoldHistory"].waitForNonExistence(timeout: 5))
-        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        // A periodic read may win the same real refresh slot. Usable history
+        // deliberately hides its spinner; prove the held HTTP read itself.
         let transport = diagnostic("nativeJourneyTrace", in: app)
         let held = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let text = transport.value as? String, let bytes = text.data(using: .utf8),
                   let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
             return (value["delayed_history_reads"] as? Int) == 1
+                && (value["active_history_reads"] as? Int) == 1
                 && (value["history_barrier_completions"] as? Int) == 0
                 && (value["history_barrier_timeouts"] as? Int) == 0
                 && (value["history_barrier_cancellations"] as? Int) == 0
         }, object: transport)
-        XCTAssertEqual(XCTWaiter.wait(for: [held], timeout: 5), .completed)
+        let holdResult = XCTWaiter.wait(for: [held], timeout: 5)
+        if holdResult != .completed {
+            readinessFailure("logout-history-not-held", app: app, queries: [("transport", transport)])
+        }
+        XCTAssertEqual(holdResult, .completed, "Logout must overlap one genuinely held history response.")
         // Ordinary Send creates the durable local request during the held GET.
         // Logout must consume its scheduler intent without erasing those words.
         app.buttons["sharedSend"].tap()
@@ -869,8 +878,6 @@ final class StudioJourneyTests: XCTestCase {
         let logout = app.buttons["로그아웃"]
         XCTAssertTrue(logout.waitForExistence(timeout: 5))
         XCTAssertTrue(logout.isEnabled); XCTAssertTrue(logout.isHittable)
-        let settingsSyncing = app.descendants(matching: .any).matching(identifier: "settingsSyncing").firstMatch
-        XCTAssertTrue(settingsSyncing.exists, "The one logout tap must overlap the actual held GET; observe it in the active sheet.")
         logout.tap()
         let pending = app.descendants(matching: .any).matching(identifier: "sharedLoggingOut").firstMatch
         XCTAssertTrue(pending.waitForExistence(timeout: 5))
@@ -880,8 +887,11 @@ final class StudioJourneyTests: XCTestCase {
         let waiting = try trace(app)
         XCTAssertEqual(waiting["logout_requests"] as? Int, 0)
         XCTAssertEqual(waiting["submitted_ids"] as? [String], [])
+        XCTAssertEqual(waiting["active_history_reads"] as? Int, 1, "The same HTTP read must remain held after the one logout tap.")
+        XCTAssertEqual(waiting["delayed_history_reads"] as? Int, 1)
         XCTAssertEqual(waiting["history_barrier_completions"] as? Int, 0)
         XCTAssertEqual(waiting["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(waiting["history_barrier_cancellations"] as? Int, 0)
         // Release only the synthetic HTTP response; never alter account/model state.
         app.buttons["conversationSettings"].tap()
         XCTAssertFalse(app.buttons["내 상황과 의도"].isEnabled)

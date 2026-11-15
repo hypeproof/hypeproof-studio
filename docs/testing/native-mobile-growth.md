@@ -423,6 +423,7 @@ separately observed. A prepared runner or green build is not that observation.
 
 - 실제 `ReflectionModel` + 기존 device sign-in protocol 제어: 로그인 전 글의 정확한 저장/재열기, 취소·거절·늦은 완료, 빈 계정 초안으로만 이동, 충돌 후 명시 복원, 계정 저장/게스트 삭제 실패의 원본 보존과 전송 0회를 확인한다 (`GuestDraftTest`).
 - 실제 `QuestionActivity` / `AtomicFile` / Keystore 제어: 첫 화면 입력, 동의 취소, 앱 재실행, 로그인 성공/거절, 충돌·복원과 손상 파일 보존을 확인한다. 음성 입력만 합성하고 실제 Host/model/file 경로에서 로그인 전 받아쓰기·백그라운드 중단·늦은 콜백 거부를 확인한다 (`QuestionJourneyTest`).
+- 충돌 후 명시 복원은 실제 DOWN → 기존 모델 저장·화면 갱신 → UP 한 번으로 확인한다 (Studio #4190). 원래 버튼이 분리되어 탭을 잃는 대조군과, 복원 글·계정/게스트 파일·전송 0회를 확인하는 수정본을 구분한다. 실패 시 synthetic 초안/저장 상태와 버튼 부착 여부를 종료 전에 보존하며 자격 증명은 기록하지 않는다.
 - 실제 소프트웨어 키보드를 연 뒤 다섯 줄의 전체 값, 입력창·로그인 버튼이 화면과 키보드 위에 남는지 확인한다. 별도 소유 에뮬레이터에서 시스템 큰 글자/다크 모드로 같은 화면을 기록한다. 기존 기기 기록은 메뉴에서 접근한다.
 - 원래 `QuestionActivity`를 복원하면 로그인 전 입력창 표시 검증이 실패해야 한다. 에뮬레이터의 합성 로그인/음성은 실제 Galaxy 로그인·마이크·접근성 서비스·배포 증거가 아니다. 실행 결과와 패키지 identity는 별도로 기록한다.
 

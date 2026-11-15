@@ -10137,7 +10137,9 @@ question screen exposes an editable, device-local draft and dictation immediatel
 Cancel, failed login and relaunch preserve it. Only successful explicit login can
 copy it into an empty account draft without an outstanding turn; a collision keeps
 both copies and offers explicit restore after the account composer is cleared.
-Persist the account copy before clearing the guest file. Neither login nor restore
+An eligible restore remains the same touch target while ordinary focus or saved-state
+updates occur during the person's single tap (Studio #4190); eligibility is still
+rechecked by the current account model. Persist the account copy before clearing the guest file. Neither login nor restore
 sends a turn. History and account settings remain secondary, while the native
 composer and normal user/assistant hierarchy support system theme, font scaling
 and the software keyboard. This follows **Human judgment stays visible** and

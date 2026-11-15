@@ -152,11 +152,38 @@ public class QuestionJourneyTest {
         var sends=loginTransport(false);ReflectionStorage store=new ReflectionStorage(context);store.saveGuestDraft("로그인 뒤에도 내가 보낼 글");app=ActivityScenario.launch(QuestionActivity.class);approveLogin();
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("로그인 뒤에도 내가 보낼 글")));assertEquals("",store.loadGuestDraft());assertEquals("로그인 뒤에도 내가 보낼 글",store.load("test-account").draft);assertNull(store.load("test-account").request);assertEquals(0,sends.get());
     }
+    private void captureGuestRestore(String phase,android.view.View target,ReflectionStorage store)throws Exception{
+        JSONObject observation=new JSONObject().put("phase",phase).put("elapsed_ms",android.os.SystemClock.elapsedRealtime());
+        app.onActivity(a->{try{ReflectionModel model=questionModel(a);observation.put("busy",model.busy).put("draft",model.draft).put("guest_draft",model.guestDraft)
+            .put("target_attached",target!=null&&target.isAttachedToWindow()).put("target_enabled",target!=null&&target.isEnabled()).put("target_pressed",target!=null&&target.isPressed());}catch(Exception e){throw new AssertionError(e);}});
+        observation.put("saved_guest",store.loadGuestDraft()).put("saved_account",store.load("test-account").draft).put("request_present",store.load("test-account").request!=null);
+        File dir=new File(context.getExternalFilesDir(null),"evidence/guest-restore");assertTrue(dir.isDirectory()||dir.mkdirs());
+        Files.write(new File(dir,phase+".json").toPath(),observation.toString(2).getBytes(StandardCharsets.UTF_8));
+    }
     @Test public void realLoginCollisionAndExplicitRestorePreserveBothFilesWithoutSending()throws Exception{
         var sends=loginTransport(false);ReflectionStorage store=new ReflectionStorage(context);store.saveGuestDraft("로그인 전에 적은 글");ReflectionState previous=new ReflectionState("test-account");previous.draft="계정에 남긴 글";store.save(previous);
-        app=ActivityScenario.launch(QuestionActivity.class);approveLogin();onView(withContentDescription("질문 대화 입력")).check(matches(withText("계정에 남긴 글")));assertEquals("로그인 전에 적은 글",store.loadGuestDraft());onView(withText("로그인 전 글 가져오기")).check(matches(org.hamcrest.Matchers.not(isEnabled())));
-        onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());onView(withText("로그인 전 글 가져오기")).perform(click());
-        onView(withContentDescription("질문 대화 입력")).check(matches(withText("로그인 전에 적은 글")));assertEquals("",store.loadGuestDraft());assertEquals("로그인 전에 적은 글",store.load("test-account").draft);assertNull(store.load("test-account").request);assertEquals(0,sends.get());screen("android-guest-restored");
+        java.util.concurrent.atomic.AtomicReference<android.view.View> target=new java.util.concurrent.atomic.AtomicReference<>();
+        try{
+            app=ActivityScenario.launch(QuestionActivity.class);approveLogin();onView(withContentDescription("질문 대화 입력")).check(matches(withText("계정에 남긴 글")));assertEquals("로그인 전에 적은 글",store.loadGuestDraft());onView(withText("로그인 전 글 가져오기")).check(matches(org.hamcrest.Matchers.not(isEnabled())));
+            onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());
+            java.util.concurrent.atomic.AtomicReference<float[]> point=new java.util.concurrent.atomic.AtomicReference<>();
+            onView(withText("로그인 전 글 가져오기")).check(matches(isEnabled())).check((v,e)->{if(e!=null)throw e;target.set(v);int[] xy=new int[2];v.getLocationOnScreen(xy);point.set(new float[]{xy[0]+v.getWidth()/2f,xy[1]+v.getHeight()/2f});});
+            captureGuestRestore("before_down",target.get(),store);
+            var instrumentation=InstrumentationRegistry.getInstrumentation();float[] xy=point.get();long downTime=android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent down=android.view.MotionEvent.obtain(downTime,downTime,android.view.MotionEvent.ACTION_DOWN,xy[0],xy[1],0);down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(down);down.recycle();
+            try{
+                // A real local save emits the same model/UI update as background reconciliation.
+                // Keep the one physical gesture in flight; do not call the restore handler.
+                app.onActivity(a->questionModel(a).retrySave());
+                captureGuestRestore("after_refresh_before_up",target.get(),store);
+            }finally{
+                android.view.MotionEvent up=android.view.MotionEvent.obtain(downTime,android.os.SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,xy[0],xy[1],0);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(up);up.recycle();
+            }
+            drain();captureGuestRestore("after_up",target.get(),store);
+            onView(withContentDescription("질문 대화 입력")).check(matches(withText("로그인 전에 적은 글")));assertEquals("",store.loadGuestDraft());assertEquals("로그인 전에 적은 글",store.load("test-account").draft);assertNull(store.load("test-account").request);assertEquals(0,sends.get());screen("android-guest-restored");
+        }catch(Exception|AssertionError failure){
+            try{captureGuestRestore("failure",target.get(),store);screen("android-guest-restore-failure");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}throw failure;
+        }
     }
     @Test public void deniedLoginAndCorruptGuestFileRemainLocalAndIntact()throws Exception{
         var sends=loginTransport(true);ReflectionStorage store=new ReflectionStorage(context);store.saveGuestDraft("취소해도 지킬 글");app=ActivityScenario.launch(QuestionActivity.class);approveLogin();assertNull(store.loadCredentials());assertEquals("취소해도 지킬 글",store.loadGuestDraft());app.close();app=null;
