@@ -16217,6 +16217,9 @@
           "path": "extensions/hypeproof-chat/test/my-works-drawer.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/my-works-open.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs"
         }
       ]
