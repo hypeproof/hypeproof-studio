@@ -53,7 +53,8 @@ export interface GuardOptions {
   onCommit?: (url: string) => void;
   /**
    * Layer 1 stopped a form aimed at another window (its submission cannot be replayed safely). Gets the form's
-   * resolved action address, at most once per `FORM_NOTICE_MS`, so a page looping `submit()` cannot flood the host.
+   * resolved action address, at most once per `FORM_NOTICE_MS` per action origin, so a page looping `submit()` cannot
+   * flood the host and a stop to one site does not hide a stop to another (the host caps the lines it shows).
    */
   onFormStopped?: (url: string) => void;
   /**
@@ -76,25 +77,56 @@ const BINDING = "__hpsOpenLink";
  * is not left with a button that does nothing). The prototypes are wrapped and locked, so a detached anchor or form
  * behaves the same. Without the binding (inside a popup) the paths are stopped. The binding carries
  * `{"k":"open"|"form","u":<absolute url>}`; only this script holds it (it is taken off `window` before the page runs).
- * A form's address is read with the prototype's getter: `form.action` is shadowed by a field named "action".
+ * A form's target and address, and a submitter's `formtarget`/`formaction`, are read with the prototypes' getters
+ * (verify-r027): `form.target`, `form.action`, `form.submit` and the like are shadowed by fields of those names.
+ * The listeners are also put in every shadow root, open or closed, as it is made (`attachShadow` is wrapped and locked):
+ * a submit event does not leave its root, and a click in a root is retargeted to the host. A declarative shadow root
+ * (`<template shadowrootmode>`) is made by the parser, not by `attachShadow`; its popups are held by layer 2.
+ * The effective target is the element's own (the submitter's `formtarget` first), else the page's `<base target>`;
+ * the browsing-context keywords are ASCII case-insensitive, as in the HTML spec (verify-r027 on #4187).
+ * A named target is resolved like the browser does, by the child browsing context's name (`frames[i].name`), not the
+ * iframe's attribute; a cross-origin frame's name cannot be read, so it is not in-page. An empty `target=""` is no
+ * target, so `<base target>` applies. A page listener that runs after these checks and changes the page (removes the
+ * named frame, adds a base target) is not seen here; layer 2 holds the window that opens (pinned by a test).
+ * A same-origin form or link aimed at a named iframe of this page is an in-page pattern, not another window: it goes
+ * through (the frame's load is a subframe document, held by the subframe rule where that applies).
  */
 const intercept = (withBinding: boolean) => `(()=>{if(window.__hpsPopupGuard)return;window.__hpsPopupGuard=1;var b=${withBinding ? `window.${BINDING};delete window.${BINDING}` : "null"};
 var send=function(u,k){try{if(b)b(JSON.stringify({k:k||"open",u:String(new URL(u,location.href))}))}catch(_){}};
-var actionOf=(function(){var d=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,"action");return function(f,s){var a=s&&s.getAttribute&&s.getAttribute("formaction");try{return a?String(new URL(a,location.href)):d&&d.get?d.get.call(f):location.href}catch(_){return location.href}}})();
+var G=function(P,k){var d=Object.getOwnPropertyDescriptor(P,k);return d&&d.get?function(o){return d.get.call(o)}:function(o){return o[k]}};
+var FP=HTMLFormElement.prototype,IP=HTMLInputElement.prototype,BP=HTMLButtonElement.prototype,EP=Element.prototype;
+var fAction=G(FP,"action"),iTarget=G(IP,"formTarget"),bTarget=G(BP,"formTarget"),iAction=G(IP,"formAction"),bAction=G(BP,"formAction");
+var hasAttr=EP.hasAttribute,closest=EP.closest,isInput=function(s){return Object.getPrototypeOf(s)===IP};
+var sTarget=function(s){return s&&hasAttr.call(s,"formtarget")?(isInput(s)?iTarget:bTarget)(s):null};
+var sAction=function(s){return s&&hasAttr.call(s,"formaction")?(isInput(s)?iAction:bAction)(s):null};
+var getAttr=EP.getAttribute,qsa=Document.prototype.querySelectorAll;
+var low=function(t){return String(t).replace(/[A-Z]/g,function(c){return String.fromCharCode(c.charCodeAt(0)+32)})};
+var other=function(t){if(!t)return false;t=low(t);return t!=="_self"&&t!=="_top"&&t!=="_parent"};
+var baseTarget=function(){var l=qsa.call(document,"base[target]");return l.length?getAttr.call(l[0],"target"):""};
+var own=function(el){var t=hasAttr.call(el,"target")?getAttr.call(el,"target"):"";return t!==""?t:baseTarget()};
+var W=window,wlen=Object.getOwnPropertyDescriptor(W,"length")||Object.getOwnPropertyDescriptor(Window.prototype,"length");
+var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(W[i].name===t)return true}catch(_){}}return false};
+var sameSite=function(u){try{return new URL(u,location.href).origin===location.origin}catch(_){return false}};
+var inPage=function(t,u){return namedFrame(t)&&sameSite(u)};
+var aimsAway=function(f,s){var t=sTarget(s);t=t!==null?t:own(f);return other(t)&&!inPage(t,actionOf(f,s))};
+var actionOf=function(f,s){try{var a=sAction(s);return a!==null?a:fAction(f)}catch(_){return location.href}};
 var stopForm=function(f,s){send(actionOf(f,s),"form")};
-var other=function(t){return !!t&&t!=="_self"&&t!=="_top"&&t!=="_parent"};
 var lock=function(o,k,v){try{Object.defineProperty(o,k,{value:v,writable:false,configurable:false})}catch(_){try{o[k]=v}catch(__){}}};
 var A=HTMLAnchorElement.prototype,F=HTMLFormElement.prototype,E=EventTarget.prototype;
 var aClick=A.click,dispatch=E.dispatchEvent,fSubmit=F.submit,fRequest=F.requestSubmit;
-var away=function(a,e){return /^https?:/i.test(a.href)&&(other(a.target)||(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.button===1)))};
+var near=function(el){return el&&el instanceof Element?closest.call(el,"a[href]"):null};
+var away=function(a,e){var t=own(a);return /^https?:/i.test(a.href)&&((other(t)&&!inPage(t,a.href))||(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.button===1)))};
 lock(window,"open",function(u){if(u)send(u);return null});
 lock(A,"click",function(){if(away(this))return send(this.href);return aClick.call(this)});
-lock(E,"dispatchEvent",function(e){var a=this instanceof Element&&e&&(e.type==="click"||e.type==="auxclick")?this.closest("a[href]"):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
-lock(F,"submit",function(){if(other(this.target))return stopForm(this);return fSubmit.call(this)});
-if(fRequest)lock(F,"requestSubmit",function(s){if(other(this.target)||(s&&other(s.getAttribute&&s.getAttribute("formtarget"))))return stopForm(this,s);return fRequest.apply(this,arguments)});
-document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)},true);
-document.addEventListener("auxclick",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}},true);
-document.addEventListener("submit",function(e){var f=e.target,s=e.submitter;if(f&&(other(f.target)||(s&&other(s.getAttribute("formtarget"))))){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}},true)})();`;
+lock(E,"dispatchEvent",function(e){var a=e&&(e.type==="click"||e.type==="auxclick")?near(this):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
+lock(F,"submit",function(){if(aimsAway(this))return stopForm(this);return fSubmit.call(this)});
+if(fRequest)lock(F,"requestSubmit",function(s){if(aimsAway(this,s))return stopForm(this,s);return fRequest.apply(this,arguments)});
+var onClick=function(e){var a=near(e.target);if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)};
+var onAux=function(e){var a=near(e.target);if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}};
+var onSubmit=function(e){var f=e.target,s=e.submitter;if(f instanceof HTMLFormElement&&aimsAway(f,s)){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}};
+var listen=E.addEventListener,guardRoot=function(r){listen.call(r,"click",onClick,true);listen.call(r,"auxclick",onAux,true);listen.call(r,"submit",onSubmit,true)};
+var attach=EP.attachShadow;if(attach)lock(EP,"attachShadow",function(){var r=attach.apply(this,arguments);guardRoot(r);return r});
+guardRoot(document)})();`;
 export const POPUP_INTERCEPT = intercept(true);
 const POPUP_INTERCEPT_NO_BINDING = intercept(false);
 
@@ -149,7 +181,8 @@ export class LinkNavigationGuard {
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
   readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0 };
-  private lastFormNotice = -Infinity;
+  /** The last stopped-form report per action origin (the cap is per origin: one site cannot hide another). */
+  private readonly lastFormNotice = new Map<string, number>();
   /**
    * What the tab's session supports, known after `start`. The host fails closed on a minor seat when any is false:
    * `fetch` (the network hold), `autoAttach` (paused popups) or `page` (navigation events).
@@ -223,7 +256,13 @@ export class LinkNavigationGuard {
       if (msg.k === "form") {
         // A form aimed at another window was stopped: report it (rate-limited), never replay it.
         const t = this.now();
-        if (t - this.lastFormNotice >= FORM_NOTICE_MS) { this.lastFormNotice = t; this.options.onFormStopped?.(url); }
+        let origin = url; try { origin = new URL(url).origin; } catch { /* keep the address */ }
+        const last = this.lastFormNotice.get(origin);
+        if (last === undefined || t - last >= FORM_NOTICE_MS) {
+          this.lastFormNotice.set(origin, t);
+          if (this.lastFormNotice.size > 50) this.lastFormNotice.delete(this.lastFormNotice.keys().next().value as string);
+          this.options.onFormStopped?.(url);
+        }
         return;
       }
       if (msg.k !== "open") return;
