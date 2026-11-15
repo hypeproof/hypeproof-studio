@@ -3612,12 +3612,14 @@ against the slice's label set (AI/Studio/올림/기록 없음 only). Cases cover
 - a ledger file carrying a learner-change event is rejected as damaged;
 - a lock that the label table, event kinds, host-write actors, provider and webview contain no
   `내가 고침` and no learner-save kind;
-- an import-graph lock (`test/artifact-provenance-imports.smoke.mjs`, #4124): no module that imports
-  `artifactProvenance` or `artifactProvenanceView` subscribes to an editor or notebook save event, except
-  `previewProvider.ts` (it reloads the watched preview), whose save callback must not reach a provenance import,
-  directly or through a method of the same class. It parses the TypeScript AST, and planted violations are caught. The
-  call check is a heuristic (one level of `this.method()`); any other call in an allowed save callback fails closed
-  unless it is listed with a reason;
+- a save-subscription lock (`test/artifact-provenance-saves.smoke.mjs`, #4124 follow-up). A save-event subscription, in
+  any spelling (property or element access, alias, method reference, `.bind`, `.call`, a string folded from literals or a
+  template, a computed `workspace[...]` key), is allowed only in `extension.ts`, `memoryEditorSaves.ts` and
+  `previewProvider.ts`; any other file fails. In those files every save callback must be inline, and everything it can
+  reach must be a reviewed node: a module with no import route to provenance, a listed function with its reason, or a
+  listed call. A reviewed cut, such as the preview's webview message handler, is a call that does not run on the save.
+  Anything the walk cannot resolve fails. It is a closed, reviewed graph rather than a proof over the whole program, and
+  planted negatives cover every case the earlier lock missed;
 - the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
 - the hash cache and skipped Python environments.
 
@@ -9714,9 +9716,13 @@ catches what the checks above cannot see: a shell command that builds the path a
     - A task's folder is removed when the task is archived or moved. The folder is renamed to a `.purge-…` tombstone at
       once, before the handler moves on, and only the tombstone is deleted afterwards, so a turn right after a restore
       writes into a fresh folder the late delete cannot reach. A tombstone a crash left behind is removed at the next
-      prune. A host without global storage, or a seat without a memory scope, archives and moves as before with nothing
-      to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move, refused move, the race,
-      the tombstone sweep and the no-op hosts), not by source text.
+      prune. If the rename is refused (EPERM/EBUSY, as on Windows with an open handle), nothing is deleted in place: the
+      task is marked (`.pending-purge-<task>`, with the purge time) and the next prune retries the rename, moves copies
+      stamped after the purge (a restored task's new turns) back, and removes the rest. Tombstones and marks are not
+      counted in the originals cap. A host without global storage, or a seat without a memory scope, archives and moves
+      as before with nothing to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move,
+      refused move, the race, the tombstone sweep, a refused rename and its retry, the originals count, and the no-op
+      hosts with a rejection counter), not by source text.
     - Nothing reads it back into memory, uploads it or logs it (tested).
     - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
   - **Write side, with this check.** A new or deleted memory file, or a changed one among the read entries, does not

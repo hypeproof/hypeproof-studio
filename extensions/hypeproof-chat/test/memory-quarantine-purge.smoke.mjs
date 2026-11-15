@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { PURGE_TOMBSTONE_PREFIX, pruneQuarantine, purgeTaskQuarantine } from '../src/memoryFolderGuard.ts';
+import { ORIGINAL_PREFIX, PURGE_PENDING_PREFIX, PURGE_TOMBSTONE_PREFIX, QUARANTINE_LIMITS, clearStudioMemoryJournal, noteStudioMemoryChange, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 
 let passed = 0;
@@ -51,6 +51,48 @@ try {
     // Malformed keys and a missing folder touch nothing and never throw.
     await purgeTaskQuarantine(base, '../..', 'x'); await purgeTaskQuarantine(base, scope, '../task-4'); await purgeTaskQuarantine(base, scope, 'missing');
     assert.ok(fs.existsSync(keep));
+  });
+
+  await t('a refused rename (EPERM/EBUSY) never deletes in place: the task is marked, and the next prune retries it', async () => {
+    const base = path.join(top, 'refused'), scope = 'd'.repeat(24), dir = path.join(base, scope, 'task-5');
+    const stampAt = (ms) => new Date(ms).toISOString().replace(/[:.]/g, '-');
+    const purgedAt = Date.now() - 5_000;
+    const old = seed(dir, `${stampAt(purgedAt - 60_000)}-1-before-archive.md`, '보관 전 사본\n');
+    for (const code of ['EPERM', 'EBUSY']) {
+      await purgeTaskQuarantine(base, scope, 'task-5', { rename: () => { throw Object.assign(new Error(code), { code }); }, now: () => purgedAt });
+      assert.ok(fs.existsSync(old), `${code}: nothing is deleted from the live folder`);
+      assert.ok(fs.existsSync(path.join(base, scope, PURGE_PENDING_PREFIX + 'task-5')), `${code}: the task is marked for the next prune`);
+    }
+    // The task is restored and a new turn writes a copy; the next prune is refused again: everything stays, still marked.
+    const fresh = seed(dir, `${stampAt(Date.now())}-2-after-restore.md`, '새 턴의 사본\n');
+    await pruneQuarantine(base, Date.now(), { rename: async () => { throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' }); } });
+    assert.ok(fs.existsSync(old) && fs.existsSync(fresh), 'a refused retry deletes nothing');
+    assert.ok(fs.existsSync(path.join(base, scope, PURGE_PENDING_PREFIX + 'task-5')), 'and keeps the mark');
+    // The next prune can rename: the copy from before the purge goes, the new turn's copy comes back, the mark is gone.
+    await pruneQuarantine(base);
+    assert.equal(fs.existsSync(old), false, 'the copy from before the purge is gone');
+    assert.equal(fs.readFileSync(fresh, 'utf8'), '새 턴의 사본\n', 'the restored task\'s new copy is kept');
+    assert.deepEqual(fs.readdirSync(path.join(base, scope)), ['task-5'], 'no mark and no tombstone are left');
+    // ENOENT is not a refusal: nothing to purge, no mark.
+    await purgeTaskQuarantine(base, scope, 'never-there');
+    assert.equal(fs.existsSync(path.join(base, scope, PURGE_PENDING_PREFIX + 'never-there')), false);
+  });
+
+  await t('originals in a tombstone (or a marked task) are not counted against the cap', async () => {
+    clearStudioMemoryJournal();
+    const base = path.join(top, 'origtomb'), scopeDir = path.join(base, '1'.repeat(24));
+    const tomb = path.join(scopeDir, `${PURGE_TOMBSTONE_PREFIX}held-abcdef012345`); fs.mkdirSync(tomb, { recursive: true });
+    const stampOf = (ms) => new Date(ms).toISOString().replace(/[:.]/g, '-');
+    for (let i = 0; i < QUARANTINE_LIMITS.originals; i++) fs.writeFileSync(path.join(tomb, `${ORIGINAL_PREFIX}${stampOf(Date.now() - 1000)}-${i + 1}-o${String(i).padStart(4, '0')}.md`), 'o');
+    const memDir = (r) => path.join(r, '.hypeproof', 'memory');
+    const root = path.join(top, 'origtomb-ws'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'k.md'), '학습자 기억\n');
+    const since = Date.now(), before = await snapshotMemoryFolder(root);
+    fs.rmSync(path.join(memDir(root), 'k.md')); await noteStudioMemoryChange(memDir(root), 'k.md', null);
+    fs.writeFileSync(path.join(memDir(root), 'k.md'), '학습자 기억\n');
+    const r = await revertTurnChanges(root, before, since, path.join(scopeDir, 'turn'));
+    assert.equal(r.failed, 0, 'the tombstone\'s originals do not fill the live pool, so nothing is refused');
+    assert.ok(fs.readdirSync(path.join(scopeDir, 'turn')).some((n) => n.startsWith(ORIGINAL_PREFIX)), 'the learner\'s bytes are kept as an original');
   });
 
   // ─── behaviour on the real provider ───
@@ -108,21 +150,32 @@ try {
     assert.equal(fs.existsSync(q(first)), false, 'its quarantine went with it');
   });
 
-  await t('no global storage, or no memory scope: archiving is a no-op for the quarantine, never throws, and still archives', async () => {
-    for (const variant of ['no-storage', 'no-scope']) {
-      const { f, root, bind } = await harness(variant);
+  await t('no global storage, or no scope: the purge does nothing, never rejects, and the archive still happens', async () => {
+    // Rejections are counted: the handler does not await the purge, so a purge that threw would surface only here.
+    const rejections = []; const onRejection = (e) => rejections.push(e); process.on('unhandledRejection', onRejection);
+    try {
+      // No global storage (the provider's context field shadowed): a seeded copy at the usual place is left as it is.
+      const { f, root, q } = await harness('no-storage');
       const first = f.store.getView().activeTaskId;
       await f.handle(f.scoped({ type: 'taskCreate' }));
       await f.handle(f.scoped({ type: 'taskSelect', id: first }));
-      // The provider's context is the activity-scoped wrapper (Object.create of the extension context): shadow the field on it.
-      if (variant === 'no-storage') Object.defineProperty(f.h.context, 'globalStorageUri', { value: undefined, configurable: true });
-      else { bind(undefined); }
+      const kept = seed(q(first));
+      Object.defineProperty(f.h.context, 'globalStorageUri', { value: undefined, configurable: true });
       const errors = f.posts.filter((m) => m.type === 'taskWorkspaceError' && m.error).length;
       await f.handle(f.scoped({ type: 'taskArchive' }));
-      assert.deepEqual(Array.from(f.store.getView().archived, (x) => x.id), [first], `${variant}: the archive happened`);
-      assert.equal(f.posts.filter((m) => m.type === 'taskWorkspaceError' && m.error).length, errors, `${variant}: no error`);
-      assert.equal(fs.existsSync(path.join(root, 'memory-quarantine')), false, `${variant}: nothing was created`);
-    }
+      await new Promise((r) => setTimeout(r, 30));
+      assert.deepEqual(Array.from(f.store.getView().archived, (x) => x.id), [first], 'no-storage: the archive happened');
+      assert.equal(f.posts.filter((m) => m.type === 'taskWorkspaceError' && m.error).length, errors, 'no-storage: no error is posted');
+      assert.ok(fs.existsSync(kept), 'no-storage: nothing was purged (no storage known, nothing touched)');
+      // No scope at all (no memory binding and no activity record): the purge resolves and touches nothing.
+      const bare = Object.assign(Object.create(f.h), { context: Object.create(f.h.context) });
+      Object.defineProperty(bare, 'activityMemoryBinding', { value: undefined });
+      Object.defineProperty(bare.context, 'globalStorageUri', { value: { fsPath: root } });
+      const other = seed(q('task-other'));
+      assert.equal(await f.h.purgeTaskMemoryQuarantine.call(bare, 'task-other'), undefined, 'no-scope: it resolves');
+      assert.ok(fs.existsSync(other), 'no-scope: nothing was purged');
+      assert.deepEqual(rejections, [], 'no purge rejected');
+    } finally { process.off('unhandledRejection', onRejection); }
   });
   console.log(`memory-quarantine-purge: ${passed} passed`);
 } finally { fs.rmSync(top, { recursive: true, force: true }); }
