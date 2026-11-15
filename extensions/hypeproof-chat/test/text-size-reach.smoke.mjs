@@ -45,11 +45,19 @@ const chatConfig = (seat, textSize) => ({
 });
 // Every row the sheet can draw today (START_SETTING_ROWS_AVAILABLE), so each grows and fits at 320px.
 const startSettings = (textSize) => ({ rows: ['textSize', 'theme', 'reduceMotion', 'notices', 'export'], textSize, theme: 'dark', reduceMotion: 'auto', notices: false, advanced: true });
+const questionEntry = {
+  account: { status: 'signedIn', account: { id: 'synthetic-account', display_name: '테스트 사용자', email: 'fixture@example.invalid' }, passes: [] },
+  questionCard: { status: 'ready', binding: 'synthetic-view', busy: false, card: {
+    schema: 'hps-card/1', key: 'growth:synthetic', kind: 'growth-choice', attempt: 1, urgency: 'normal', expires_at: null, deliver_via: ['in_app'],
+    title: '오늘의 질문', preface: null, prompt: '어떤 생각부터 정리해 볼까요?', segments: [], choices: [{ id: 'goal', label: '목표부터 생각하기' }], select: 'pick',
+    text: { label: '내 생각', placeholder: '짧게 적어도 좋아요', max: 2000, value: null }, actions: [{ id: 'continue', label: '선택하고 이어가기', primary: true, needs_answer: true }], skip: '나중에', note: null,
+  } },
+};
 const HELP = { generation: 1, draft_key: null, availability: { state: 'unknown' }, seat: null, draft: { question: '', turnId: null, duration: 30, updated_at: 0 },
   turns: [], envelope: null, current: [], history: [], refresh: { state: 'never', at: null }, note: null };
 const MESSAGE = '글자 크기를 바꾸어도 긴 한국어 문장을 편안하게 읽고 다음 질문을 보낼 수 있어요.';
 // REACH_ONLY=<surface>[,…] narrows a local rerun; CI runs every surface.
-const SURFACES = ['start', 'start-settings', 'classroom', 'classroom-lesson', 'classroom-shortcuts', 'personal', 'personal-shortcuts'].filter((x) => !process.env.REACH_ONLY || process.env.REACH_ONLY.split(',').includes(x));
+const SURFACES = ['start', 'start-settings', 'start-question', 'classroom', 'classroom-lesson', 'classroom-shortcuts', 'personal', 'personal-shortcuts'].filter((x) => !process.env.REACH_ONLY || process.env.REACH_ONLY.split(',').includes(x));
 
 // Panes: [pane px, zoom]. CSS width = pane / zoom.
 const PANES = [[320, 1], [800, 1], [640, 2], [320, 2]];
@@ -101,8 +109,9 @@ async function render({ surface, theme, pane, zoom, size, inject }) {
   // Zoom: VS Code zooms the whole window, so a pane of N device px is N / zoom CSS px.
   await b.send('Emulation.setDeviceMetricsOverride', { width: Math.round(pane / zoom), height: Math.round(800 / zoom), deviceScaleFactor: zoom, mobile: false });
   if (start) {
-    await ev(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'1.0.0',settings:${JSON.stringify(startSettings(size))}}}}))`);
-    await waitFor(`!!document.querySelector('.studio-choice')`, 'the start choices');
+    const state = { checking: false, version: '1.0.0', settings: startSettings(size), ...(surface === 'start-question' ? questionEntry : {}) };
+    await ev(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:${JSON.stringify(state)}}}))`);
+    await waitFor(surface === 'start-question' ? `!!document.querySelector('.studio-question textarea')` : `!!document.querySelector('.studio-choice')`, 'the actual start surface');
     if (surface === 'start-settings') {
       await ev(`[...document.querySelectorAll('.studio-nav button')].find(x=>x.textContent.trim()==='설정').click()`);
       await waitFor(`!!document.querySelector('.studio-settings')`, 'the settings sheet');
