@@ -104,6 +104,13 @@ try {
   check(await b.evaluate(`!document.querySelector('[data-daily] svg[role="img"]') && document.querySelector('[data-daily]').textContent.includes('최근 14일 사용 기록이 없습니다.')`), 'empty: sentence instead of chart');
   await b.evaluate(show(viewOf(undefined)));
   check(await b.evaluate(`document.querySelector('[data-daily]').textContent.includes('일별 사용을 확인하지 못했습니다.')`), 'no daily view: said, not drawn as 0');
+  // An older Service (no daily_usage), even with a fresh or a stale as-of: the daily area claims no time and no freshness.
+  for (const asOf of [new Date().toISOString(), new Date(Date.now() - 31 * 60000).toISOString()]) {
+    for (const d of [undefined, [], [{ meter: 7 }], 'x']) {
+      await b.evaluate(show(viewOf(d === undefined ? undefined : d, asOf)));
+      check(await b.evaluate(`(() => { const box = document.querySelector('[data-daily]'); return !box.textContent.includes('기준 시각') && !box.querySelector('[data-stale]') && !box.querySelector('svg') && !/\\b0\\b/.test(box.textContent) && box.textContent.includes('일별 사용을 확인하지 못했습니다.'); })()`), `missing daily view (${JSON.stringify(d)}): no as-of, no stale label, no chart, no 0`);
+    }
+  }
   // Two currency meters: a chooser. A malformed amount is shown as unknown, not as 0.
   await b.evaluate(show(viewOf(daily({ 'currency:KRW:micro': days.map((d, i) => row(d, i === 13 ? { confirmed_amount: 'x' } : {})), [M]: series }))));
   check(await b.evaluate(`document.querySelector('[data-daily] select')?.options.length === 2`), 'meter chooser');
