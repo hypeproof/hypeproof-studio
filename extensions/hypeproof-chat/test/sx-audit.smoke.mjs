@@ -161,6 +161,10 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
   const s = auditRegionText("남은 단계 2", { region: "work" });
   assert.equal(s.ok, true, `"남은 단계 2"를 수치로 잡았다 → 계측기 결함: ${describe(s)}`);
   console.log("ok 양성: 3주차 · 남은 단계 2 는 허용 수치다");
+  for (const ok of ["1 / 8 단계", "8 / 8 단계", "2 / 4 단계두 번째 단계", "1 / 3 단계 첫 장면"]) {
+    const r = auditRegionText(ok, { region: "work" });
+    assert.equal(r.ok, true, `단계 넘겨 보기의 위치 ${JSON.stringify(ok)} 를 수치로 잡았다 → 계측기 결함: ${describe(r)}`);
+  }
   const st = auditRegionText("2 / 4 단계: 두 번째 단계", { region: "work" });
   assert.equal(st.ok, true, `단계 넘겨 보기의 위치 "2 / 4 단계"를 수치로 잡았다 → 계측기 결함: ${describe(st)}`);
   console.log("ok 양성: 단계 넘겨 보기의 '2 / 4 단계' 는 허용 수치다");
@@ -252,6 +256,13 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
     // …and a number next to 단계 still cannot carry a score (the allowance needs exactly "N / M 단계").
     ["단계 점수 3 / 5", "bare_number"],
     ["3 / 5점", "points"],
+    // …nor a judgment word after it, nor a score shape larger than the stepper's 8 stages (#4166 verify).
+    ["3 / 4 단계 통과", "bare_number"],
+    ["4 / 4 단계 성공!", "bare_number"],
+    ["2 / 4 단계 우수", "bare_number"],
+    ["정답률 2 / 4 단계", "bare_number"],
+    ["90 / 100 단계", "ratio_hundred"],
+    ["3 / 12 단계", "bare_number"],
   ];
   for (const [sample, rule] of negatives) {
     const r = auditRegionText(sample, { region: "work" });

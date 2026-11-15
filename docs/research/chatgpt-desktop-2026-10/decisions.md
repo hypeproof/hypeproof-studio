@@ -2622,4 +2622,8 @@ Confirmed by Jay: no. The coordinator chose box_spacing v1 as the first parametr
 - **Stepper (agent choice).**
   - The whole block takes focus for ←/→. There is no timer.
   - Stage text is drawn as text nodes only. The caption repeats the stage title, which is text too.
+- **After verify (#4166, agent choice).**
+  - The box preview scrolls, so it is a registered focus scroll scope (inset ring), like the other scrolling containers.
+  - Stage text uses the Service's single-line safe-text rule, checked against the shared case list.
+  - The SX audit's `stage_position` allowance covers only a stepper position: single digits within 2–8 stages, no score word before it and no judgment word after 단계. "3 / 4 단계 통과" and "90 / 100 단계" are flagged.
 - **Not covered:** a real installed App and a real screen reader. Chalk authoring is the next PR.

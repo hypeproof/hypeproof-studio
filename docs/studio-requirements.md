@@ -9011,6 +9011,9 @@ two parametric blocks, drawn in the existing 자료 card. Studio part only; Chal
   - Nothing advances on its own.
   - The stages are instructor text and untrusted: they are rendered only as text nodes, never as markup, links or
     markdown. The caption is "N / M 단계: <title>". The position is local and per lesson version and step.
+  - Served stages must also pass the Service's single-line safe-text rule (no control, format, bidi or invisible
+    characters, no surrounding whitespace, a readable glyph), checked against the shared `safe-text-cases.json`;
+    otherwise the block draws the unsupported notice. Links are not re-checked, because nothing is made clickable.
 - **Style.** 44px targets and 14px text throughout. Hover and pressed use the shared state layers, the focus ring is
   tokens.css's, and forced colours use system colours.
 - **Evidence.**

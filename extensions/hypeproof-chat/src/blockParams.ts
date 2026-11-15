@@ -73,8 +73,23 @@ export function boxParams(uiVersion: unknown, raw: unknown): BoxValues | null {
   return out as unknown as BoxValues;
 }
 
-const SINGLE_LINE_BAD = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
-/** stage_stepper stages as served, or null unless they are exactly 2–8 items of {title, sentence}, each a non-empty single line within its limit. */
+/**
+ * The Service's single-line safe-text rule (hypeproof-service worker/src/lib/session-design.ts validateOneLine), with the
+ * same character classes Chalk uses: no control, format, bidi or separator characters, no blank look-alikes (U+3164,
+ * U+FFA0, U+2800), no 3+ stacked combining marks, no lone surrogate, no surrounding whitespace, and (when `needReadable`)
+ * a readable glyph once quotes are removed. chalk/test/fixtures/safe-text-cases.json is the shared case list, and
+ * block-params.smoke checks this predicate against it. The Service also refuses links in stage text; Studio draws stage
+ * text as text nodes only, so a link is never made clickable and is not re-checked here.
+ */
+const SAFE_INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u3164\uFFA0\u2800]/u;
+const SAFE_MARK_STACK = /\p{M}{3,}/u;
+const SAFE_LONE = /\p{Cs}/u;
+const SAFE_READABLE = /[\p{L}\p{N}\p{S}\p{P}]/u;
+export function safeLine(t: unknown, needReadable: boolean): boolean {
+  return typeof t === "string" && t.length > 0 && t === t.trim() && !SAFE_INVISIBLE.test(t) && !SAFE_MARK_STACK.test(t) && !SAFE_LONE.test(t)
+    && !(needReadable && !SAFE_READABLE.test(t.replace(/["'`]/g, "")));
+}
+/** stage_stepper stages as served, or null unless they are exactly 2–8 items of {title, sentence}, each a safe single line (the Service's rule) within its limit. */
 export function stageParams(uiVersion: unknown, raw: unknown): Stage[] | null {
   const spec = own(BLOCK_SPECS.stage_stepper, String(uiVersion === undefined ? 1 : uiVersion));
   const p = spec ? own(spec.params, "stages") : undefined;
@@ -87,7 +102,7 @@ export function stageParams(uiVersion: unknown, raw: unknown): Stage[] | null {
     const stage: Record<string, string> = {};
     for (const [field, f] of Object.entries(p.fields)) {
       const v = item[field];
-      if (typeof v !== "string" || !v.trim() || v.length > f.maxLength || SINGLE_LINE_BAD.test(v)) return null;
+      if (typeof v !== "string" || v.length > f.maxLength || !safeLine(v, true)) return null;
       stage[field] = v;
     }
     out.push(stage as unknown as Stage);

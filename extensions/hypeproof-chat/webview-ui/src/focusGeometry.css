@@ -26,7 +26,7 @@ html body :is(
   .hps-messages, .hps-markdown-table, .hps-codepill-body, .hps-fatal-detail, .hps-file-mentions-list, .hps-pasted-list, .hps-pasted-editor, .hps-turn-raw, .hps-math-block,
   .hps-update-banner-notes, .hps-element-meta pre, .hps-shell-row pre, .hp-rail-lesson, .hp-rail-goal,
   .hps-native-observation, .hps-effort details[open], .hps-access[open],
-  .hps-voice-body, .hp-evidence, .hp-evidence-compare pre, .hps-carryover-list,
+  .hps-voice-body, .hp-evidence, .hp-evidence-compare pre, .hps-carryover-list, .hp-box-preview,
   .hps-recovery-list, .hps-annotations-list, .hps-page-attachment pre, .hps-annotations pre, .hps-page-context-panel,
   .hps-attachment-failures, .local-review pre, .hps-tools-menu, .hps-attachments, .hps-myq-list,
   .hps-preferences, .hps-outbound, .hps-write-approval, .hps-accuracy-answer, .hp-capability-sheet, .hps-copy-toasts,

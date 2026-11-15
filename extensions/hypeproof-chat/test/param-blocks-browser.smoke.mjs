@@ -85,6 +85,16 @@ try {
     await press('ArrowRight'); assert.equal((await ev('vals()')).padding, 48, `${tag}: not above max`);
     await press('PageDown'); assert.equal((await ev('vals()')).padding, 43, `${tag}: PageDown is 10 % of 48 (5)`);
     await press('Home'); await press('ArrowLeft'); assert.equal((await ev('vals()')).padding, 0, `${tag}: not below min`);
+    // The range keys are handled in code (same step in every engine), so a handled key is never left to the browser.
+    await ev(`(()=>{window.__kp=[];if(!window.__kpOn){window.__kpOn=true;document.addEventListener('keydown',e=>window.__kp.push([e.key,e.defaultPrevented]));}})()`);
+    await press('PageUp'); await press('End'); await press('Home');
+    assert.deepEqual(await ev('window.__kp'), [['PageUp', true], ['End', true], ['Home', true]], `${tag}: PageUp/End/Home are handled by the block, not the browser`);
+    assert.equal((await ev('vals()')).padding, 0);
+    // No range key acts while an IME composition is open.
+    await ev(`(()=>{for(const key of ['End','PageUp','ArrowRight'])range('padding').dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true,isComposing:true}));})()`); await settle();
+    assert.equal((await ev('vals()')).padding, 0, `${tag}: a composing key does not move the range`);
+    await ev(`(()=>{const e=new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true});Object.defineProperty(e,'keyCode',{get:()=>229});range('padding').dispatchEvent(e);})()`); await settle();
+    assert.equal((await ev('vals()')).padding, 0, `${tag}: nor does a keyCode 229 key`);
     await ev(`range('border').focus()`); await press('End'); await press('PageUp');
     assert.equal((await ev('vals()')).border, 8, `${tag}: border max 8`);
     // The layout segmented control.

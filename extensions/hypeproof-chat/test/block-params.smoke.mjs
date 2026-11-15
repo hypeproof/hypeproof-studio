@@ -82,6 +82,17 @@ if (svcFile && existsSync(svcFile)) {
   ok('stageParams: exactly 2–8 single-line {title ≤ 40, sentence ≤ 60}; markup text kept as text; stepping stays inside');
 }
 {
+  // The Service's single-line safe-text rule, against the case list the Service and Chalk share (byte-for-byte copies).
+  const cases = JSON.parse(readFileSync(new URL('../../../chalk/test/fixtures/safe-text-cases.json', import.meta.url), 'utf8')).cases;
+  assert.ok(cases.length >= 30, `shared cases (${cases.length})`);
+  assert.deepEqual(cases.map(([t, readable]) => B.safeLine(t, readable)), cases.map(([, , safe]) => safe), 'safeLine equals the shared safe-text case list');
+  // Every case the list refuses with the readable rule is a stage title Studio does not draw (bidi override, zero-width, …).
+  for (const [t, readable, safe] of cases) if (readable && !safe && t.length <= 40)
+    assert.equal(B.stageParams(1, { stages: [{ title: t, sentence: '문장' }, { title: '둘', sentence: '문장' }] }), null, JSON.stringify(t));
+  assert.equal(B.stageParams(1, { stages: [{ title: 'a\u202eb', sentence: '문장' }, { title: '둘', sentence: '문장' }] }), null, 'a bidi override is refused');
+  ok('safeLine: equals the shared safe-text cases; stage text the Service would refuse is not drawn');
+}
+{
   // Fail closed: a block with params that do not fit draws the unsupported notice, never a guessed value.
   const lesson = (ui, ui_params) => ({ sha256: 's', version: 'v', content: { steps: [{ id: 'a', ui, ui_version: 1, ui_params }] } });
   assert.equal(F.surfaceOf({ id: 'a', ui: 'box_spacing', ui_version: 1, ui_params: { padding: 49 } }), 'unsupported:box_spacing');
