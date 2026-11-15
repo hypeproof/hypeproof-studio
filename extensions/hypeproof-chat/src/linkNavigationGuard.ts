@@ -23,7 +23,9 @@
  *   - Subframes (#4128, minor seats, `decideFrame`): a document of another origin than the top page it is drawn in is
  *     decided with no dialog on every load and hop: first in its container's session, then in the out-of-process
  *     iframe's own session, which is auto-attached paused and given the same hold (and its own auto-attach). A session
- *     that cannot attach its iframes refuses cross-site frames. Subresources are not held (accepted residual).
+ *     that cannot attach its iframes refuses cross-site frames. Subresources are not held, except below.
+ *   - Outbound requests (Jay, 2026-11-15, minor seats, `outbound`): on a loopback (AI-made) top page, a cross-site
+ *     `fetch`, XHR, beacon or EventSource off the lesson list is refused. Images, CSS, fonts and scripts are untouched.
  *   - Every other cross-origin main-frame Document is decided too (existing-window fix): a form a popup submits into
  *     its opener by name, or the page into an existing popup, fires no `frameRequestedNavigation` in the window it
  *     moves, and looks exactly like a browser-started load. Only navigations Studio itself started are let go:
@@ -80,6 +82,12 @@ export interface GuardOptions {
    * only while the tab has not committed a page yet, may go undecided as that tab's own first load.
    */
   studioFirstDocument?: string;
+  /**
+   * Minor seats (Jay, 2026-11-15): on an AI-made loopback page (the top document is loopback), a cross-site `fetch`,
+   * XHR, beacon or EventSource is refused unless `allowed` admits its address (loopback or the lesson list). Pages on
+   * other sites, and images, CDN scripts, styles and fonts everywhere, are unchanged. `onBlocked` reports a refusal.
+   */
+  outbound?: { allowed: (url: string) => Promise<boolean>; onBlocked?: (url: string) => void };
 }
 const BINDING = "__hpsOpenLink";
 /**
@@ -156,7 +164,18 @@ export function sameOrigin(a: string, b: string): boolean {
 const REQUEST_WINDOW_MS = 10_000;
 /** At most one stopped-form report per this many ms per tab. */
 export const FORM_NOTICE_MS = 3_000;
+/** At most one outbound-refusal line per tab per this many ms (Jay, 2026-11-15). */
+export const OUTBOUND_NOTICE_MS = 10_000;
 const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", requestStage: "Request" }] };
+/**
+ * Jay's 2026-11-15 decision — outbound requests held on minor seats: `fetch`, XHR, `sendBeacon` (Ping) and EventSource
+ * (Chromium reports fetch and EventSource as XHR). Images, scripts, styles, fonts and media are not patterned at all.
+ * WebSocket cannot be paused by the Fetch domain (it rejects the type), so it is not in this list.
+ */
+const OUTBOUND_TYPES = new Set(["Fetch", "XHR", "Ping", "EventSource"]);
+const WITH_OUTBOUND = { patterns: [...DOCUMENTS.patterns, ...[...OUTBOUND_TYPES].map((resourceType) => ({ urlPattern: "*", resourceType, requestStage: "Request" }))] };
+const LOOPBACK_HOST = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+const isLoopbackUrl = (u: string): boolean => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) && LOOPBACK_HOST.test(x.hostname); } catch { return false; } };
 
 /**
  * One session the guard holds requests in: the tab's page, a popup it opened (main-frame rules for its whole life), or
@@ -196,7 +215,9 @@ export class LinkNavigationGuard {
   /** The main frame's address when the guard attached (or after the last main-frame navigation). */
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
-  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0 };
+  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0, outboundRefused: 0 };
+  /** The Fetch patterns every held session gets: documents, plus outbound requests on a minor seat. */
+  private get patterns() { return this.options.outbound ? WITH_OUTBOUND : DOCUMENTS; }
   /** The last stopped-form report per action origin (the cap is per origin: one site cannot hide another). */
   private readonly lastFormNotice = new Map<string, number>();
   /**
@@ -225,7 +246,7 @@ export class LinkNavigationGuard {
     const tree = await this.cdp.send("Page.getFrameTree").catch(() => null);
     this.page.mainFrame = tree?.frameTree?.frame?.id;
     this.page.current = tree?.frameTree?.frame?.url ?? "";
-    this.capabilities.fetch = await this.cdp.send("Fetch.enable", DOCUMENTS).then(() => true, () => false);
+    this.capabilities.fetch = await this.cdp.send("Fetch.enable", this.patterns).then(() => true, () => false);
     this.page.fetchHeld = this.capabilities.fetch;
     if (this.options.interceptPopups) {
       await this.cdp.send("Runtime.enable").catch(() => undefined);
@@ -306,7 +327,7 @@ export class LinkNavigationGuard {
           await Promise.all([
             // Page events too: without the network hold, a commit is the fallback (sent back to about:blank).
             sendIn(sid, "Page.enable"),
-            sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
+            sendIn(sid, "Fetch.enable", this.patterns).then(() => { state.fetchHeld = true; }),
             sendIn(sid, "Target.setAutoAttach", AUTO_ATTACH).then(() => { state.framesAttached = true; }),
             p.waitingForDebugger ? sendIn(sid, "Runtime.runIfWaitingForDebugger") : undefined,
           ].map((r) => Promise.resolve(r).catch(() => undefined)));
@@ -338,7 +359,7 @@ export class LinkNavigationGuard {
         const sendIn = this.cdp.sendIn;
         await Promise.all([
           sendIn(sid, "Page.enable"),
-          sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
+          sendIn(sid, "Fetch.enable", this.patterns).then(() => { state.fetchHeld = true; }),
           // The same popup paths inside the popup, on a minor seat (a popup must not open a further popup unseen).
           this.options.interceptPopups ? sendIn(sid, "Page.addScriptToEvaluateOnNewDocument", { source: POPUP_INTERCEPT_NO_BINDING }) : undefined,
           // A popup's own out-of-process iframes (#4128), on a minor seat.
@@ -381,6 +402,7 @@ export class LinkNavigationGuard {
       // A popup refused before it showed anything is closed.
       if (state !== this.page && state.popupFirst && state.targetId) await this.cdp.send("Target.closeTarget", { targetId: state.targetId }).catch(() => undefined);
     };
+    if (this.options.outbound && OUTBOUND_TYPES.has(p.resourceType)) { await this.outboundRequest(state, requestId, url); return; }
     if (p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
     // #4128: a subframe document (an iframe in this page or popup, or any document of an out-of-process iframe).
     if (state.kind === "frame" || (state.mainFrame && p.frameId !== state.mainFrame)) { await this.subframeRequest(state, requestId, url, p.frameId); return; }
@@ -418,6 +440,23 @@ export class LinkNavigationGuard {
    * container cannot attach its out-of-process iframes, a cross-site frame's later loads could not be held, so a
    * cross-site subframe is refused there even when the list admits it. Same-origin frames, and adults, load.
    */
+  /**
+   * Jay's 2026-11-15 decision — an outbound request (`fetch`, XHR, beacon, EventSource) from a page whose top document
+   * is loopback (an AI-made page) to another site is refused unless the lesson list (or loopback) admits it; no
+   * dialog, the host shows one quiet line. Same origin, loopback-to-loopback and any non-loopback top go on.
+   */
+  private async outboundRequest(state: FrameState, requestId: string, url: string): Promise<void> {
+    const go = () => this.sendTo(state, "Fetch.continueRequest", { requestId });
+    const top = topOf(state).current;
+    if (!this.options.outbound || !isLoopbackUrl(top) || isLoopbackUrl(url) || sameOrigin(url, top)) { this.stats.continued++; await go(); return; }
+    let allowed = false;
+    try { allowed = await this.options.outbound.allowed(url); } catch { allowed = false; }
+    if (allowed) { this.stats.continued++; await go(); return; }
+    this.stats.outboundRefused++;
+    await this.sendTo(state, "Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => undefined);
+    this.options.outbound.onBlocked?.(url);
+  }
+
   /**
    * #4128 fail closed when this session has no network hold (a minor seat only): a cross-site subframe that committed
    * off the list is sent back to `about:blank` (`Page.navigate` with its frameId; for an out-of-process iframe this is

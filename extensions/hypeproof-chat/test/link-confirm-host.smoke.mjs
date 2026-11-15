@@ -501,6 +501,48 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   h.linkConfirmRequest.respond(promptOf().id, "cancel"); await wait();
 }
 
+// 14. Jay, 2026-11-15: on a minor seat an AI-made (loopback) page's fetch/XHR/beacon/EventSource to a site off the
+//     list is refused with one quiet line per tab per 10 s; the patterns are only installed on minor seats.
+{
+  const fake = (current) => {
+    const listeners = new Set(); const sent = [];
+    const raw = { onDidReceiveMessage: (l) => { listeners.add(l); return { dispose: () => listeners.delete(l) }; }, onDidClose: () => ({ dispose() {} }), close: async () => {},
+      sendMessage: async (m) => { sent.push([m.method, m.params]); const reply = (msg) => queueMicrotask(() => { for (const l of [...listeners]) l({ id: m.id, ...msg }); });
+        if (m.method === "Target.getTargets") reply({ result: { targetInfos: [{ type: "page", targetId: "t1" }] } });
+        else if (m.method === "Target.attachToTarget") reply({ result: { sessionId: "s1" } });
+        else if (m.method === "Page.getFrameTree") reply({ result: { frameTree: { frame: { id: "main", url: current } } } });
+        else reply({ result: {} }); } };
+    const emit = (method, params) => { for (const l of [...listeners]) l({ method, params, sessionId: "s1" }); };
+    return { raw, emit, sent };
+  };
+  const wait = () => new Promise((r) => setTimeout(r, 40));
+  const run = async (seat, start) => {
+    reset(); const h = host(seat); h.registerBrowserLinkGuards({ subscriptions: [] });
+    const p = h.openLearnerLink(start); await tick(); if (promptOf()) h.linkConfirmRequest.respond(promptOf().id, "open"); await p;
+    const f = fake(start); const t = { url: start, closed: 0, close: async () => { t.closed++; }, startCDPSession: async () => f.raw };
+    tabOpened(t); await wait(); infos.length = 0; return f;
+  };
+  const xhr = (f, id, url, type = "XHR") => f.emit("Fetch.requestPaused", { requestId: id, request: { url, method: "POST", headers: {} }, resourceType: type, frameId: "main" });
+  const went = (f, id) => f.sent.some(([m, q]) => m === "Fetch.continueRequest" && q?.requestId === id);
+  const stopped = (f, id) => f.sent.some(([m, q]) => m === "Fetch.failRequest" && q?.requestId === id);
+  const line = "이 페이지가 다른 사이트로 정보를 보내려 해서 막았어요.";
+  const patterned = (f) => f.sent.some(([m, q]) => m === "Fetch.enable" && q?.patterns?.some((x) => x.resourceType === "XHR") && q.patterns.some((x) => x.resourceType === "Ping"));
+  const f = await run(kid, "http://127.0.0.1:5500/index.html");
+  ok(patterned(f), "minor seat: the outbound patterns (XHR, Ping, ...) are installed");
+  xhr(f, "o1", "https://collect.example/t"); await wait();
+  ok(stopped(f, "o1") && infos.filter((x) => x === line).length === 1, "a loopback page's XHR off the list is refused, with the quiet line");
+  xhr(f, "o2", "https://collect.example/u", "Ping"); await wait();
+  ok(stopped(f, "o2") && infos.filter((x) => x === line).length === 1, "a beacon within 10 s is refused with no second line");
+  xhr(f, "o3", "https://hypeproof-ai.xyz/live/x/gallery/api"); await wait();
+  xhr(f, "o4", "http://localhost:8080/api"); await wait();
+  ok(went(f, "o3") && went(f, "o4"), "the lesson list and loopback receive them (positive control)");
+  const s2 = await run(kid, "https://hypeproof-ai.xyz/live/x/gallery/start");
+  xhr(s2, "o5", "https://collect.example/t"); await wait();
+  ok(went(s2, "o5") && !infos.includes(line), "a page on a lesson site (not loopback) is not affected");
+  const a = await run(grown, "http://127.0.0.1:5500/index.html");
+  ok(!patterned(a), "adult seat: no outbound patterns (negative control)");
+}
+
 // Wiring: the preview forwards only a bounded http(s) string, and extension.ts routes it as a preview link.
 const preview = readFileSync(new URL("../src/previewProvider.ts", import.meta.url), "utf8");
 ok(/msg\?\.type === "preview_open_link"\) \{\s*if \(typeof msg\.href === "string" && msg\.href\.length <= 4096 && \/\^https\?:/.test(preview), "the panel forwards only bounded http(s) strings");

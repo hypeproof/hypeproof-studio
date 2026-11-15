@@ -10,7 +10,23 @@
   1. a CDN host list;
   2. hold cross-site media only;
   3. block cross-site `fetch`, beacon and WebSocket only, on loopback pages only.
-  - Confirmed by Jay: no.
+  - Confirmed by Jay: no. **Superseded 2026-11-15:** Jay chose option 3; see "Outbound requests from loopback pages" below.
+- **Outbound requests from loopback pages (Jay, 2026-11-15).** Confirmed by Jay: yes (2026-11-15).
+  - *Rule.* On minor seats, when the top document is loopback (an AI-made page), a cross-site `fetch`, XHR, `sendBeacon` (Ping) or EventSource is refused (`Fetch.failRequest`, `BlockedByClient`) unless loopback or the lesson list admits its address (`frameAllowed`).
+  - *Unchanged.* Images, stylesheets, fonts, media and CDN scripts load as before. Pages on any other site, the lesson's allowlisted sites included, are not affected. Adults are not affected.
+  - *Where.* The page, every popup and every out-of-process iframe session gets Fetch patterns for those types (Chromium reports `fetch` and EventSource as XHR) on minor seats only. A frame is judged by the top document it is drawn in.
+  - *Notice.* One quiet line per tab per 10 s, no dialog: "이 페이지가 다른 사이트로 정보를 보내려 해서 막았어요."
+  - *Without the network hold* (`Fetch.enable` rejected) there is no request-level fallback, so these requests are not held. This is documented, not coded.
+  - *WebSocket: in Jay's scope, NOT yet covered.* Jay's 2026-11-15 decision includes WebSocket, but this slice does not hold it. The Fetch domain rejects a WebSocket resource type, and `Network.setBlockedURLs` did not stop the handshake in the snts probe.
+    - No page-script `WebSocket` wrapper (coordinator, 2026-11-15): workers and service workers bypass it, and it would read as coverage it is not.
+    - Planned fix: block ws/wss upgrades to off-list hosts for minor seats in the safe session's `webRequest`, through a `vscodium-base/patches/` core patch.
+    - Until then a test pins the residual as expected: a minor loopback page's WebSocket to an off-list host still connects.
+  - *Tests.* `test/outbound-hold-browser.smoke.mjs`:
+    - From a loopback top, all four types to an off-list site send nothing: from the page, from same-origin and cross-site frames, and from a popup. Each refusal is reported.
+    - Images, CSS and CDN scripts from that site load. The lesson list, loopback-to-loopback and same-origin requests go on. A non-loopback page and an adult seat are unaffected.
+    - Red first: the page, frame and popup cases reached the off-list site on a0ca56902.
+    - Expected residual: a WebSocket to an off-list host still connects. This is pinned, to be flipped when the core patch lands.
+    - `link-confirm-host` section 14 covers the patterns (minor seats only), the refusal and its line, the 10 s cap, and the positive controls.
 - **Tests.** `test/subframe-hold-browser.smoke.mjs` (31 checks): real cross-site origins `a.test`/`b.test`/`c.test` with `--site-per-process`, and a recorder that counts every hit and a refusal per case.
   - Refused (no request reaches b.test): static, script-made and redirected frames; an admitted out-of-process frame that the page re-points or that moves itself off the list; a nested frame; frames in a popup.
   - Allowed: admitted and same-origin frames, srcdoc. Subresources from b.test still load (pins the residual). No subframe asks the dialog.

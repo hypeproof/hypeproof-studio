@@ -117,7 +117,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { domainToUnicode } from "node:url";
 import { LINK_CONFIRM_COPY, LinkConfirmRequest, type LinkConfirmPrompt } from "./linkConfirm";
-import { FORM_NOTICE_MS, LinkNavigationGuard } from "./linkNavigationGuard";
+import { FORM_NOTICE_MS, LinkNavigationGuard, OUTBOUND_NOTICE_MS } from "./linkNavigationGuard";
 import { openStudioTab, studioTabs } from "./studioTabs";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
@@ -5491,7 +5491,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
         // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
         // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
-        let strict = false, formLineAt = -Infinity, frameClosed = false;
+        let strict = false, formLineAt = -Infinity, frameClosed = false, outboundLineAt = -Infinity;
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
@@ -5499,6 +5499,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           studioFirstDocument: isNew && studioTabs.takeFirstLoad(tab.url) ? tab.url : undefined,
           // #4128: on a minor seat a cross-site iframe loads only when the lesson list (or loopback) admits it; no dialog.
           decideFrame: minor ? (url) => this.frameAllowed(url) : undefined,
+          // Jay, 2026-11-15: on a minor seat an AI-made (loopback) page may not send fetch/XHR/beacon/EventSource to a site
+          // off the lesson list; one quiet line per tab per 10 s, no dialog.
+          outbound: minor ? {
+            allowed: (url) => this.frameAllowed(url),
+            onBlocked: () => {
+              const t = Date.now();
+              if (t - outboundLineAt < OUTBOUND_NOTICE_MS) return;
+              outboundLineAt = t; void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.outbound);
+            },
+          } : undefined,
           // Without the network hold a frame off the list is sent back to about:blank; one that cannot be, or that went
           // out of process unwatched, closes the tab (fail closed, verify-3928 on #4128).
           onFrameUnheld: () => { if (frameClosed) return; frameClosed = true; void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); },
