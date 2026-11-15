@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { ORIGINAL_PREFIX, PURGE_PENDING_PREFIX, PURGE_TOMBSTONE_PREFIX, QUARANTINE_LIMITS, clearStudioMemoryJournal, noteStudioMemoryChange, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
+import { ORIGINAL_PREFIX, PURGE_PENDING_PREFIX, PURGE_TMP_GRACE_MS, PURGE_TOMBSTONE_PREFIX, QUARANTINE_LIMITS, clearStudioMemoryJournal, noteStudioMemoryChange, pruneQuarantine, purgeTaskQuarantine, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 
 let passed = 0;
@@ -187,6 +187,69 @@ try {
     await pruneQuarantine(base);
     assert.ok(!fs.existsSync(path.join(dir, first)), 'the first archive\'s copy did not come back');
     assert.ok(!fs.existsSync(path.join(dir, second)), 'the second archive\'s copy is gone too');
+  });
+
+  await t('cleanup (1): out of rounds with a listed name still live, the mark stays, so that name is purged at the next prune', async () => {
+    const base = path.join(top, 'rounds'), scope = 'a1'.repeat(12), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-14');
+    const listedName = path.basename(seed(dir, `${stampAt(Date.now())}-1-a.md`, '보관 사본\n'));
+    await purgeTaskQuarantine(base, scope, 'task-14', refused());
+    // Round 1 renames the folder away; a writer puts a file with the listed name back into the live folder at once (so
+    // round 2 runs), and again after round 2's rename (so names are still left when the rounds run out).
+    let renames = 0;
+    const rename = async (a, b) => { fs.renameSync(a, b); renames++; if (renames <= 2) seed(dir, listedName, '같은 이름의 재기록\n'); };
+    await pruneQuarantine(base, Date.now(), { rename });
+    assert.ok(fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-14')), 'the mark is kept while a listed name is still live');
+    await pruneQuarantine(base);
+    assert.ok(!fs.existsSync(path.join(dir, listedName)), 'the next prune purges it');
+    assert.ok(!fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-14')), 'and only then removes the mark');
+  });
+
+  await t('cleanup (2): a stale temp file of an atomic mark write is removed after the grace period and stops pinning tombstones', async () => {
+    const base = path.join(top, 'stale-tmp'), scope = 'b2'.repeat(12), scopeDir = path.join(base, scope);
+    const tomb = path.join(scopeDir, `${PURGE_TOMBSTONE_PREFIX}task-15-abcdef012345`); seed(tomb);
+    const tmp = path.join(scopeDir, `${PURGE_PENDING_PREFIX}task-15.tmp-0123456789ab`); fs.writeFileSync(tmp, '{"fi');
+    await pruneQuarantine(base);
+    assert.ok(fs.existsSync(tmp) && fs.existsSync(tomb), 'within the grace period it is kept, and so is the tombstone');
+    const old = (Date.now() - PURGE_TMP_GRACE_MS - 60_000) / 1000; fs.utimesSync(tmp, old, old);
+    await pruneQuarantine(base);
+    assert.ok(!fs.existsSync(tmp), 'past the grace period it is removed');
+    assert.ok(!fs.existsSync(tomb), 'and the tombstone it pinned is swept');
+  });
+
+  await t('cleanup (3): a tombstone pinned by an unreadable mark ages out by the retention, then the mark goes', async () => {
+    const base = path.join(top, 'unreadable-age'), scope = 'c3'.repeat(12), scopeDir = path.join(base, scope);
+    const tomb = path.join(scopeDir, `${PURGE_TOMBSTONE_PREFIX}task-16-abcdef012345`);
+    const oldCopy = seed(tomb, `${stampAt(Date.now() - QUARANTINE_LIMITS.retentionMs - 60_000)}-1-old.md`);
+    const freshCopy = seed(tomb, `${stampAt(Date.now())}-2-fresh.md`, '최근 사본\n');
+    const mark = path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-16'); fs.writeFileSync(mark, 'not json');
+    const old = (Date.now() - QUARANTINE_LIMITS.retentionMs - 60_000) / 1000; fs.utimesSync(mark, old, old);
+    await pruneQuarantine(base);
+    assert.ok(!fs.existsSync(oldCopy), 'a copy past the retention ages out of the pinned tombstone');
+    assert.equal(fs.readFileSync(freshCopy, 'utf8'), '최근 사본\n', 'a recent copy is kept');
+    assert.ok(fs.existsSync(mark), 'the mark stays while its tombstone holds something');
+    fs.renameSync(freshCopy, path.join(tomb, `${stampAt(Date.now() - QUARANTINE_LIMITS.retentionMs - 60_000)}-2-fresh.md`));
+    await pruneQuarantine(base); await pruneQuarantine(base);
+    assert.ok(!fs.existsSync(tomb), 'emptied by the retention, the tombstone goes');
+    assert.ok(!fs.existsSync(mark), 'then the old unreadable mark');
+    // Control: a recent unreadable mark keeps everything (it may be a mark being repaired).
+    const tomb2 = path.join(scopeDir, `${PURGE_TOMBSTONE_PREFIX}task-17-abcdef012345`); const c = seed(tomb2, `${stampAt(Date.now())}-1-x.md`);
+    fs.writeFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-17'), 'not json');
+    await pruneQuarantine(base);
+    assert.ok(fs.existsSync(c) && fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-17')), 'control: a recent unreadable mark keeps all');
+  });
+
+  await t('cleanup (4): a crash mid-write of the mark never leaves a torn mark (atomic write pinned)', async () => {
+    const base = path.join(top, 'torn-write'), scope = 'd4'.repeat(12), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-18');
+    seed(dir, `${stampAt(Date.now())}-1-a.md`);
+    const crash = (file, data) => { fs.writeFileSync(file, data.slice(0, 7)); throw new Error('crash mid-write'); };
+    await purgeTaskQuarantine(base, scope, 'task-18', { ...refused(), writeFile: crash });
+    assert.equal(fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-18')), false, 'no mark under the mark\'s name: the torn bytes are only in a temp file');
+    // A valid mark exists; a second purge crashes mid-write: the valid mark is left as it was.
+    await purgeTaskQuarantine(base, scope, 'task-18', refused());
+    const before = fs.readFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-18'), 'utf8');
+    seed(dir, `${stampAt(Date.now())}-2-b.md`);
+    await purgeTaskQuarantine(base, scope, 'task-18', { ...refused(), writeFile: crash });
+    assert.equal(fs.readFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-18'), 'utf8'), before, 'the previous mark is intact');
   });
 
   await t('originals in a tombstone (or a marked task) are not counted against the cap', async () => {
