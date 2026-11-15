@@ -9724,7 +9724,14 @@ catches what the checks above cannot see: a shell command that builds the path a
       to use. The next prune retries: it renames the folder to that tombstone, moves every unlisted file back (a restored
       task's new turns, whatever their stamps), deletes only the listed names, and removes the tombstone only once it is
       empty and then the mark. No clock is used. A crash at any step leaves the mark and the tombstone, and the next prune
-      resumes; a tombstone a mark names is never swept whole. Tombstones and marks are not
+      resumes; a tombstone a mark names is never swept whole. The mark is written atomically (a temp file, then a rename),
+      a second refused purge adds its names to the first's, and while any mark-like file of a task exists (a mark, a torn
+      or unreadable one, or a temp file) no tombstone of that task is swept: an unreadable mark means keep everything.
+      Known limits:
+      - New bytes written under a name the mark lists are deleted with it. That needs a same-millisecond name collision
+        (names carry a stamp and a per-turn counter) or a foreign writer in Studio's storage.
+      - When a file cannot be moved back because the name is taken in the task folder, the mark and the tombstone stay,
+        holding that file, until the name is free; nothing is lost and nothing is overwritten. Tombstones and marks are not
       counted in the originals cap. A host without global storage, or a seat without a memory scope, archives and moves
       as before with nothing to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move,
       refused move, the race, the tombstone sweep, a refused rename and its retry, the originals count, and the no-op

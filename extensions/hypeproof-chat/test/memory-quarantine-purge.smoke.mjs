@@ -140,6 +140,55 @@ try {
     assert.ok(fs.existsSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-9')), 'the mark is kept, so the tombstone is never swept');
   });
 
+  await t('a torn or unreadable mark (or a temp file of its atomic write) keeps the task\'s tombstone: never swept whole', async () => {
+    for (const [what, write] of [
+      ['torn mark', (scopeDir, task) => fs.writeFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + task), '{"files":["a.md"],"to')],
+      ['empty mark', (scopeDir, task) => fs.writeFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + task), '')],
+      ['temp file only', (scopeDir, task) => fs.writeFileSync(path.join(scopeDir, `${PURGE_PENDING_PREFIX}${task}.tmp-0123456789ab`), '{"fil')],
+    ]) {
+      const base = path.join(top, 'torn-' + what.replace(/ /g, '-')), scope = '6'.repeat(24), scopeDir = path.join(base, scope);
+      const tomb = path.join(scopeDir, `${PURGE_TOMBSTONE_PREFIX}task-10-abcdef012345`);
+      const kept = seed(tomb, `${stampAt(Date.now())}-2-new.md`, '중단된 재시도의 새 사본\n');
+      write(scopeDir, 'task-10');
+      await pruneQuarantine(base); await pruneQuarantine(base);
+      assert.equal(fs.readFileSync(kept, 'utf8'), '중단된 재시도의 새 사본\n', `${what}: the tombstone and its new copy are kept`);
+    }
+    // Control: a tombstone with no mark of any kind is a finished purge and is swept.
+    const base = path.join(top, 'torn-control'), scopeDir = path.join(base, '7'.repeat(24));
+    const tomb = path.join(scopeDir, `${PURGE_TOMBSTONE_PREFIX}task-11-abcdef012345`); seed(tomb);
+    await pruneQuarantine(base);
+    assert.equal(fs.existsSync(tomb), false, 'control: an unmarked tombstone is swept');
+    // And a mark for another task (task-11-x) does not protect task-11's tombstone.
+    seed(tomb); fs.writeFileSync(path.join(scopeDir, PURGE_PENDING_PREFIX + 'task-11-x'), '');
+    await pruneQuarantine(base);
+    assert.equal(fs.existsSync(tomb), false, 'a mark of a different task key does not protect it');
+  });
+
+  await t('the mark is written atomically (temp file, then rename): no temp file is left and the mark parses', async () => {
+    const base = path.join(top, 'atomic'), scope = '8'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-12');
+    seed(dir, `${stampAt(Date.now())}-1-a.md`);
+    await purgeTaskQuarantine(base, scope, 'task-12', refused());
+    assert.deepEqual(fs.readdirSync(scopeDir).sort(), [PURGE_PENDING_PREFIX + 'task-12', 'task-12'], 'only the mark and the task folder');
+    assert.ok(Array.isArray(markOf(scopeDir, 'task-12').files));
+  });
+
+  await t('a second refused purge unions the names: archived copies moved to the tombstone by an interrupted retry never come back', async () => {
+    const base = path.join(top, 'union'), scope = '9'.repeat(24), scopeDir = path.join(base, scope), dir = path.join(scopeDir, 'task-13');
+    const first = path.basename(seed(dir, `${stampAt(Date.now())}-1-first-archive.md`, '첫 보관 사본\n'));
+    await purgeTaskQuarantine(base, scope, 'task-13', refused());
+    // An interrupted retry: the folder went to the tombstone; then restore + a new turn + archive again (refused again).
+    const { tomb } = markOf(scopeDir, 'task-13');
+    fs.renameSync(dir, path.join(scopeDir, tomb));
+    const second = path.basename(seed(dir, `${stampAt(Date.now())}-2-second-archive.md`, '두 번째 보관 사본\n'));
+    await purgeTaskQuarantine(base, scope, 'task-13', refused());
+    const m = markOf(scopeDir, 'task-13');
+    assert.deepEqual(m.files, [first, second].sort(), 'the names from both purges');
+    assert.equal(m.tomb, tomb, 'the first tombstone name is kept');
+    await pruneQuarantine(base);
+    assert.ok(!fs.existsSync(path.join(dir, first)), 'the first archive\'s copy did not come back');
+    assert.ok(!fs.existsSync(path.join(dir, second)), 'the second archive\'s copy is gone too');
+  });
+
   await t('originals in a tombstone (or a marked task) are not counted against the cap', async () => {
     clearStudioMemoryJournal();
     const base = path.join(top, 'origtomb'), scopeDir = path.join(base, '1'.repeat(24));

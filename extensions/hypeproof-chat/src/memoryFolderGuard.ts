@@ -190,11 +190,18 @@ export async function pruneQuarantine(base: string, now = Date.now(), io: { rena
     for (const name of await fs.readdir(scopeDir).catch(() => [] as string[])) if (name.startsWith(PURGE_PENDING_PREFIX)) await retryPendingPurge(scopeDir, name, io.rename ?? ((a, b) => fs.rename(a, b)));
     // A tombstone a mark still names is a retry in progress: it may hold a later turn's copies, so it is never removed whole.
     const marked = new Set<string>();
+    // Any mark-like file for the tombstone's task (a mark, a corrupt or torn one, a temp file of an atomic write) keeps every
+    // tombstone of that task: a mark that cannot be read means "keep everything", never "sweep".
+    const entries = await fs.readdir(scopeDir).catch(() => [] as string[]);
+    const pendingFor = (tombName: string) => {
+      const task = tombName.slice(PURGE_TOMBSTONE_PREFIX.length).replace(/-[0-9a-f]{12}$/, "");
+      return entries.some((n) => n.startsWith(`${PURGE_PENDING_PREFIX}${task}`) && (n.length === PURGE_PENDING_PREFIX.length + task.length || n[PURGE_PENDING_PREFIX.length + task.length] === "."));
+    };
     for (const name of await fs.readdir(scopeDir).catch(() => [] as string[])) if (name.startsWith(PURGE_PENDING_PREFIX)) { const m = readMark(path.join(scopeDir, name)); if (m?.tomb) marked.add(m.tomb); }
     for (const task of await fs.readdir(scopeDir).catch(() => [] as string[])) {
       const taskDir = path.join(scopeDir, task);
       // A purge that did not finish (the app quit between the rename and the delete) leaves a tombstone: finish it.
-      if (task.startsWith(PURGE_TOMBSTONE_PREFIX)) { if (!marked.has(task)) await fs.rm(taskDir, { recursive: true, force: true }).catch(() => undefined); continue; }
+      if (task.startsWith(PURGE_TOMBSTONE_PREFIX)) { if (!marked.has(task) && !pendingFor(task)) await fs.rm(taskDir, { recursive: true, force: true }).catch(() => undefined); continue; }
       if (task.startsWith(PURGE_PENDING_PREFIX)) continue; // a mark still refused: kept for the next prune
       for (const name of await fs.readdir(taskDir).catch(() => [] as string[])) {
         const file = path.join(taskDir, name);
@@ -262,7 +269,10 @@ export async function purgeTaskQuarantine(base: string, scopeKey: string, taskKe
     try {
       const prior = readMark(markFile);
       const files = [...new Set([...(prior?.files ?? []), ...readdirSync(dir)])].sort();
-      writeFileSync(markFile, JSON.stringify({ files, tomb: prior?.tomb ?? path.basename(tomb) }), { mode: 0o600 });
+      // Atomic: a torn mark must never exist under the mark's name (a temp file, then a rename over it).
+      const tmp = `${markFile}.tmp-${randomBytes(6).toString("hex")}`;
+      writeFileSync(tmp, JSON.stringify({ files, tomb: prior?.tomb ?? path.basename(tomb) }), { mode: 0o600 });
+      renameSync(tmp, markFile);
     } catch { /* not marked: nothing is deleted */ }
     return;
   }
