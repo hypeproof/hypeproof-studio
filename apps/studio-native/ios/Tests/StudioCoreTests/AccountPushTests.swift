@@ -27,18 +27,25 @@ final class AccountPushTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [PushProtocol.self]
         let session = URLSession(configuration: config); defer { session.invalidateAndCancel(); PushProtocol.respond = nil }
         let service = ConversationService(session: session, base: URL(string: "https://fixture.invalid")!), id = UUID().uuidString.lowercased()
+        let opened = ["schema": "hps-push-open/1", "delivery_id": UUID().uuidString.lowercased()]
         var methods: [String] = [], malformed = false
         PushProtocol.respond = { request, body in
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-access"); XCTAssertNil(request.value(forHTTPHeaderField: "Origin")); XCTAssertNil(request.value(forHTTPHeaderField: "Cookie")); methods.append(request.httpMethod!)
-            if request.httpMethod == "POST" { XCTAssertEqual(body["schema"] as? String, "hps-push-open/1"); return (200, ["recorded": malformed ? NSNumber(value: 1) : NSNumber(value: true), "evidence_kind": "client_observed"]) }
+            if request.httpMethod == "POST" {
+                XCTAssertEqual(Set(body.keys), Set(opened.keys))
+                XCTAssertEqual(body["schema"] as? String, opened["schema"])
+                XCTAssertEqual(body["delivery_id"] as? String, opened["delivery_id"])
+                return (200, ["recorded": malformed ? NSNumber(value: 1) : NSNumber(value: true), "evidence_kind": "client_observed"])
+            }
             if request.httpMethod == "PUT" { XCTAssertEqual(Set(body.keys), ["schema", "platform", "token", "permission"]); XCTAssertEqual(body["permission"] as? String, "granted") }
             return (200, ["schema": "hps-push-device/1", "id": id, "active": request.httpMethod == "PUT", "generation": 1])
         }
         try await service.accountPush(id, method: "PUT", body: ["schema": "hps-push-device/1", "platform": "ios", "token": String(repeating: "ab", count: 32), "permission": "granted"], token: "synthetic-access")
-        try await service.accountPush(id + "/opened", method: "POST", body: ["schema": "hps-push-open/1", "delivery_id": UUID().uuidString.lowercased()], token: "synthetic-access")
+        try await service.accountPush(id + "/opened", method: "POST", body: opened, token: "synthetic-access")
         try await service.accountPush(id, method: "DELETE", body: nil, token: "synthetic-access")
         malformed = true
-        do { try await service.accountPush(id + "/opened", method: "POST", body: [:], token: "synthetic-access"); XCTFail("Numeric success cannot acknowledge an open") } catch {}
+        // Keep the request valid: only the server's success type is malformed.
+        do { try await service.accountPush(id + "/opened", method: "POST", body: opened, token: "synthetic-access"); XCTFail("Numeric success cannot acknowledge an open") } catch SyncFailure.invalidResponse {}
         XCTAssertEqual(methods, ["PUT", "POST", "DELETE", "POST"])
     }
     @MainActor func testPreferenceSurvivesRestartAndLostReceiptWithoutCachingTokenOrOptingAnotherAccountIn() async throws {
