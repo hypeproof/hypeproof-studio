@@ -1,0 +1,3 @@
+| DEC | Choice | Why | Default state | Confirmed by Jay |
+|---|---|---|---|---|
+| CGP-VOICE-R-026 (minor voice default, #3976) | Minor seats keep automatic voice send as #3976 built it: after one explicit start, each finished utterance goes through the normal composer send, with #3976's start-control copy and no re-acknowledgement for a user who already acknowledged the voice notice. Push-to-talk is not the minor default. CGP-VOICE-R-026 (optional push-to-talk mode) stays an open row, without a minor-default part | Jay 2026-11-14, AskUserQuestion: "자동전송하자" | Follows #3976 (served voice profile only, no new flag). #3976 merged into the stacked branch `feat/cgp-voice-r007`, which reached `main` through #3928 (squash 1fe3261d6, 2026-11-13) | yes (2026-11-14) |

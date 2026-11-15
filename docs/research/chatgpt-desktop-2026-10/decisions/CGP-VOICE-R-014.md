@@ -1,0 +1,14 @@
+## CGP-VOICE-R-014 / R-015 / D-010 / D-012: dictation control and failures by cause (2026-11-15, agent-selected)
+
+Audit of main (c2be35060): distinct names, a single microphone owner, per-cause lines (with the Service's own sentences), the permission card and Esc cancel were already built. Gaps: the disabled control gave no reason; most causes offered only `닫기`; `starting` had no words and no cancel; no input level; no icon; too short never went away.
+- Refusal (R-014, agent copy): the disabled control's name and tooltip carry `음성 대화 중에는 받아쓰기를 쓸 수 없어요` / `받아쓰기가 끝나면 쓸 수 있어요`; Alt+Shift+M during a conversation shows the same line and asks for no microphone.
+- One recovery per cause (R-015, agent copy `다시 보내기` / `다시 말하기` / `글로 쓰기`, chosen by cause in `src/dictationRecovery.ts`). `다시 보내기` follows policy 3 for every seat, minors included: the clip is memory only, dropped after transcription, on dismiss, task or seat switch, window hide or 10 minutes, never on disk. The coordinator first asked for minors to get no resend; policy 3 (all seats via D4) already allows the in-memory retry and main ships it, so the policy was followed and this is recorded here. `닫기` stays as the quiet second button; DES-CGPV-18's "one action" is read as one recovery action.
+- Starting (D-010): `마이크를 켜는 중이에요` with `취소`, no spinner (an unbounded indicator is not allowed, and the OS prompt has no known length). The register's `받아쓰는 중` wording is not adopted; the shipped `듣고 있어요` stays.
+- Input level (D-010): decorative and `aria-hidden`; an `AnalyserNode` on the same stream, never connected to the output; only the current level is read (one reused block, no samples kept); disconnected and its context closed when recording ends; not drawn under reduced motion. The retry keep-timer now runs on the control's own clock (the same injected timers as the recorder).
+- Placement (D-012, agent choice): the failure line stays in the composer's notice slot above the text box, not "under composer" as DES-CGPV-18 says. Every composer notice (class off, the microphone explainer, the permission card, recording) lives in that one slot; putting dictation failures alone below the input card would split one notice area into two and move the line away from the button that caused it.
+- Auto-dismiss (D-012): only too short, after 8 s, and not while focus is inside the line. The timer is keyed on the line's id, so a parent re-render (a streaming answer) does not restart it (verify-r004).
+- Expired copy (verify-r004): when the kept clip goes while its line is shown, `다시 보내기` becomes `다시 말하기` in place; a press under the `다시 보내기` label never opens the microphone (a stale press only updates the label).
+- Unchanged: no flag, policy, Service or minor-seat change; no audio stored or logged; the text flow and the voice conversation's own lines.
+- Not covered: a real microphone, the packaged app and a screen reader: NOT RUN.
+- Confirmed by Jay: no.
+

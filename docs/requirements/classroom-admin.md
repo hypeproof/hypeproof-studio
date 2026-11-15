@@ -312,7 +312,7 @@ D1 fixture SHA-256: `4e20b7bc59d5d7356f5c5288b90e49cadd64f53266096b4a532b40fd838
 
 ### 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)
 
-출처: CGP-SHELL-R-024(REQ-SHELL-24) “강사가 학생의 수업 설정을 바꾸면 학생은 다음 질문 전에 무엇이 바뀌었는지 본다”, 디자인 CGP-SHELL-D-023(DES-SHELL-23) “채팅 안의 시스템 줄, 모달 아님”. 새 Service 계약은 없다. Studio가 이미 받는 `/v1/profile` 값만 비교한다. 개인 좌석은 강사가 없으므로 기존 REQ-STUDIO-CAPABILITY-CHANGE 카드가 맡는다. 에이전트 선택은 `docs/research/chatgpt-desktop-2026-10/decisions.md`의 CGP-SHELL-R-024 항목(Jay 확인 전)이다.
+출처: CGP-SHELL-R-024(REQ-SHELL-24) “강사가 학생의 수업 설정을 바꾸면 학생은 다음 질문 전에 무엇이 바뀌었는지 본다”, 디자인 CGP-SHELL-D-023(DES-SHELL-23) “채팅 안의 시스템 줄, 모달 아님”. 새 Service 계약은 없다. Studio가 이미 받는 `/v1/profile` 값만 비교한다. 개인 좌석은 강사가 없으므로 기존 REQ-STUDIO-CAPABILITY-CHANGE 카드가 맡는다. 에이전트 선택은 `docs/research/chatgpt-desktop-2026-10/decisions/CGP-SHELL-R-024.md`의 CGP-SHELL-R-024 항목(Jay 확인 전)이다.
 
 | 항목 | 계약 |
 |---|---|
@@ -348,7 +348,7 @@ D1 fixture SHA-256: `4e20b7bc59d5d7356f5c5288b90e49cadd64f53266096b4a532b40fd838
 
 ### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)
 
-출처: CGP-SHELL-R-034(REQ-SHELL-34) “Chalk는 좌석마다 Studio 버전을 보여 주고 수업의 최소 버전보다 낮은 좌석을 표시한다”, 디자인 CGP-SHELL-D-033(DES-SHELL-33) “관리 목록의 버전 열: 96px 이하, 낮으면 amber 아이콘 + ‘업데이트 필요’, 정렬 가능, 밀집 비교 보기에 포함”. 새 Service 계약은 없다. Studio는 45초 heartbeat마다 `x-hps-client-version` 헤더로 자기 버전을 이미 보내고, Service는 좌석의 heartbeat 기록에 저장해 `/board` 읽기의 좌석 행에 `client_version`으로 이미 돌려준다. `/manage`가 그 값을 보이게 할 뿐이다. 기준 버전은 DEC-24(Jay 2026-11-12 확인)이고, 나머지 에이전트 선택은 `docs/research/chatgpt-desktop-2026-10/decisions.md`의 CGP-SHELL-R-034 항목(Jay 확인 전)이다.
+출처: CGP-SHELL-R-034(REQ-SHELL-34) “Chalk는 좌석마다 Studio 버전을 보여 주고 수업의 최소 버전보다 낮은 좌석을 표시한다”, 디자인 CGP-SHELL-D-033(DES-SHELL-33) “관리 목록의 버전 열: 96px 이하, 낮으면 amber 아이콘 + ‘업데이트 필요’, 정렬 가능, 밀집 비교 보기에 포함”. 새 Service 계약은 없다. Studio는 45초 heartbeat마다 `x-hps-client-version` 헤더로 자기 버전을 이미 보내고, Service는 좌석의 heartbeat 기록에 저장해 `/board` 읽기의 좌석 행에 `client_version`으로 이미 돌려준다. `/manage`가 그 값을 보이게 할 뿐이다. 기준 버전은 DEC-24(Jay 2026-11-12 확인)이고, 나머지 에이전트 선택은 `docs/research/chatgpt-desktop-2026-10/decisions/DEC-24.md`의 CGP-SHELL-R-034 항목(Jay 확인 전)이다.
 
 | 항목 | 계약 |
 |---|---|
@@ -366,7 +366,7 @@ D1 fixture SHA-256: `4e20b7bc59d5d7356f5c5288b90e49cadd64f53266096b4a532b40fd838
 
 ### 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)
 
-출처: CGP-SHELL-R-027(REQ-SHELL-27) “학습자나 보호자가 계정과 데이터 삭제를 요청할 수 있고, 요청 상태가 보인다. 설정 창이나 Lab 페이지에서 한 요청이 Service 기록을 만든다. 상태는 접수 / 처리 중 / 완료 / 보류(사유). 공유 기록은 ADM-14를 따른다. 이 컴퓨터의 파일은 따로 확인하지 않고 지우지 않는다”, 디자인 CGP-SHELL-D-026(DES-SHELL-26) “상태 칩이 있는 한 줄. 상태마다 아이콘 + 글, 날짜, ‘보류’는 사유를 줄 안에 보인다”. DEC-23(보호자·삭제 결정)이 정해지지 않았으므로 **기본 꺼짐**이다(decisions.md DEC-23 interim for CGP-SHELL-R-027, Confirmed by Jay: no).
+출처: CGP-SHELL-R-027(REQ-SHELL-27) “학습자나 보호자가 계정과 데이터 삭제를 요청할 수 있고, 요청 상태가 보인다. 설정 창이나 Lab 페이지에서 한 요청이 Service 기록을 만든다. 상태는 접수 / 처리 중 / 완료 / 보류(사유). 공유 기록은 ADM-14를 따른다. 이 컴퓨터의 파일은 따로 확인하지 않고 지우지 않는다”, 디자인 CGP-SHELL-D-026(DES-SHELL-26) “상태 칩이 있는 한 줄. 상태마다 아이콘 + 글, 날짜, ‘보류’는 사유를 줄 안에 보인다”. DEC-23(보호자·삭제 결정)이 정해지지 않았으므로 **기본 꺼짐**이다(decisions/DEC-23.md DEC-23 interim for CGP-SHELL-R-027, Confirmed by Jay: no).
 
 | 항목 | 계약 |
 |---|---|
@@ -384,7 +384,7 @@ D1 fixture SHA-256: `4e20b7bc59d5d7356f5c5288b90e49cadd64f53266096b4a532b40fd838
 
 ### 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)
 
-출처: CGP-SHELL-R-003(REQ-SHELL-03) “강사가 수업의 Studio 버전을 기간을 정해 고정한다. 설정은 수업별로 저장되고, 그 수업의 Studio는 기간 동안 업데이트 배너를 숨기고 정보·업데이트 화면에 ‘선생님이 업데이트 시점을 정했어요’를 보인다. 보안이 중요한 출시는 고정을 넘고 Chalk가 그렇게 표시한다”, 디자인 CGP-SHELL-D-002(DES-SHELL-02) “날짜 범위 고르기 + 수업 줄의 상태 배지 ‘업데이트 고정 ~10/31’(amber, 자물쇠 아이콘), 키보드로 쓰는 날짜 입력, 화면 읽기가 범위를 읽음”. DEC-24의 남은 질문(누가 고정을 넘을 수 있나, 보안 수정은 어떻게 하나)은 에이전트 선택으로 정했다(`docs/research/chatgpt-desktop-2026-10/decisions.md`의 CGP-SHELL-R-003 항목, Jay 확인 전).
+출처: CGP-SHELL-R-003(REQ-SHELL-03) “강사가 수업의 Studio 버전을 기간을 정해 고정한다. 설정은 수업별로 저장되고, 그 수업의 Studio는 기간 동안 업데이트 배너를 숨기고 정보·업데이트 화면에 ‘선생님이 업데이트 시점을 정했어요’를 보인다. 보안이 중요한 출시는 고정을 넘고 Chalk가 그렇게 표시한다”, 디자인 CGP-SHELL-D-002(DES-SHELL-02) “날짜 범위 고르기 + 수업 줄의 상태 배지 ‘업데이트 고정 ~10/31’(amber, 자물쇠 아이콘), 키보드로 쓰는 날짜 입력, 화면 읽기가 범위를 읽음”. DEC-24의 남은 질문(누가 고정을 넘을 수 있나, 보안 수정은 어떻게 하나)은 에이전트 선택으로 정했다(`docs/research/chatgpt-desktop-2026-10/decisions/DEC-24.md`의 CGP-SHELL-R-003 항목, Jay 확인 전).
 
 | 항목 | 계약 |
 |---|---|
@@ -531,7 +531,7 @@ that version in Studio and can reply or mark it handled. The coach is never assi
 responsibility) and 5 (instructor feedback that the learner acts on). The behaviour may expose ADAPT (does the learner
 change the page after the comment) and OWNERSHIP (does the learner answer for their own result). It makes no
 learning-outcome claim, and no capability label appears. The research rows and the parked questions are in
-`docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-005).
+`docs/research/chatgpt-desktop-2026-10/decisions/DEC-ART-R-005.md` (DEC-ART-R-005).
 
 | ID | Requirement | Evidence |
 |---|---|---|

@@ -117,7 +117,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { domainToUnicode } from "node:url";
 import { LINK_CONFIRM_COPY, LinkConfirmRequest, type LinkConfirmPrompt } from "./linkConfirm";
-import { LinkNavigationGuard } from "./linkNavigationGuard";
+import { FORM_NOTICE_MS, LinkNavigationGuard } from "./linkNavigationGuard";
 import { openStudioTab, studioTabs } from "./studioTabs";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
@@ -321,6 +321,7 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
+import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
@@ -5465,7 +5466,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       guards.set(tab, { dispose: () => undefined });
       // A minor seat fails closed on the two ways round the guard: a tab a page opened (window.open, target=_blank),
       // and a tab whose page moved to another site before the guard attached. Either is closed and its address goes
-      // through the confirm dialog; 열기 opens it again as a Studio tab. Adults: known gap (decisions.md).
+      // through the confirm dialog; 열기 opens it again as a Studio tab. Adults: known gap (decisions/README.md).
       // A popup the guard is deciding right now (its dialog is open): wait for that answer before judging the tab.
       for (let i = 0; isNew && this.linkConfirmRequest.open && i < 1300; i++) await new Promise((r) => setTimeout(r, 100));
       if (isNew && studioTabs.refused(tab.url)) { void Promise.resolve(tab.close()).catch(() => undefined); guards.delete(tab); return; }
@@ -5490,10 +5491,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
         // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
         // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
-        let strict = false, frameClosed = false;
+        let strict = false, formLineAt = -Infinity, frameClosed = false;
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
+          // Existing-window fix: a tab Studio just opened may load its own first page undecided, once (verify-r027).
+          studioFirstDocument: isNew && studioTabs.takeFirstLoad(tab.url) ? tab.url : undefined,
           // #4128: on a minor seat a cross-site iframe loads only when the lesson list (or loopback) admits it; no dialog.
           decideFrame: minor ? (url) => this.frameAllowed(url) : undefined,
           // Without the network hold a frame off the list is sent back to about:blank; one that cannot be, or that went
@@ -5501,8 +5504,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           onFrameUnheld: () => { if (frameClosed) return; frameClosed = true; void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); },
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
           // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
-          // as any refused address (`allowlistOnly` shows it); on the list, the stop stays silent (a known gap).
-          onFormStopped: (url) => { void this.allowlistOnly(url).catch(() => undefined); },
+          // as any refused address (the route `allowlistOnly` refuses); on the list, the stop stays silent (a known gap).
+          onFormStopped: (url) => {
+            // The cap counts only lines the learner is shown (verify-r027): a silent on-list stop spends nothing.
+            void this.learnerLinkRoute(url, "browser").then((route) => {
+              if (route.kind !== "confirm") return;
+              const t = Date.now();
+              if (t - formLineAt < FORM_NOTICE_MS) return;
+              formLineAt = t; void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
+            }, () => undefined);
+          },
           onCommit: (url) => {
             if (!strict || guard.capabilities.fetch || !/^https?:/i.test(url)) return;
             void this.allowlistOnly(url).then((ok) => { if (!ok) { void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); } });
@@ -9482,6 +9493,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (typeof msg.on !== "boolean") return;
         await this.setLessonTips(msg.on);
         return;
+      case "setMicInput": {
+        // CGP-VOICE-R-019 — kept per computer (the microphone is the PC's), an id and a label only. The label can
+        // name a person, so it stays here: never logged, never sent. A refused value changes nothing.
+        const next = writeMicChoice(msg.choice);
+        if (next === undefined) return;
+        await this.context.globalState.update(MIC_INPUT_KEY, next ?? undefined);
+        await this.postConfig();
+        return;
+      }
       case "setLearnerNickname": {
         // CGP-KNOW-R-032 — the host's check is the authoritative one: the seat must offer the field
         // and the value must pass the same screen the field ran. A refused value changes nothing.
@@ -12431,6 +12451,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
+    const micInput = readMicChoice(this.context.globalState?.get(MIC_INPUT_KEY));
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
     this.lessonTips.forSeat(tipsSeat);
@@ -12480,6 +12501,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
         lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
+        // CGP-VOICE-R-019 — only when a microphone was chosen: the default config is unchanged.
+        ...(micInput ? { micInput } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).

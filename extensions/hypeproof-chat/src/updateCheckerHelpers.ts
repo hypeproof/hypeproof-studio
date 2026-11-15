@@ -226,7 +226,7 @@ export function parseLatestRelease(
  * CGP-SHELL-R-003 — a release whose notes carry this line on its own is security-critical: a cohort's update
  * freeze does not hold it, and Chalk labels it (chalk/src/lib/latest-release.ts reads the same line). An HTML
  * comment, so GitHub does not render it; the mirror workflow copies it into the member mirror's notes.
- * Agent choice (decisions.md CGP-SHELL-R-003, "Confirmed by Jay: no").
+ * Agent choice (decisions/CGP-SHELL-R-003.md CGP-SHELL-R-003, "Confirmed by Jay: no").
  */
 export const SECURITY_CRITICAL_MARKER = "<!-- hps-update: security-critical -->";
 export function isSecurityCriticalRelease(body: unknown): boolean {

@@ -69,7 +69,8 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
   useEffect(() => {
     if (!speech) return;
     const controller = new VoiceConversation({
-      recorder: makeRecorder(), observe: observeVoiceEndpoint, scope: () => voiceConversationScope(latest.current.config), ready,
+      // R-019: each listening turn reads the current microphone choice, so a change applies at the next turn.
+      recorder: Object.assign(makeRecorder(), { micChoice: () => latest.current.voice.micChoice ?? null }), observe: observeVoiceEndpoint, scope: () => voiceConversationScope(latest.current.config), ready,
       transcribe: (requestId, clip) => postToHost({ type: 'voiceTranscribe', requestId, mime: clip.mime, seconds: clip.seconds, audio: base64Of(clip.bytes) }),
       submit: text => latest.current.turn.submit(text), speech,
       changed: next => {

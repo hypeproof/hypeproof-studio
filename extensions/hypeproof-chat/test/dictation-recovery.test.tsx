@@ -196,6 +196,22 @@ for (const [seat, profile] of [["adult", adult], ["minor", minor]] as const) {
 }
 
 for (const [seat, profile] of [["adult", adult], ["minor", minor]] as const) {
+  // #4164 follow-up: a problem with the clip itself is never kept, even when the host marks it retryable (it does for
+  // unreadable / voice_empty / voice_type_mismatch). Resending the same bytes fails the same way and spends hosted
+  // transcription; the line offers 다시 말하기. A retryable network failure is the positive control: it keeps the clip.
+  t(`${seat}: a host-retryable clip problem is not kept; a retryable network failure is`, async () => {
+    for (const kind of ["unreadable", "too_short", "too_large", "too_long"]) {
+      await mount(profile(), { acked: true });
+      await recordClip();
+      await hostSays({ type: "voiceTranscribeResult", requestId: lastSend().requestId, ok: false, kind, message: `${kind} 문장`, retry: true });
+      eq([probe!.hasKeptClip(), actions()], [false, ["다시 말하기", "닫기"]], `${kind} with retry:true`);
+    }
+    await mount(profile(), { acked: true });
+    await recordClip();
+    await hostSays({ type: "voiceTranscribeResult", requestId: lastSend().requestId, ok: false, kind: "network", message: "연결", retry: true });
+    eq([probe!.hasKeptClip(), actions()], [true, ["다시 보내기", "닫기"]], "network with retry:true keeps the clip");
+  });
+
   t(`${seat}: the retry copy is memory only and dropped on success, 닫기, window hide, pagehide, leaving the chat and after 10 minutes`, async () => {
     const failOnce = async () => {
       await recordClip();

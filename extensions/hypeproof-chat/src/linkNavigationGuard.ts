@@ -24,8 +24,14 @@
  *     decided with no dialog on every load and hop: first in its container's session, then in the out-of-process
  *     iframe's own session, which is auto-attached paused and given the same hold (and its own auto-attach). A session
  *     that cannot attach its iframes refuses cross-site frames. Subresources are not held (accepted residual).
- *   - Navigations Studio starts from outside the page (the address bar, a confirmed chat link, the coach's approved
- *     browser actions) are not page-requested and not redirects, so they are not held.
+ *   - Every other cross-origin main-frame Document is decided too (existing-window fix): a form a popup submits into
+ *     its opener by name, or the page into an existing popup, fires no `frameRequestedNavigation` in the window it
+ *     moves, and looks exactly like a browser-started load. Only navigations Studio itself started are let go:
+ *     `studioNavigate` records each of its `Page.navigate` calls for that tab, claimed once by the navigation's shape
+ *     (`StudioNavigationLedger`), and a tab `openStudioTab` opened may load its own first page once. A popup has no
+ *     Studio-started navigations, so in a popup nothing is exempt.
+ *     The cost: an address typed in the bar, or back/forward across origins (VS Code core, not Studio), is decided —
+ *     with no dialog for loopback, the lesson list, or an adult without the confirm setting.
  *   - Allowed: `Fetch.continueRequest`. Refused: `Fetch.failRequest` (Aborted); the page stays where it was.
  *
  * Structurally typed against CdpSession (`send`, `sendIn` for a child session, events with their sessionId) so it runs
@@ -53,7 +59,8 @@ export interface GuardOptions {
   onCommit?: (url: string) => void;
   /**
    * Layer 1 stopped a form aimed at another window (its submission cannot be replayed safely). Gets the form's
-   * resolved action address, at most once per `FORM_NOTICE_MS`, so a page looping `submit()` cannot flood the host.
+   * resolved action address, at most once per `FORM_NOTICE_MS` per action origin, so a page looping `submit()` cannot
+   * flood the host and a stop to one site does not hide a stop to another (the host caps the lines it shows).
    */
   onFormStopped?: (url: string) => void;
   /**
@@ -66,6 +73,13 @@ export interface GuardOptions {
    * back to `about:blank`, or a frame went out of process where it cannot be watched. The host closes the tab.
    */
   onFrameUnheld?: () => void;
+  /** Did Studio start this paused main-frame request? Default: this tab's records in `studioNavigations`. */
+  studioStarted?: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
+  /**
+   * The address of a tab Studio opened with `openStudioTab`: only this guard's first paused main-frame Document, and
+   * only while the tab has not committed a page yet, may go undecided as that tab's own first load.
+   */
+  studioFirstDocument?: string;
 }
 const BINDING = "__hpsOpenLink";
 /**
@@ -76,25 +90,59 @@ const BINDING = "__hpsOpenLink";
  * is not left with a button that does nothing). The prototypes are wrapped and locked, so a detached anchor or form
  * behaves the same. Without the binding (inside a popup) the paths are stopped. The binding carries
  * `{"k":"open"|"form","u":<absolute url>}`; only this script holds it (it is taken off `window` before the page runs).
- * A form's address is read with the prototype's getter: `form.action` is shadowed by a field named "action".
+ * A form's target and address, and a submitter's `formtarget`/`formaction`, are read with the prototypes' getters
+ * (verify-r027): `form.target`, `form.action`, `form.submit` and the like are shadowed by fields of those names.
+ * The listeners are also put in every shadow root, open or closed, as it is made (`attachShadow` is wrapped and locked):
+ * a submit event does not leave its root, and a click in a root is retargeted to the host. A declarative shadow root
+ * (`<template shadowrootmode>`) is made by the parser, not by `attachShadow`; its popups are held by layer 2.
+ * The effective target is the element's own (the submitter's `formtarget` first), else the page's `<base target>`;
+ * the browsing-context keywords are ASCII case-insensitive, as in the HTML spec (verify-r027 on #4187).
+ * A named target is resolved like the browser does, by the child browsing context's name, not the iframe's attribute.
+ * The name is read through the `name` getter captured before the page ran, so a same-origin child that redefines its
+ * own `name` cannot lie its way in-page; a cross-origin frame's name cannot be read, so it is never in-page. An empty `target=""` is no
+ * target, so `<base target>` applies. A page listener that runs after these checks and changes the page (removes the
+ * named frame, adds a base target) is not seen here; layer 2 holds the window that opens (pinned by a test).
+ * A same-origin form or link aimed at a named iframe of this page is an in-page pattern, not another window: it goes
+ * through (the frame's load is a subframe document, held by the subframe rule where that applies).
  */
 const intercept = (withBinding: boolean) => `(()=>{if(window.__hpsPopupGuard)return;window.__hpsPopupGuard=1;var b=${withBinding ? `window.${BINDING};delete window.${BINDING}` : "null"};
 var send=function(u,k){try{if(b)b(JSON.stringify({k:k||"open",u:String(new URL(u,location.href))}))}catch(_){}};
-var actionOf=(function(){var d=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,"action");return function(f,s){var a=s&&s.getAttribute&&s.getAttribute("formaction");try{return a?String(new URL(a,location.href)):d&&d.get?d.get.call(f):location.href}catch(_){return location.href}}})();
+var G=function(P,k){var d=Object.getOwnPropertyDescriptor(P,k);return d&&d.get?function(o){return d.get.call(o)}:function(o){return o[k]}};
+var FP=HTMLFormElement.prototype,IP=HTMLInputElement.prototype,BP=HTMLButtonElement.prototype,EP=Element.prototype;
+var fAction=G(FP,"action"),iTarget=G(IP,"formTarget"),bTarget=G(BP,"formTarget"),iAction=G(IP,"formAction"),bAction=G(BP,"formAction");
+var hasAttr=EP.hasAttribute,closest=EP.closest,isInput=function(s){return Object.getPrototypeOf(s)===IP};
+var sTarget=function(s){return s&&hasAttr.call(s,"formtarget")?(isInput(s)?iTarget:bTarget)(s):null};
+var sAction=function(s){return s&&hasAttr.call(s,"formaction")?(isInput(s)?iAction:bAction)(s):null};
+var getAttr=EP.getAttribute,qsa=Document.prototype.querySelectorAll;
+var low=function(t){return String(t).replace(/[A-Z]/g,function(c){return String.fromCharCode(c.charCodeAt(0)+32)})};
+var other=function(t){if(!t)return false;t=low(t);return t!=="_self"&&t!=="_top"&&t!=="_parent"};
+var baseTarget=function(){var l=qsa.call(document,"base[target]");return l.length?getAttr.call(l[0],"target"):""};
+var own=function(el){var t=hasAttr.call(el,"target")?getAttr.call(el,"target"):"";return t!==""?t:baseTarget()};
+var W=window,wlen=Object.getOwnPropertyDescriptor(W,"length")||Object.getOwnPropertyDescriptor(Window.prototype,"length");
+var wname=Object.getOwnPropertyDescriptor(W,"name")||Object.getOwnPropertyDescriptor(Window.prototype,"name");
+var nameOf=function(w){return wname&&wname.get?wname.get.call(w):w.name};
+var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(nameOf(W[i])===t)return true}catch(_){/* a cross-origin frame's name cannot be read: never in-page */}}return false};
+var sameSite=function(u){try{return new URL(u,location.href).origin===location.origin}catch(_){return false}};
+var inPage=function(t,u){return namedFrame(t)&&sameSite(u)};
+var aimsAway=function(f,s){var t=sTarget(s);t=t!==null?t:own(f);return other(t)&&!inPage(t,actionOf(f,s))};
+var actionOf=function(f,s){try{var a=sAction(s);return a!==null?a:fAction(f)}catch(_){return location.href}};
 var stopForm=function(f,s){send(actionOf(f,s),"form")};
-var other=function(t){return !!t&&t!=="_self"&&t!=="_top"&&t!=="_parent"};
 var lock=function(o,k,v){try{Object.defineProperty(o,k,{value:v,writable:false,configurable:false})}catch(_){try{o[k]=v}catch(__){}}};
 var A=HTMLAnchorElement.prototype,F=HTMLFormElement.prototype,E=EventTarget.prototype;
 var aClick=A.click,dispatch=E.dispatchEvent,fSubmit=F.submit,fRequest=F.requestSubmit;
-var away=function(a,e){return /^https?:/i.test(a.href)&&(other(a.target)||(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.button===1)))};
+var near=function(el){return el&&el instanceof Element?closest.call(el,"a[href]"):null};
+var away=function(a,e){var t=own(a);return /^https?:/i.test(a.href)&&((other(t)&&!inPage(t,a.href))||(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.button===1)))};
 lock(window,"open",function(u){if(u)send(u);return null});
 lock(A,"click",function(){if(away(this))return send(this.href);return aClick.call(this)});
-lock(E,"dispatchEvent",function(e){var a=this instanceof Element&&e&&(e.type==="click"||e.type==="auxclick")?this.closest("a[href]"):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
-lock(F,"submit",function(){if(other(this.target))return stopForm(this);return fSubmit.call(this)});
-if(fRequest)lock(F,"requestSubmit",function(s){if(other(this.target)||(s&&other(s.getAttribute&&s.getAttribute("formtarget"))))return stopForm(this,s);return fRequest.apply(this,arguments)});
-document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)},true);
-document.addEventListener("auxclick",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}},true);
-document.addEventListener("submit",function(e){var f=e.target,s=e.submitter;if(f&&(other(f.target)||(s&&other(s.getAttribute("formtarget"))))){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}},true)})();`;
+lock(E,"dispatchEvent",function(e){var a=e&&(e.type==="click"||e.type==="auxclick")?near(this):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
+lock(F,"submit",function(){if(aimsAway(this))return stopForm(this);return fSubmit.call(this)});
+if(fRequest)lock(F,"requestSubmit",function(s){if(aimsAway(this,s))return stopForm(this,s);return fRequest.apply(this,arguments)});
+var onClick=function(e){var a=near(e.target);if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)};
+var onAux=function(e){var a=near(e.target);if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}};
+var onSubmit=function(e){var f=e.target,s=e.submitter;if(f instanceof HTMLFormElement&&aimsAway(f,s)){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}};
+var listen=E.addEventListener,guardRoot=function(r){listen.call(r,"click",onClick,true);listen.call(r,"auxclick",onAux,true);listen.call(r,"submit",onSubmit,true)};
+var attach=EP.attachShadow;if(attach)lock(EP,"attachShadow",function(){var r=attach.apply(this,arguments);guardRoot(r);return r});
+guardRoot(document)})();`;
 export const POPUP_INTERCEPT = intercept(true);
 const POPUP_INTERCEPT_NO_BINDING = intercept(false);
 
@@ -149,7 +197,8 @@ export class LinkNavigationGuard {
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
   readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0 };
-  private lastFormNotice = -Infinity;
+  /** The last stopped-form report per action origin (the cap is per origin: one site cannot hide another). */
+  private readonly lastFormNotice = new Map<string, number>();
   /**
    * What the tab's session supports, known after `start`. The host fails closed on a minor seat when any is false:
    * `fetch` (the network hold), `autoAttach` (paused popups) or `page` (navigation events).
@@ -160,10 +209,14 @@ export class LinkNavigationGuard {
   private readonly decide: (url: string) => Promise<boolean>;
   private readonly now: () => number;
   private readonly onPopup: (url: string, allowed: boolean) => void;
+  private readonly studioStarted: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
+  private firstDocument: string | undefined;
   private readonly options: GuardOptions;
   constructor(cdp: GuardCdp, decide: (url: string) => Promise<boolean>, options: GuardOptions = {}) {
     this.cdp = cdp; this.decide = decide; this.options = options;
     this.now = options.now ?? Date.now; this.onPopup = options.onPopup ?? (() => {});
+    this.studioStarted = options.studioStarted ?? ((r) => studioNavigations.claim(this.cdp.targetId, r));
+    this.firstDocument = options.studioFirstDocument;
   }
 
   async start(): Promise<void> {
@@ -223,7 +276,13 @@ export class LinkNavigationGuard {
       if (msg.k === "form") {
         // A form aimed at another window was stopped: report it (rate-limited), never replay it.
         const t = this.now();
-        if (t - this.lastFormNotice >= FORM_NOTICE_MS) { this.lastFormNotice = t; this.options.onFormStopped?.(url); }
+        let origin = url; try { origin = new URL(url).origin; } catch { /* keep the address */ }
+        const last = this.lastFormNotice.get(origin);
+        if (last === undefined || t - last >= FORM_NOTICE_MS) {
+          this.lastFormNotice.set(origin, t);
+          if (this.lastFormNotice.size > 50) this.lastFormNotice.delete(this.lastFormNotice.keys().next().value as string);
+          this.options.onFormStopped?.(url);
+        }
         return;
       }
       if (msg.k !== "open") return;
@@ -334,8 +393,17 @@ export class LinkNavigationGuard {
     const redirect = typeof p.redirectedRequestId === "string";
     const first = state.popupFirst;
     const from = redirect ? (redirectFrom ?? state.current) : state.current;
-    // A popup's first document is judged against its opener, like a page-requested move; after that it is a page.
-    if ((!pageAsked && !redirect && !first) || sameOrigin(url, from)) {
+    // A popup's first document is judged against its opener; after that, like every later move, it is decided when it
+    // leaves the origin. Only the page has Studio-started navigations to exempt (recorded before Studio sends them).
+    // The tab's own first load (openStudioTab), once and only before anything committed; else this tab's record.
+    let studio = false;
+    const firstLoad = state === this.page && !redirect ? this.firstDocument : undefined;
+    if (state === this.page && !redirect) this.firstDocument = undefined;
+    if (state === this.page && !pageAsked && !redirect && !sameOrigin(url, from)) {
+      const blank = !this.page.current || this.page.current === "about:blank";
+      studio = (firstLoad !== undefined && blank && noHash(firstLoad) === noHash(url)) || this.studioStarted({ url, method: p.request?.method, headers: p.request?.headers });
+    }
+    if (studio || sameOrigin(url, from)) {
       if (!redirect) state.popupFirst = false;
       this.stats.continued++; await go(); return;
     }
@@ -389,6 +457,55 @@ export class LinkNavigationGuard {
  * `target=_blank` link): on a minor seat it is closed and its address goes through the confirm dialog instead.
  * Origins are kept too, so a redirect inside the site Studio opened is not mistaken for a page-opened tab.
  */
+/**
+ * Existing-window fix — navigations Studio itself starts in a browser tab with `Page.navigate` (verify-r027 on #4192).
+ * A record is keyed by the tab's target id, never globally. It is made just before the command is sent, because
+ * Chromium may answer `Page.navigate` only after the paused request goes on, so the loaderId cannot be waited for.
+ * A paused request claims it only when it is that navigation's shape: the same tab, the same address (without the
+ * fragment), a GET, and no Referer or Origin header. A page's own request carries one of those (a form POST, a link or
+ * a form with a referrer); the one shape left, a no-referrer GET to the very address Studio is loading in that tab at
+ * that moment, takes the tab exactly where Studio was taking it. A record is claimed once; a failed or thrown
+ * navigation removes it; a short TTL is only a backstop.
+ */
+export class StudioNavigationLedger {
+  private readonly records = new Map<string, Array<{ url: string; at: number }>>();
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+  constructor(ttlMs = 5_000, now: () => number = Date.now) { this.ttlMs = ttlMs; this.now = now; }
+  /** Before sending; `fail()` removes the record (an error or throw). */
+  begin(targetId: string | undefined, url: string): { fail(): void } {
+    if (!targetId) return { fail() {} };
+    const rec = { url: noHash(url), at: this.now() };
+    const list = this.fresh(targetId); list.push(rec); this.records.set(targetId, list.slice(-8));
+    return { fail: () => { const l = this.records.get(targetId); if (!l) return; const k = l.indexOf(rec); if (k >= 0) l.splice(k, 1); if (!l.length) this.records.delete(targetId); } };
+  }
+  /** A paused main-frame request of this tab: true once, only for the shape of a navigation Studio sent there. */
+  claim(targetId: string | undefined, request: { url: string; method?: string; headers?: Record<string, unknown> }): boolean {
+    if (!targetId) return false;
+    if ((request.method ?? "GET").toUpperCase() !== "GET") return false;
+    if (Object.keys(request.headers ?? {}).some((h) => /^(referer|origin)$/i.test(h))) return false;
+    const list = this.fresh(targetId), k = list.findIndex((r) => r.url === noHash(request.url));
+    if (k < 0) return false;
+    list.splice(k, 1); if (!list.length) this.records.delete(targetId);
+    return true;
+  }
+  private fresh(targetId: string): Array<{ url: string; at: number }> {
+    const t = this.now(), list = (this.records.get(targetId) ?? []).filter((r) => t - r.at <= this.ttlMs);
+    if (list.length) this.records.set(targetId, list); else this.records.delete(targetId);
+    return list;
+  }
+}
+export const studioNavigations = new StudioNavigationLedger();
+/** Studio's own `Page.navigate` on a tab's session: recorded before it is sent, keyed by the tab's target id. */
+export async function studioNavigate(cdp: { send(method: string, params?: any, ...rest: any[]): Promise<any>; targetId?: string }, url: string, ...rest: any[]): Promise<any> {
+  const rec = studioNavigations.begin(cdp.targetId, url);
+  try {
+    const r = await cdp.send("Page.navigate", { url }, ...rest);
+    if (r && typeof r.errorText === "string" && r.errorText) rec.fail();
+    return r;
+  } catch (e) { rec.fail(); throw e; }
+}
+
 export class StudioTabLedger {
   private readonly urls = new Map<string, number>();
   private readonly origins = new Map<string, number>();
@@ -400,6 +517,14 @@ export class StudioTabLedger {
     this.urls.set(noHash(url), t);
     try { this.origins.set(new URL(url).origin, t); } catch { /* not a URL */ }
     for (const map of [this.urls, this.origins]) for (const [k, at] of map) if (t - at > this.windowMs) map.delete(k);
+  }
+  /** `openStudioTab` addresses whose new tab has not been seen yet: that tab's guard takes one, once (first load). */
+  private readonly firstLoads = new Map<string, number>();
+  noteFirstLoad(url: string): void { this.firstLoads.set(noHash(url), this.now()); }
+  takeFirstLoad(url: string): boolean {
+    const key = noHash(url), at = this.firstLoads.get(key);
+    this.firstLoads.delete(key);
+    return at !== undefined && this.now() - at <= this.windowMs;
   }
   /** A popup the guard already refused (failed before its first request): its tab is closed with no second dialog. */
   private readonly refusedUrls = new Map<string, number>();

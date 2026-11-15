@@ -1,0 +1,12 @@
+## DEC-DS-R-010: spacing unit and control ladder (CGP-DS-R-010, 2026-10-22; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Existing spacing | Kept at its values (5, 6, 7, 10px and so on). `--hp-space` is 4px; new and changed spacing uses `calc(var(--hp-space) * n)`. The only spacing this row changes is the classroom header's block padding (8px → one unit) | The acceptance asks for the unit to be defined. Moving every off-grid value would redraw every surface, which DEC-27 and CGP-DS-R-001 (preserve shipped geometry) rule out without a design review | On | needed for a grid migration |
+| Ladder steps | 32 / 44 / 48px; learner floor = 44 (`--hp-control-min`) | 44 is DES-06's floor. 32 is the dense row Chalk already uses (DES-CGP-DS-24). 48 is what the start page's large choices draw. No step below 44 is allowed on a learner surface, and the smoke fails on any learner rule using sm | On | no |
+| How each small control reaches 44px | `min-height`/`min-width` on the control's own rule; padding and font unchanged | Smallest visual change: text stays where it was, the box grows around it. The classroom header row grows from 43 to 53px (its block padding drops from 8px to one unit) | On | no |
+| One-line composer textarea (24px) | The card forwards a primary press on its own surface to the textarea, instead of making the textarea 44px | The growing-composer code measures the textarea's scrollHeight to decide when to expand; padding or a min-height there would make every draft look like two lines. The card is already ≥44px and is what the learner sees as the field | On | no |
+| Classroom photo remove × on a 64px thumbnail | A transparent 44px round button in the corner with the dot drawn as a radial gradient (the `.hps-edit-image button` pattern) | A solid 44px circle would hide most of a 64px thumbnail; the existing pattern is already on main | On | no |
+| Inline links in an answer | Exempt | WCAG 2.5.8 inline exception: the link's size is set by the sentence it sits in | n/a | no |
+| Which surfaces count as learner surfaces | Personal task workspace and chat, classroom chat with its lesson rail, start page. Instructor surfaces, local review and host dialogs are out of this row | They are the surfaces a learner touches in the app; the others are named as not covered in REQ-STUDIO-CONTROL-LADDER | n/a | no |
+

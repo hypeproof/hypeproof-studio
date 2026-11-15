@@ -644,7 +644,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.pendingPush {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

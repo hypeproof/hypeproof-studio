@@ -10,6 +10,8 @@
 // The clip is handed to the caller as bytes; sending it is the host's job (voiceHost.ts), because the
 // chat webview's CSP lets it talk to nothing but itself.
 
+import { micAudioConstraint, resolveMicChoice, type MicAudioConstraint, type MicChoice, type MicDevice } from "./micInput.ts";
+
 export const DICTATION_BITS_PER_SECOND = 32_000;
 /** The Service refuses a clip over 60 s, measured from the bytes. */
 export const SERVICE_MAX_SECONDS = 60;
@@ -64,7 +66,16 @@ export function needsMicExplainer(permission: MicPermission, explainedAlready: b
 export interface DictationEnv {
   /** CGP-SHELL-R-010. Absent (older test rigs): treated as granted, so no explainer is drawn. */
   micPermission?(): Promise<MicPermission>;
-  getUserMedia(constraints: { audio: boolean }): Promise<StreamLike>;
+  getUserMedia(constraints: { audio: MicAudioConstraint }): Promise<StreamLike>;
+  /**
+   * CGP-VOICE-R-019: the microphone chosen on this computer, or null for the system default. Absent: the default.
+   * Read at every start, so a change applies to the next recording (and the conversation's next listening turn).
+   */
+  micChoice?(): MicChoice | null;
+  /** CGP-VOICE-R-019: the connected microphones (micInput.ts listMicDevices); null when the browser hides them. */
+  listMics?(): Promise<MicDevice[] | null>;
+  /** CGP-VOICE-R-019: run `fn` when a microphone is plugged in or out; returns the unsubscribe. */
+  onDeviceChange?(fn: () => void): () => void;
   Recorder: RecorderCtor | undefined;
   now(): number;
   setTimeout(fn: () => void, ms: number): unknown;
@@ -133,6 +144,7 @@ export interface Clip {
 export type DictationFailure =
   | "denied"       // the OS or Studio refused the microphone (NotAllowedError, SecurityError)
   | "no_mic"       // NotFoundError, OverconstrainedError
+  | "mic_missing"  // R-019: the microphone chosen in settings is not connected (never silently the default)
   | "busy"         // NotReadableError, AbortError
   | "unsupported"  // no getUserMedia, no recorder, no webm/ogg opus
   | "too_short"
@@ -221,19 +233,37 @@ export class DictationRecorder {
     this.recorder = null;
   }
 
-  async start(): Promise<void> {
+  /**
+   * Opens the microphone and records. `useDefault`: this one recording uses the system default although a
+   * microphone is chosen (R-019 기본 마이크로 녹음, an explicit press); the stored choice is untouched.
+   */
+  async start(options: { useDefault?: boolean } = {}): Promise<void> {
     if (this.state !== "idle") return;
     const mime = pickDictationMime(this.env.Recorder);
     if (!this.env.Recorder || !mime || typeof this.env.getUserMedia !== "function") { this.cb.onFailure("unsupported"); return; }
     const generation = ++this.generation;
     this.set("starting");
+    // R-019: the chosen microphone, exactly. Not connected: nothing opens, and the learner decides (mic_missing).
+    let choice: MicChoice | null = null;
+    try { choice = options.useDefault ? null : this.env.micChoice?.() ?? null; } catch { choice = null; }
+    let deviceId: string | null = null;
+    if (choice) {
+      let devices: MicDevice[] | null = null;
+      try { devices = (await this.env.listMics?.()) ?? null; } catch { devices = null; }
+      if (generation !== this.generation) return;
+      const resolved = resolveMicChoice(choice, devices);
+      if (resolved.kind === "missing") { this.set("idle"); this.cb.onFailure("mic_missing"); return; }
+      deviceId = resolved.kind === "device" ? resolved.id : null;
+    }
     let stream: StreamLike;
     try {
-      stream = await this.env.getUserMedia({ audio: true });
+      stream = await this.env.getUserMedia({ audio: micAudioConstraint(deviceId) });
     } catch (error) {
       if (generation !== this.generation) return;
       this.set("idle");
-      this.cb.onFailure(classifyMediaError(error));
+      const kind = classifyMediaError(error);
+      // The exact constraint is what failed: the chosen microphone is gone, not "no microphone at all".
+      this.cb.onFailure(deviceId && kind === "no_mic" ? "mic_missing" : kind);
       return;
     }
     // Cancelled while the permission prompt was open: close the microphone we were just given.

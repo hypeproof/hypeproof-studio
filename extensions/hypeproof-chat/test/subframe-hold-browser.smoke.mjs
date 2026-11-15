@@ -1,5 +1,5 @@
 // #4128 (CGP-SHELL-R-026 follow-up F1) — minor seats: a cross-site iframe in the browser panel loads only when the
-// lesson list admits it, with no dialog; subresources are not held (accepted residual, decisions.md).
+// lesson list admits it, with no dialog; subresources are not held (accepted residual, decisions/README.md).
 //   FOCUS_REQUIRE_BROWSER=1 node --experimental-strip-types test/subframe-hold-browser.smoke.mjs
 // Real cross-site origins: headless Chromium with --site-per-process and a.test / b.test / c.test resolved to one
 // local server that records every hit. a.test is the top page, b.test is off the list, c.test is on it. The guard is

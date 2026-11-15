@@ -1,0 +1,9 @@
+## CGP-CHAT-R-028: "내 질문" jump list (2026-10-25, agent-selected conservative implementation)
+
+- Count: the user turns of the transcript as drawn, one version per prompt group. An edited prompt counts once, and its row jumps to the version on screen. Tool, system and assistant lines never count. Below 4 there is no button.
+- Row text: the first non-empty line of the learner's own words. A leading `> ` quote block (CGP-CHAT-R-007 quote reply) is skipped when the learner wrote anything after it, because the quote is the coach's text, not their question. Controls, bidi format characters, the zero-width space and the BOM are removed; ZWJ/ZWNJ stay so emoji and scripts are not broken; a line that draws nothing is skipped. The line is cut at 60 grapheme clusters or 240 code units with "…" (the 320px popover also ellipsizes).
+- Focus target: the prompt's bubble (`.hps-msg-body`), not the full-width row, so the ring hugs the bubble (D81 "focus moves to the selected user bubble"). It is focusable only for the jump (`tabindex="-1"`, removed on blur). An in-place edit focuses its editor; a row that failed to render jumps to its turn fallback box.
+- Placement: a quiet 44px header button at the 14px floor (DEC-29), next to the header controls; in the personal workspace it is drawn into the task heading with the rest of the chat header. Popover: `role="dialog"` labelled "내 질문", REQ-STUDIO-FOCUS-RESTORE popover contract.
+- Seats: every seat whose chat panel draws the task header, including instructor mode (the label still names that user's own prompts). The classroom transcript keeps its scroll-to-latest on a new message, so a reply arriving after a jump scrolls back down there; pinning a jump in the classroom seat would change that seat's scroll rule and is left out.
+- Default state: on (display only; no host message, no stored state, nothing leaves the device).
+

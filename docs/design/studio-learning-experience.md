@@ -478,7 +478,7 @@ body.vscode-light, body.vscode-high-contrast-light {
 | `--tw-*` (개인 작업 공간, CP-R1·CC-R1) | 개인 작업 대화 화면 | `taskWorkspace.css` | VS Code 테마를 따른다. 캔버스 `--vscode-editor-background`(fallback `#202226`), 패널 `--vscode-sideBar-background`(fallback `#17191d`), 구분선 `#34383e`, 보조 글 `#a4aab3`, 포커스 `#799ed7`은 어두운 테마 fallback일 뿐이다 |
 | 역할이 다른 값 | `#18231C` | `--hp-text-inverse-default` | 패널이 아니라 lime CTA 위의 글자색이다 |
 
-개인 작업 공간이 학습 화면과 다른 것은 의도다(호스트 테마 추종). 이 슬라이스는 시각 변화를 만들지 않으며 CSS를 바꾸지 않는다. 결정 기록은 `docs/research/chatgpt-desktop-2026-10/decisions.md`의 DEC-27.
+개인 작업 공간이 학습 화면과 다른 것은 의도다(호스트 테마 추종). 이 슬라이스는 시각 변화를 만들지 않으며 CSS를 바꾸지 않는다. 결정 기록은 `docs/research/chatgpt-desktop-2026-10/decisions/DEC-27.md`의 DEC-27.
 
 역할 규칙:
 
