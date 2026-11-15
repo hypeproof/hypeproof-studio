@@ -6834,6 +6834,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/link-confirm-render.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/subframe-hold-browser.smoke.mjs"
         }
       ]
     },
