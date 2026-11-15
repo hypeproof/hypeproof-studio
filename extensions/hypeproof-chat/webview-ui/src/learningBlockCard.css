@@ -134,6 +134,13 @@
 .hp-stage-nav { display: flex; gap: var(--hp-space-2); }
 .hp-stage-nav > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
 .hp-stage-nav > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
+/* CGP-LEARN-D-007 (DES-CGP-LEARN-07) — playback for an animated block (BlockPlayback.tsx): "2 / 4 장면" as text and 재생 /
+   멈춤 / 한 단계 as 44px quiet buttons, the same shape as the stepper's. No transition here: a frame swaps in place. */
+.hp-playback { display: flex; flex-direction: column; gap: var(--hp-space-1); min-width: 0; }
+.hp-playback-scene { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-primary-default); }
+.hp-playback-nav { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hp-playback-nav > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-playback-nav > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
 @media (forced-colors: active) {
   .hp-box-outer { border-color: CanvasText; }
   .hp-box-margin { border-color: CanvasText; }

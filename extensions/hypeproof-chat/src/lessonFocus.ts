@@ -60,6 +60,16 @@ export function rendersPin(kind: string, uiVersion: unknown): boolean {
  */
 export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board", "box_spacing", "stage_stepper"] as const;
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+/**
+ * CGP-LEARN-R-007 / D-007: whether a kind animates. None does yet. A kind marked "animated" must draw its frames through
+ * webview-ui/src/BlockPlayback.tsx (starts paused, explicit 재생, 한 단계 always there, nothing under reduced motion);
+ * learning-block-motion-browser.smoke checks both sides: every static kind stays unchanged with no input, and every animated
+ * kind starts paused with the playback controls.
+ */
+export const MATERIAL_MOTION: Readonly<Record<MaterialKind, "static" | "animated">> = {
+  canvas_editor: "static", canvas_preview: "static", criterion_form: "static", evidence_note: "static", coach_request: "static",
+  decision_form: "static", metric_board: "static", box_spacing: "static", stage_stepper: "static",
+};
 export interface StepMaterial {
   kind: MaterialKind; stepId: string; version: string; sha256: string; uiVersion: number;
   /** CGP-LEARN-R-006 — box_spacing's pinned values, re-validated (the starting state of its controls). */

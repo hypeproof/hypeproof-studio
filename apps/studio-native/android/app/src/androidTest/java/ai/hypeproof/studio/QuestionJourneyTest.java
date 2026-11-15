@@ -112,21 +112,73 @@ public class QuestionJourneyTest {
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("")));
         ReflectionStorage store=new ReflectionStorage(context);assertEquals("",store.loadGuestDraft());assertNull(store.loadCredentials());assertEquals(0,calls.get());
     }
+    private final java.util.List<JSONObject> dictationTouchEvents=new java.util.ArrayList<>();
+    private void dictationTouch(String phase,QuestionActivity activity,android.view.View target,VoiceFixture voice,android.view.MotionEvent event){
+        try{
+            ReflectionModel model=questionModel(activity);
+            var hostField=NativeVoice.class.getDeclaredField("host");hostField.setAccessible(true);NativeVoice.Host host=(NativeVoice.Host)hostField.get(voice.controller);
+            var composerField=QuestionActivity.class.getDeclaredField("composer");composerField.setAccessible(true);android.view.View composer=(android.view.View)composerField.get(activity);
+            int[] xy=new int[2];target.getLocationOnScreen(xy);
+            JSONObject row=new JSONObject().put("phase",phase).put("uptime_ms",android.os.SystemClock.uptimeMillis())
+                .put("target_identity",System.identityHashCode(target)).put("attached",target.isAttachedToWindow()).put("enabled",target.isEnabled()).put("pressed",target.isPressed())
+                .put("x",xy[0]).put("y",xy[1]).put("width",target.getWidth()).put("height",target.getHeight()).put("window_focus",target.hasWindowFocus())
+                .put("busy",model.busy).put("read_only",model.readOnly).put("guest_read_only",model.guestReadOnly).put("signed_in",model.account()!=null)
+                .put("foreground",host.foreground()).put("voice_allowed",host.allowed(false)).put("scope_present",host.projectID()!=null).put("composer_focused",composer.hasFocus()).put("capture_starts",voice.starts).put("voice_phase",voice.controller.session.phase().name()).put("long_press_timeout_ms",android.view.ViewConfiguration.getLongPressTimeout());
+            if(event!=null)row.put("action",event.getActionMasked()).put("event_time_ms",event.getEventTime()).put("down_time_ms",event.getDownTime()).put("event_duration_ms",event.getEventTime()-event.getDownTime());
+            dictationTouchEvents.add(row);
+        }catch(Exception error){throw new AssertionError(error);}
+    }
+    private void saveDictationTouch(String outcome)throws Exception{
+        File dir=new File(context.getExternalFilesDir(null),"evidence/guest-dictation");assertTrue(dir.isDirectory()||dir.mkdirs());
+        Files.write(new File(dir,"touch.json").toPath(),new JSONObject().put("outcome",outcome).put("events",new JSONArray(dictationTouchEvents)).toString(2).getBytes(StandardCharsets.UTF_8));
+    }
     @Test public void guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend()throws Exception{
         java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No guest network");};
         app=ActivityScenario.launch(QuestionActivity.class);VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
         onView(withContentDescription("질문 대화 입력")).perform(replaceText("이미 적은 글"),click(),closeSoftKeyboard());
+        java.util.concurrent.atomic.AtomicReference<QuestionActivity> activity=new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<android.view.View> target=new java.util.concurrent.atomic.AtomicReference<>(),edit=new java.util.concurrent.atomic.AtomicReference<>();
+        app.onActivity(activity::set);
+        onView(withContentDescription("질문 대화 입력")).check((v,e)->{if(e!=null)throw e;edit.set(v);});
+        onView(withContentDescription("말로 적기")).check((v,e)->{if(e!=null)throw e;target.set(v);
+            v.setOnTouchListener((view,event)->{dictationTouch("touch",activity.get(),view,voice,event);return false;});
+        });
+        try {
         // A focus update may arrive between physical DOWN/UP; it must not eat the tap.
         java.util.concurrent.atomic.AtomicReference<float[]> point=new java.util.concurrent.atomic.AtomicReference<>();
         onView(withContentDescription("말로 적기")).check((v,e)->{if(e!=null)throw e;int[] xy=new int[2];v.getLocationOnScreen(xy);point.set(new float[]{xy[0]+v.getWidth()/2f,xy[1]+v.getHeight()/2f});});
         var instrumentation=InstrumentationRegistry.getInstrumentation();float[] xy=point.get();long downTime=android.os.SystemClock.uptimeMillis();
         android.view.MotionEvent down=android.view.MotionEvent.obtain(downTime,downTime,android.view.MotionEvent.ACTION_DOWN,xy[0],xy[1],0);down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(down);down.recycle();
-        onView(withContentDescription("질문 대화 입력")).check((v,e)->{if(e!=null)throw e;v.clearFocus();});
-        android.view.MotionEvent up=android.view.MotionEvent.obtain(downTime,android.os.SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,xy[0],xy[1],0);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(up);up.recycle();drain();
+        // Espresso synchronizes before a new interaction. Doing that while DOWN
+        // is held can turn this intended tap into the platform's tooltip long press.
+        // Keep the real focus update in flight, without a second Espresso barrier.
+        try{
+            instrumentation.runOnMainSync(()->{
+                dictationTouch("before_focus",activity.get(),target.get(),voice,null);
+                assertTrue("focus change must occur while the actual mic is pressed",target.get().isPressed());
+                assertTrue("the composer starts focused",edit.get().hasFocus());
+                edit.get().clearFocus();
+                assertFalse("real focus loss completed before UP",edit.get().hasFocus());
+                dictationTouch("after_focus",activity.get(),target.get(),voice,null);
+            });
+        }finally{
+            android.view.MotionEvent up=android.view.MotionEvent.obtain(downTime,android.os.SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,xy[0],xy[1],0);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(up);up.recycle();
+        }
+        drain();
+        app.onActivity(a->dictationTouch("after_up",a,target.get(),voice,null));saveDictationTouch("after_up");screen("android-guest-dictation-after-up");
+        java.util.List<JSONObject> delivered=new java.util.ArrayList<>();for(JSONObject event:dictationTouchEvents)if(event.getString("phase").equals("touch"))delivered.add(event);
+        assertEquals("one actual DOWN/UP, no retry or cancellation",2,delivered.size());
+        assertEquals(android.view.MotionEvent.ACTION_DOWN,delivered.get(0).getInt("action"));assertEquals(android.view.MotionEvent.ACTION_UP,delivered.get(1).getInt("action"));
+        long limit=android.view.ViewConfiguration.getLongPressTimeout();
+        assertTrue("injected gesture must stay below the device long-press threshold",delivered.get(1).getLong("event_duration_ms")<limit);
+        assertTrue("delivered gesture must stay below the device long-press threshold",delivered.get(1).getLong("uptime_ms")-delivered.get(0).getLong("uptime_ms")<limit);
         app.onActivity(a->{try{var f=QuestionActivity.class.getDeclaredField("model");f.setAccessible(true);ReflectionModel model=(ReflectionModel)f.get(a);assertNotNull("dictation tap must start capture; phase="+voice.controller.session.phase()+" error="+model.error,voice.capture);}catch(ReflectiveOperationException e){throw new AssertionError(e);}});
         app.onActivity(a->voice.partial("말로 이어 적은 글"));app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
         app.onActivity(a->voice.result("늦게 온 말"));drain();assertFalse(voice.controller.session.active());
-        app.close();app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(withText("이미 적은 글\n말로 이어 적은 글")));assertEquals(0,calls.get());
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(withText("이미 적은 글\n말로 이어 적은 글")));assertEquals(0,calls.get());saveDictationTouch("PASS");
+        }catch(Exception|AssertionError failure){
+            try{saveDictationTouch("FAIL");screen("android-guest-dictation-failure");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}throw failure;
+        }
     }
     private java.util.concurrent.atomic.AtomicInteger loginTransport(boolean denied){
         java.util.concurrent.atomic.AtomicInteger sends=new java.util.concurrent.atomic.AtomicInteger();
