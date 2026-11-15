@@ -20,11 +20,16 @@
  *        is decided against its opener (a refusal fails it and closes the popup; `onPopup` reports both), and every
  *        later page-requested move or redirect hop to another origin is decided like the page's. Targets that are
  *        not this page's popups are let go.
+ *   - Subframes (#4128, minor seats, `decideFrame`): a document of another origin than the top page it is drawn in is
+ *     decided with no dialog on every load and hop: first in its container's session, then in the out-of-process
+ *     iframe's own session, which is auto-attached paused and given the same hold (and its own auto-attach). A session
+ *     that cannot attach its iframes refuses cross-site frames. Subresources are not held (accepted residual).
  *   - Every other cross-origin main-frame Document is decided too (existing-window fix): a form a popup submits into
  *     its opener by name, or the page into an existing popup, fires no `frameRequestedNavigation` in the window it
- *     moves, and looks exactly like a browser-started load. Only navigations Studio itself started are let go: its
- *     own `Page.navigate` calls and `openStudioTab` record the address in `studioNavigations` first, and the first
- *     matching request takes the record. A popup has no Studio-started navigations, so in a popup nothing is exempt.
+ *     moves, and looks exactly like a browser-started load. Only navigations Studio itself started are let go:
+ *     `studioNavigate` records each of its `Page.navigate` calls for that tab, claimed once by the navigation's shape
+ *     (`StudioNavigationLedger`), and a tab `openStudioTab` opened may load its own first page once. A popup has no
+ *     Studio-started navigations, so in a popup nothing is exempt.
  *     The cost: an address typed in the bar, or back/forward across origins (VS Code core, not Studio), is decided —
  *     with no dialog for loopback, the lesson list, or an adult without the confirm setting.
  *   - Allowed: `Fetch.continueRequest`. Refused: `Fetch.failRequest` (Aborted); the page stays where it was.
@@ -57,6 +62,16 @@ export interface GuardOptions {
    * resolved action address, at most once per `FORM_NOTICE_MS`, so a page looping `submit()` cannot flood the host.
    */
   onFormStopped?: (url: string) => void;
+  /**
+   * #4128 (minor seats): decides a cross-site subframe document with no dialog — an iframe of the page, of a popup or
+   * of another iframe, on its first load and on every later load or redirect hop. Unset (adults): subframes load.
+   */
+  decideFrame?: (url: string) => Promise<boolean>;
+  /**
+   * #4128 fail closed without the network hold: a cross-site subframe committed off the list and could not be sent
+   * back to `about:blank`, or a frame went out of process where it cannot be watched. The host closes the tab.
+   */
+  onFrameUnheld?: () => void;
   /** Did Studio start this paused main-frame request? Default: this tab's records in `studioNavigations`. */
   studioStarted?: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
   /**
@@ -108,8 +123,18 @@ const REQUEST_WINDOW_MS = 10_000;
 export const FORM_NOTICE_MS = 3_000;
 const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", requestStage: "Request" }] };
 
-/** The main-frame rules' state for one page session: the tab's page, or a popup it opened (for its whole life). */
+/**
+ * One session the guard holds requests in: the tab's page, a popup it opened (main-frame rules for its whole life), or
+ * an out-of-process iframe (#4128: subframe rules only, judged against the top page that contains it).
+ */
 interface FrameState {
+  kind: "page" | "popup" | "frame";
+  /** A frame's container: the page, a popup, or another frame. */
+  owner?: FrameState;
+  /** This session auto-attaches its own out-of-process iframes (paused), so their later loads can be held too. */
+  framesAttached: boolean;
+  /** `Fetch.enable` worked in this session: its requests are held before they leave. */
+  fetchHeld: boolean;
   sessionId?: string;
   targetId?: string;
   mainFrame: string | undefined;
@@ -121,19 +146,22 @@ interface FrameState {
   /** A popup's first document request is decided against its opener's address; a page's is not held. */
   popupFirst: boolean;
 }
-const frameState = (current: string, sessionId?: string, targetId?: string, popupFirst = false): FrameState =>
-  ({ sessionId, targetId, mainFrame: undefined, current, requested: new Map(), hops: new Map(), popupFirst });
+const frameState = (kind: FrameState["kind"], current: string, sessionId?: string, targetId?: string, owner?: FrameState): FrameState =>
+  ({ kind, owner, framesAttached: false, fetchHeld: false, sessionId, targetId, mainFrame: kind === "page" ? undefined : targetId, current, requested: new Map(), hops: new Map(), popupFirst: kind === "popup" });
+/** The page (or popup) a frame state is drawn in: subframes are compared with its address. */
+const topOf = (state: FrameState): FrameState => { let s = state; while (s.kind === "frame" && s.owner) s = s.owner; return s; };
+const AUTO_ATTACH = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true };
 
 export class LinkNavigationGuard {
-  private readonly page: FrameState = frameState("");
-  /** Auto-attached popups, each with the same main-frame rules as the page for as long as it lives. */
-  private readonly popups = new Map<string, FrameState>();
+  private readonly page: FrameState = frameState("page", "");
+  /** Auto-attached sessions by sessionId: popups (main-frame rules for life) and out-of-process iframes (#4128). */
+  private readonly children = new Map<string, FrameState>();
   private sub: { dispose(): void } | undefined;
   private scriptId: string | undefined;
   /** The main frame's address when the guard attached (or after the last main-frame navigation). */
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
-  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0 };
+  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0 };
   private lastFormNotice = -Infinity;
   /**
    * What the tab's session supports, known after `start`. The host fails closed on a minor seat when any is false:
@@ -162,6 +190,7 @@ export class LinkNavigationGuard {
     this.page.mainFrame = tree?.frameTree?.frame?.id;
     this.page.current = tree?.frameTree?.frame?.url ?? "";
     this.capabilities.fetch = await this.cdp.send("Fetch.enable", DOCUMENTS).then(() => true, () => false);
+    this.page.fetchHeld = this.capabilities.fetch;
     if (this.options.interceptPopups) {
       await this.cdp.send("Runtime.enable").catch(() => undefined);
       await this.cdp.send("Runtime.addBinding", { name: BINDING }).catch(() => undefined);
@@ -169,10 +198,11 @@ export class LinkNavigationGuard {
       await this.cdp.send("Runtime.evaluate", { expression: POPUP_INTERCEPT }).catch(() => undefined);
     }
     if (this.cdp.sendIn) {
-      const auto = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true };
-      const page = await this.cdp.send("Target.setAutoAttach", auto).then(() => true, () => false);
-      const root = this.cdp.sendRoot ? await this.cdp.sendRoot("Target.setAutoAttach", auto).then(() => true, () => false) : false;
+      const page = await this.cdp.send("Target.setAutoAttach", AUTO_ATTACH).then(() => true, () => false);
+      const root = this.cdp.sendRoot ? await this.cdp.sendRoot("Target.setAutoAttach", AUTO_ATTACH).then(() => true, () => false) : false;
       this.capabilities.autoAttach = page || root;
+      // The page session's auto-attach is what brings out-of-process iframes in (paused); the root's brings popups.
+      this.page.framesAttached = page;
     }
   }
 
@@ -218,10 +248,38 @@ export class LinkNavigationGuard {
       this.onPopup(url, allowed);
       return;
     }
-    if (event.method === "Target.attachedToTarget" && !event.sessionId && this.cdp.sendIn) {
+    if (event.method === "Target.attachedToTarget" && this.cdp.sendIn) {
+      const sid: string = p.sessionId, info = p.targetInfo ?? {};
+      // The session that auto-attached it: the page, the root, or a popup or frame the guard already holds.
+      const parent = event.sessionId ? this.children.get(event.sessionId) : event.root ? undefined : this.page;
+      if (info.type === "iframe" && parent) {
+        // #4128: an out-of-process iframe (its first load was decided in its container). On a minor seat its later
+        // loads and redirect hops are held in its own session, and its own iframes are attached the same way; the
+        // hold goes in before it runs (sent in order, resume last). Adults: let go, as before.
+        if (this.options.decideFrame) {
+          const state = frameState("frame", "", sid, info.targetId, parent);
+          this.children.set(sid, state);
+          this.stats.frames++;
+          const sendIn = this.cdp.sendIn;
+          await Promise.all([
+            // Page events too: without the network hold, a commit is the fallback (sent back to about:blank).
+            sendIn(sid, "Page.enable"),
+            sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
+            sendIn(sid, "Target.setAutoAttach", AUTO_ATTACH).then(() => { state.framesAttached = true; }),
+            p.waitingForDebugger ? sendIn(sid, "Runtime.runIfWaitingForDebugger") : undefined,
+          ].map((r) => Promise.resolve(r).catch(() => undefined)));
+          return;
+        }
+        if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
+        return;
+      }
+      if (event.sessionId) {
+        // Anything else a popup or frame attached (a worker): let it run.
+        if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
+        return;
+      }
       // Layer 2: a target this page created (root or page auto-attach). A popup gets the page's main-frame rules for
       // its whole life, installed before it runs; a target that is not this page's popup is let go at once.
-      const sid: string = p.sessionId, info = p.targetInfo ?? {};
       const mine = info.type === "page" && info.targetId !== this.cdp.targetId && (!event.root || !this.cdp.targetId || info.openerId === this.cdp.targetId);
       if (event.root && !mine) {
         if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
@@ -230,17 +288,19 @@ export class LinkNavigationGuard {
       }
       if (mine) {
         this.stats.popups++;
-        const state = frameState(this.page.current, sid, info.targetId, true);
-        this.popups.set(sid, state);
+        const state = frameState("popup", this.page.current, sid, info.targetId);
+        this.children.set(sid, state);
         // Sent together, in order, with the resume last: a session processes its commands in order, so the hold is in
         // place before the popup runs. Awaiting each reply first would deadlock a `noopener` popup, whose
         // `Page.enable` does not answer until the popup is resumed.
         const sendIn = this.cdp.sendIn;
         await Promise.all([
           sendIn(sid, "Page.enable"),
-          sendIn(sid, "Fetch.enable", DOCUMENTS),
+          sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
           // The same popup paths inside the popup, on a minor seat (a popup must not open a further popup unseen).
           this.options.interceptPopups ? sendIn(sid, "Page.addScriptToEvaluateOnNewDocument", { source: POPUP_INTERCEPT_NO_BINDING }) : undefined,
+          // A popup's own out-of-process iframes (#4128), on a minor seat.
+          this.options.decideFrame ? sendIn(sid, "Target.setAutoAttach", AUTO_ATTACH).then(() => { state.framesAttached = true; }) : undefined,
           p.waitingForDebugger ? sendIn(sid, "Runtime.runIfWaitingForDebugger") : undefined,
         ].map((r) => Promise.resolve(r).catch(() => undefined)));
         return;
@@ -248,9 +308,15 @@ export class LinkNavigationGuard {
       if (p.waitingForDebugger) await this.cdp.sendIn(sid, "Runtime.runIfWaitingForDebugger").catch(() => undefined);
       return;
     }
-    if (event.method === "Target.detachedFromTarget" && !event.sessionId && typeof p.sessionId === "string") { this.popups.delete(p.sessionId); return; }
-    const state = event.sessionId ? this.popups.get(event.sessionId) : event.root ? undefined : this.page;
+    if (event.method === "Target.detachedFromTarget" && typeof p.sessionId === "string") { this.children.delete(p.sessionId); return; }
+    const state = event.sessionId ? this.children.get(event.sessionId) : event.root ? undefined : this.page;
     if (!state) return;
+    if (event.method === "Page.frameNavigated" && p.frame?.parentId) { await this.subframeCommitted(state, p.frame); return; }
+    if (event.method === "Page.frameDetached" && p.reason === "swap" && this.options.decideFrame && !state.fetchHeld && !state.framesAttached) {
+      // A frame of this session went out of process, where nothing here can hold or watch it: fail closed.
+      this.options.onFrameUnheld?.();
+      return;
+    }
     if (event.method === "Page.frameNavigated" && p.frame && !p.frame.parentId) {
       state.mainFrame = p.frame.id; state.current = p.frame.url ?? state.current;
       if (state === this.page) this.options.onCommit?.(state.current);
@@ -273,8 +339,9 @@ export class LinkNavigationGuard {
       // A popup refused before it showed anything is closed.
       if (state !== this.page && state.popupFirst && state.targetId) await this.cdp.send("Target.closeTarget", { targetId: state.targetId }).catch(() => undefined);
     };
-    const mainFrame = !state.mainFrame || p.frameId === state.mainFrame;
-    if (!mainFrame || p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
+    if (p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
+    // #4128: a subframe document (an iframe in this page or popup, or any document of an out-of-process iframe).
+    if (state.kind === "frame" || (state.mainFrame && p.frameId !== state.mainFrame)) { await this.subframeRequest(state, requestId, url, p.frameId); return; }
     const redirectFrom = typeof p.redirectedRequestId === "string" ? state.hops.get(p.redirectedRequestId) : undefined;
     state.hops.set(requestId, url);
     if (state.hops.size > 200) state.hops.delete(state.hops.keys().next().value as string);
@@ -286,7 +353,7 @@ export class LinkNavigationGuard {
     const from = redirect ? (redirectFrom ?? state.current) : state.current;
     // A popup's first document is judged against its opener; after that, like every later move, it is decided when it
     // leaves the origin. Only the page has Studio-started navigations to exempt (recorded before Studio sends them).
-    // The tab's own first load (openStudioTab), once and only before anything committed; else a recorded loaderId.
+    // The tab's own first load (openStudioTab), once and only before anything committed; else this tab's record.
     let studio = false;
     const firstLoad = state === this.page && !redirect ? this.firstDocument : undefined;
     if (state === this.page && !redirect) this.firstDocument = undefined;
@@ -300,6 +367,45 @@ export class LinkNavigationGuard {
     }
     const allowed = await this.hold(url, go, stop);
     if (first && !redirect) { state.popupFirst = false; this.onPopup(url, allowed); }
+  }
+
+  /**
+   * #4128 — the subframe rule (minor seats): a document of another origin than the top page it is drawn in is decided
+   * by `decideFrame`, with no dialog; every load and every redirect hop is judged the same way. Refused: the request
+   * fails (`BlockedByClient`, the frame shows Chromium's blocked page) and the page stays. Fail closed: when the
+   * container cannot attach its out-of-process iframes, a cross-site frame's later loads could not be held, so a
+   * cross-site subframe is refused there even when the list admits it. Same-origin frames, and adults, load.
+   */
+  /**
+   * #4128 fail closed when this session has no network hold (a minor seat only): a cross-site subframe that committed
+   * off the list is sent back to `about:blank` (`Page.navigate` with its frameId; for an out-of-process iframe this is
+   * its own session). It may have loaded for a moment, which is why the network hold is the rule and this the fallback.
+   * If the frame cannot be sent back, the host closes the tab.
+   */
+  private async subframeCommitted(state: FrameState, frame: { id?: string; url?: string }): Promise<void> {
+    const url = frame.url ?? "";
+    if (!this.options.decideFrame || state.fetchHeld || !/^https?:/i.test(url) || sameOrigin(url, topOf(state).current)) return;
+    let allowed = false;
+    try { allowed = await this.options.decideFrame(url); } catch { allowed = false; }
+    if (allowed) return;
+    this.stats.framesRefused++;
+    const ok = await this.sendTo(state, "Page.navigate", { url: "about:blank", frameId: frame.id }).then(() => true, () => false);
+    if (!ok) this.options.onFrameUnheld?.();
+  }
+
+  private async subframeRequest(state: FrameState, requestId: string, url: string, frameId: unknown): Promise<void> {
+    const go = () => this.sendTo(state, "Fetch.continueRequest", { requestId });
+    const top = topOf(state);
+    if (!this.options.decideFrame || sameOrigin(url, top.current)) { this.stats.continued++; await go(); return; }
+    let allowed = false;
+    // Allowing a cross-site frame is safe only if its later loads can be held too. An out-of-process iframe moving
+    // itself is held right here (its own session). A new frame inside this session is held later only if this
+    // session attaches its out-of-process iframes.
+    const ownMove = state.kind === "frame" && frameId === state.targetId;
+    if (ownMove || state.framesAttached) { try { allowed = await this.options.decideFrame(url); } catch { allowed = false; } }
+    if (allowed) { this.stats.continued++; await go(); return; }
+    this.stats.framesRefused++;
+    await this.sendTo(state, "Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => undefined);
   }
 }
 
