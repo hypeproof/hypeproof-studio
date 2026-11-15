@@ -844,10 +844,24 @@ CGP-DS-R-009 (2026-10-19): in personal chat the learner chooses a text size, 기
 in the 대화 설정 dialog. Message bodies and the composer read 16/18/20px, and the reply-choice text
 inside answers grows by the same 2px steps; control heights and 44px targets do not change. The
 choice is a device preference (`globalState`, not part of any lesson or activity) and applies when
-the host confirms it. The default size adds no markup. Not built: classroom seats have no settings
-dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
+the host confirms it. The default size adds no markup. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
 variable on the shell, so every caption in the personal chat (code pills included) follows it too.
-Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport.
+CGP-SHELL-R-017 (REQ-SHELL-17, 2026-11-14) carries the same choice to the classroom chat, the help
+sheets and panels inside the chat (키보드 단축키, 새로운 기능, the lesson tip, and the classroom help-request,
+approval and lesson panels, whose fixed 15px size now adds the step, plus the mission header's sentence and the lesson
+material cards, which also had fixed sizes) and
+the start page with its 설정 sheet: the step is set on every chat shell, not only the personal one, and
+on the start page root, where every font size adds it. A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so its
+learner sets the size in the start page 설정 sheet, whose note now says "대화와 시작 화면의 글자 크기예요.".
+At 아주 크게 every surface fits a 320px pane and a 640px pane at 200% zoom without horizontal scroll or a
+clipped control; in a 320px pane at 200% (160 CSS px) the start-page footer tagline and the lesson tip's 입력창에 넣기
+action wrap. The personal
+workspace's task rail and heading stay outside the chat shell at their own sizes, as before. Kept as
+shipped, a recorded difference from REQ-SHELL-17: 16 / 18 / 20px, not 15 / 17 / 20px, and the label
+기본, not 보통 (decisions.md "CGP-SHELL-R-017"). Not covered: the entry screen shown before the start
+page connects (`.studio-disconnected`, it has no settings yet) and the separate automation,
+local-review and skill-store webviews.
+Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport. `test/text-size-reach.smoke.mjs` (CGP-SHELL-R-017) renders the start page, its 설정 sheet, the classroom and personal chat and the shortcut sheet in both seats at each size, dark and light, at 320 and 800px and at 200% zoom: every visible line computes to its base size plus the step, and no control leaves the viewport, clips its label or gets shorter.
 
 CGP-CHAT-D-002 (D65, 2026-10-20) extends this edit flow: the latest prompt's
 44px edit control has a 16px pencil and the Korean label `수정`. It remains visible
@@ -1297,7 +1311,7 @@ chips and domains, chip captions, AI disclosure, rail time and message count, ru
 host names and source policy line rise from 10-13px to 14px. Values are recorded first in
 `docs/design/studio-learning-experience.md` §디자인 시스템. The text-size choice (CGP-DS-R-009) is
 one variable: `--hp-font-step` is 0px on `:root`, and the personal shell sets 2px (크게) or 4px
-(아주 크게). The size tokens are declared on `:root, .hps-shell`, because a custom property is
+(아주 크게); since CGP-SHELL-R-017 every chat shell and the start page root set it. The size tokens are declared on `:root, .hps-shell, .studio-start`, because a custom property is
 substituted where it is declared: re-declared on the shell they pick up its step, so every token
 size inside the chat grows by the same 2px/4px, and the shell's own size is the caption step so text
 that only inherits follows as well. Control heights and 44px targets do not change; they are
@@ -1357,13 +1371,13 @@ runner bar and gallery notice, and the automation question card (`UserQuestionCa
 The naming screen's activity line (`start.css`, ChatPanel only, outside any shell) moves from .9em to
 the caption step in both seats. Side effect in the personal seat: the error-boundary screen and the
 coach-naming card draw a bare `.hps-shell`, so their inherited text grows from 13px to 14px. The
-personal rules and the personal text-size step are unchanged; the classroom keeps the base step
-(0px). DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
+personal rules and the personal text-size step are unchanged; the classroom kept the base step
+(0px) until CGP-SHELL-R-017 gave it the same step. DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
 hidden text, decorative glyphs, glyph-only buttons with an accessible name, instructor-only text and
 the unmounted VoicePanel. Not covered: the error-boundary screen's own 11-13px lines (both seats), the
 naming screen's draft-error line and update banner (drawn beside the naming card, outside any shell), the entry page (`start.css`), the automation and local-review surfaces (their own webview
 entry points), DES-CGP-DS-09 weights/tracking/upper steps in the classroom (CGP-DS-D-005 is
-personal-scoped) and the text-size choice in the classroom (CGP-DS-R-009).
+personal-scoped). The text-size choice in the classroom, listed here as not covered, landed with CGP-SHELL-R-017.
 Tests: `test/type-scale.smoke.mjs` step 7 classifies every sub-14px rule in every file the classroom
 loads (not only `styles.css`; personal-scoped and `.tw-*` selectors skip) and computes each classroom learner selector, plus inherited probes
 (CTA, bare paragraph, answer paragraph, trial line, code copy status, tools caption, citation chip,
@@ -2985,7 +2999,7 @@ dev-host 검증(자동화 셸 불가). REQ-D3(iframe 샌드박싱)은 live_serve
 
 | REQ-N9 | 미리보기 주소는 추측하지 않는다 (#507, #470 재발) | 라이브 서버는 `listen(0)` 으로 매 실행 **다른 에페메랄 포트**를 받는다(실측 2026-07-28: 58085). 그런데 그 주소가 코치 컨텍스트로 가는 통로가 **아예 없었다** — Run 버튼은 확장이 `liveServer.ensure()` 로 URL 을 직접 받아 정상이고, 코치만 알 방법이 없어 `127.0.0.1:3000` 을 반사적으로 찍고 `ERR_CONNECTION_REFUSED` 로 멈췄다(코드·프롬프트 어디에도 `3000` 은 없다 — 모델의 추측이다. 그 포트는 사용 중이라서가 아니라 **비어 있어서** 죽는다). 계약 3겹: ① **주소를 준다** — `liveServer.currentUrl()`(떠 있을 때만, 시작 부작용 없음)을 `x-hps-preview-url` 헤더로 실어 보내고(프록시=요청 헤더, SDK=`ANTHROPIC_CUSTOM_HEADERS`, 작업 폴더 #431 과 같은 통로: 워커가 클라이언트 `system` 을 통째로 교체하므로 프롬프트에 붙이는 길은 없다), 워커가 `# 미리보기 (라이브 서버)` 블록을 만든다. **문구는 워커 소유**, 클라이언트는 주소만 — 값은 루프백 http(s) 만 통과(`sanitizeLoopbackUrl`)라 주입 통로가 되지 않는다. 서버가 없으면 블록도 없다(빈 블록이 곧 추측 유도); ② **추측을 교정한다** — `resolveLivePreviewUrl`(pure): 루프백→루프백만, 서버 주소를 **알 때만**, 경로·쿼리·해시 보존. 프록시 경로는 실행 직전(`retargetLoopbackNavigation`), SDK 경로는 `resolveAlreadyOpen` 안에서(모달과 핸들러가 같은 주소를 봐야 한다). 서버가 안 떠 있는 걸 **아는** 상태에서 루프백을 요청하면 그 주소는 반드시 틀렸으므로 `startLivePreview()` 로 띄우고 진짜 주소를 연다. 호스트가 `livePreviewUrl?()` 를 지원하지 않으면(=모름) **아무것도 바꾸지 않는다**; ③ **교정했으면 말한다** — 도구 결과에 원래 주소와 실제 주소를 함께 적는다. 조용히 고치면 다음 턴에 또 추측한다. 프롬프트 안전망은 런타임별 브라우저 규약 + live-server preview 계약(도구 이름 없이 — REQ-N8 ②) | U(`test/live-preview-url` — 양성/음성 대조군 + 미지원 호스트 무회귀) + R(`worker/test/messages-integration` — 전달·음성·주입 대조군) |
 | REQ-N16 | The coach can open the learner's own localhost server and is told what it serves (#3425, extends REQ-N9 / #507, 2026-11-03) | Member report on v2026.1102.2: a server on `localhost:9000` served `homepage/` (no index.html); the coach said "브라우저 도구는 9000번을 열지 못합니다" and asked the learner to describe the screen. Cause: REQ-N9 ② rewrote **every** loopback port other than Studio's live server to the live server, and with no live server up started one instead, so no other local server could ever be opened; and no tool result named the folder or file a server serves. Contract: ① **An answering loopback port is not a guess.** Before the #507 correction (SDK `resolveAlreadyOpen` + `runBrowserOpen`, proxy `retargetLoopbackNavigation`) the requested loopback address (`127.0.0.1`/`localhost`/`[::1]`, any port) is HEAD-probed (2 s); any HTTP status means a server listens there and the address is opened as asked, without starting the live server. Only no answer keeps the #507 correction (dead guessed port → the real live server, or start it). ② **Boundary unchanged for everything else.** Only `isLoopbackUrl` addresses are probed (look-alikes such as `localhost.evil.com`, `127.0.0.1.nip.io` are external and are never probed); external sites keep the approval modal; hostile schemes stay denied; with the Curriculum Runtime switch on, CR-11 still refuses an origin outside its scope. Loopback was already auto-allowed (it is the learner's own machine, which the coach's shell can already reach), so no new reach is granted. ③ **Served-folder fact.** `browser_open` / `live_preview_start` results for a loopback address carry one line (`previewServerFacts.ts`): address and port, Studio's server or another local server, the served folder relative to the work folder, and the file at `/` — or, when the folder has no index.html, that fact plus the folder's HTML files and how to open one by name. Studio's server is described from its root on disk; another server from its answer at `/`: a directory listing whose names match exactly one folder, or a page whose bytes equal exactly one HTML file. Otherwise the folder is "확인 불가", never guessed. ④ Restoring a file (e.g. from a backup) is unchanged: a write, so plan-then-approve. Not claimed: the root of a non-Studio server whose answer matches no file (e.g. a framework dev server that rewrites HTML); installed-app observation on Windows. | U(`test/coach-localhost-preview.smoke.mjs` — real HTTP servers on 127.0.0.1: answering port opened as asked with and without a live server, dead port keeps #507, external/hostile/look-alike/CR-11 negative controls, folder without index.html named for Studio's and another server; `test/live-preview-url.smoke.mjs` unchanged) |
-| REQ-N11 | Chat links never bypass the safe browser (CGP-ART-R-008, 2026-10-19) | A link the learner clicks in chat (citation chip, classroom inbox link) goes through one exit, `openLearnerLink` → `routeExternalLink`. Minor cohorts (`browser_session.mode = "safe"`) open it in the integrated browser; before this row both paths called `vscode.env.openExternal` and left the safe session. (Correction 2026-11-04: the `persist:hp-safe` core patch that was to enforce the cohort allowlist inside the integrated browser is not in the pinned `vscodium-base` — it exists only on the fork branch `feat/306-hp-safe-session` — so the integrated browser itself enforces no allowlist; see the CGP-ART-D-008 clause below.) Every other cohort sees a modal "바깥 사이트를 열까요?" naming the host, with **열기** and **링크 복사**; only **열기** reaches the system browser. Anything but an absolute http(s) URL with a host is refused for everyone. **Fail closed**: without a loaded profile (first load, refetch, token expiry) the persisted `hypeproof.browser.safeSession` decides and an unknown value counts as safe; if the integrated browser cannot open, nothing falls back to the system browser. The chat webview has no raw `target="_blank"` anchor; the error-banner runbook link posts to the host like a citation chip. Not covered: account sign-in, pass and guardian checkout, and the learner's own published-site "열기" (`publish/publishHost.ts`), which use the system browser by design. **CGP-ART-D-008 (2026-11-04).** ① Adult dialog: the native modal's message is "바깥 사이트를 열까요?" with the host on its own line of the message (the bold line of a native modal); the detail is the full address. The host is shown whole up to 48 characters and middle-ellipsized beyond (start and registrable end kept, never fewer than 24 characters shown); buttons stay **열기** and **링크 복사** (`externalLinkDialog`). ② The learner's own loopback address (WHATWG hostname `127.0.0.1`, `localhost` or `[::1]`, so `http://2130706433/` too) opens in the integrated browser for every cohort with no dialog; look-alikes (`localhost.evil.com`, `127.0.0.1.nip.io`, `localhost@evil.com`) are external. ③ Minor blocked notice, turned on by the served profile (Jay, 2026-11-04; `safeLinkEnforced`): on only when the loaded profile marks the seat minor (`minor_cohort: true`) in the safe session (`browser_session.mode = "safe"`) with a `browser_session.allowlist` holding at least one usable entry; without a loaded profile, a persisted safe session with a persisted usable allowlist keeps it on, but those two settings are registered only by the `persist:hp-safe` core patch, so on builds without it the block is off until the profile loads (the link still opens only in the integrated browser, never the system browser). A minor seat served an empty list (or only malformed entries) keeps the integrated route rather than blocking every link, and adults are unchanged. The machine-scoped `hypeproofChat.safeLinkAllowlistEnabled` (default true) is the support override: an explicit `false` turns the block off on that machine. The Service pins every minor seat to a non-empty, well-formed allowlist in its `/v1/profile` snapshot test (hypeproof-service#321). While on, a safe-session link the cohort allowlist does not admit does not navigate, and the chat panel draws an inline alert "이 사이트는 수업에서 열 수 없어요" with the host in bold (same length rule) and **닫기**, plus **선생님께 알리기** only while this learner's class help channel is ready with no preview open. That button only appends "수업 중에 이 사이트를 열어야 해요: {host}" to the learner's own help draft (once per notice) and opens the help panel; the learner still previews and consents before anything leaves, and nothing notifies the instructor automatically (DEC-14). Allowlist entries: a bare host (`example.org`, `*.example.org`) admits that host and its subdomains; an entry with a scheme admits that origin and path prefix on a segment boundary; malformed entries admit nothing; an empty list admits nothing (fail closed). Without a loaded profile the persisted `hypeproof.browser.safeAllowlist` is used. A trailing-dot host (`example.org.`) matches like `example.org`. Chalk's `openExternal` contract op returns `{ ok: false, reason: "blocked" }` for a blocked link after the notice is drawn. With the block off, today's integrated route is unchanged. The notice is drawn beside the composer, not inside the browser tab: the BrowserTab contract has no trusted in-tab surface. **Saved allowlist and the hardened session (second core batch, 2026-11-05).** ④ Every served profile is saved in the extension's own `globalState` (`hypeproofChat.savedLinkSafety`: seat, `minor_cohort`, safe session, allowlist strings), never in settings.json. The seat is a one-way key of the token's cohort (else of the credential). Without a loaded profile (first load, refetch, token expiry) this seat's copy decides the route as its profile did, ahead of the persisted settings: a minor seat with a usable saved list stays blocked outside it, an adult copy keeps the confirm dialog, `safeLinkAllowlistEnabled: false` still turns the block off. Another seat's copy is never applied and is removed on a token change or profile reset; sign-out removes it; a later served profile replaces it. With no copy, the persisted-settings fallback above is unchanged. ⑤ A failed profile fetch writes no `hypeproof.browser.*` setting (it used to write `safeSession: false`). ⑥ The `persist:hp-safe` session ships as the Studio core patch `scripts/patches/core/hps-safe-session.patch` (ported from the fork branch, not a submodule bump), off until `hypeproof.browser.hardenedSessionEnabled` (application scope, default false; the extension writes it only as clause ⑧ says) is turned on after a real-device check. On, a seat the extension marks safe gets a session that denies every permission, cancels downloads, refuses popups and devtools, and lets a main-frame load or navigation through only for `file:`, `about:`, the learner's loopback address or an allowlist match (same grammar as above, checked by the same vectors). `safeSession`, `safeAllowlist` and the flag are application-scoped, so a workspace settings file cannot change them. ⑦ **Every tab, no exit (2026-11-07).** While on, a hardened tab offers no way to the system browser or devtools: the context menu has no "Open Link in External Browser" and no "Inspect", and the toolbar/command "Open in External Browser" is disabled and refuses to run if called directly. The workbench tells the main process at startup and on every `hypeproof.browser.*` change whether the hardened session is on; while it is, every tab the main process creates takes the hardened session: editor tabs (even without per-call options), CDP `Target.createTarget` with or without a browser context, context-menu tabs, and a reused view id; a popup child Electron made in another session fails closed. Tabs open when it turns on are closed and their pages (not blank tabs) reopened in the hardened session, where the allowlist decides; an allowlist change applies to the next navigation in open hardened tabs (a page already on screen is not re-checked). Turned off, new tabs follow upstream and hardened tabs stay hardened. Not claimed: a real-device run of the hardened session, sub-frame filtering, Korean labels for the three core settings, dragging a link out of a tab to another app, the system print dialog (`window.print()`; its PDF options hand the page to other apps), (listed in decisions.md as conditions before the flag is turned on). ⑧ **Locked for minor and safe seats (Jay, 2026-11-07).** The three settings `hardenedSessionEnabled`, `safeSession` and `safeAllowlist` come from the served profile for a seat whose profile is minor (`minor_cohort: true`) or safe (`browser_session.mode = "safe"`): each served profile saves a lock `{ hardened, safeSession, allowlist }` in the extension's `globalState` (`hypeproofChat.browserSettingsLock`); `hardened` is the served `browser_session.hardened === true` or the registered default (false today), so nothing turns the session on before the real-device check. An adult profile removes the lock; a failed fetch and sign-out keep it (only another seat's served profile replaces it). (a) The extension puts a loosened value back on every `hypeproof.browser.*` change and at startup: `false` where the lock says `true`, and any allowlist other than the served one; a stricter value (`true` where the lock says `false`) stays. Adult seats are never written. (b) The core patch does not wait for the extension: the value the workbench pushes to the main process, the value new views use, the toolbar exit's context key (`hypeproofBrowserSafeSession`, no longer a `config.` key) and the command guard all come from `hpSafeSessionOptions`, which reads that lock straight from the extension's stored state (this VS Code profile's copy, else the default profile's) and lets a setting only tighten it, with the lock's allowlist replacing the settings list. So a settings.json edit while the app runs, an edit made before the extension activates, a new VS Code profile, a workspace settings file (application scope) or a disabled extension does not turn the hardened session off or widen the list; a lock change is pushed at once. Support override: change the cohort's served profile on the Service; there is no local override on the learner's Mac. Only the allowlist can ping-pong between two windows in different VS Code profiles holding different locks (the booleans only ever go to `true`), so a list this window wrote less than 5 s ago is not rewritten at once but checked again when the 5 s have passed; the core patch enforces each window's lock either way. The chat-link fallback (no loaded profile and no saved copy, e.g. after sign-out or before another seat's profile loads) reads the lock before the settings file, so a locked seat stays in the safe route with the served list. Not claimed: a learner who edits the app's state database on disk, deletes the extension's stored state (for example with "Developer: Remove Large Storage Database Entries") and then restarts while the profile cannot be fetched, or runs the workbench with developer tools; a learner keybinding that sets the toolbar context key re-enables the button but the command still refuses; and a fresh `--user-data-dir` before its first sign-in (no seat yet, as on a fresh install) | U (`test/external-link-route.smoke.mjs`, `test/external-link-blocked.test.tsx`, `test/saved-link-safety-host.smoke.mjs`: real provider, real `ensureProfile` over a fake /v1/profile, refetch/expiry block, override, seat change, sign-out; `test/safe-session-patch.smoke.mjs`: applies to the pristine 1.116 files, default off, application scope, request filter, shipped matcher run against the extension's vectors, staging; `test/safe-session-gaps.smoke.mjs`: the patched main-process service compiled and run against stand-ins — context menu of hardened and normal tabs, CDP targets, the flip, popup child, allowlist refresh, off again — plus the workbench push and the toolbar gate; `test/browser-settings-lock.smoke.mjs`: clause ⑧, pure lock and reverts, the real provider over a fake /v1/profile putting back edits while running and before activation, sign-out and adult seats, and the patched workbench functions compiled and run against a stand-in storage holding the extension's lock) + Ubuntu worker: clauses ①–⑥, the patch applied after the fork's own patches and the other Studio core patches on the pinned VS Code tree, plus a TypeScript check of the patched tree; clauses ⑦–⑧ (2026-11-07), a full `tsc --noEmit` of the pinned 1.116 tree with this patch applied to the pristine browserView files reports the same 71 errors (all pre-existing `lib.dom.d.ts` conflicts) as the tree without it |
+| REQ-N11 | Chat links never bypass the safe browser (CGP-ART-R-008, 2026-10-19) | A link the learner clicks in chat (citation chip, classroom inbox link) goes through one exit, `openLearnerLink` → `routeExternalLink`. Minor cohorts (`browser_session.mode = "safe"`) open it in the integrated browser; before this row both paths called `vscode.env.openExternal` and left the safe session. (Correction 2026-11-04: the `persist:hp-safe` core patch that was to enforce the cohort allowlist inside the integrated browser is not in the pinned `vscodium-base` — it exists only on the fork branch `feat/306-hp-safe-session` — so the integrated browser itself enforces no allowlist; see the CGP-ART-D-008 clause below.) Every other cohort sees a modal "바깥 사이트를 열까요?" naming the host, with **열기** and **링크 복사**; only **열기** reaches the system browser. Anything but an absolute http(s) URL with a host is refused for everyone. **Fail closed**: without a loaded profile (first load, refetch, token expiry) the persisted `hypeproof.browser.safeSession` decides and an unknown value counts as safe; if the integrated browser cannot open, nothing falls back to the system browser. The chat webview has no raw `target="_blank"` anchor; the error-banner runbook link posts to the host like a citation chip. Not covered: account sign-in, pass and guardian checkout, and the learner's own published-site "열기" (`publish/publishHost.ts`), which use the system browser by design. **CGP-ART-D-008 (2026-11-04).** ① Adult dialog: the native modal's message is "바깥 사이트를 열까요?" with the host on its own line of the message (the bold line of a native modal); the detail is the full address. The host is shown whole up to 48 characters and middle-ellipsized beyond (start and registrable end kept, never fewer than 24 characters shown); buttons stay **열기** and **링크 복사** (`externalLinkDialog`). ② The learner's own loopback address (WHATWG hostname `127.0.0.1`, `localhost` or `[::1]`, so `http://2130706433/` too) opens in the integrated browser for every cohort with no dialog; look-alikes (`localhost.evil.com`, `127.0.0.1.nip.io`, `localhost@evil.com`) are external. ③ Minor blocked notice, turned on by the served profile (Jay, 2026-11-04; `safeLinkEnforced`): on only when the loaded profile marks the seat minor (`minor_cohort: true`) in the safe session (`browser_session.mode = "safe"`) with a `browser_session.allowlist` holding at least one usable entry; without a loaded profile, a persisted safe session with a persisted usable allowlist keeps it on, but those two settings are registered only by the `persist:hp-safe` core patch, so on builds without it the block is off until the profile loads (the link still opens only in the integrated browser, never the system browser). A minor seat served an empty list (or only malformed entries) keeps the integrated route rather than blocking every link, and adults are unchanged. The machine-scoped `hypeproofChat.safeLinkAllowlistEnabled` (default true) is the support override: an explicit `false` turns the block off on that machine. The Service pins every minor seat to a non-empty, well-formed allowlist in its `/v1/profile` snapshot test (hypeproof-service#321). While on, a safe-session link the cohort allowlist does not admit does not navigate, and the chat panel draws an inline alert "이 사이트는 수업에서 열 수 없어요" with the host in bold (same length rule) and **닫기**, plus **선생님께 알리기** only while this learner's class help channel is ready with no preview open. That button only appends "수업 중에 이 사이트를 열어야 해요: {host}" to the learner's own help draft (once per notice) and opens the help panel; the learner still previews and consents before anything leaves, and nothing notifies the instructor automatically (DEC-14). Allowlist entries: a bare host (`example.org`, `*.example.org`) admits that host and its subdomains; an entry with a scheme admits that origin and path prefix on a segment boundary; malformed entries admit nothing; an empty list admits nothing (fail closed). Without a loaded profile the persisted `hypeproof.browser.safeAllowlist` is used. A trailing-dot host (`example.org.`) matches like `example.org`. Chalk's `openExternal` contract op returns `{ ok: false, reason: "blocked" }` for a blocked link after the notice is drawn. With the block off, today's integrated route is unchanged. The notice is drawn beside the composer, not inside the browser tab: the BrowserTab contract has no trusted in-tab surface. **Saved allowlist and the hardened session (second core batch, 2026-11-05).** ④ Every served profile is saved in the extension's own `globalState` (`hypeproofChat.savedLinkSafety`: seat, `minor_cohort`, safe session, allowlist strings), never in settings.json. The seat is a one-way key of the token's cohort (else of the credential). Without a loaded profile (first load, refetch, token expiry) this seat's copy decides the route as its profile did, ahead of the persisted settings: a minor seat with a usable saved list stays blocked outside it, an adult copy keeps the confirm dialog, `safeLinkAllowlistEnabled: false` still turns the block off. Another seat's copy is never applied and is removed on a token change or profile reset; sign-out removes it; a later served profile replaces it. With no copy, the persisted-settings fallback above is unchanged. ⑤ A failed profile fetch writes no `hypeproof.browser.*` setting (it used to write `safeSession: false`). ⑥ The `persist:hp-safe` session ships as the Studio core patch `scripts/patches/core/hps-safe-session.patch` (ported from the fork branch, not a submodule bump), off until `hypeproof.browser.hardenedSessionEnabled` (application scope, default false; the extension writes it only as clause ⑧ says) is turned on after a real-device check. On, a seat the extension marks safe gets a session that denies every permission, cancels downloads, refuses popups and devtools, and lets a main-frame load or navigation through only for `file:`, `about:`, the learner's loopback address or an allowlist match (same grammar as above, checked by the same vectors). `safeSession`, `safeAllowlist` and the flag are application-scoped, so a workspace settings file cannot change them. ⑦ **Every tab, no exit (2026-11-07).** While on, a hardened tab offers no way to the system browser or devtools: the context menu has no "Open Link in External Browser" and no "Inspect", and the toolbar/command "Open in External Browser" is disabled and refuses to run if called directly. The workbench tells the main process at startup and on every `hypeproof.browser.*` change whether the hardened session is on; while it is, every tab the main process creates takes the hardened session: editor tabs (even without per-call options), CDP `Target.createTarget` with or without a browser context, context-menu tabs, and a reused view id; a popup child Electron made in another session fails closed. Tabs open when it turns on are closed and their pages (not blank tabs) reopened in the hardened session, where the allowlist decides; an allowlist change applies to the next navigation in open hardened tabs (a page already on screen is not re-checked). Turned off, new tabs follow upstream and hardened tabs stay hardened. Not claimed: a real-device run of the hardened session, sub-frame filtering, Korean labels for the three core settings, dragging a link out of a tab to another app, the system print dialog (`window.print()`; its PDF options hand the page to other apps), (listed in decisions.md as conditions before the flag is turned on). ⑧ **Locked for minor and safe seats (Jay, 2026-11-07).** The three settings `hardenedSessionEnabled`, `safeSession` and `safeAllowlist` come from the served profile for a seat whose profile is minor (`minor_cohort: true`) or safe (`browser_session.mode = "safe"`): each served profile saves a lock `{ hardened, safeSession, allowlist }` in the extension's `globalState` (`hypeproofChat.browserSettingsLock`); `hardened` is the served `browser_session.hardened === true` or the registered default (false today), so nothing turns the session on before the real-device check. An adult profile removes the lock; a failed fetch and sign-out keep it (only another seat's served profile replaces it). (a) The extension puts a loosened value back on every `hypeproof.browser.*` change and at startup: `false` where the lock says `true`, and any allowlist other than the served one; a stricter value (`true` where the lock says `false`) stays. Adult seats are never written. (b) The core patch does not wait for the extension: the value the workbench pushes to the main process, the value new views use, the toolbar exit's context key (`hypeproofBrowserSafeSession`, no longer a `config.` key) and the command guard all come from `hpSafeSessionOptions`, which reads that lock straight from the extension's stored state (this VS Code profile's copy, else the default profile's) and lets a setting only tighten it, with the lock's allowlist replacing the settings list. So a settings.json edit while the app runs, an edit made before the extension activates, a new VS Code profile, a workspace settings file (application scope) or a disabled extension does not turn the hardened session off or widen the list; a lock change is pushed at once. Support override: change the cohort's served profile on the Service; there is no local override on the learner's Mac. Only the allowlist can ping-pong between two windows in different VS Code profiles holding different locks (the booleans only ever go to `true`), so a list this window wrote less than 5 s ago is not rewritten at once but checked again when the 5 s have passed; the core patch enforces each window's lock either way. The chat-link fallback (no loaded profile and no saved copy, e.g. after sign-out or before another seat's profile loads) reads the lock before the settings file, so a locked seat stays in the safe route with the served list. Not claimed: a learner who edits the app's state database on disk, deletes the extension's stored state (for example with "Developer: Remove Large Storage Database Entries") and then restarts while the profile cannot be fetched, or runs the workbench with developer tools; a learner keybinding that sets the toolbar context key re-enables the button but the command still refuses; and a fresh `--user-data-dir` before its first sign-in (no seat yet, as on a fresh install) **CGP-SHELL-R-026 (2026-11-14, Jay #4090; supersedes CGP-ART-D-008's block for this scope).** One route and one dialog for every link the learner opens: chat links, citations, inbox links and Chalk runtime links, links clicked in the preview, and page-requested navigations to another site in the browser panel. Loopback opens with no dialog. A minor (safe-session) seat opens an allowlisted link in Studio's browser with no dialog and confirms every other link, which then opens in Studio's browser; nothing is blocked any more, and `hypeproofChat.safeLinkAllowlistEnabled: false` makes every external link confirm. An adult opens the system browser with no dialog unless `hypeproofChat.confirmExternalLinks` (default off) is on. **The host is the boundary for the preview:** every preview-originated open shows the confirm, for adults and minors alike, and at most one per 2 s; the page's relay acts only on a trusted click on an external anchor, which is defence in depth only, because a page script can post the same message. The dialog is Studio's `LinkConfirmDialog` in the chat (VS Code's native modal cannot make 취소 the default): the host on its own line in bold ASCII (punycode for an IDN), the decoded form and a look-alike warning for an IDN or mixed-script host, the full address wrapping, 취소 as the first focus (Enter on it and Esc cancel), 열기 and 링크 복사; userinfo is stripped. If the chat cannot show it, nothing opens. The browser panel is held through each tab's CDP session (`LinkNavigationGuard`), so no core patch is needed, and every hold is at the network layer before the request leaves: `Fetch` holds main-frame documents, and a page-requested move (link, script, meta refresh, form POST) or a server redirect hop to another origin is decided before it is sent. Popups on a minor seat: the page's `window.open`, its links and forms aimed at another window, and the script paths to them (`a.click()` on a detached anchor, a dispatched click, `form.submit`/`requestSubmit`) are replaced before its scripts run (a binding; no popup is created, an allowed address opens as a Studio tab, a form aimed at another window is stopped), and a popup that gets round that starts paused (`Target.setAutoAttach` with `waitForDebuggerOnStart`) and keeps the page's main-frame rules for its whole life: its first document is decided against its opener, and every later page-requested move or redirect hop to another origin is decided too (a popup that opens on this site and then leaves is held at the hop). A tab a page opened anyway, or a page that moved before the guard attached, is closed and asked again (`StudioTabLedger`). On adult seats popups and a move before attach are known gaps. **Fail closed:** a minor tab whose session rejects `Target.setAutoAttach`, `Fetch.enable` or `Page.enable` falls back to the old allowlist block (refuse, never confirm; without the network hold a committed move off the list closes the tab), so minors never fall below the behaviour before this row. Guards: the answer must carry the prompt's own single-use random id; a second request while the dialog is open is refused with "먼저 열린 링크 확인 창에 답해 주세요." (not stacked, not replaced); message markdown cannot draw or answer the dialog; 열기 needs a trusted click or a fresh Enter/Space on 열기 (a key held from the composer does nothing). Why not VS Code's native modal: it always makes its first non-cancel button the default (`defaultId = 0`, the close affordance moved last), so Enter would open the link. | U (`test/external-link-route.smoke.mjs`, `test/external-link-blocked.test.tsx`, `test/saved-link-safety-host.smoke.mjs`: real provider, real `ensureProfile` over a fake /v1/profile, refetch/expiry block, override, seat change, sign-out; `test/safe-session-patch.smoke.mjs`: applies to the pristine 1.116 files, default off, application scope, request filter, shipped matcher run against the extension's vectors, staging; `test/safe-session-gaps.smoke.mjs`: the patched main-process service compiled and run against stand-ins — context menu of hardened and normal tabs, CDP targets, the flip, popup child, allowlist refresh, off again — plus the workbench push and the toolbar gate; `test/browser-settings-lock.smoke.mjs`: clause ⑧, pure lock and reverts, the real provider over a fake /v1/profile putting back edits while running and before activation, sign-out and adult seats, and the patched workbench functions compiled and run against a stand-in storage holding the extension's lock) + Ubuntu worker: clauses ①–⑥, the patch applied after the fork's own patches and the other Studio core patches on the pinned VS Code tree, plus a TypeScript check of the patched tree; clauses ⑦–⑧ (2026-11-07), a full `tsc --noEmit` of the pinned 1.116 tree with this patch applied to the pristine browserView files reports the same 71 errors (all pre-existing `lib.dom.d.ts` conflicts) as the tree without it; CGP-SHELL-R-026: `test/external-link-route.smoke.mjs` (the route, IDN and mixed-script hosts, userinfo, the 2 s limiter), `test/link-confirm-host.smoke.mjs` (the request, the guard on a fake CDP session, and the real provider for chat, adult, preview including a relay-shaped message sent straight to the host, the browser panel, fail closed and Chalk), `test/link-confirm-browser.smoke.mjs` (the dialog in the real App: focus, Enter, Esc, 열기, 링크 복사, the IDN warning, wrapping at 320px, 44px buttons; the relay with a real click, an untrusted click and a same-page link; the guard on a real page with two origins), `test/saved-link-safety-host.smoke.mjs` and `test/browser-settings-lock.smoke.mjs` updated |
 | REQ-N12 | Page text sent to the coach is visible, removable and quoted as data (CGP-ART-R-007, extends REQ-N3, 2026-10-19) | After "페이지를 코치에게" the composer area shows "페이지 내용 · {host}" with the exact text that will go with the next message (trimmed, capped at 3,000 characters, the same string the model receives), whether a screenshot goes too, and **빼기**. Removing it clears the page text, screenshot and notice, so nothing from the page is sent. The model receives the page inside `<page_content source="{host}">…</page_content>` followed by an instruction to treat it as reference material and not follow instructions inside it; a closing tag inside the page cannot end the block. The chip also shows the title and full URL, because both reach the model. A later quest result or experiment capture that reuses the same slot drops the preview; switching or creating a task and clearing the conversation drop the page itself; a config post re-shows a pending chip, so page text is never sent after the webview reset it from view. The chip is host-owned (2026-10-20, with REQ-STUDIO-CHAT-FILE-ATTACH): the webview no longer clears it on send, and the host releases it only where a model turn takes the page, so a send turned away before that (activity scope, edit/tool checks, instructor hold, activity switch, turn restore, product re-test) leaves it visible instead of sending it unseen later; closing-tag variants (`</ page_content>`, no `>`, fullwidth) are defused too. Gating is unchanged (REQ-N3: minors off). CGP-ART-D-007 / DES-ART-07 (PI#2 and PI#4; ADAPT): the composer footer keeps the origin chip visible; activating that native button expands a read-only region headed “보낼 페이지 내용”, with a monospace origin, full queued text in a 3px-left-border quote, and a single scrollable panel capped at 40vh. The independent 빼기 action remains available folded or expanded. A replacement capture starts folded; task changes/removal follow existing host ownership. Shown is sent (2026-10-21): the page text, title and URL pass one sanitizer (`sanitizePageString`) before both the preview and the model text. Bidi controls, Cf format characters, every Default_Ignorable_Code_Point (variation selectors, combining grapheme joiner, Hangul/Khmer fillers, Mongolian free variation selectors, the whole tag block), U+FFF0–U+FFF8, zero-width characters and C0/C1 controls except `\n` and `\t` are removed (emoji and Korean text keep their glyphs; only the invisible selector goes); CR, U+2028 and U+2029 become `\n`. The closing-tag defuse applies to the preview too, so the visible strings are byte for byte the queued ones. `user:password@` is removed from the URL shown and sent; a page without a host (data:, about:, blob:) is labelled "주소 없음 (scheme:)", never its raw address; the title is capped at 200 characters ending in "…"; the URL is capped at 2,048 characters ending in "…" and shown as readable text only when its percent-escapes decode to safe text (otherwise it stays percent-encoded), the same string in the chip and in the model text; the folded chip's "보낼 내용 전체 보기 (N자)" counts URL, title and text together. | U (`test/page-attachment.test.tsx`, `test/page-attachment-disclosure.test.tsx`); browser layout/keyboard acceptance separately |
 | REQ-N13 | Preview failures say why, with one action (`REQ-STUDIO-PREVIEW-RECOVERY`, CGP-ART-R-009 / REQ-ART-09, DES-ART-09; extends #751 U4, 2026-10-20) | When the learner's live preview tab cannot show its page, the chat panel (personal and classroom) shows one calm cause line and exactly **one** action. The cause comes from measured signals only (`previewFailure.ts`, pure): the live server's own state for the tab's address (`LiveServer.isListening()`, the socket, not the object), the page probe (HTTP status, a refused connection, or no answer in 3 s), and the webview's `navigator.onLine`. Error text is never read. **Off is decided from the server's state only**: on Studio's current address the server is off only when its socket no longer listens (closed or crashed); on an old Studio address only when the connection is refused (nothing listens on that port). A server that is listening but answers late is **slow**, never off. Causes: **server not running** → "미리보기 서버가 꺼져 있어요." + **다시 켜기**, the existing start path (`startLivePreview` → `LiveServer.ensure`, which drops a server whose socket no longer listens and starts a fresh one on a new port, then opens one tab); **page missing** (404 from the running Studio server) → "{file} 파일이 없어서 페이지를 열 수 없어요." naming the file only (decoded first, then cut at the last `/` or `\`, so an encoded separator never shows folders; names over 60 characters are shortened in the middle and keep their extension; a folder is its index.html) + **파일 목록 보기** (Explorer); **slow** → "미리보기가 응답이 늦어요." + **다시 시도**; **offline**, only for a page that needs the network (never the loopback preview) → "인터넷 연결이 끊겨서 미리보기를 열 수 없어요." + **다시 시도**; **unknown** (any other status, or another process answering or hanging on an old port) → "미리보기를 열지 못했어요." + **다시 시도** (reloads the tab through a tab-pinned CDP session), never naming a cause or a file. The technical code sits folded under 자세히 (DES-ART-09), never in the line. The action is a 44px target with text on the type-scale tokens (≥14px), keeps a ButtonText outline in forced colors, carries no capability label; the card sits in the personal chat's 740px reading column and, in classroom chat, inset like the composer. **Whose tab:** only tabs on an address Studio's preview server served are judged — this run's addresses, or ones remembered in `globalState` (at most 20, each forgotten after 7 days). 다시 켜기 closes only tabs on addresses this run's server served; a tab Studio did not open in this run (another localhost tool, or a tab restored from an earlier run) is never closed. **Every press is answered once** with its result (`done` / `refused` / `failed`, also when measuring or the action throws), which is the only thing that re-enables the button. The host measures again on every press and refuses an action that no longer fits (`previewActionFits`); a refused or failed press shows one more line: "지금 상태와 맞지 않아 실행하지 않았어요. 위 안내를 확인해 주세요.", "미리보기 상태가 바뀌어서 실행하지 않았어요." (no card left) or "실행하지 못했어요. 잠시 뒤 다시 눌러 주세요." (including a start path that could not run, e.g. no work folder). The panel asks on mount, focus and visibility; the host pushes after a browser tab opens, closes or changes. **CGP-ART-D-009:** a Studio core patch also renders this classification in the preview tab: illustration-free, 16px cause, one 44px action focused on visible load, and collapsed `자세히` technical details. A measured 404 hides the native page even without a native load-error flag. The host binds a one-use request to the exact tab object, URL, activity/task and freshly measured action; ambiguous duplicate URLs, changed scope, token changes and disposal refuse it. Tab navigation invalidates delayed shell responses; hidden editors do not steal focus. This new restart action reuses only its requested tab and preserves the page path on the new server origin; the existing chat recovery path remains unchanged. Common native surface for all seats, no new instructor access. Remote offline browsing remains outside this known-loopback bridge. Not claimed: full native shell compilation, installed-app focus and actual native error URL behaviour. Headless rendering and extracted patched-shell methods are local evidence only. | U (`test/preview-failure.test.mjs`: causes, slow ≠ off, file names, refusal, results and lines; `test/preview-recovery-provider.test.mjs`: the real provider over real loopback ports — another tool's tab gets no card, is never closed, a refused and a failed press are answered; `test/preview-recovery-host.smoke.mjs`: real `LiveServer` over HTTP — running, 404, slow, crash, the real `ensure` restart, old port, other process, memory cap and expiry; `test/preview-recovery.test.tsx`: real `ChatPanel` in personal and classroom) + headless Chromium screenshots |
 
@@ -3597,7 +3611,18 @@ against the slice's label set (AI/Studio/올림/기록 없음 only). Cases cover
   while its bytes stay, anything else reads 기록 없음;
 - a ledger file carrying a learner-change event is rejected as damaged;
 - a lock that the label table, event kinds, host-write actors, provider and webview contain no
-  `내가 고침`, no learner-save kind and no editor save subscription;
+  `내가 고침` and no learner-save kind;
+- a save-subscription lock (`test/artifact-provenance-saves.smoke.mjs`, #4124 follow-up). A save-event subscription, in
+  any spelling (property or element access, alias, method reference, `.bind`, `.call`, a string folded from literals or a
+  template, a computed `workspace[...]` key), is allowed only in `extension.ts`, `memoryEditorSaves.ts` and
+  `previewProvider.ts`; any other file fails. In those files every save callback must be inline, and everything it can
+  reach must be a reviewed node: a module with no import route to provenance, a listed function with its reason, or a
+  listed call. A reviewed cut, such as the preview's webview message handler, is a call that does not run on the save.
+  Anything the walk cannot resolve fails, and so do: every `vscode` call that is not individually reviewed;
+  `executeCommand` always; `new` of anything but a built-in or a class from a module with no route; a function or method
+  passed as a value (`.then(fn)`, an object literal holding it); an unreviewed getter; and a reviewed name that is not
+  declared exactly once with a body. It is a closed, reviewed graph rather than a proof over the whole program, and
+  planted negatives cover every case the earlier lock missed;
 - the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
 - the hash cache and skipped Python environments.
 
@@ -6300,6 +6325,15 @@ separate from installed Studio and native OS IME acceptance.
 | REQ-CGPV-41 | PI#2 (the learner keeps visible control of what the AI says) / CGP-VOICE-041 / VO-38 / VO-42: when the engine refuses to start sound without a press (autoplay policy: the speech synthesizer's `not-allowed` error, its form of the media `NotAllowedError`), read-aloud does not pretend to be reading. The answer's button returns to `읽어 주기` (`aria-pressed="false"`), the row's status says `소리가 막혔어요.` and never `읽는 중이에요`, and one action `소리 켜기` appears. One press of it reads on from the first chunk that did not finish: nothing already heard is repeated and nothing is lost. The press goes through the served-voice gate like any read-aloud press. `소리 끄기` (REQ-CGPV-02) clears the notice, and nothing speaks while it is on. Any other engine error keeps today's silent failure, because a press cannot fix it. Voice stays inert until served: an unserved seat has no read-aloud and no notice. Today the only audio Studio plays is read-aloud through the OS voice; the voice conversation has no audio transport yet, so it has no blocked state to recover (see decisions.md). Nothing is stored or logged. | `test/voice-autoplay-blocked.test.tsx` |
 | DES-CGPV-41 | Fallback notice, autoplay part (CGP-VOICE-D-021): one sentence and one action inline in the answer's action row, not a modal. It does not move focus. The action is a real button with the answer-action target and focus ring, the speaker glyph and the words `소리 켜기`. The text uses the theme's primary ink at the caption step (14px or more) and wraps at 320px. There is no animation or transition, so reduced motion has nothing to stop. It is shown once per refusal and disappears after the press, a stop, a normal end or 소리 끄기. The VAD-failure half of D-021 (REQ-CGPV-39) is not in this slice. | `test/voice-autoplay-blocked.test.tsx` (style case); CSS `.hps-voice-blocked` in `webview-ui/src/voice.css` |
 
+## Microphone explainer before the OS prompt (CGP-SHELL-R-010 / CGP-SHELL-D-009)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-SHELL-10 | PI#2 (the learner knows why something is asked before it is asked) / PI#4 / CGP-SHELL-017. Dictation is the only Studio feature that can raise an OS permission prompt (`getUserMedia` in `src/voiceDictation.ts`). The voice capability probe runs only from its command, never at activation (`src/voiceCapability.ts`). The voice panel has no capture. **Not served, nothing asked**: a seat without served dictation never sees the card and never has the microphone requested. The composer mounts the control only when dictation is served, and the press checks it again. Minor seats follow the served policy like any seat, with no extra rule. **Nothing asks at launch or at mount**: no permission query and no `getUserMedia` until the learner presses 받아쓰기. On that press, after the served-voice gate and the disclosure sheet, the control reads the browser's microphone permission (Permissions API, `unknown` when it cannot say, 1 s at most). When it is `prompt` or `unknown`, Studio shows its own card before anything can raise the OS prompt. Only `허용하기` calls `getUserMedia`. `나중에` calls nothing, stores nothing and leaves text chat as it was. The only memory is an in-memory flag for the life of the control, with no settings, globalState or webview state. The card is shown once per dictation control, so the next press goes straight on. `granted` (no prompt will come) and `denied` (the existing denied card explains, with `마이크 설정 열기` and `글로 계속하기`) show no card. A denial after `허용하기` ends in that denied card, and the mic button stays available for a retry. | `test/voice-mic-explainer.test.tsx` |
+| DES-SHELL-09 | The explainer is an inline card in the composer's dictation status area (the same card as the other voice notes), not a modal: `role="group"`, labelled by its title. It shows the 20px mic glyph, the title `목소리로 말하려면 마이크가 필요해요` and one sentence: `허용하기를 누르면 이 컴퓨터가 마이크를 써도 되는지 물어요. 허용하지 않아도 글로는 계속 이야기할 수 있어요.`. It has one primary `허용하기`, in the accent colour, focused when the card appears, and a secondary `나중에`. It wraps at 320px and keeps the voice notes' 44px controls and forced-colours borders. | same |
+
+Not covered: the desktop app's own OS purpose string (`NSMicrophoneUsageDescription` in the macOS bundle) still comes from VSCodium. Changing it needs a `vscodium-base` patch and a full build, so it is left to a separate change.
+
 ## Class window notice (CGP-SHELL-R-025)
 
 `REQ-STUDIO-CLASS-WINDOW` (PI#4, PI#1; REQ-B5): the chat rail shows a passive
@@ -7148,8 +7182,8 @@ The tip may expose FRAMING and JUDGMENT behaviour (whether a learner uses or edi
 help); showing, using or dismissing it is not recorded as evidence and is not a learning outcome.
 Presentation (design CGP-CHAT-D-021 / CGP-CHAT-D19): the tip is one row element in the
 composer column's flow, never positioned over the composer; at chat-column widths (800px and
-up) the 도움말 badge, the text and both buttons share one line, and a narrow panel (320px) may
-wrap the two buttons under the text inside the same row (44px targets win over a single visual
+up) the 도움말 badge, the text and the buttons share one line, and a narrow panel (320px) may
+wrap the buttons under the text inside the same row (44px targets win over a single visual
 line). However long the hint is, the text is clamped to two lines, so the row stays above the
 composer and the composer stays on screen at every text size. Under forced colours the row keeps
 a CanvasText border and the buttons use ButtonText/GrayText.
@@ -7158,6 +7192,47 @@ Validation: `lesson-tip.test.tsx` (source, hygiene, keys, dismiss bound, prefill
 `FOCUS_REQUIRE_BROWSER=1` without a browser), which also covers the instructor console, an
 unavailable seat, a rehearsal, a pending send (posted, not yet started, then rejected), a
 twelve-line hint at 320/800/1420px with base and xlarge text, and forced colours.
+
+### Turning lesson tips off (CGP-SHELL-R-019)
+
+REQ-SHELL-19 / CGP-SHELL-035 / PI#4 (the learner decides how much help the screen offers; it may
+expose OWNERSHIP): the tip row has a third, quiet action, `팁 그만 보기`, after `입력창에 넣기`.
+Pressing it turns every lesson tip off for this learner: in every step, task and window, until the
+learner on this seat turns tips on again. It hides only this row. The lesson's steps, instructions, mission
+header, the rail's 힌트 보기 and anything an instructor marked as required stay as they are.
+The choice belongs to one learner, not the computer (classroom PCs are shared): the host's
+globalState key `hypeproofChat.lessonTips` (`src/lessonTips.ts`) holds the seats that turned tips
+off on this computer, keyed by the same seat id as the collapsed learning blocks (`collapseSeat`:
+the Service seat id, else the lesson capability receipt, else the local activity). A seat not on
+the list sees tips, so another learner on the same window starts with tips on; an empty seat keeps
+its choice in memory only and loses it on any seat switch. It is written only from a boolean
+`setLessonTips` message, bounded to 200 seats, never synced, logged or sent to the Service, and
+reaches the chat as `config.lessonTips`. The off note never carries over to another seat. Right after the press the row is replaced by a
+`role="status"` line, `팁을 껐어요. 여기 다시 켜기로 언제든 다시 켤 수 있어요.`, whose `다시 켜기`
+(focused) turns tips back on. The choice is never one-way: after the next send, and after a reload,
+every hinted step shows one quiet line in the tip's place, `팁을 꺼 두었어요.` with `다시 켜기` (no live
+region, so it is not re-read). The chat's settings dialog of a lesson seat (opened from the access
+chip) has a lasting `팁 보기` checkbox with the hint `수업 단계의 도움말을 입력창 위에 보여 줘요.`, bound
+to the host's `lessonTipsState()` / `setLessonTips()`; a seat without a lesson has no such switch.
+The start page's 팁 보기 row (CGP-SHELL-R-014) uses the same host methods and is added by that row's
+follow-up. `setLessonTips` refuses a non-boolean (`refused`, nothing changes) and says whether
+the choice was `stored` for the seat or kept `memory-only` (no seat known yet, or an empty seat), so a
+caller can tell the learner it was not saved. The host takes the seat only in a config build that passed its staleness check, so a
+press never lands on a previous seat. Per-step 닫기 is unchanged. Seats
+without a served lesson, hintless steps and the instructor console draw no tip and no action.
+Not built (needs Jay, decisions.md): REQ-SHELL-19's "at most once per session and only after an
+observed trigger (e.g. 3 failed runs)". It contradicts the owner decision that a step's hint shows
+from the start.
+Validation: `lesson-tips-off.smoke.mjs` (actual App in headless Chromium, 18 cases: one off write and
+the way back; off hides every tip but never the lesson or the rail's 힌트 보기; the quiet 다시 켜기
+line after a send and after a reload; a seat switch drops the note; the settings switch reads and
+writes the seat; 닫기 unchanged; negative controls; 44px/14px/focus ring in Dark+/Light+ at
+320-1420px and 4.5:1 ink with visible edges in HC Dark, HC Light and forced colours; red on main;
+mutants for a one-way off, a hidden 힌트 보기 and a note that survives a seat switch are caught) and
+`lesson-tips-host.smoke.mjs` (the provider's own `LessonTipsPreference` over a fake globalState:
+learner A off, learner B on the same window still on, A again off; empty seat memory-only and
+reset on a switch; junk is on; bounded; never synced; the seat is taken after the staleness
+check; a seat-blind control fails it).
 
 ## Find in chat (CGP-CHAT-R-027)
 
@@ -7501,13 +7576,31 @@ between key caps only in a window 480px wide or narrower, so the table keeps two
 |---|---|---|
 | Enter | 메시지 보내기 (답하는 중에 누르면 끝나고 보내도록 예약해요) | composer key handler, #416 queue; nothing while the composer is read-only |
 | Shift + Enter | 줄 바꾸기 | the textarea's own newline |
+| Esc | 답변 멈추기 (답하는 중에 눌러요. 메뉴나 창이 열려 있으면 그것부터 닫아요) | `chatKeys.ts` `useChatKeys`, every ChatPanel seat: the same stop as the stop button (a parked message goes back to the draft), only while an answer streams |
+| Alt + Shift + K (macOS ⌥ Option + ⇧ Shift + K) | 입력창으로 가기 | `chatKeys.ts` `useChatKeys`, every ChatPanel seat, matched by the physical K key; not under a dialog or in an IME composition |
 | Esc | 열린 창·메뉴 닫기 | dialog, menu and panel focus contract |
 | Cmd + F (macOS) / Ctrl + F | 대화에서 찾기 (찾기 칸에서 Enter는 다음, Shift + Enter는 이전 결과) | ChatFindBar (CGP-CHAT-R-027), every ChatPanel seat |
 | Alt + Shift + J | 대화로 바로 가기 (작업 화면 안에서 눌러요; listed only while the personal task layout is shown) | TaskWorkspace (CGP-AGENT-D-019), focus inside the task layout |
 | ? | 이 단축키 목록 열기 (입력창 밖에서) | this sheet |
 
-Not listed because nothing binds them yet: Esc to stop an answer (Stop stays the button) and a
-focus-the-composer key. Cmd/Ctrl+Z in the sketch dialog is that dialog's own key and is not
+**Esc has many owners, and stopping an answer comes last** (CGP-CHAT-R-030, 2026-11-14). Esc stops only while an answer
+streams, and only when all of these hold:
+- the Escape has no modifier, is not a repeat and is not part of an IME composition;
+- it starts in the composer's text box or in a non-text place in the chat, not in another text field, the find bar, the
+  voice panel, a dialog, a menu or a list;
+- no dialog, open menu or list, dictation recording or microphone card (`.hps-voice-card`: mic denied, recovered
+  text) is on screen;
+- no other listener handled it. The stop decision waits until the whole dispatch has finished, so an owner that calls
+  `preventDefault` after the chat's own listener still keeps its Escape. An Escape pressed while a tooltip is on screen
+  closes the tooltip only and the answer keeps running. The chat notes the tooltip in a window-capture listener, which
+  runs before `tooltips.ts` hides it; the event is not consumed, so every other Escape owner is unchanged.
+
+Tests: `test/chat-keys.test.tsx` (the guard on the real `DictationNoticeView` markup), the same file (a
+press that met the real tooltip is noted and not consumed) and `test/shortcut-sheet-browser.smoke.mjs` (on the real App:
+a message parked during the stream is back in the composer after Esc, and not sent).
+
+Alt+Shift+K has no VS Code default and no OS default on macOS or Windows, and sits beside the chat's Alt+Shift+J and
+Alt+Shift+M. Cmd/Ctrl+Z in the sketch dialog is that dialog's own key and is not
 listed in the chat sheet. A row is added in
 `webview-ui/src/chatShortcuts.ts` in the same change that binds its key. The sheet does not
 read the VS Code keybinding editor and does not reflect user rebinding (REQ-CGPV-29 asks for
@@ -7520,7 +7613,9 @@ colours; opens from settings and from `?`, not from the composer or with a modif
 composition; the listed rows equal the bound set and each listed key is pressed on the real
 panel with real key input: Enter sends, Shift+Enter inserts a line break without sending, Esc
 closes, Cmd+F (macOS) or Ctrl+F (Windows) opens find and the other platform's modifier does not,
-Alt+Shift+J focuses the conversation, `?` opens; the computed table has two columns side by side
+Alt+Shift+J focuses the conversation, Alt+Shift+K focuses the composer, Esc stops a streaming answer from the composer and
+does nothing without a stream, while the find bar or the sheet takes the Escape, in an IME composition, with Shift, or
+when a later listener handles it, `?` opens; the computed table has two columns side by side
 in every row at every width, key caps on one line at 800px and wider, Tab and Shift+Tab stay in
 the sheet; 44px entry and close, >=14px text,
 opaque surface inside the viewport, outlined key caps). It fails under
@@ -7658,6 +7753,94 @@ and mouse events, the accessibility tree inside the bar, line boxes and clipping
 personal and classroom, dark/light, 320/1420 px). This serves PI#1 (useful work first: the learner learns why a save may fail
 before losing work) and the access principle that limits never hide or take away the
 learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
+
+## Busy banner (CGP-AGENT-R-031)
+
+REQ-CGP-AGENT-66 / CGP-AGENT-R-031 / DES-CGP-AGENT-66 / CGP-AGENT-D-027 / PI#4 / ADAPT:
+while the AI side is struggling, Studio says so before the learner sends, calmly, and
+never stops them from sending.
+
+- Signal: the Service serves `GET /v1/service-status` → `{"busy": true|false}` to an
+  authenticated participant seat only (hypeproof-service#465). It is derived from the
+  upstream failures learner turns already meet (429, 529, 5xx and unreachable, not a
+  learner's own Stop), over a short window. The body names no provider, model, status
+  or count, and the public `/health` carries no such flag.
+- When Studio asks: the panel asks on mount, when it comes back into view, on window
+  focus, and once a minute while the view is visible and the window is focused. The host
+  asks only for a signed-in participant seat on the Service (no token, a local coach, or an
+  instructor or issuer seat asks nothing, because the route answers 401 to an issuer token), and never more than once a minute: a remount inside that minute (a task switch, the panel
+  coming back) re-posts the last answer without asking again. After an error (network, timeout, 5xx)
+  the wait doubles up to 15 minutes and a good answer returns it to a minute. When the Service
+  has no such route (404), that seat stops asking until its token or the Service address changes.
+  A 401 or 403 is an error and backs off like one: a 403 `session_inactive` clears when the class
+  opens with the same token. An
+  unchanged answer is not re-posted, and concurrent asks share one request
+  (`src/serviceStatus.ts`, `ChatPanelProvider.refreshServiceStatus`).
+- Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,
+  a 5-second timeout, a 401, a 404 from a Service without the route, or a malformed body
+  reads as not busy. The offline banner (CGP-SHELL-R-011) covers a lost network.
+- What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요", and one
+  close button ("붐빔 알림 닫기"). It is `role="status"`. It
+  leaves on its own when the Service reads healthy and comes back if busy returns. Closing it
+  hides it for that busy episode: the host keeps the closed state with the last answer, so a
+  remount (a task switch) re-posts it closed. The episode ends only when the Service answers
+  healthy (a 200 with `busy: false`); an error answer hides the banner but keeps it closed for
+  the episode. The next busy episode shows the banner again. Focus returns to the composer.
+- Not: it never holds a send, disables the composer, names a provider or a cause, or
+  replaces the stall watchdog (REQ-M26), which still handles a turn that does not answer.
+- Design (DES-CGP-AGENT-66): an amber edge (`--hp-border-warn-default`) on the widget
+  background, one line of text at least 14px from 320 to 1420 px, a 44px close with the
+  shared focus ring, no animation or transition at all (so reduced motion needs no
+  override), and in forced colours the edge becomes a text-coloured line and the ring
+  stays.
+
+Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
+fail-quiet fetch with positive and negative controls, outcomes and backoff; the real
+`ChatPanelProvider` for busy, dedupe, recovery, the minimum interval, backoff and its cap,
+the 404 stop and 401/403 backoff (a 403 that clears with the same token), remount, shared requests, a seat without a token,
+instructor and issuer seats that never ask (control: a participant seat with the same token does), and a dismissal that
+survives remounts for the busy episode and ends when the Service reads not busy) and
+`busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
+classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
+44px close, focus ring, Enter still sends, healthy removes it, closing tells the host, and after a remount the host's
+`dismissed` keeps it closed (control: busy without `dismissed` shows it); fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser). The installed app against the
+deployed Service is NOT RUN.
+
+## Lesson skill shelf (CGP-AGENT-R-020)
+
+REQ-CGP-AGENT-36 / CGP-AGENT-R-020 / DES-CGP-AGENT-36 / CGP-AGENT-D-017 / PI#1 / PI#3: Jay approved this on 2026-11-14.
+A lesson can offer the learner up to six skill cards. An instructor authors them in Chalk (CH-13: a name, a one-line
+summary and a starter prompt), and they are frozen with the lesson version (`skill_cards`, hypeproof-service#488).
+
+- Source: `/v1/profile` serves `skill_cards` only when the frozen lesson has them. Studio re-validates them
+  (`src/lessonSkillCards.ts`) and skips anything malformed:
+  - more than 6 cards;
+  - a name over 30 units, a summary over 80, or a prompt over 300 units or 6 lines;
+  - control, bidi or zero-width characters;
+  - a link, by the Service's `hasLink`. It applies NFKC and folds colon look-alikes, then refuses `<scheme>://`, a
+    known scheme directly followed by `:` (http(s), ftp(s), javascript, vbscript, data, file, blob, mailto, tel,
+    sms, intent, about, vscode*, hypeproof*, x-*; marks stripped and Cyrillic/Greek look-alikes folded), a bare
+    `http:`/`https:`, `www.` plus a domain, and `//` plus a host. Coding text with colons passes (`color:red`,
+    `a:hover`, `std::cout`, `C:\Users`, `//주석`, `Q:답`). The cases live in `chalk/test/fixtures/link-cases.json`;
+  - a duplicate name.
+- What: a collapsed "이 수업의 스킬 (N)" disclosure above the composer, after the starter chips. Each card
+  shows its name and summary and one "써 보기" button ("써 보기: <name>"). It stays after the learner's first
+  message (unlike starters). Instructor surfaces draw no shelf.
+- 써 보기 puts the card's starter prompt into the draft through the same rule as a starter chip: a manual draft is
+  kept, a second press replaces the first card's text, and nothing is sent.
+- Not: no install, enable, delete or source control, and no "보기". The coach's SKILL.md and `Profile.skills` are
+  never shown. The cards never reach the coach. The Service drops them from the coach's lesson JSON, and the dev
+  local runtime drops them too (`devCoachVisibleLesson`).
+- A lesson without cards renders byte-identical to before.
+- Design (DES-CGP-AGENT-36): one column at every width, 44px summary and buttons, 14px text, tokens only.
+
+Evidence:
+- `extensions/hypeproof-chat/test/lesson-skill-cards.test.tsx`: the real ChatPanel on the minimal DOM. It covers
+  placement and collapse, the controls, insert without send, the manual draft, the shelf staying after a send,
+  byte-identity without cards, the reader's refusals, HTML as text, no instructor shelf, and the CSS floors.
+- `test/local-runtime.smoke.mjs`: the dev prompt carries no card text.
+- The installed app against the deployed Service is NOT RUN.
 
 ## Browser downloads (CGP-KNOW-R-021)
 
@@ -8187,8 +8370,9 @@ stale one opens nothing). The sheet lists at most six rows, in the order REQ-SHE
 behaviour exists in the build (DEC-SHELL-R014):
 
 - 글자 크기 — a 기본 / 크게 / 아주 크게 list, the same device preference as the personal chat settings
-  (CGP-DS-R-009, `hypeproof.textSize`); the row says it is the size of personal-activity chat text.
-  An open chat picks the change up at once.
+  (CGP-DS-R-009, `hypeproof.textSize`); since CGP-SHELL-R-017 it applies to every chat seat and the
+  start page itself, and the row's note says "대화와 시작 화면의 글자 크기예요.". An open chat and the
+  start page pick the change up at once.
 - 움직임 줄이기 — a 기기 설정 따르기 / 줄이기 / 줄이지 않기 list, written to `workbench.reduceMotion`
   (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
 - 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
@@ -8524,6 +8708,10 @@ carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`
    A failed refresh keeps the last known status and shows the Service's Korean sentence (`role="alert"`).
 4. Nothing in Studio deletes anything. The Service records the request; an operator processes it by hand.
    The host logs nothing about it and touches no file.
+5. Local copies a request does not reach, because they never leave the device: the memory quarantine of keep-off turns
+   (REQ-STUDIO-TASK-MEMORY-SWITCHES, `memory-quarantine/` in the extension's global storage). It keeps at most 200 copies,
+   200 moved files and 1,000 of the learner's own displaced originals per activity, and seven days. It is removed with its task when the task is archived or moved, and it is never uploaded
+   or logged.
 
 Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
 `worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (by DEC-23's interim guardian half, Jay 2026-11-14, an operator or support handles them by hand outside the product until the guardian account GRD-12 exists), status after the
@@ -8794,8 +8982,7 @@ no host message, saved work kept, quiet 44px/14px buttons, disabled colour and d
 
 REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
 REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
-it back. **Partial:** this covers only (c) "접기". The report half, (a) and (b), is not built: the "자료가 틀린 것 같아요" item,
-its optional field and the report reaching the lesson's instructor in Chalk. That half needs a Service and Chalk route.
+it back. This row covers (c) "접기". The report half, (a) and (b), is REQ-STUDIO-LEARNING-BLOCK-REPORT below.
 
 The open 자료 card has a 자료 메뉴 button in its head, after 닫기. It is a quiet 44×44 button, named "자료 메뉴: <block title>",
 with `aria-haspopup="menu"`. The closed card keeps DES-CGP-LEARN-01's one row and has no menu button, because a fourth head
@@ -8835,6 +9022,70 @@ Evidence:
   - another step and a new lesson version are shown;
   - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
 - `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
+
+REQ-STUDIO-LEARNING-BLOCK-REPORT / REQ-CGP-LEARN-11 (a) and DES-CGP-LEARN-11, report half (traces to
+REQ-STUDIO-LEARNING-BLOCK-COLLAPSE, CGP-LEARN-R-011) / PI#2: a learner can tell the class instructor that a learning block looks
+wrong, and the instructor learns which block it was without reading anything the learner wrote.
+
+The open card's 자료 메뉴 gains "자료가 틀린 것 같아요", before 접기, only while this window has a live class connection to a
+Service that stores material reports. The inbox view must have a run, be neither offline nor ended, and carry `reports`.
+The host sets `reports` only after the Service's sync answer names `material_report` in `event_kinds`, which it sends to a
+device that declares the `material_report` capability. Without that, there is no instructor to reach, or the Service would
+drop the report, so the item is not drawn. Instructor windows and rehearsals never draw it. The item opens the report inline, as a row under the card head, never as a
+modal. The row asks "어떤 점이 이상한가요?" and offers three reasons as native radios in 44px labels at a 14px floor: 내용이 틀려요,
+열리지 않아요, 이해하기 어려워요. Focus moves to the first reason. A note says "어떤 자료인지와 고른 이유만 선생님께 가요. 대화 내용은
+가지 않아요." "선생님께 보내기" stays disabled until a reason is picked, and "취소" or Escape closes the row with focus on the
+menu button.
+
+**There is no text field, for any seat.** DES-CGP-LEARN-11's optional 0–300 character field is deferred (decisions.md
+CGP-LEARN-R-011 (a)). The class board this goes to never carries a learner's words, and an optional field would break that.
+
+The webview posts `{ type: "materialReport", stepId, reason }` and nothing else. The host builds the payload from the served
+lesson only (`lessonFocus.ts` `materialReportPayload`):
+- the course, version and step;
+- the block type and pinned version of the block that step draws;
+- the reason.
+
+A step that draws no block, or an unknown reason, gives nothing. The host queues the payload as a classroom-ops
+`material_report` event with actor student (`ClassroomOpsHost.materialReport`). It then waits up to 15 seconds for the
+Service's outcome for that event's seq in the sync answer (`material_reports`). **A queued report is never called sent.**
+- `accepted` → "sent": the row closes, the toast "선생님께 전달했어요" is announced in the polite live region, and focus returns to
+  the menu button.
+- `duplicate` → "already": the Service already holds this learner's report of that block. The row closes, and the toast says
+  "이미 선생님께 전달한 자료예요".
+- `capped` → the row stays and says "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요."
+- No answer in time, or the connection dropped → "unconfirmed": the row stays and says "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시
+  뒤 다시 보내 보세요." Sending again is safe, because a report the Service already has comes back as "already".
+- `rejected` (the connection is fine, but the Service refused this report, for example because the lesson on this
+  computer is not the class's lesson) → "rejected": the row stays and says "이 자료는 선생님께 보낼 수 없었어요. 선생님께 직접
+  말해 주세요."
+- No connection, a Service that does not store the kind, or a refused outbox → "not_sent": the row stays and says
+  "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요."
+- An outcome that arrives while the report is still being queued (the sync loop can send it before the outbox write
+  returns) is kept by seq and given to that report, never dropped as unconfirmed.
+
+The report is not work, not evidence and not a spool line, and it carries no transcript. The Service lists it
+on the run's instructor board, and Chalk `/manage` shows it as "자료 신고" (hypeproof-service material_report; Chalk
+`chalk/test/material-report.test.mjs`). Seats: classroom seats with a live class connection. Default: on.
+
+Evidence:
+- `extensions/hypeproof-chat/test/learning-block-report-browser.smoke.mjs` runs in headless Chromium with real key events,
+  light and dark, at 800 and 1420px. It checks:
+  - with no connection, an offline one, an ended one, or a Service that does not store the kind, the menu holds only 접기 (the control);
+  - the inline row has no dialog, nothing positioned and no text field, three 44px/14px radios, focus on the first and a focus ring;
+  - opening it sends nothing, and the post is exactly a step and a reason;
+  - "not_sent", "capped" and "unconfirmed" are said with no toast, and another lesson's answer is ignored;
+  - "sent" and "already" close it with their polite announcement, and "sent" returns focus to the menu button;
+  - Escape closes it, and a dropped connection removes the item and the open row.
+- `extensions/hypeproof-chat/test/learning-block-report-host.smoke.mjs` runs the pure payload with positive and negative controls
+  against the Service allowlist. It drives the real `ChatPanelProvider.handleMessage`, which drops webview-supplied block fields
+  and text, records no spool line and maps each Service outcome (only `accepted` is "sent"). The sync loop hands every 200
+  answer of its own stream to the host. The real `ClassroomOpsHost.materialReport` answers with the outcome for its own seq:
+  an older Service that does not name the kind, a rejected seq, a timeout and the real `stopConnection` are never "sent".
+- `extensions/hypeproof-chat/test/learning-block-report-gate-host.test.mjs` runs the real `ClassroomOpsHost` with fetch
+  intercepted: the device declares `material_report` on connect and every sync; the inbox view offers reports only after
+  a sync answer names the kind (never for an older Service, withdrawn when a later answer stops naming it); and after a
+  disconnect, the next connection offers nothing before its own first answer.
 
 ## Activity memory state line (CGP-KNOW-R-022)
 
@@ -9362,6 +9613,150 @@ REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-USE.
   `test/memory-remember-tool.smoke.mjs` (the tool on both runtimes, the real provider, class refusal, traversal and oversize,
   a minor seat, persisted undo, the oversized replaced file).
 
+## Task memory switches: use memory / remember this task (CGP-KNOW-R-028, CGP-KNOW-D-028)
+
+`REQ-STUDIO-TASK-MEMORY-SWITCHES` implements REQ-KNOW-46 / DES-KNOW-46. PI#2 (the learner sees and decides what the AI
+keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMORY-USE and the memory write line above.
+
+- **Where.** In the personal settings dialog, under the memory list, a group `이 작업의 기억` holds two native
+  checkboxes with visible labels: `이 작업에서 기억 쓰기` and `이 작업을 기억에 남기기`. Each has a one-line hint, a
+  44px row and the caption step, and none uses a physical box property. The host draws the group only where the memory
+  store binding exists (personal and trial activities, minors included) and the open task is an ordinary one. An
+  instructor, a class or lesson seat, or a `기록 없이 묻기` task gets no group; a temporary task keeps its own no-write
+  rule (R-029).
+- **Defaults.** Both switches are on, which is today's behaviour. No Service profile key serves other defaults yet, so
+  none is read.
+- **기억 쓰기 (use).** Off: the task's requests carry no memory (`takeMemoryContext` returns nothing before reading the
+  store). In the Agent SDK runtime the coach's own `Read`, `Grep`, `Glob` and `NotebookRead` are also denied, with
+  `이 작업에서는 기억을 쓰지 않게 해 두었어요`, when their target is inside the memory folder or their pattern names
+  `.hypeproof`. A shell command naming `.hypeproof` is denied too. It is locked once the task has a message: the box is disabled, with a lock glyph and the reason
+  `첫 메시지를 보낸 뒤에는 바꿀 수 없어요. 새 작업에서 다시 정할 수 있어요.` as text tied to it (`aria-describedby`). The
+  host decides the lock from the task's own message count and refuses a locked change, whatever the webview sends.
+- **기억에 남기기 (keep).** It can change at any time. Off: no memory write comes from this task's turns.
+  - The `remember` tool is not offered.
+  - A host made earlier refuses its next call.
+  - `recordTurnMemoryWrite()` refuses (`memoryWriteRefusal`, the same path as REQ-KNOW-47).
+  - The coach's own file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) are denied in the Agent SDK runtime when
+    they target the activity's `.hypeproof/memory/`, with `이 작업은 기억에 남기지 않게 해 두었어요`. The target is
+    compared after links are resolved (the real path of its deepest existing folder) and with case folded where the OS
+    folds it (macOS, Windows), so `.HYPEPROOF/MEMORY/…` and a symlinked folder are the same folder.
+  - In the same runtime, any shell command that names `.hypeproof`, in any case and in any form of the path, is denied
+    before the policy runs. This is a coarse, deny-only string check, and it refuses reads as well as writes.
+
+  These checks run in the host, where the write happens: the webview only asks. Memory is local files, so no request
+  leaves the client either way (tested).
+
+  Each turn is bound to the task it began in, so a task switch mid-turn cannot move its writes. Turning keep off mid-turn
+  stops the next write.
+- **Storage.** `workspaceState` key `hps.taskMemory.v1`: per activity scope, per task id, the two booleans. An entry
+  equal to the default is removed. At most 50 scopes and 200 tasks per scope are kept, and the oldest go first. A
+  malformed value falls back to on. No memory text and no task title are stored.
+
+**Status: partially met.** Every known gap:
+
+- **Write side, keep off.** Not stopped by these checks:
+  - shell quote or escape splitting (`.hype''proof`, `.hype"proof"`, `.hype\proof`);
+  - interpreter one-liners (`python3 -c`, `node -e`);
+  - names built at run time (a variable, a glob, `cd` steps);
+  - the local CLI runtime's shell;
+  - a `Write` through a dangling symlink (`dangling.md -> .hypeproof/memory/ghost.md`): the link's target does not
+    exist yet, so the path check resolves only the link's own folder.
+
+  These are covered once #4059 (#4014, the turn-end check of the memory folder) lands: it puts the folder back after
+  the turn.
+- **Read side, use off.** Not stopped; this stays partial after #4014:
+  - shell reads written in any of the forms above;
+  - a search from an ancestor folder whose pattern does not name `.hypeproof`;
+  - reads by the local CLI runtime's tools.
+
+  Through any of these, memory text could reach that task's later requests.
+
+**Turn-end folder check (#4014).** A turn that begins with keep off takes a snapshot of `.hypeproof/memory/` and compares
+it when the turn ends, in every runtime: the Agent SDK runtime and the local CLI runtime share the same turn `finally`. That
+catches what the checks above cannot see: a shell command that builds the path at run time, or the local runtime's shell.
+  - **What happens to changes.** An added file is moved out of the store into a quarantine. A changed file gets its earlier
+    bytes back (written beside it and renamed over it), and the turn's version goes to the quarantine. A deleted file is
+    restored.
+  - **Studio's own changes are left alone:** every `ActivityMemory` append, restore and remove (the memory list, an undo),
+    and the learner's own save of a memory file in the editor.
+  - **The line.** One line in that turn, kept with it, names only the count: `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`.
+    It never shows memory content or a file name.
+  - **Snapshot bounds (the store's own limits). Fail closed.** Every entry's name is listed, up to 10,000, so anything
+    new the turn adds is always found and moved out. Contents are read for at most 250 entries, the store's memory-named
+    files first, and only up to the 16 KiB item size. Every entry whose content was tracked at turn start is read again
+    at the end, so a flood of new files cannot push it out of the read set and hide a rewrite. An entry past the bound at
+    turn start is tracked by name only: a change inside it cannot be seen, and the turn says `기억 폴더에 파일이 많아서 일부 파일의 바뀐 내용은 확인하지 못했어요. 새로 생긴 파일은 모두 옮겼어요. 기억 목록에서 확인해 주세요.`.
+    A file past the item size cannot be put back. It is left in place (it is never read as memory either), and the turn
+    says `기억 파일 N개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`.
+  - **Studio's own changes during the turn win.** The journal keeps the state Studio left each file in, with its bytes up
+    to the item size. A learner's save followed by a shell overwrite in the same turn puts back the learner's save, not
+    the pre-turn version. An editor save is journaled from the bytes on disk, so a byte-order mark or CRLF line endings
+    are not mistaken for a foreign write.
+  - **Other files are moved, never deleted.** A new name the store would never read as memory (a photo the learner
+    dropped in from the file manager, or junk) is renamed into the quarantine: no copy, no extra disk. At most 200 per
+    turn; the rest is left in place and reported. A move across volumes is not attempted, and the file stays and is
+    reported. Moved files have their own count cap (200 per activity) and the seven-day cap, but not the byte cap. Age and order come from the stamp in
+    the quarantined file's name, never its mtime (a move keeps the original's date, and a turn can set any date); the
+    moved file's times are set to the move as well.
+  - **An item that cannot be put back keeps its bytes.** When the item was replaced by a folder, its earlier bytes are
+    copied into the quarantine before the failure is reported, also when the folder sits past the read bound.
+  - **The learner's own bytes are a protected pool.** A copy whose bytes are the learner's own (the item's state at turn
+    start, or the learner's save during the turn) is kept as an original (`orig-…`): an item that could not be put back,
+    or one that was still on disk when the target differed. Originals are never removed by count, only after seven days,
+    so nothing the turn writes or moves can evict one. Per activity at most 1,000 (five times the item count); at that cap
+    an item that would need a new original is left as it is and reported, and no original is dropped. Bytes that exist
+    nowhere else any more (a folder swap) are kept even past the cap.
+  - **Quarantine bounds.**
+    - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
+      with one folder per seat activity (a keyed hash of its scope) and per task.
+    - Per activity, three pools: originals (above); copies of what the turn wrote, at most the store's item count (200)
+      and that many full items' bytes, oldest first; moved files, at most 200, oldest first. Equal stamps are ordered by
+      name.
+    - Ages come from the stamp in each name. A stamp more than 60 s ahead of the clock was not written by Studio and
+      counts as oldest; one within 60 s is clamped to now. Known residual: an entry Studio really wrote while the clock
+      ran more than 60 s fast, after the clock is corrected, is taken for a planted one and removed at the next prune.
+    - Nothing older than seven days is kept, applied at every check and at activation.
+    - A task's folder is removed when the task is archived or moved. The folder is renamed to a `.purge-…` tombstone at
+      once, before the handler moves on, and only the tombstone is deleted afterwards, so a turn right after a restore
+      writes into a fresh folder the late delete cannot reach. A tombstone a crash left behind is removed at the next
+      prune. If the rename is refused (EPERM/EBUSY, as on Windows with an open handle), nothing is deleted in place.
+      The task is marked (`.pending-purge-<task>`) with the exact file names it held at purge time and the tombstone name
+      to use. The next prune retries: it renames the folder to that tombstone, moves every unlisted file back (a restored
+      task's new turns, whatever their stamps), deletes only the listed names, and removes the tombstone only once it is
+      empty and then the mark. No clock is used. A crash at any step leaves the mark and the tombstone, and the next prune
+      resumes; a tombstone a mark names is never swept whole. The mark is written atomically (a temp file, then a rename),
+      a second refused purge adds its names to the first's, and while any mark-like file of a task exists (a mark, a torn
+      or unreadable one, or a temp file) no tombstone of that task is swept: an unreadable mark means keep everything.
+      Known limits:
+      - New bytes written under a name the mark lists are deleted with it. That needs a same-millisecond name collision
+        (names carry a stamp and a per-turn counter) or a foreign writer in Studio's storage.
+      - When a file cannot be moved back because the name is taken in the task folder, the mark and the tombstone stay,
+        holding that file, until the name is free; nothing is lost and nothing is overwritten. Tombstones and marks are not
+      counted in the originals cap. A host without global storage, or a seat without a memory scope, archives and moves
+      as before with nothing to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move,
+      refused move, the race, the tombstone sweep, a refused rename and its retry, the originals count, and the no-op
+      hosts with a rejection counter), not by source text.
+    - Nothing reads it back into memory, uploads it or logs it (tested).
+    - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
+  - **Write side, with this check.** A new or deleted memory file, or a changed one among the read entries, does not
+    survive a keep-off turn, in either runtime. The shell form does not matter. What remains, and is told or named:
+    - a change inside an entry past the read bound (told in the turn);
+    - a file past the item size (told);
+    - a write by a process the turn started in the background that lands after the turn ended (for example
+      `nohup sh -c 'sleep 30; …' &`). The next keep-off turn's snapshot already includes it, so it is not put back. This
+      one is not told.
+  - **A turn that began with keep on is not checked.** If keep is turned on during a keep-off turn, a shell write after
+    that is still put back.
+
+- **Policy.** The switches only narrow what the served memory policy allows. Where memory is not available for the seat
+  (no store binding: class, lesson and instructor seats), there is no group and no write path.
+- **Evaluation surface.** The group lives in the settings dialog, not on the work screen. It shows no score, label or
+  evaluation sentence (SX-01/06/07/59).
+- **Lock timing.** Any message in the task counts, including a stored tool line before the first send.
+
+Tests: `test/task-memory-switches.smoke.mjs` (ledger rules, the real provider on real files, the bundled SDK runtime's
+`canUseTool`), `test/task-memory-switches.test.tsx` (render, posts, lock, mount, style floors).
+
 ## Public skill store (#3418)
 
 [Intent](intents/skill-store.md) INT-ST-01..03. Rows cite keys of [docs/policy/skill-store-policy.md](policy/skill-store-policy.md); a policy value change does not reopen a row.
@@ -9429,6 +9824,15 @@ REQ-CGPV-04/17/18/19/24/33).** 기존 Service 프로필이 받아쓰기와 읽�
 실제 Recorder/Analyser, 일반 UI→호스트→디스크 기록, 두 턴·중지·이전 범위 응답을 검증한다.
 한국어 종료 임계값은 임시값이다. 설치 앱·물리 마이크·실제 청취·운영 이용량은 NOT RUN이며,
 이 클라이언트 변경은 운영 플래그·권한·요금·예산을 변경하지 않는다.
+
+### Dictation as its own control; failures by cause, each with one recovery (CGP-VOICE-R-014, R-015, D-010, D-012)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-17c | PI#1 / VO-36 / VO-09: dictation (`받아쓰기`) and the voice conversation (`자동 음성 대화 시작`) are separate buttons with their own names, and only one holds the microphone. While one runs the other is disabled and says why, in its accessible name and its tooltip (`받아쓰기, 음성 대화 중에는 받아쓰기를 쓸 수 없어요`; `자동 음성 대화 시작, 받아쓰기가 끝나면 쓸 수 있어요`). The dictation key Alt+Shift+M pressed during a conversation is refused with the same line in the composer's notice slot and never asks for the microphone. | `dictation-recovery.test.tsx` (the refusal by name, tooltip and key; no `getUserMedia`), `voice-conversation-browser.smoke.mjs` (the real App during a live conversation) |
+| REQ-CGPV-18 | PI#1 / CGP-VOICE-018: every failure is said by its cause and offers exactly one recovery action, chosen by the cause (`src/dictationRecovery.ts`), with `닫기` as the quiet way out. `다시 보내기` resends the same clip, only for a failure the host marked retryable, and only while the clip is still in memory. Policy 3 applies to every seat, minors included: memory only, dropped after transcription, on dismiss, on a task or seat switch, on window hide or after 10 minutes, never on disk. When the copy goes while the line is shown, its `다시 보내기` turns into `다시 말하기` in place. A press under the `다시 보내기` label never opens the microphone: a stale press only updates the label. `다시 말하기` starts a new recording. It is offered for no microphone, microphone busy, too short, too large, too long, unreadable and a recorder failure. `글로 쓰기` closes the line and puts the caret in the composer. It is offered for unsupported, the daily cap, sign-in, voice unavailable and anything unknown. The permission card (REQ-CGPV-03) keeps its settings action. The Service's sentences are shown as written, and the draft is never touched. | `dictation-recovery.test.tsx` (every cause's line and its one action for an adult seat and a minor seat; resend sends the same bytes without reopening the microphone; after 10 minutes resend records instead; 글로 쓰기 focuses the composer; the draft is untouched; for both seats the kept copy is dropped on success, 닫기, a hidden window, pagehide, leaving the chat and 10 minutes, with no storage API, blob URL, webview state or other host message holding the audio); `voice-ui.test.tsx` |
+| DES-CGPV-17 | The button is the `mic` stroke glyph, distinct from the conversation's `level` glyph. Starting is said in words, `마이크를 켜는 중이에요`, with `취소`, which also closes a microphone granted after it. There is no spinner: an unbounded indicator is not allowed and the OS prompt can take any time. While recording: the dot, `듣고 있어요`, the seconds and `취소`, plus a decorative input-level bar. The bar is `aria-hidden` and fed by an `AnalyserNode` on the same stream that is never connected to the speakers. Only the current level is read (no samples kept), and the analyser is disconnected and its context closed when recording ends. Under reduced motion no bar is drawn. Then `글로 바꾸는 중이에요` and `입력창에 넣었어요. 고쳐서 보내세요.`. Every state has words, Esc cancels, and the text box keeps its height across states (within 4px). | `dictation-recovery.test.tsx` (the starting line and its cancel; the bar follows the meter, is flat for silence, is absent under reduced motion; the meter is closed on stop); `voice-browser.smoke.mjs` (the real recorder on an AudioContext stream draws the bar; the text box height idle vs recording vs failure within 4px; 320/480/800, both seats and themes) |
+| DES-CGPV-18 | A failure line in the composer's notice slot, not modal: the `alert` glyph (20px), one sentence at 14px, one recovery action and `닫기`, all 44px. Only too short goes away on its own, after 8 s, and not while focus is inside it. The timer belongs to that line, keyed on its id, so a parent re-render never restarts it, for example while an answer streams. Permission, no-microphone and every other line stay until the learner acts. Placement is the composer's existing notice slot above the text box rather than "under composer" (agent choice, decisions.md CGP-VOICE-R-014). | `dictation-recovery.test.tsx` (too short gone after 8 s, the no-microphone line stays); `voice-browser.smoke.mjs` (icon 20px, sentence 14px, both buttons 44px, inside the viewport and clear of the composer) |
 
 Not covered, by design: real-device behaviour. This row set is synthetic and headless; nothing is on for any seat
 (Service flags default off) and nothing was run in the installed app. The microphone core patch (DEC-03) and
@@ -9584,6 +9988,71 @@ pins and cap, host against a recording Service: flag and sign-in gates, nothing 
 consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
 and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
 Electron app and a deployed Service; both are NOT RUN in this slice.
+
+## Compact coach layout: `ux.coach_layout` (REQ-STUDIO-COACH-LAYOUT-COMPACT)
+
+`REQ-STUDIO-COACH-LAYOUT-COMPACT` (2026-11-12; instructor feedback from a dental-seminar test on a 761px-tall
+window, where the conversation area was left at 24px by the chrome above and below it). The served profile may carry
+`ux.coach_layout: 'compact'`. That one value turns on everything below; an absent field or any other value draws exactly
+today's layout (same DOM, same classes, the static `ChipRack`), and the instructor console never takes it. The gate is
+`data-coach-layout="compact"` on the shell root (CSS: the closing block of `chatDetails.css`, every rule scoped under it) plus one
+`compactLayout` flag in `ChatPanel`; the running-process card reads the same field in `App.tsx`. No host change.
+
+- **Chrome.** The mission header is one wrapping row; a collapsed lesson card, the model row, the collapsed access card
+  and (classroom seats) the composer lose padding and stacked rows. Every control keeps the learner's 44px floor
+  (`--hp-control-min`); only padding, margins and rows shrink.
+- **Composer footer.** The model control (the "모델" select and its "선생님이 정한 설정이에요" note) is not drawn at all
+  (class owner decision 2026-11-15, replacing the earlier "note stays visually hidden"). The model control inside the
+  settings sheet is unchanged. The collapsed
+  "이용권 · 사용량" panel (`AccessControl`) is not drawn in the footer on ANY activity (instructor decision 2026-11-13,
+  replacing the earlier "only where the header chip carries it"); it stays in the gear dialog next to "AI가 할 수 있는 일".
+  The one exception is a funding choice the learner must make before sending (`requiresFundingSelection`): that blocks
+  sending, so the footer panel and its "이용권을 선택해 주세요" summary stay. Limit errors and notices are separate
+  messages and are unchanged. The automation seat's summary says "대화 설정" when the panel is not inside it.
+- **Changed-page card and "AI가 한 일".** Neither the "이번 답에서 바뀐 페이지" card (`PageCard`, with its version label
+  and check status) nor the "AI가 한 일" panel (`TaskActivity`) is drawn (class owner decision 2026-11-15: jargon for a
+  non-developer learner). The "이번 요청 동안 바뀐 파일 N개" block with "모두 되돌리기 / 이대로 둘게요" and the
+  preview-server row are unchanged. Covered by `test/coach-layout-compact.test.tsx`; the standard layout's page card
+  markup is pinned by `test/fixtures/coach-layout-head-page-card.html`.
+- **Command approval (위험한 명령).** Only a prompt whose heading would read "코치가 위험한 명령을 실행하려고 해요"
+  (`purpose: 'destructive'`) changes. Title: `이 명령을 실행할까요?`. The fixed "되돌릴 수 없어요" line becomes one small
+  line (`.hps-command-warning-compact`, caption size) in the same slot. The prompt carries no reason code (the classifier
+  answers yes or no), so `compactDestructiveNote(command)` picks the sentence from the command's shape: a download piped
+  into a shell: "내려받은 것을 바로 실행하는 경우 내용을 확인할 수 없어 위험할 수 있습니다."; a delete/move/overwrite verb or
+  redirect: "파일을 지우거나 옮기거나 덮어쓰는 경우 되돌리기 어려워 위험할 수 있습니다."; several commands joined (`&&`, `;`,
+  `|`): "여러 명령을 이어 붙인 경우 그중에 파일을 지우거나 덮어쓰는 명령이 섞여 있으면 위험할 수 있습니다."; otherwise
+  "파일을 지우거나 덮어쓰는 명령이면 되돌리기 어려울 수 있습니다." The command, the 거절/허락 buttons, the deny-first focus, the
+  classifier and the approval flow are untouched; the outward and ordinary prompts keep their headings. The webview reads
+  `coach_layout` from the served profile itself, so no host change.
+- **Running processes.** One row per card: title, address (a shell shows its folder), and the 끄기/멈추기 button. The
+  "실행 중인 것" heading, the "보여 주는 곳" line, the "켜 두어요" note and the state word are not drawn; the heading and
+  state word stay for screen readers.
+- **Rail panels.** "이 수업에서 AI가 할 수 있는 일" (CGP-AGENT-R-003) and the "자료 N개" card
+  (REQ-STUDIO-ACTIVITY-MATERIALS) are no longer drawn above the conversation. The capabilities card is the first block in
+  the settings dialog, and the header gear opens that in-panel dialog on a classroom seat too (it used to open the app's
+  settings editor); the dialog's "앱 설정 열기" reaches it. The 자료 actions move into the composer's "+" menu as
+  "파일 넣기" and "주소 넣기 (https)", which post the rail card's own messages (`materialAddFile`, `materialAddUrl`);
+  the host-side behaviour, checks and refusal text are unchanged. The list shows as small tags directly above the
+  composer; pressing a tag puts it in or takes it out of the next question (`aria-pressed`), × removes a removable
+  item, nothing is pre-selected, and only selected items are sent ("고른 자료만 다음 질문과 함께 AI에게 보내요").
+- **Next steps.** A reply that ENDS with a line of exactly `다음에 해볼 만한 것` (optional trailing `:`) followed by one
+  to three lines each starting `→ ` is a block. Each step is trimmed, 1 to 60 characters, with no control or format
+  character, none of `<>` and the backtick, no `http`, no markdown link; anything else (text after the block, a fourth step,
+  a bad step) leaves the text as ordinary prose. A matched block is cut out of the bubble, also while it streams in (from a
+  complete header line on, while every non-empty line after it starts with `→`). Under the latest spoken answer, not while
+  streaming, the steps are single-line pills under a muted caption; a press fills the composer like any chip and never
+  sends. A latest reply with a block shows these and not the static follow-up chips; without one, the static chips behave
+  as before. Coach text never disappears without a chip for it: the block is cut only from the answer whose steps are drawn
+  as chips (not an older answer, not after an error or a stopped turn whose last line may be cut off, not while the
+  project-ideas offer holds the slot, and not when nothing else would be left of the bubble). The format-character check
+  applies to the block's own lines, not the body; an unclosed fence (3 or more backticks or tildes) hides a block inside
+  it; a step with `**`, `__` or a leading `www.` is refused.
+- **자료 menu.** The two "+" menu entries are offered only once the host has answered with its list (a press would
+  otherwise show nothing). The address form closes only on the answer to its own request and returns focus to the "+"
+  button or the text box.
+- **Evidence.** Parser: `test/next-steps-parser.test.tsx`. Gate on and off, tags, "+" menu, settings dialog, footer reason and usage panel,
+  next steps, running-process markup: `test/coach-layout-compact.test.tsx`; command-approval wording on and off: `test/command-approval.test.tsx`. Not covered: real-app pixel heights at 761px (run in the
+  installed app), and the Service serving the field (hypeproof-service).
 
 
 ### Android question-first local draft — Studio #3946

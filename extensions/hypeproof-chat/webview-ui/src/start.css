@@ -30,7 +30,7 @@
   display:inline-flex;
   gap:var(--ds-c-studio-start-space-1);
   align-items:center;
-  font-size:var(--ds-c-studio-start-type-10);
+  font-size:calc(var(--ds-c-studio-start-type-10) + var(--hp-font-step));
   font-weight:var(--ds-c-studio-start-typography-3);
   letter-spacing:var(--ds-c-studio-start-size-34);
   white-space:nowrap;
@@ -41,7 +41,7 @@
   font-weight:var(--ds-c-studio-start-typography-12);
   color:var(--hp-text-muted-default)}
 .studio-edition {
-  font-size:var(--ds-c-studio-start-type-4);
+  font-size:calc(var(--ds-c-studio-start-type-4) + var(--hp-font-step));
   letter-spacing:var(--ds-c-studio-start-size-7);
   color:var(--hp-text-muted-default)}
 .studio-main {
@@ -57,7 +57,7 @@
   display:flex;
   align-items:center;
   gap:var(--ds-c-studio-start-space-7);
-  font-size:var(--ds-c-studio-start-type-1);
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step));
   color:var(--hp-text-accent-default);
   letter-spacing:var(--ds-c-studio-start-size-3);
   margin:0 0 var(--ds-c-studio-start-space-3)}
@@ -67,7 +67,7 @@
   background:var(--hp-bg-accent-default);
   border-radius:50%}
 .studio-intro h1 {
-  font-size:clamp(var(--ds-c-studio-start-type-11),4.3vw,var(--ds-c-studio-start-type-12));
+  font-size:calc(clamp(var(--ds-c-studio-start-type-11),4.3vw,var(--ds-c-studio-start-type-12)) + var(--hp-font-step));
   line-height:var(--ds-c-studio-start-typography-13);
   font-weight:var(--ds-c-studio-start-typography-14);
   letter-spacing:var(--ds-c-studio-start-size-38);
@@ -76,7 +76,7 @@
 .studio-intro h1 span {
   color:var(--ds-c-studio-start-ink-7)}
 .studio-lead {
-  font-size:var(--ds-c-studio-start-type-13);
+  font-size:calc(var(--ds-c-studio-start-type-13) + var(--hp-font-step));
   line-height:var(--ds-c-studio-start-typography-15);
   color:var(--hp-text-muted-default);
   margin:0}
@@ -89,14 +89,14 @@
   padding-top:var(--ds-c-studio-start-space-34)}
 .studio-process>div>span {
   display:block;
-  font-size:var(--ds-c-studio-start-type-3);
+  font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step));
   color:var(--ds-c-studio-start-ink-8);
   margin-bottom:var(--ds-c-studio-start-space-19)}
 .studio-process strong {
-  font-size:var(--ds-c-studio-start-type-9);
+  font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step));
   font-weight:var(--ds-c-studio-start-typography-2)}
 .studio-process p {
-  font-size:var(--ds-c-studio-start-type-3);
+  font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step));
   color:var(--hp-text-muted-default);
   margin:var(--ds-c-studio-start-space-12) 0 0;
   word-break:keep-all;
@@ -118,13 +118,13 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 /* Letter-spaced Hangul reads as broken syllables ("시 작 하 기"), and the hollow dot beside it read
    as an unchecked radio that does nothing (design re-critique iter4). Quiet 11px label, no dot. */
 .studio-step {
-  font-size:var(--ds-c-studio-start-type-3);
+  font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step));
   letter-spacing:0;
   color:var(--hp-text-muted-default)}
 .studio-dot {
   display:none}
 .studio-connect h2 {
-  font-size:var(--ds-c-studio-start-type-6);
+  font-size:calc(var(--ds-c-studio-start-type-6) + var(--hp-font-step));
   line-height:var(--ds-c-studio-start-typography-16);
   font-weight:var(--ds-c-studio-start-typography-2);
   letter-spacing:var(--ds-c-studio-start-size-39);
@@ -132,14 +132,14 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   word-break:keep-all;
   overflow-wrap:anywhere}
 .studio-card-description {
-  font-size:var(--ds-c-studio-start-type-9);
+  font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step));
   color:var(--hp-text-muted-default);
   margin:0 0 var(--ds-c-studio-start-space-3);
   word-break:keep-all;
   overflow-wrap:anywhere}
 .studio-connect label {
   display:block;
-  font-size:var(--ds-c-studio-start-type-1);
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step));
   margin:0 0 var(--ds-c-studio-start-space-24)}
 .studio-connect input {
   width:100%;
@@ -149,7 +149,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   border-radius:var(--ds-c-studio-start-radius-1);
   padding:var(--ds-c-studio-start-space-35) var(--ds-c-studio-start-space-1);
   font:inherit;
-  font-size:var(--ds-c-studio-start-type-9)}
+  font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step))}
 .studio-connect input::placeholder {
   color:var(--hp-text-placeholder-default)}
 .studio-start button,.studio-disconnected button {
@@ -168,7 +168,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   gap:var(--ds-c-studio-start-space-7);
   text-align:left;
   padding:var(--ds-c-studio-start-space-35) var(--ds-c-studio-start-space-36);
-  font-size:var(--ds-c-studio-start-type-9)!important;
+  font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step))!important;
   font-weight:var(--ds-c-studio-start-typography-3)!important;
   word-break:keep-all;
   overflow-wrap:anywhere;
@@ -185,7 +185,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-primary:disabled:not([aria-busy=true]) {
   cursor:default}
 .studio-help {
-  font-size:var(--ds-c-studio-start-type-3);
+  font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step));
   color:var(--hp-text-muted-default);
   margin:var(--ds-c-studio-start-space-24) 0 var(--ds-c-studio-start-space-37)}
 .studio-text-button {
@@ -196,18 +196,18 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   margin:var(--ds-c-studio-start-space-36) auto 0;
   padding:var(--ds-c-studio-start-space-13);
   min-height:var(--hp-control-min);
-  font-size:var(--ds-c-studio-start-type-1)!important}
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step))!important}
 .studio-card-footer {
   border-top:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
   padding-top:var(--ds-c-studio-start-space-18);
   margin-top:var(--ds-c-studio-start-space-37);
   color:var(--hp-text-muted-default);
-  font-size:var(--ds-c-studio-start-type-3);
+  font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step));
   display:flex;
   align-items:center;
   gap:var(--ds-c-studio-start-space-7)}
 .studio-card-footer span {
-  font-size:var(--ds-c-studio-start-type-13)}
+  font-size:calc(var(--ds-c-studio-start-type-13) + var(--hp-font-step))}
 .studio-course {
   background:var(--ds-c-studio-start-surface-14);
   border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
@@ -215,17 +215,17 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   padding:var(--ds-c-studio-start-space-18);
   margin:0 0 var(--ds-c-studio-start-space-34)}
 .studio-verified {
-  font-size:var(--ds-c-studio-start-type-4);
+  font-size:calc(var(--ds-c-studio-start-type-4) + var(--hp-font-step));
   color:var(--ds-c-studio-start-ink-10)}
 .studio-course h3 {
-  font-size:var(--ds-c-studio-start-type-14);
+  font-size:calc(var(--ds-c-studio-start-type-14) + var(--hp-font-step));
   line-height:var(--ds-c-studio-start-typography-5);
   font-weight:var(--ds-c-studio-start-typography-2);
   margin:var(--ds-c-studio-start-space-2) 0 var(--ds-c-studio-start-space-20);
   word-break:keep-all}
 .studio-course dl {
   margin:0;
-  font-size:var(--ds-c-studio-start-type-1)}
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step))}
 .studio-course dl>div {
   display:flex;
   justify-content:space-between;
@@ -239,14 +239,14 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   text-align:right;
   overflow-wrap:anywhere}
 .studio-status {
-  font-size:var(--ds-c-studio-start-type-1);
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step));
   color:var(--hp-text-muted-default);
   margin-top:var(--ds-c-studio-start-space-1)}
 .studio-status:empty {
   display:none}
 .studio-error {
   margin-top:var(--ds-c-studio-start-space-18);
-  font-size:var(--ds-c-studio-start-type-1);
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step));
   background:var(--ds-c-studio-start-surface-15);
   border:var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-5);
   border-radius:var(--ds-c-studio-start-radius-1);
@@ -264,14 +264,14 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   border-top:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
   padding-top:var(--ds-c-studio-start-space-38);
   color:var(--hp-text-muted-default);
-  font-size:var(--ds-c-studio-start-type-3)}
+  font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step))}
 .studio-bottom button {
   border:0;
   background:none;
   color:var(--hp-text-primary-default);
   padding:0;
   min-height:var(--hp-control-min);
-  font-size:var(--ds-c-studio-start-type-1);
+  font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step));
   white-space:nowrap}
 .studio-bottom .studio-build {
   margin-left:auto;
@@ -283,13 +283,13 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   padding:var(--ds-c-studio-start-space-26) var(--ds-c-studio-start-space-5);
   min-height:100vh}
 .studio-disconnected .studio-brand {
-  font-size:var(--ds-c-studio-start-type-14)}
+  font-size:calc(var(--ds-c-studio-start-type-14) + var(--hp-font-step))}
 .studio-disconnected h1 {
-  font-size:var(--ds-c-studio-start-type-15);
+  font-size:calc(var(--ds-c-studio-start-type-15) + var(--hp-font-step));
   line-height:var(--ds-c-studio-start-typography-5);
   margin-top:var(--ds-c-studio-start-space-39)}
 .studio-disconnected p {
-  font-size:var(--ds-c-studio-start-type-9);
+  font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step));
   color:var(--hp-text-muted-default);
   margin-bottom:var(--ds-c-studio-start-space-40);
   word-break:keep-all;
@@ -302,7 +302,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   margin:var(--ds-c-studio-start-space-41) auto;
   max-width:var(--ds-c-studio-start-size-40)}
 .studio-intro h1 {
-  font-size:var(--ds-c-studio-start-type-16)}
+  font-size:calc(var(--ds-c-studio-start-type-16) + var(--hp-font-step))}
 .studio-process {
   margin-top:var(--ds-c-studio-start-space-3)}
 .studio-edition {
@@ -320,12 +320,12 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   .studio-start {
   padding:var(--ds-c-studio-start-space-4) var(--ds-c-studio-start-space-5)}
 .studio-intro h1 {
-  font-size:var(--ds-c-studio-start-type-7);
+  font-size:calc(var(--ds-c-studio-start-type-7) + var(--hp-font-step));
   letter-spacing:var(--ds-c-studio-start-size-41)}
 .studio-brand {
-  font-size:var(--ds-c-studio-start-type-5)}
+  font-size:calc(var(--ds-c-studio-start-type-5) + var(--hp-font-step))}
 .studio-lead {
-  font-size:var(--ds-c-studio-start-type-17)}
+  font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step))}
 .studio-process {
   gap:var(--ds-c-studio-start-space-1)}
 .studio-process p {
@@ -333,7 +333,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-connect {
   padding:var(--ds-c-studio-start-space-38)}
 .studio-connect h2 {
-  font-size:var(--ds-c-studio-start-type-15)}
+  font-size:calc(var(--ds-c-studio-start-type-15) + var(--hp-font-step))}
 .studio-bottom>span:not(.studio-build) {
   width:100%;
   order:3}
@@ -346,12 +346,16 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   .studio-top {
   gap:var(--ds-c-studio-start-space-7)}
 .studio-brand {
-  font-size:var(--ds-c-studio-start-type-2);
+  font-size:calc(var(--ds-c-studio-start-type-2) + var(--hp-font-step));
   white-space:normal}
 .studio-nav {
   gap:var(--ds-c-studio-start-space-15)}
 .studio-nav button {
   padding:var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-24)}
+/* CGP-SHELL-R-017: at a larger text size the footer tagline would run past a 160 CSS px window
+   (a 320px pane at 200%); here it may wrap instead. */
+.studio-bottom .studio-build {
+  white-space:normal}
 .studio-start,.studio-disconnected {
   padding-left:var(--ds-c-studio-start-space-1);
   padding-right:var(--ds-c-studio-start-space-1)}
@@ -379,7 +383,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-primary:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .studio-primary:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .studio-nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-c-studio-start-space-7); }
-.studio-nav button { font: inherit; font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-10); padding: var(--ds-c-studio-start-space-12) var(--ds-c-studio-start-space-19); min-height: var(--hp-control-min); cursor: pointer; }
+.studio-nav button { font: inherit; font-size: calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-10); padding: var(--ds-c-studio-start-space-12) var(--ds-c-studio-start-space-19); min-height: var(--hp-control-min); cursor: pointer; }
 .studio-nav button:hover { background-color: var(--hp-bg-control-hover); border-color: var(--ds-c-studio-start-boundary-6); color: var(--ds-c-studio-start-ink-12); }
 .studio-nav button:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 
@@ -401,7 +405,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   gap:var(--ds-c-studio-start-space-7);
   text-align:left;
   padding:var(--ds-c-studio-start-space-35) var(--ds-c-studio-start-space-36);
-  font-size:var(--ds-c-studio-start-type-9)!important;
+  font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step))!important;
   font-weight:var(--ds-c-studio-start-typography-3)!important;
   word-break:keep-all;
   overflow-wrap:anywhere;
@@ -410,7 +414,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-choice:disabled { opacity:.55; cursor:default; }
 /* TUX-SP-12 — what the trial choice needs and gives, read before choosing. Quiet text, not a second button. */
 .studio-choice-group { display:grid; gap:var(--ds-c-studio-start-space-15); }
-.studio-choice-note { margin:0 var(--ds-c-studio-start-space-14); font-size:var(--ds-c-studio-start-type-3); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-choice-note { margin:0 var(--ds-c-studio-start-space-14); font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step)); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
 .studio-choice-note span { display:block; }
 
 /* REQ-L12 — passes are a list of peer choices (SX-04): the selected one gets a border, never a second Primary. */
@@ -422,25 +426,25 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 /* CGP-DS-D-003 — pressed: the text colour at 14% over the surface (hover is 8%, tokens.css). After every :hover rule
  * it ties with, so a press shows while the pointer is still over the control. */
 .studio-nav button:active, .studio-secondary:active:enabled, .studio-choice:active:enabled, .studio-plan:active:enabled { background: var(--hp-bg-control-pressed); }
-.studio-plan-name { font-size:var(--ds-c-studio-start-type-17); font-weight:var(--ds-c-studio-start-typography-3); }
-.studio-plan-name em { margin-left:var(--ds-c-studio-start-space-2); font-style:normal; font-size:var(--ds-c-studio-start-type-3); font-weight:var(--ds-c-studio-start-typography-8); color:var(--hp-text-accent-default); }
-.studio-plan-price { font-size:var(--ds-c-studio-start-type-17); font-weight:var(--ds-c-studio-start-typography-3); text-align:right; }
-.studio-plan-for, .studio-plan-what { grid-column:1 / -1; font-size:var(--ds-c-studio-start-type-1); color:var(--hp-text-muted-default); }
+.studio-plan-name { font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); font-weight:var(--ds-c-studio-start-typography-3); }
+.studio-plan-name em { margin-left:var(--ds-c-studio-start-space-2); font-style:normal; font-size:calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step)); font-weight:var(--ds-c-studio-start-typography-8); color:var(--hp-text-accent-default); }
+.studio-plan-price { font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); font-weight:var(--ds-c-studio-start-typography-3); text-align:right; }
+.studio-plan-for, .studio-plan-what { grid-column:1 / -1; font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); color:var(--hp-text-muted-default); }
 .studio-purchase-actions { display:flex; flex-wrap:wrap; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-20); }
 
 /* "GitHub에서 이어하기" — the choice that replaces the one Primary while a code is confirmed and
  * the seat's GitHub already holds a site: continue (Primary) or start new (a peer option). */
 .studio-github { display: grid; gap: var(--ds-c-studio-start-space-7); }
-.studio-github h3 { font-size: var(--ds-c-studio-start-type-9); font-weight: var(--ds-c-studio-start-typography-3); margin: 0; }
+.studio-github h3 { font-size: calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step)); font-weight: var(--ds-c-studio-start-typography-3); margin: 0; }
 .studio-repo-list { border: 0; margin: 0; padding: 0; display: grid; gap: var(--ds-c-studio-start-space-15); min-width: 0; }
-.studio-repo-list legend { font-size: var(--ds-c-studio-start-type-3); color: var(--hp-text-muted-default); padding: 0; margin-bottom: var(--ds-c-studio-start-space-15); }
-.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: var(--ds-c-studio-start-space-7); border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-1); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); margin: 0; font-size: var(--ds-c-studio-start-type-9); cursor: pointer; }
+.studio-repo-list legend { font-size: calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step)); color: var(--hp-text-muted-default); padding: 0; margin-bottom: var(--ds-c-studio-start-space-15); }
+.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: var(--ds-c-studio-start-space-7); border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-1); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); margin: 0; font-size: calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step)); cursor: pointer; }
 .studio-repo-list label:has(input:checked) { border-color: var(--ds-c-studio-start-boundary-6); }
 /* `.studio-connect input` styles the code field (width:100%, padding, border); undo it for radios,
  * or the radio takes the row and the name wraps one letter per line (seen in c-01-pick.png). */
 .studio-repo-list input[type="radio"] { width: auto; flex: none; margin: 0; padding: 0; border: 0; border-radius: 50%; background: none; accent-color: var(--ds-c-studio-start-ink-12); }
 .studio-repo-list span, .studio-repo-one span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.studio-repo-list small, .studio-repo-one small { flex-shrink: 0; font-size: var(--ds-c-studio-start-type-3); color: var(--hp-text-muted-default); }
+.studio-repo-list small, .studio-repo-one small { flex-shrink: 0; font-size: calc(var(--ds-c-studio-start-type-3) + var(--hp-font-step)); color: var(--hp-text-muted-default); }
 .studio-repo-one { cursor: default; }
 .studio-github .studio-help { margin: 0; }
 
@@ -453,35 +457,35 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-saved-activity-name { max-width: 100%; overflow-wrap: anywhere; }
 /* width 0 + min-width 100%: the one-line workspace must not set the card's minimum width (the card is a grid item
    with min-width auto), or a long folder name widens the page at 320 px instead of ending in an ellipsis. */
-.studio-saved-activities small { display: block; width: 0; min-width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
+.studio-saved-activities small { display: block; width: 0; min-width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(var(--ds-c-studio-start-type-18) + var(--hp-font-step)); color: var(--hp-text-muted-default); }
 /* CGP-DS-R-008 (DEC-29b): the naming screen's activity line (ChatPanel only, outside any shell) reads at the 14px caption step in both seats. */
 .hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
 
 /* #751 U2 — the same inbox on the entry card: a quiet text line under the one Primary, never a second emphasised button. */
-.hp-inbox-quiet { margin-top: var(--ds-c-studio-start-space-20); text-align: left; font-size: var(--ds-c-studio-start-type-17); }
+.hp-inbox-quiet { margin-top: var(--ds-c-studio-start-space-20); text-align: left; font-size: calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); }
 .hp-inbox-quiet > summary { min-height: var(--ds-c-studio-start-size-8); cursor: pointer; padding: var(--ds-c-studio-start-space-7) 0; text-decoration: underline; text-underline-offset: var(--ds-c-studio-start-size-13); overflow-wrap: anywhere; }
 .hp-inbox-quiet .hp-inbox-list { list-style: none; margin: var(--ds-c-studio-start-space-2) 0 0; padding: 0; display: grid; gap: var(--ds-c-studio-start-space-2); }
 .hp-inbox-quiet .hp-inbox-card { border-top: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-7); padding-top: var(--ds-c-studio-start-space-2); min-width: 0; }
 .hp-inbox-quiet .hp-inbox-card summary { min-height: var(--ds-c-studio-start-size-8); cursor: pointer; padding: var(--ds-c-studio-start-space-2) 0; overflow-wrap: anywhere; }
 .hp-inbox-quiet .hp-inbox-title { font-weight: var(--ds-c-studio-start-typography-7); }
-.hp-inbox-quiet .hp-inbox-meta, .hp-inbox-quiet .hp-rail-lesson-note { font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.hp-inbox-quiet .hp-inbox-meta, .hp-inbox-quiet .hp-rail-lesson-note { font-size: calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hp-inbox-quiet .hp-inbox-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--ds-c-studio-start-space-2) 0; }
 .hp-inbox-quiet .hp-inbox-links { list-style: none; margin: var(--ds-c-studio-start-space-2) 0; padding: 0; display: grid; gap: var(--ds-c-studio-start-space-2); }
 .hp-inbox-quiet .hp-inbox-links li { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-start-space-2); align-items: center; min-width: 0; }
-.hp-inbox-quiet .hp-inbox-link-url { font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
+.hp-inbox-quiet .hp-inbox-link-url { font-size: calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox-quiet button { font: inherit; color: inherit; background: none; border: var(--ds-c-studio-start-size-3) solid currentColor; border-radius: var(--ds-c-studio-start-radius-3); min-height: var(--ds-c-studio-start-size-10); padding: var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); cursor: pointer; }
 .hp-inbox-quiet :focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 
 /* Personal account preview: a single primary sign-in action and plain pass choices. */
 .studio-account { border-bottom: var(--ds-c-studio-start-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-start-boundary-8)); padding-bottom: var(--ds-c-studio-start-space-5); margin-bottom: var(--ds-c-studio-start-space-2); }
-.studio-account h3 { font-size: var(--ds-c-studio-start-type-13); margin: var(--ds-c-studio-start-space-19) 0 var(--ds-c-studio-start-space-2); }
+.studio-account h3 { font-size: calc(var(--ds-c-studio-start-type-13) + var(--hp-font-step)); margin: var(--ds-c-studio-start-space-19) 0 var(--ds-c-studio-start-space-2); }
 .studio-account-identity { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-13); }
-.studio-account-identity span, .studio-account-pass > span { font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.studio-account-identity span, .studio-account-pass > span { font-size: calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .studio-account-pass { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-12); padding: var(--ds-c-studio-start-space-19) 0; }
 .studio-account-pass .studio-choice { margin-top: var(--ds-c-studio-start-space-13); }
 
 /* Google's light button treatment keeps the multicolor mark on white. */
-.studio-account .studio-google { background: var(--ds-c-studio-start-surface-19); color: var(--ds-c-studio-start-ink-15); border: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-9); border-radius: var(--ds-c-studio-start-radius-13); min-height: var(--hp-control-cta); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); justify-content: center; gap: var(--ds-c-studio-start-space-1); font-family: var(--ds-c-studio-start-font-2); font-size: var(--ds-c-studio-start-type-17)!important; font-weight: var(--ds-c-studio-start-typography-8)!important; }
+.studio-account .studio-google { background: var(--ds-c-studio-start-surface-19); color: var(--ds-c-studio-start-ink-15); border: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-9); border-radius: var(--ds-c-studio-start-radius-13); min-height: var(--hp-control-cta); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); justify-content: center; gap: var(--ds-c-studio-start-space-1); font-family: var(--ds-c-studio-start-font-2); font-size: calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step))!important; font-weight: var(--ds-c-studio-start-typography-8)!important; }
 .studio-account .studio-google:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .studio-account .studio-google:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .studio-account .studio-google:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
@@ -489,24 +493,24 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 /* REQ-L13 ⑧ (CGP-SHELL-R-022, DES-SHELL-21) — 링크 복사 under the waiting sign-in: 44px target, 14px text.
    The 1px border is a real boundary, so forced colors draw it in ButtonText. */
 .studio-signin-copy-row { margin-top: var(--ds-c-studio-start-space-2); }
-.studio-account .studio-signin-copy { min-height: var(--ds-c-studio-start-size-8); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-36); border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); font-size: var(--ds-c-studio-start-type-17)!important; }
-.studio-signin-copy-hint { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); color: var(--hp-text-muted-default); word-break: keep-all; overflow-wrap: anywhere; }
-.studio-signin-copy-status { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); color: var(--hp-text-primary-default); word-break: keep-all; overflow-wrap: anywhere; }
+.studio-account .studio-signin-copy { min-height: var(--ds-c-studio-start-size-8); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-36); border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); font-size: calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step))!important; }
+.studio-signin-copy-hint { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); line-height: var(--ds-c-studio-start-typography-5); color: var(--hp-text-muted-default); word-break: keep-all; overflow-wrap: anywhere; }
+.studio-signin-copy-status { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); line-height: var(--ds-c-studio-start-typography-5); color: var(--hp-text-primary-default); word-break: keep-all; overflow-wrap: anywhere; }
 .studio-signin-copy-status:empty { margin: 0; }
-.studio-signin-copy-link { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); overflow-wrap: anywhere; word-break: break-all; }
+.studio-signin-copy-link { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); line-height: var(--ds-c-studio-start-typography-5); overflow-wrap: anywhere; word-break: break-all; }
 .studio-signin-copy-link code { user-select: all; }
 /* TUX-SP-14/15/16 — free start card. Same tokens as the rest of the card; one Primary, quiet links. */
 .studio-free { display:grid; gap:var(--ds-c-studio-start-space-1); }
-.studio-question { margin:0 0 var(--ds-c-studio-start-space-14); font-size:var(--ds-c-studio-start-type-2); line-height:var(--ds-c-studio-start-typography-5); font-weight:var(--ds-c-studio-start-typography-2); color:var(--hp-text-primary-default); word-break:keep-all; }
+.studio-question { margin:0 0 var(--ds-c-studio-start-space-14); font-size:calc(var(--ds-c-studio-start-type-2) + var(--hp-font-step)); line-height:var(--ds-c-studio-start-typography-5); font-weight:var(--ds-c-studio-start-typography-2); color:var(--hp-text-primary-default); word-break:keep-all; }
 .studio-free-links { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-18); margin:var(--ds-c-studio-start-space-13) 0 0 var(--ds-c-studio-start-space-42); }
 /* The free allowance is the offer itself: read before the question, in body text, not as a footnote. */
-.studio-free-allowance { margin:var(--ds-c-studio-start-space-42) 0 var(--ds-c-studio-start-space-15); font-size:var(--ds-c-studio-start-type-9); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-primary-default); word-break:keep-all; }
+.studio-free-allowance { margin:var(--ds-c-studio-start-space-42) 0 var(--ds-c-studio-start-space-15); font-size:calc(var(--ds-c-studio-start-type-9) + var(--hp-font-step)); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-primary-default); word-break:keep-all; }
 .studio-free-links .studio-text-button { margin:0; }
 .studio-free-guardian { color:var(--hp-text-primary-default); text-decoration:underline; text-underline-offset:var(--ds-c-studio-start-size-15); margin:0 0 0 var(--ds-c-studio-start-space-42); }
 /* A calm notice, not an error: today's free budget is gone or paused. No red, no countdown. */
-.studio-notice { margin:0; font-size:var(--ds-c-studio-start-type-1); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
+.studio-notice { margin:0; font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
 /* REQ-STUDIO-START-UPDATE-NOTICE — the chat banner's update offer, one calm row under the top bar. */
-.studio-update { display:flex; align-items:center; flex-wrap:wrap; gap:var(--ds-c-studio-start-space-1); margin:0; font-size:var(--ds-c-studio-start-type-1); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
+.studio-update { display:flex; align-items:center; flex-wrap:wrap; gap:var(--ds-c-studio-start-space-1); margin:0; font-size:calc(var(--ds-c-studio-start-type-1) + var(--hp-font-step)); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
 .studio-update p { margin:0; flex:1 1 auto; min-width:0; }
 .studio-update-version { overflow-wrap:anywhere; }
 .studio-update-actions { display:flex; align-items:center; gap:var(--ds-c-studio-start-space-1); }
@@ -526,14 +530,14 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 
 /* REQ-STUDIO-JOIN-LINK (DES-SHELL-04) — the class a join link named, above the empty code field. */
 .studio-join-link { margin:0 0 var(--ds-c-studio-start-space-18); padding:var(--ds-c-studio-start-space-1) var(--ds-c-studio-start-space-19); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-left:var(--ds-c-studio-start-size-15) solid var(--hp-border-accent-default); border-radius:var(--ds-c-studio-start-radius-1); background:var(--ds-c-studio-start-surface-14); }
-.studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); font-size:var(--ds-c-studio-start-type-17); color:var(--hp-text-muted-default); }
-.studio-join-class strong { color:var(--hp-text-primary-default); font-size:var(--ds-c-studio-start-type-13); font-weight:var(--ds-c-studio-start-typography-7); overflow-wrap:anywhere; }
-.studio-join-help { margin:var(--ds-c-studio-start-space-15) 0 0; font-size:var(--ds-c-studio-start-type-17); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); color:var(--hp-text-muted-default); }
+.studio-join-class strong { color:var(--hp-text-primary-default); font-size:calc(var(--ds-c-studio-start-type-13) + var(--hp-font-step)); font-weight:var(--ds-c-studio-start-typography-7); overflow-wrap:anywhere; }
+.studio-join-help { margin:var(--ds-c-studio-start-space-15) 0 0; font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
 /* DES-SHELL-04 — the code field is one 44px learner control (--hp-control-min, DES-06) with 14px text, on every
  * start-page code form. No block padding: the control centres its own text, so the height does not depend on
  * the font's metrics. A refused code is said directly under the field, in the flow (never a toast). */
-.studio-connect #course-code { min-block-size:var(--hp-control-min); padding-block:0; font-size:var(--ds-c-studio-start-type-17); }
-.studio-field-error { margin-block:var(--ds-c-studio-start-space-24) 0; font-size:var(--ds-c-studio-start-type-17); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-connect #course-code { min-block-size:var(--hp-control-min); padding-block:0; font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); }
+.studio-field-error { margin-block:var(--ds-c-studio-start-space-24) 0; font-size:calc(var(--ds-c-studio-start-type-17) + var(--hp-font-step)); word-break:keep-all; overflow-wrap:anywhere; }
 
 /* CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". It reuses the chat's
  * settings dialog (ChatPreferences); the start page has no task workspace, so the three task
@@ -616,9 +620,16 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   cursor:pointer}
 /* One account question at a time; inherit the existing Studio theme. */
 .studio-question { margin: 20px 0; padding: 20px; border: 1px solid var(--vscode-panel-border); border-radius: 16px; background: var(--vscode-editor-background); }
-.studio-question h2 { margin: 8px 0 16px; font-size: 1.35rem; line-height: 1.5; }
+.studio-question h2 { margin: 8px 0 16px; font-size: calc(1.35rem + var(--hp-font-step, 0px)); line-height: 1.5; }
 .studio-question p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .studio-question-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.studio-question-choices button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); border-radius: 12px; cursor: pointer; }
+.studio-question-choices button { min-height: 44px; padding: 8px 14px; font: inherit; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); border-radius: 12px; cursor: pointer; }
 .studio-question-choices button[aria-pressed="true"] { outline: 2px solid var(--vscode-focusBorder); }
-.studio-question textarea { display: block; width: 100%; min-height: 88px; margin-top: 8px; resize: vertical; box-sizing: border-box; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 8px; padding: 10px; }
+.studio-question textarea { display: block; width: 100%; min-height: 88px; margin-top: 8px; resize: vertical; box-sizing: border-box; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 8px; padding: 10px; }
+
+/* CGP-SHELL-R-017: the learner's text size (설정 → 글자 크기) reaches the start page too. The root
+   carries the choice; every font-size above adds the step, and the --hp-font-* sizes are re-declared on
+   .studio-start (tokens.css), so 크게 / 아주 크게 add 2px / 4px to every start-page line, the settings
+   sheet included. Control min-heights and 44px targets do not change. */
+.studio-start[data-text-size="large"] { --hp-font-step: var(--ds-c-studio-start-size-7); }
+.studio-start[data-text-size="xlarge"] { --hp-font-step: var(--ds-c-studio-start-size-13); }

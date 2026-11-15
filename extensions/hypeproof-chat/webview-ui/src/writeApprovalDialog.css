@@ -17,8 +17,11 @@
 .hps-browser-host { display: block; font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; unicode-bidi: isolate; }
 .hps-browser-badge { display: inline-flex; align-items: center; gap: var(--hp-space-2); padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); }
 .hps-browser-badge svg { width: var(--ds-c-studio-writeapprovaldialog-size-30); height: var(--ds-c-studio-writeapprovaldialog-size-30); flex-shrink: 0; }
-.hps-browser-approval .hps-write-actions { flex-wrap: wrap; }
-.hps-browser-approval button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.hps-browser-approval .hps-write-actions, .hps-link-confirm .hps-write-actions { flex-wrap: wrap; }
+.hps-browser-approval button, .hps-link-confirm button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+/* CGP-SHELL-R-026 (DES-SHELL-25): the full address wraps, never ellipsized; the look-alike warning reads as strong text. */
+.hps-link-confirm .hps-link-url { overflow-wrap: anywhere; word-break: break-all; unicode-bidi: isolate; }
+.hps-link-confirm .hps-link-warning { font-weight: var(--hp-weight-strong); }
 @media (forced-colors: active) { .hps-browser-badge { border-color: CanvasText; color: CanvasText; } }
 /* DES-CGP-AGENT-04: purpose before the complete, horizontally scrollable command. */
 .hps-command-approval h2 { font-size: var(--hp-font-body); word-break: keep-all; }
@@ -28,6 +31,8 @@
 .hps-command-approval .hps-write-actions { flex-wrap: wrap; }
 .hps-command-approval[data-destructive="true"] { border-color: var(--vscode-errorForeground, currentColor); }
 .hps-command-warning { color: var(--vscode-errorForeground, currentColor); }
+/* Compact coach layout: the same warning slot, as one small calm line. */
+.hps-command-warning-compact { font-size: var(--hp-font-caption); }
 /* DEC-11e: the destination wraps instead of widening the dialog at 320px. */
 .hps-command-destination { overflow-wrap: anywhere; font-weight: var(--hp-weight-strong); }
 .hps-command-destination-note { font-size: var(--hp-font-caption); }

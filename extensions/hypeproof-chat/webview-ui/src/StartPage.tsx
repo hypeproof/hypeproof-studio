@@ -129,7 +129,9 @@ export function StartPage() {
     : freeEntering ? FREE_START_COPY.preparing
     : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
-  return <main className="studio-start" onClickCapture={event => {
+  // CGP-SHELL-R-017: the saved text size (설정 → 글자 크기) applies here too; the base size adds no markup.
+  const textSize = state.settings?.textSize && state.settings.textSize !== "base" ? state.settings.textSize : undefined;
+  return <main className="studio-start" data-text-size={textSize} onClickCapture={event => {
     const choice = (event.target as Element).closest('button, a');
     if (state.personalReflectionPending && choice && !choice.closest('[data-personal-question-flow]') && !choice.hasAttribute('data-personal-question-entry')) postToHost({ type: 'cancelPersonalReflection' });
   }}>
