@@ -20,8 +20,13 @@
  *        is decided against its opener (a refusal fails it and closes the popup; `onPopup` reports both), and every
  *        later page-requested move or redirect hop to another origin is decided like the page's. Targets that are
  *        not this page's popups are let go.
- *   - Navigations Studio starts from outside the page (the address bar, a confirmed chat link, the coach's approved
- *     browser actions) are not page-requested and not redirects, so they are not held.
+ *   - Every other cross-origin main-frame Document is decided too (existing-window fix): a form a popup submits into
+ *     its opener by name, or the page into an existing popup, fires no `frameRequestedNavigation` in the window it
+ *     moves, and looks exactly like a browser-started load. Only navigations Studio itself started are let go: its
+ *     own `Page.navigate` calls and `openStudioTab` record the address in `studioNavigations` first, and the first
+ *     matching request takes the record. A popup has no Studio-started navigations, so in a popup nothing is exempt.
+ *     The cost: an address typed in the bar, or back/forward across origins (VS Code core, not Studio), is decided —
+ *     with no dialog for loopback, the lesson list, or an adult without the confirm setting.
  *   - Allowed: `Fetch.continueRequest`. Refused: `Fetch.failRequest` (Aborted); the page stays where it was.
  *
  * Structurally typed against CdpSession (`send`, `sendIn` for a child session, events with their sessionId) so it runs
@@ -52,6 +57,13 @@ export interface GuardOptions {
    * resolved action address, at most once per `FORM_NOTICE_MS`, so a page looping `submit()` cannot flood the host.
    */
   onFormStopped?: (url: string) => void;
+  /** Did Studio start this paused main-frame request? Default: this tab's records in `studioNavigations`. */
+  studioStarted?: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
+  /**
+   * The address of a tab Studio opened with `openStudioTab`: only this guard's first paused main-frame Document, and
+   * only while the tab has not committed a page yet, may go undecided as that tab's own first load.
+   */
+  studioFirstDocument?: string;
 }
 const BINDING = "__hpsOpenLink";
 /**
@@ -133,10 +145,14 @@ export class LinkNavigationGuard {
   private readonly decide: (url: string) => Promise<boolean>;
   private readonly now: () => number;
   private readonly onPopup: (url: string, allowed: boolean) => void;
+  private readonly studioStarted: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
+  private firstDocument: string | undefined;
   private readonly options: GuardOptions;
   constructor(cdp: GuardCdp, decide: (url: string) => Promise<boolean>, options: GuardOptions = {}) {
     this.cdp = cdp; this.decide = decide; this.options = options;
     this.now = options.now ?? Date.now; this.onPopup = options.onPopup ?? (() => {});
+    this.studioStarted = options.studioStarted ?? ((r) => studioNavigations.claim(this.cdp.targetId, r));
+    this.firstDocument = options.studioFirstDocument;
   }
 
   async start(): Promise<void> {
@@ -268,8 +284,17 @@ export class LinkNavigationGuard {
     const redirect = typeof p.redirectedRequestId === "string";
     const first = state.popupFirst;
     const from = redirect ? (redirectFrom ?? state.current) : state.current;
-    // A popup's first document is judged against its opener, like a page-requested move; after that it is a page.
-    if ((!pageAsked && !redirect && !first) || sameOrigin(url, from)) {
+    // A popup's first document is judged against its opener; after that, like every later move, it is decided when it
+    // leaves the origin. Only the page has Studio-started navigations to exempt (recorded before Studio sends them).
+    // The tab's own first load (openStudioTab), once and only before anything committed; else a recorded loaderId.
+    let studio = false;
+    const firstLoad = state === this.page && !redirect ? this.firstDocument : undefined;
+    if (state === this.page && !redirect) this.firstDocument = undefined;
+    if (state === this.page && !pageAsked && !redirect && !sameOrigin(url, from)) {
+      const blank = !this.page.current || this.page.current === "about:blank";
+      studio = (firstLoad !== undefined && blank && noHash(firstLoad) === noHash(url)) || this.studioStarted({ url, method: p.request?.method, headers: p.request?.headers });
+    }
+    if (studio || sameOrigin(url, from)) {
       if (!redirect) state.popupFirst = false;
       this.stats.continued++; await go(); return;
     }
@@ -284,6 +309,55 @@ export class LinkNavigationGuard {
  * `target=_blank` link): on a minor seat it is closed and its address goes through the confirm dialog instead.
  * Origins are kept too, so a redirect inside the site Studio opened is not mistaken for a page-opened tab.
  */
+/**
+ * Existing-window fix — navigations Studio itself starts in a browser tab with `Page.navigate` (verify-r027 on #4192).
+ * A record is keyed by the tab's target id, never globally. It is made just before the command is sent, because
+ * Chromium may answer `Page.navigate` only after the paused request goes on, so the loaderId cannot be waited for.
+ * A paused request claims it only when it is that navigation's shape: the same tab, the same address (without the
+ * fragment), a GET, and no Referer or Origin header. A page's own request carries one of those (a form POST, a link or
+ * a form with a referrer); the one shape left, a no-referrer GET to the very address Studio is loading in that tab at
+ * that moment, takes the tab exactly where Studio was taking it. A record is claimed once; a failed or thrown
+ * navigation removes it; a short TTL is only a backstop.
+ */
+export class StudioNavigationLedger {
+  private readonly records = new Map<string, Array<{ url: string; at: number }>>();
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+  constructor(ttlMs = 5_000, now: () => number = Date.now) { this.ttlMs = ttlMs; this.now = now; }
+  /** Before sending; `fail()` removes the record (an error or throw). */
+  begin(targetId: string | undefined, url: string): { fail(): void } {
+    if (!targetId) return { fail() {} };
+    const rec = { url: noHash(url), at: this.now() };
+    const list = this.fresh(targetId); list.push(rec); this.records.set(targetId, list.slice(-8));
+    return { fail: () => { const l = this.records.get(targetId); if (!l) return; const k = l.indexOf(rec); if (k >= 0) l.splice(k, 1); if (!l.length) this.records.delete(targetId); } };
+  }
+  /** A paused main-frame request of this tab: true once, only for the shape of a navigation Studio sent there. */
+  claim(targetId: string | undefined, request: { url: string; method?: string; headers?: Record<string, unknown> }): boolean {
+    if (!targetId) return false;
+    if ((request.method ?? "GET").toUpperCase() !== "GET") return false;
+    if (Object.keys(request.headers ?? {}).some((h) => /^(referer|origin)$/i.test(h))) return false;
+    const list = this.fresh(targetId), k = list.findIndex((r) => r.url === noHash(request.url));
+    if (k < 0) return false;
+    list.splice(k, 1); if (!list.length) this.records.delete(targetId);
+    return true;
+  }
+  private fresh(targetId: string): Array<{ url: string; at: number }> {
+    const t = this.now(), list = (this.records.get(targetId) ?? []).filter((r) => t - r.at <= this.ttlMs);
+    if (list.length) this.records.set(targetId, list); else this.records.delete(targetId);
+    return list;
+  }
+}
+export const studioNavigations = new StudioNavigationLedger();
+/** Studio's own `Page.navigate` on a tab's session: recorded before it is sent, keyed by the tab's target id. */
+export async function studioNavigate(cdp: { send(method: string, params?: any, ...rest: any[]): Promise<any>; targetId?: string }, url: string, ...rest: any[]): Promise<any> {
+  const rec = studioNavigations.begin(cdp.targetId, url);
+  try {
+    const r = await cdp.send("Page.navigate", { url }, ...rest);
+    if (r && typeof r.errorText === "string" && r.errorText) rec.fail();
+    return r;
+  } catch (e) { rec.fail(); throw e; }
+}
+
 export class StudioTabLedger {
   private readonly urls = new Map<string, number>();
   private readonly origins = new Map<string, number>();
@@ -295,6 +369,14 @@ export class StudioTabLedger {
     this.urls.set(noHash(url), t);
     try { this.origins.set(new URL(url).origin, t); } catch { /* not a URL */ }
     for (const map of [this.urls, this.origins]) for (const [k, at] of map) if (t - at > this.windowMs) map.delete(k);
+  }
+  /** `openStudioTab` addresses whose new tab has not been seen yet: that tab's guard takes one, once (first load). */
+  private readonly firstLoads = new Map<string, number>();
+  noteFirstLoad(url: string): void { this.firstLoads.set(noHash(url), this.now()); }
+  takeFirstLoad(url: string): boolean {
+    const key = noHash(url), at = this.firstLoads.get(key);
+    this.firstLoads.delete(key);
+    return at !== undefined && this.now() - at <= this.windowMs;
   }
   /** A popup the guard already refused (failed before its first request): its tab is closed with no second dialog. */
   private readonly refusedUrls = new Map<string, number>();

@@ -5489,6 +5489,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
+          // Existing-window fix: a tab Studio just opened may load its own first page undecided, once (verify-r027).
+          studioFirstDocument: isNew && studioTabs.takeFirstLoad(tab.url) ? tab.url : undefined,
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
           // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
           // as any refused address (`allowlistOnly` shows it); on the list, the stop stays silent (a known gap).

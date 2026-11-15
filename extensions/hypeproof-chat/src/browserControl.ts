@@ -1,3 +1,4 @@
+import { studioNavigate } from "./linkNavigationGuard";
 import { dragRectangle, intersects, marker, markerComment, isAnnotationOverlayNode, type MarkerOptions } from "./annotationCapture";
 import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
@@ -391,7 +392,7 @@ export class BrowserControl {
       const first = await doc();
       if (gone()) return null;
       const before = first?.origin ?? 0;
-      await session.send("Page.navigate", { url });
+      await studioNavigate(session, url);
       const until = Date.now() + timeoutMs;
       for (;;) {
         const d = await doc();
@@ -447,7 +448,7 @@ export class BrowserControl {
     } else {
       this.setTargetTab(tab);
       const s = await this.cdp();
-      await s.send("Page.navigate", { url });
+      await studioNavigate(s, url);
     }
     await this.waitLoad();
   }
@@ -500,7 +501,7 @@ export class BrowserControl {
   private async history(dir: -1 | 1): Promise<BrowserToolResult> {
     const s = await this.cdp();
     const h = await s.send("Page.getNavigationHistory", {});
-    const entries: Array<{ id?: number }> = h?.entries ?? [];
+    const entries: Array<{ id?: number; url?: string }> = h?.entries ?? [];
     const idx = (h?.currentIndex ?? 0) + dir;
     if (idx < 0 || idx >= entries.length || typeof entries[idx]?.id !== "number") {
       return fail(dir < 0 ? "뒤로 갈 페이지가 없어요." : "앞으로 갈 페이지가 없어요.");

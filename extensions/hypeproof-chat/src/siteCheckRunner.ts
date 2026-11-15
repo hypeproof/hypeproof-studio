@@ -20,6 +20,7 @@
 //
 // Zero model requests: nothing here calls the gateway.
 
+import { studioNavigate } from "./linkNavigationGuard.ts";
 import {
   SITE_CHECK_BUDGET_MS,
   siteCheckExpression,
@@ -204,7 +205,7 @@ export async function runSiteCheck(port: SiteCheckPort | null | undefined, run: 
     if (at.origin !== wrapper.origin) return unverified("no_frame");
     if (at.pathname !== WRAPPER_PATH) {
       // Another page of the learner's own preview: take it to the wrapper, once.
-      await bounded(cdp.send("Page.navigate", { url: wrapper.href }, Math.max(1, left())), left(), run.signal);
+      await bounded(studioNavigate(cdp, wrapper.href, Math.max(1, left())), left(), run.signal);
       for (;;) {
         await sleep(50);
         if (left() <= 0) return unverified("timeout");

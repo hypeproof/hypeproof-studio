@@ -18,7 +18,7 @@ import { createServer } from 'node:http';
 const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN link confirm: no Chromium'); process.exit(0); }
 const { injectLinkRelay, PREVIEW_LINK_MESSAGE } = await import('../src/previewHtml.ts');
-const { LinkNavigationGuard } = await import('../src/linkNavigationGuard.ts');
+const { LinkNavigationGuard, studioNavigations, studioNavigate } = await import('../src/linkNavigationGuard.ts');
 const dir = fileURLToPath(new URL('../webview-ui/', import.meta.url));
 const app = await build({ entryPoints: [dir + 'src/main.tsx'], bundle: true, platform: 'browser', format: 'iife', outdir: 'link-confirm-assets', write: false, loader: { '.svg': 'dataurl', '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl' }, logLevel: 'silent' });
 const css = app.outputFiles.find(f => f.path.endsWith('.css')).text, script = app.outputFiles.find(f => f.path.endsWith('.js')).text;
@@ -141,6 +141,17 @@ try {
     if (req.url.startsWith('/meta')) { res.end(`<title>M</title><meta http-equiv="refresh" content="0;url=${B}/hitmeta">`); return; }
     // Popups that open on this site first and leave for B afterwards (verify-3928).
     if (req.url.startsWith('/go302')) { res.statusCode = 302; res.setHeader('location', `${B}/hitp302`); res.end(); return; }
+    // Existing-window fix: a form submitted by name into a window that already exists (a popup, or the opener).
+    // verify-r027 (verify-ew-baseline): a declarative shadow root, which layer 1 does not see, opens a same-site popup
+    // w2 (no decision: same origin) and then posts a form into it, to B. Both layers on, the minor-seat configuration.
+    if (req.url.startsWith('/dsdpage')) { res.end(`<title>D</title><div id="dsl" style="width:200px;height:40px"><template shadowrootmode="closed"><a href="/w2same" target="w2" style="display:block;width:200px;height:40px">open w2</a></template></div>
+      <div id="dsf" style="width:200px;height:40px"><template shadowrootmode="closed"><form method="post" action="${B}/hitdsd" target="w2"><button style="display:block;width:200px;height:40px">post into w2</button></form></template></div>`); return; }
+    if (req.url.startsWith('/w1page')) { res.end(`<title>W</title><button id="w1open" onclick="window.open('/w1same','w1')" style="display:block;padding:12px">open w1</button>
+      <form method="get" action="${B}/hitw1get" target="w1"><button id="w1g" style="display:block;padding:12px">GET into w1</button></form>
+      <form method="post" action="${B}/hitw1post" target="w1"><button id="w1p" style="display:block;padding:12px">POST into w1</button></form>
+      <form method="get" action="${B}/hitw1noref" target="w1" rel="noreferrer"><button id="w1n" style="display:block;padding:12px">no-referrer GET into w1</button></form>`); return; }
+    if (req.url.startsWith('/w1back')) { const k = (req.url.split('k=')[1] || ''); res.end(`<title>Back</title><form id="g" method="get" action="${B}/hitopget" target="mainwin"></form><form id="p" method="post" action="${B}/hitoppost" target="mainwin"></form><form id="n" method="get" action="${B}/hitopnoref" target="mainwin" rel="noreferrer"></form><script>setTimeout(function(){document.getElementById('${k}').submit()},300)</script>`); return; }
+    if (req.url.startsWith('/openerpage')) { const k = (req.url.split('k=')[1] || ''); res.end(`<title>O</title><script>window.name='mainwin'</script><button id="oo" onclick="window.open('/w1back?k=${k}','w2')" style="display:block;padding:12px">open back</button>`); return; }
     if (req.url.startsWith('/plocate')) { res.end(`<title>P</title><script>setTimeout(function(){location.href='${B}/hitploc'},50)</script>`); return; }
     res.end(`<title>A</title>
       <a id="go" href="${B}/hitlink" style="display:block;padding:12px">link</a>
@@ -162,6 +173,7 @@ try {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const A = `http://127.0.0.1:${server.address().port}/a`;
   const reachedB = (path) => hits.includes(`localhost/${path}`);
+  const reachedA = (path) => hits.includes(`127.0.0.1/${path}`);
   const Bo = `http://localhost:${server.address().port}`;
   try {
     await b.send('Page.enable');
@@ -179,7 +191,9 @@ try {
     };
     const popups = [], studioOpened = [], formStops = []; let shift = 0;
     const guard = new LinkNavigationGuard(port, async (url) => { decisions.push(url); return allow; }, { onPopup: (url, ok2) => popups.push([url, ok2]), interceptPopups: true, now: () => Date.now() + shift, onFormStopped: (url) => formStops.push(url), openPopup: (url) => { studioOpened.push(url); if (!/\/(go302|plocate)$/.test(url)) void fetch(url).catch(() => {}); } });
-    const fresh = async () => { await b.send('Page.navigate', { url: A }); await settle(500); };
+    // The harness's own navigations stand for Studio's: recorded first, as Studio's code does (existing-window fix).
+    const studioNav = (url) => studioNavigate({ send: (m, p) => b.send(m, p), targetId: targetInfo.targetId }, url);
+    const fresh = async () => { await studioNav(A); await settle(500); };
     await fresh();
     await guard.start();
     const tryIt = async (sel, path, label) => {
@@ -223,6 +237,16 @@ try {
       ok(!reachedB(path) && !hits.some((h) => /\/(go302|plocate)/.test(h)), `${sel}: a same-site popup made by script creates no popup (${a ? 'allowed' : 'refused'}): ${JSON.stringify(hits)}`);
     }
     ok(popups.some(([u, a]) => u.endsWith('/hitpop') && a === false) && popups.some(([u, a]) => u.endsWith('/hitpop') && a === true), 'the popup decisions are reported to the host');
+    // The declarative-shadow-root path to an existing window (both layers on): refused, nothing reaches B.
+    {
+      allow = false; hits.length = 0;
+      await studioNav(A.replace(/\/a$/, '/dsdpage')); await settle(500);
+      await clickAt('#dsl'); await settle(900);
+      ok(reachedA('w2same'), `the declarative root's same-site link opened w2 (${JSON.stringify(hits)})`);
+      await clickAt('#dsf'); await settle(1300);
+      ok(!reachedB('hitdsd'), `both layers: a declarative root's POST into the existing window w2 is refused, nothing reached the other site (${JSON.stringify(hits)})`);
+      const { targetInfos } = await root.send('Target.getTargets'); for (const t of targetInfos) if (t.type === 'page' && t.targetId !== targetInfo.targetId) await root.send('Target.closeTarget', { targetId: t.targetId }).catch(() => {});
+    }
     // Layer 2 alone (no interception at all): the real fix holds by itself. Popups get the main-frame rules for their
     // whole life, so a popup that opens on this site and then leaves is decided at its cross-site hop.
     {
@@ -239,13 +263,54 @@ try {
           else ok(reachedB(path), `auto-attach only, ${label}: allowed, it went on (${JSON.stringify(hits)}; decisions ${JSON.stringify(decisions.slice(-2))}; stats ${JSON.stringify(g2.stats)})`);
         }
       }
+      // A form by name into an EXISTING window. The popup opened on this site first (no decision), then the page
+      // submits into it; or the popup submits into its opener. Neither fires frameRequestedNavigation in the window it
+      // moves; each must still be decided. Refused throughout, so nothing may reach the other site.
+      const closeOthers = async () => { const { targetInfos } = await root.send('Target.getTargets'); for (const t of targetInfos) if (t.type === 'page' && t.targetId !== targetInfo.targetId) await root.send('Target.closeTarget', { targetId: t.targetId }).catch(() => {}); };
+      const at = (p2) => A.replace(/\/a$/, p2);
+      allow = false;
+      for (const [sel, id, how] of [['#w1g', 'hitw1get?', 'a GET form'], ['#w1p', 'hitw1post', 'a POST form'], ['#w1n', 'hitw1noref?', 'a no-referrer GET form']]) {
+        hits.length = 0; await studioNav(at('/w1page')); await settle(500);
+        await clickAt('#w1open'); await settle(900);
+        ok(reachedA('w1same'), `the same-site popup w1 opened (${JSON.stringify(hits)})`);
+        await clickAt(sel); await settle(1300);
+        ok(!reachedB(id), `auto-attach only, ${how} into an existing popup by name: refused, nothing reached the other site (${JSON.stringify(hits)})`);
+        await closeOthers();
+      }
+      // The exemption race (verify-r027 on #4192): Studio has a navigation to the very address in flight on this tab
+      // while the popup posts into the opener. The page's request is not Studio's (another loaderId): decided.
+      {
+        hits.length = 0; await studioNav(at('/openerpage?k=p')); await settle(500);
+        const rec = studioNavigations.begin(targetInfo.targetId, `http://localhost:${server.address().port}/hitoppost`);
+        await clickAt('#oo'); await settle(1700);
+        rec.fail();
+        ok(reachedA('w1back?k=p') && !reachedB('hitoppost'), `a Studio navigation in flight does not exempt the page's own cross-window POST (${JSON.stringify(hits)})`);
+        await closeOthers();
+      }
+      for (const [k, id, how] of [['g', 'hitopget?', 'GET'], ['p', 'hitoppost', 'POST'], ['n', 'hitopnoref?', 'no-referrer GET']]) {
+        hits.length = 0; await studioNav(at(`/openerpage?k=${k}`)); await settle(500);
+        await clickAt('#oo'); await settle(1600);
+        ok(reachedA(`w1back?k=${k}`) && !reachedB(id), `auto-attach only, a popup's ${how} form into its opener by name: refused, nothing reached the other site (${JSON.stringify(hits)})`);
+        await closeOthers();
+      }
       g2.dispose();
     }
-    // Negative controls: a same-site move is not held, and a navigation Studio starts is not held.
+    // Negative controls: a navigation Studio starts (recorded in studioNavigations before it is sent) is not held; one
+    // nothing recorded (what VS Code core's address bar or back/forward looks like) is decided (the stated cost).
+    // (A guard is running: before this fix the control ran after every guard was disposed, and so measured nothing.)
+    await studioNav(A); await settle(500);
+    const g3 = new LinkNavigationGuard(port, async (url) => { decisions.push(url); return allow; }, {});
+    await g3.start();
     const n = decisions.length;
     hits.length = 0; allow = false;
-    await b.send('Page.navigate', { url: `http://localhost:${server.address().port}/studio` }); await settle(500);
-    ok(decisions.length === n && reachedB('studio'), 'a navigation Studio starts (not page-requested, not a redirect) is not held');
+    const studioUrl = `http://localhost:${server.address().port}/studio`;
+    await studioNav(studioUrl); await settle(500);
+    ok(decisions.length === n && reachedB('studio'), 'a navigation Studio starts (recorded, not page-requested, not a redirect) is not held');
+    await studioNav(A); await settle(500);
+    hits.length = 0;
+    await b.send('Page.navigate', { url: `http://localhost:${server.address().port}/typed` }); await settle(500);
+    ok(decisions.length === n + 1 && !reachedB('typed'), `an unrecorded cross-origin load (the address bar) is decided, here refused (${JSON.stringify(hits)})`);
+    g3.dispose();
   } finally { server.close(); }
   console.log(`PASS link confirm dialog, preview relay and browser-panel guard: ${checks} checks (dark/light x 320/800px)`);
 } finally { await b.close(); }

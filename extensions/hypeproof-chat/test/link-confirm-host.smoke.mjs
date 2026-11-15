@@ -11,7 +11,7 @@ import { webcrypto } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const { LinkConfirmRequest } = await import("../src/linkConfirm.ts");
-const { LinkNavigationGuard } = await import("../src/linkNavigationGuard.ts");
+const { LinkNavigationGuard, studioNavigations, studioNavigate } = await import("../src/linkNavigationGuard.ts");
 const tick = () => new Promise((r) => setTimeout(r, 0));
 let checks = 0;
 const ok = (c, m) => { assert.ok(c, m); checks++; };
@@ -39,12 +39,12 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 {
   const sent = []; let listener;
   const cdp = { send: async (method, params) => { sent.push([method, params]); if (method === "Page.getFrameTree") return { frameTree: { frame: { id: "main", url: "https://school.example/lesson" } } }; return {}; },
-    onEvent: (l) => { listener = l; return { dispose() {} }; } };
+    onEvent: (l) => { listener = l; return { dispose() {} }; }, targetId: "t1" };
   const asked = []; let answer = false;
   const guard = new LinkNavigationGuard(cdp, async (url) => { asked.push(url); return answer; });
   await guard.start();
   ok(sent.some(([m, p]) => m === "Fetch.enable" && p.patterns[0].resourceType === "Document"), "main-frame documents are paused");
-  const paused = (id, url, frameId = "main") => listener({ method: "Fetch.requestPaused", params: { requestId: id, request: { url }, resourceType: "Document", frameId } });
+  const paused = (id, url, frameId = "main", request = {}) => listener({ method: "Fetch.requestPaused", params: { requestId: id, request: { url, method: "GET", headers: {}, ...request }, resourceType: "Document", frameId } });
   const asks = (url, frameId = "main") => listener({ method: "Page.frameRequestedNavigation", params: { frameId, url } });
   const last = () => sent.at(-1);
   // A link to another site: held, the dialog decides.
@@ -52,12 +52,42 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
   ok(asked.at(-1) === "https://news.example.com/story" && last()[0] === "Fetch.failRequest", "취소: the navigation is aborted");
   answer = true; asks("https://news.example.com/story"); paused("r2", "https://news.example.com/story"); await tick();
   ok(last()[0] === "Fetch.continueRequest" && last()[1].requestId === "r2", "열기: it goes on in the tab");
-  // Negative controls: not page-requested (address bar, Studio, the coach), same origin, a subframe.
-  const n = asked.length;
+  // Existing-window fix: a cross-site load nothing recorded is decided too (a form from another window, the address
+  // bar); one Studio recorded before sending it is not. Same origin and a subframe are not asked.
+  answer = false;
   paused("r3", "https://elsewhere.example/"); await tick();
+  ok(asked.at(-1) === "https://elsewhere.example/" && last()[0] === "Fetch.failRequest", "an unrecorded cross-site load is decided (fail closed)");
+  // Studio's own Page.navigate on this tab: recorded by target id, claimed once by that navigation's shape (a GET with
+  // no Referer or Origin to that address) — verify-r027 on #4192.
+  const contd = (id) => sent.some(([m, p]) => m === "Fetch.continueRequest" && p.requestId === id);
+  const failed = (id) => sent.some(([m, p]) => m === "Fetch.failRequest" && p.requestId === id);
+  await studioNavigate({ targetId: "t1", send: async () => ({ frameId: "main", loaderId: "L1" }) }, "https://elsewhere.example/#x");
+  paused("r3b", "https://elsewhere.example/"); await tick();
+  paused("r3c", "https://elsewhere.example/"); await tick();
+  ok(contd("r3b") && failed("r3c"), "Studio's navigation goes on once (the #fragment is not part of the address); a second one is decided");
+  // The race: while Studio's navigation to an address is pending on this tab, the page's own requests to that address
+  // (another window's form POST, a link with a referrer) do not claim it; Studio's own request still does.
+  const pending = studioNavigations.begin("t1", "https://elsewhere.example/a#frag");
+  paused("r3d", "https://elsewhere.example/a", "main", { method: "POST", headers: { Origin: "https://school.example" } }); await tick();
+  paused("r3g", "https://elsewhere.example/a", "main", { headers: { Referer: "https://school.example/lesson" } }); await tick();
+  ok(failed("r3d") && failed("r3g"), "the race: a page's POST, or a GET with a referrer, to the pending address is decided");
+  paused("r3h", "https://elsewhere.example/a"); await tick();
+  ok(contd("r3h"), "and Studio's own GET to it still goes on");
+  pending.fail();
+  // A failed or thrown navigation leaves no record.
+  await studioNavigate({ targetId: "t1", send: async () => ({ frameId: "main", loaderId: "L3", errorText: "net::ERR_NAME_NOT_RESOLVED" }) }, "https://elsewhere.example/f");
+  await studioNavigate({ targetId: "t1", send: async () => { throw new Error("CDP Page.navigate timed out"); } }, "https://elsewhere.example/g").catch(() => {});
+  paused("r3e", "https://elsewhere.example/f"); await tick();
+  paused("r3i", "https://elsewhere.example/g"); await tick();
+  ok(failed("r3e") && failed("r3i"), "a failed or thrown navigation's record is gone: later loads of that address are decided");
+  // Another tab's record cannot be claimed here.
+  studioNavigations.begin("t2", "https://elsewhere.example/t2");
+  paused("r3f", "https://elsewhere.example/t2"); await tick();
+  ok(failed("r3f"), "another tab's navigation record is not claimed by this tab");
+  const m2 = asked.length;
   asks("https://school.example/next"); paused("r4", "https://school.example/next"); await tick();
   asks("https://ads.example/", "child"); paused("r5", "https://ads.example/", "child"); await tick();
-  ok(asked.length === n && sent.filter(([m]) => m === "Fetch.continueRequest").length === 4, "only page-requested cross-site main-frame navigations ask");
+  ok(asked.length === m2 && sent.filter(([m]) => m === "Fetch.continueRequest").length === 5, "same-origin and subframe loads do not ask");
   // The page moved: same-origin is judged against the new page.
   listener({ method: "Page.frameNavigated", params: { frame: { id: "main", url: "https://news.example.com/story" } } });
   asks("https://school.example/back"); paused("r6", "https://school.example/back"); await tick();
@@ -348,6 +378,63 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   await ad.openLearnerLink("https://news.example.com/start");
   const adult = mk("https://news.example.com/start"); tabOpened(adult.t); await settleLong();
   ok(!adult.f.sent.includes("Runtime.addBinding"), "adult seat: no popup replacement (negative control)");
+}
+
+// 11. Existing-window fix: a cross-site load nothing recorded (a form from another window, the address bar) is
+//     decided through the real host route. Adults with the confirm on get the dialog; adults by default and loopback
+//     or allowlisted addresses go on with no dialog; a load Studio recorded goes on.
+{
+  const fake = (current) => {
+    const listeners = new Set(); const sent = [];
+    const raw = { onDidReceiveMessage: (l) => { listeners.add(l); return { dispose: () => listeners.delete(l) }; }, onDidClose: () => ({ dispose() {} }), close: async () => {},
+      sendMessage: async (m) => { sent.push([m.method, m.params]); const reply = (msg) => queueMicrotask(() => { for (const l of [...listeners]) l({ id: m.id, ...msg }); });
+        if (m.method === "Target.getTargets") reply({ result: { targetInfos: [{ type: "page", targetId: "t1" }] } });
+        else if (m.method === "Target.attachToTarget") reply({ result: { sessionId: "s1" } });
+        else if (m.method === "Page.getFrameTree") reply({ result: { frameTree: { frame: { id: "main", url: current } } } });
+        else reply({ result: {} }); } };
+    const emit = (method, params) => { for (const l of [...listeners]) l({ method, params, sessionId: "s1" }); };
+    return { raw, emit, sent };
+  };
+  const wait = () => new Promise((r) => setTimeout(r, 40));
+  const run = async (seat, start) => {
+    reset(); const h = host(seat); h.registerBrowserLinkGuards({ subscriptions: [] });
+    const p = h.openLearnerLink(start); await tick(); if (promptOf()) h.linkConfirmRequest.respond(promptOf().id, "open"); await p;
+    const f = fake(start); const t = { url: start, closed: 0, close: async () => { t.closed++; }, startCDPSession: async () => f.raw };
+    tabOpened(t); await wait(); posted.length = 0; return { h, f };
+  };
+  const doc = (f, id, url) => f.emit("Fetch.requestPaused", { requestId: id, request: { url }, resourceType: "Document", frameId: "main" });
+  const went = (f, id) => f.sent.some(([m, q]) => m === "Fetch.continueRequest" && q?.requestId === id);
+  settings.hypeproofChat = { confirmExternalLinks: true };
+  let { h, f } = await run(grown, "https://news.example.com/start");
+  doc(f, "x1", "https://other.example/form"); await wait();
+  ok(promptOf()?.url === "https://other.example/form" && promptOf().source === "browser", "adult, confirm on: an unrecorded cross-site load asks");
+  h.linkConfirmRequest.respond(promptOf().id, "cancel"); await wait();
+  ok(f.sent.some(([m, q]) => m === "Fetch.failRequest" && q?.requestId === "x1"), "취소 stops it");
+  settings.hypeproofChat = {};
+  ({ h, f } = await run(grown, "https://news.example.com/start"));
+  doc(f, "x3", "https://other.example/form"); await wait();
+  ok(!promptOf() && went(f, "x3"), "adult by default: an unrecorded cross-site load goes on with no dialog (decided, no cost)");
+  ({ h, f } = await run(kid, "https://hypeproof-ai.xyz/live/x/gallery/start"));
+  doc(f, "x4", "https://hypeproof-ai.xyz/live/x/gallery/next?from=popup"); await wait();
+  doc(f, "x5", "http://127.0.0.1:5500/index.html"); await wait();
+  ok(!promptOf() && went(f, "x4") && went(f, "x5"), "minor: same-origin and loopback loads go on with no dialog");
+  doc(f, "x6", "https://ads.example/x"); await wait();
+  ok(promptOf()?.url === "https://ads.example/x", "minor: an unrecorded off-list load asks");
+  h.linkConfirmRequest.respond(promptOf().id, "cancel"); await wait();
+  // A chat link the learner opened goes to a NEW tab (openStudioTab). That tab's own first load goes on with no second
+  // dialog; the old tab's request to the same address is decided (it cannot consume the new tab's record).
+  const pr = h.openLearnerLink("https://news.example.com/r"); await tick(); h.linkConfirmRequest.respond(promptOf().id, "open"); await pr;
+  posted.length = 0;
+  doc(f, "x7", "https://news.example.com/r"); await wait();
+  ok(promptOf()?.url === "https://news.example.com/r", "minor: the old tab's request to the new tab's address is decided");
+  h.linkConfirmRequest.respond(promptOf().id, "cancel"); await wait(); posted.length = 0;
+  const nf = fake("about:blank"); const nt = { url: "https://news.example.com/r", closed: 0, close: async () => { nt.closed++; }, startCDPSession: async () => nf.raw };
+  tabOpened(nt); await wait();
+  doc(nf, "x8", "https://news.example.com/r"); await wait();
+  ok(!promptOf() && went(nf, "x8"), "minor: the new tab's own first load goes on with no second dialog");
+  doc(nf, "x9", "https://news.example.com/r"); await wait();
+  ok(promptOf()?.url === "https://news.example.com/r", "and only once: a second load of that address there is decided");
+  h.linkConfirmRequest.respond(promptOf().id, "cancel"); await wait();
 }
 
 // Wiring: the preview forwards only a bounded http(s) string, and extension.ts routes it as a preview link.
