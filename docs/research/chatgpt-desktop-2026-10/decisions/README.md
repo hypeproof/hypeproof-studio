@@ -126,6 +126,7 @@ reproduces the former file byte for byte.
 - [CGP-LEARN-R-004](CGP-LEARN-R-004.md): CGP-LEARN-R-004 / CGP-LEARN-D-004: block references pin type, version and params (2026-11-14)
 - [CGP-LEARN-R-005](CGP-LEARN-R-005.md): CGP-LEARN-R-005 (`text_list` param kind)
 - [CGP-LEARN-R-006](CGP-LEARN-R-006.md): CGP-LEARN-R-006 (first parametric type)
+- [CGP-LEARN-R-009](CGP-LEARN-R-009.md): CGP-LEARN-R-009 / D-009: narrated diagrams, Service catalog part (2026-11-15)
 - [CGP-LEARN-R-010](CGP-LEARN-R-010.md): CGP-LEARN-R-010 / CGP-LEARN-D-010: reset and undo for a learning block (2026-11-14)
 - [CGP-LEARN-R-011](CGP-LEARN-R-011.md): CGP-LEARN-R-011 (c) / CGP-LEARN-D-011: collapse a learning block, partial (2026-11-14)
 - [CGP-LEARN-R-015](CGP-LEARN-R-015.md): CGP-LEARN-R-015: completion checklist helper in Chalk authoring (2026-10-26, agent-selected conservative implementation)
@@ -188,6 +189,7 @@ reproduces the former file byte for byte.
 - [DEC-30](DEC-30.md): DEC-30 step 2: 시작 문장, AI 역할, AI 말투 in Chalk (CGP-AGENT-R-015 remainder, CGP-AGENT-D-013, CGP-KNOW-R-037, CGP-KNOW-D-037; 2026-11-10)
 - [DEC-32](DEC-32.md): DEC-32 interim: math rendering (CGP-CHAT-R-022)
 - [DEC-35](DEC-35.md): DEC-35
+- [DEC-36](DEC-36.md): DEC-36: Service migrations 0086–0094 and deploy (2026-11-15, Jay)
 - [DEC-AGENT-D028](DEC-AGENT-D028.md): DEC-AGENT-D028: lesson disclosure modal (2026-10-24, agent choice)
 - [DEC-AGENT-R-010](DEC-AGENT-R-010.md): DEC-AGENT-R-010: goal status is a learner self-report (2026-10-22)
 - [DEC-AGENT-R032](DEC-AGENT-R032.md): DEC-AGENT-R032: local lesson disclosure receipt (2026-10-22, agent choice)
@@ -236,6 +238,7 @@ reproduces the former file byte for byte.
 - [DEC-SHELL-R028](DEC-SHELL-R028.md): DEC-SHELL-R028: work export zip (CGP-SHELL-R-028, 2026-10-26; agent choice, not a new human agreement)
 - [DEC-VOICE-R009](DEC-VOICE-R009.md): DEC-VOICE-R009: voice "보여주기" (2026-10-26; agent implementation choice)
 - [DEC-VOICE-R010](DEC-VOICE-R010.md): DEC-VOICE-R010: own-preview text only (2026-10-22; agent implementation choice)
+- [decisions-split](decisions-split.md): Decisions split into one file per requirement or decision id (2026-11-15)
 - [hardened-session-the-three-settings-locked-for-minor-and-saf](hardened-session-the-three-settings-locked-for-minor-and-saf.md): Hardened session: the three settings locked for minor and safe seats (2026-11-07)
 - [hardened-session-the-two-verifier-gaps-closed-2026-11-07](hardened-session-the-two-verifier-gaps-closed-2026-11-07.md): Hardened session: the two verifier gaps closed (2026-11-07)
 - [refused-photo-chip-remove-contrast-2026-11-14-a-4053-follow](refused-photo-chip-remove-contrast-2026-11-14-a-4053-follow.md): Refused-photo chip remove × contrast (2026-11-14, a #4053 follow-up, agent-selected)

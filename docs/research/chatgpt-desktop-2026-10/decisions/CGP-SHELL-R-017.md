@@ -7,5 +7,5 @@ Requirement: REQ-SHELL-17 (`domains/settings-account-shell.md`), DES-SHELL-16; `
 - **Where a classroom learner sets it.** A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so the start page 설정 sheet is its picker. The row's note changes from "혼자 하는 활동의 대화 글자 크기예요." to "대화와 시작 화면의 글자 크기예요." (agent copy).
 - **Narrow windows.** At 아주 크게 every surface fits a 320 px pane and a 640 px pane at 200% zoom. In a 320 px pane at 200% (160 CSS px) the start page footer tagline (만들기 · 검토하기 · 내 것으로) would run past the window, so it may wrap at that width; at the base size it still fits on one line. The lesson tip's 입력창에 넣기 action may wrap there too, instead of widening the shell.
 - **Not covered.** The entry screen drawn before the start page connects (`.studio-disconnected`; it has no settings yet), the separate automation, local-review and skill-store webviews, a real installed app and a screen reader.
-- Confirmed by Jay: no.
+- The 16/18/20 px steps only: Confirmed by Jay: yes (2026-11-15), chosen option "지금대로 16/18/20". Other choices in this entry (the 기본 label, the scope, the copy): Confirmed by Jay: no.
 

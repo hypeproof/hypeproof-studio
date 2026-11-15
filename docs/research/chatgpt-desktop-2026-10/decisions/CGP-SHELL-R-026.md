@@ -65,3 +65,11 @@ Requirement: REQ-SHELL-26, DES-SHELL-25 (`domains/settings-account-shell.md`); `
 - **Unresolved: R-026 × the safe session (2026-11-15).** With the hardened safe session on, the session's `webRequest.onBeforeRequest` cancels every mainFrame load off its allowlist. It is not yet known whether a minor's 열기 on an off-list link (a confirmed R-026 open) actually loads, or is cancelled by core; nothing found adds the confirmed address to the session allowlist. This is added to #3561's real-device check plan as an explicit step. No code change until it is observed.
 - Confirmed by Jay: the scope and the adult default (2026-11-14). The three agent choices were confirmed by the coordinator, not Jay.
 
+
+### CGP-SHELL-R-026: sub-requests from AI-made local pages on minor seats (2026-11-15, Jay)
+
+- The #4128 residual: on minor seats the browser panel blocks cross-site iframes but not sub-requests such as images and fetch, so a local page the AI made could send what the learner typed to another site.
+- Question: "미성년 좌석 브라우저에서 다른 사이트 iframe은 이제 막지만, 이미지·fetch 같은 하위 요청은 막지 않아요. 그래서 AI가 만든 로컬 페이지가 학습자가 입력한 내용을 외부로 보낼 수 있어요. 어떻게 할까요?"
+- Chosen option: "로컬 페이지만 차단". On AI-made loopback pages, cross-site fetch, beacon, WebSocket and EventSource are blocked; images and CDN loads are unchanged.
+- Status: decided; being built by builder-shell-r027.
+- Confirmed by Jay: yes (2026-11-15).

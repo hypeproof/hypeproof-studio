@@ -17,5 +17,5 @@
 - Attribution (agent choice): a session counts for the `product_version` it records, else its experiment's pinned
   version, so a comparison experiment's variant sessions land on their own version.
 
-Confirmed by Jay: no.
+The 횟수 wording only: Confirmed by Jay: yes (2026-11-15), chosen option "'횟수' 그대로". Other choices in this entry: Confirmed by Jay: no.
 

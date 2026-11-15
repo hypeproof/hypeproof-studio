@@ -8,5 +8,5 @@ Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-0
 - Parked (needs Jay): REQ-SHELL-19's "at most once per session and only after an observed trigger (e.g. 3 failed runs)". It contradicts the owner decision to show a step's hint from the start; gating instructor-written help behind three failures changes the lesson. Recommendation: keep hints shown from the start. If triggered help is wanted, add a separate Chalk-authored field (for example `hint_after_failures`) through a Service schema change, never Studio copy, with "once per session" applying only to it.
 - Default state: tips on for everyone (unchanged). No flag, policy, Service or minor-seat change.
 - Not covered: a real installed App and a screen reader: NOT RUN.
-- Confirmed by Jay: no.
+- The parked 3-failure clause only: Confirmed by Jay: yes (2026-11-15), chosen option "AI가 알아서 판단": REQ-SHELL-19's 3-failure hint is judged by the AI. Other choices in this entry: Confirmed by Jay: no.
 
