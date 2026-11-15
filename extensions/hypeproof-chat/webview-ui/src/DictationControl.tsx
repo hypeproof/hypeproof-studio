@@ -14,7 +14,8 @@ import {
   DictationRecorder, base64Of, needsMicExplainer, webAudioLevelMeter, type AudioContextLike, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState, type LevelMeter, type MicPermission,
 } from "../../src/voiceDictation";
 import { autoDismissMs, recoveryFor, type DictationRecovery } from "../../src/dictationRecovery";
-import { DICTATE_STARTING, RECOVER_RESEND, RECOVER_SPEAK_AGAIN, RECOVER_TYPE } from "../../src/voiceCopy";
+import { DICTATE_STARTING, MIC_MISSING, RECOVER_RESEND, RECOVER_SPEAK_AGAIN, RECOVER_TYPE, RECOVER_USE_DEFAULT } from "../../src/voiceCopy";
+import { listMicDevices } from "../../src/micInput";
 import {
   CLASS_OFF, CLASS_OFF_HINT, CLOSE, DICTATE_CANCEL_LABEL, DICTATE_DONE, DICTATE_ELAPSED, DICTATE_LABEL, DICTATE_LIMIT_NOTE, DICTATE_RECORDING, DICTATE_START_TIP,
   DICTATE_STOP_LABEL, DICTATE_WORKING, GENERIC_UNAVAILABLE, MIC_BUSY, MIC_DENIED_BODY, MIC_DENIED_DISMISS, MIC_DENIED_TITLE, MIC_SETTINGS_BUTTON,
@@ -74,9 +75,24 @@ async function browserMicPermission(): Promise<MicPermission> {
   }
 }
 
+/** CGP-VOICE-R-019: the connected microphones. Never asks for the microphone: before permission the list is hidden (null). */
+async function browserListMics() {
+  const md = typeof navigator === "undefined" ? undefined : navigator.mediaDevices;
+  if (!md || typeof md.enumerateDevices !== "function") return null;
+  return listMicDevices(await md.enumerateDevices());
+}
+function browserOnDeviceChange(fn: () => void): () => void {
+  const md = typeof navigator === "undefined" ? undefined : navigator.mediaDevices;
+  if (!md || typeof md.addEventListener !== "function") return () => {};
+  md.addEventListener("devicechange", fn);
+  return () => md.removeEventListener("devicechange", fn);
+}
+
 export const browserDictationEnv = (): DictationEnv => ({
   micPermission: browserMicPermission,
   getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c) as Promise<MediaStream>,
+  listMics: browserListMics,
+  onDeviceChange: browserOnDeviceChange,
   Recorder: (typeof MediaRecorder === "undefined" ? undefined : MediaRecorder) as unknown as DictationEnv["Recorder"],
   now: () => Date.now(),
   setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -92,7 +108,7 @@ function browserLevelMeter(stream: unknown): LevelMeter | null {
 export const DictationEnvContext = createContext<() => DictationEnv>(browserDictationEnv);
 
 const FAILURE_TEXT: Record<Exclude<DictationFailure, "denied">, string> = {
-  no_mic: NO_MIC, busy: MIC_BUSY, unsupported: UNSUPPORTED, too_short: SOFT_TOO_SHORT, too_large: TOO_LARGE, failed: GENERIC_UNAVAILABLE,
+  no_mic: NO_MIC, mic_missing: MIC_MISSING, busy: MIC_BUSY, unsupported: UNSUPPORTED, too_short: SOFT_TOO_SHORT, too_large: TOO_LARGE, failed: GENERIC_UNAVAILABLE,
 };
 
 /** Each failure line gets its own id: its 8 s timer belongs to that line, not to a render. */
@@ -108,7 +124,10 @@ function useDictation(api: ComposerAddonApi): DictationController {
   const apiRef = useRef(api); apiRef.current = api;
   const clip = useRef<Clip | null>(null);
   // The browser objects for this control, made once. The retry keep-timer runs on the same clock (tests drive it).
-  const [env] = useState(makeEnv);
+  // R-019: the recorder reads the microphone choice at each start, from the latest voice context.
+  const voiceRef = useRef(voice); voiceRef.current = voice;
+  // The env object is fresh per call; it is extended in place (a spread would snapshot accessor properties).
+  const [env] = useState<DictationEnv>(() => { const e = makeEnv(); e.micChoice ??= () => voiceRef.current.micChoice ?? null; return e; });
   const envRef = useRef(env);
   const keepTimer = useRef<unknown>(null);
   const afterRetry = useRef(false);
@@ -219,7 +238,11 @@ function useDictation(api: ComposerAddonApi): DictationController {
 
   // CGP-SHELL-R-010: whether this control already showed the microphone explainer (one per control).
   const explained = useRef(false);
-  const toggle = useCallback(() => {
+  /** R-019: a 기본 마이크로 녹음 start waiting behind the explainer card (cleared by 나중에). */
+  const defaultAfterExplain = useRef(false);
+  const startRecorder = useCallback((useDefault: boolean) => { void recorder.start({ useDefault }); }, [recorder]);
+  /** Start, or stop when recording. `useDefault`: R-019 기본 마이크로 녹음, this one recording with the system default. */
+  const begin = useCallback((useDefault: boolean) => {
     if (apiRef.current.disabled) {
       // R-014: refused with a message, not silently, when another control holds the microphone.
       const reason = apiRef.current.disabledReason;
@@ -235,23 +258,27 @@ function useDictation(api: ComposerAddonApi): DictationController {
     dropClip();
     voice.gate(() => {
       const ask = envRef.current.micPermission;
-      if (!ask || explained.current) { void recorder.start(); return; }
+      if (!ask || explained.current) { startRecorder(useDefault); return; }
       void ask().then((permission) => {
         if (recorder.current !== "idle" || inFlight.current) return;
-        if (needsMicExplainer(permission, explained.current)) { set({ kind: "explain" }); return; }
-        void recorder.start();
+        if (needsMicExplainer(permission, explained.current)) { defaultAfterExplain.current = useDefault; set({ kind: "explain" }); return; }
+        startRecorder(useDefault);
       });
     });
-  }, [recorder, voice, dropClip, set]);
+  }, [recorder, voice, dropClip, set, startRecorder]);
+  const toggle = useCallback(() => begin(false), [begin]);
   const allowMic = useCallback(() => {
     if (view.kind !== "explain") return;
     explained.current = true;
     set({ kind: "idle" });
-    void recorder.start();   // the OS asks now, right after the learner read why
-  }, [view, recorder, set]);
+    const useDefault = defaultAfterExplain.current;
+    defaultAfterExplain.current = false;
+    startRecorder(useDefault);   // the OS asks now, right after the learner read why
+  }, [view, set, startRecorder]);
   const laterMic = useCallback(() => {
     if (view.kind !== "explain") return;
     explained.current = true;
+    defaultAfterExplain.current = false;
     set({ kind: "idle" });
   }, [view, set]);
 
@@ -274,8 +301,9 @@ function useDictation(api: ComposerAddonApi): DictationController {
     }
     if (view.recovery === "type") { dismiss(); apiRef.current.focusComposer?.(); return; }
     dismiss();
-    toggle();
-  }, [view, retry, dismiss, toggle]);
+    // R-019 기본 마이크로 녹음: one press records this once with the system default; the choice stays.
+    begin(view.recovery === "use_default");
+  }, [view, retry, dismiss, begin]);
   const insertRecovered = useCallback(() => {
     if (view.kind !== "recovered") return;
     if (apiRef.current.insert(view.text)) set({ kind: "done" });
@@ -443,7 +471,7 @@ export function DictationNoticeView({ view, controller }: { view: View; controll
   }
 }
 
-const RECOVERY_LABEL: Record<DictationRecovery, string> = { resend: RECOVER_RESEND, speak_again: RECOVER_SPEAK_AGAIN, type: RECOVER_TYPE };
+const RECOVERY_LABEL: Record<DictationRecovery, string> = { resend: RECOVER_RESEND, speak_again: RECOVER_SPEAK_AGAIN, type: RECOVER_TYPE, use_default: RECOVER_USE_DEFAULT };
 
 /**
  * D-012 / R-015: one failure line: the alert icon, the cause's one sentence and its one recovery action, with

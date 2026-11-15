@@ -828,7 +828,8 @@ export function App() {
   });
 
   // Studio voice (voiceServed.ts): `none` unless the served profile carries a `voice` block. Nothing below draws then.
-  const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor);
+  // CGP-VOICE-R-019: the microphone choice is this computer's (config.micInput), read by dictation and the voice conversation.
+  const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor, state.config?.micInput);
 
   return (<VoiceProvider controller={voice}>
     {/* REQ-STUDIO-REPORT-LOGS: the report form and the send confirmation stay reachable while the crash card is up

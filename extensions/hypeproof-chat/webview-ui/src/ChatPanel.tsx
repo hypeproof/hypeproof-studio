@@ -134,6 +134,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { DataDeletionRequest } from "./DataDeletionRequest";
 import { TaskMemorySwitches } from "./TaskMemorySwitches";
 import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
+import { MicInputSetting } from "./MicInputSetting";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
@@ -2810,6 +2811,8 @@ export function ChatPanel(props: Props) {
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {/* CGP-SHELL-R-019 — the lasting way back after 팁 그만 보기: only where a lesson can show tips, never the instructor console. */}
         {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
+        {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served. */}
+        <MicInputSetting />
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -2837,6 +2840,8 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served, while open. */}
+        <MicInputSetting open={preferencesOpen} />
         {/* CGP-KNOW-D-022 — the same read-only state line, with the folder, in the settings dialog. */}
         {config.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="settings" />}
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).

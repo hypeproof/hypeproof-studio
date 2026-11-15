@@ -366,6 +366,30 @@ should. Four mutants each fail at least one case: treating `not-allowed` as a pl
 from the first chunk, showing a blocked reading as pressed, and keeping no pending chunks. A real
 browser autoplay refusal, a screen reader and the packaged app are not run here.
 
+## Choosing the microphone (CGP-VOICE-R-019 / CGP-VOICE-D-015)
+
+`test/mic-input.smoke.mjs` has no DOM.
+- It reads the stored record: junk of any shape is the default, and a write is refused unless it is a choice or null.
+- It covers the device list: pseudo-entries are dropped, a list hidden before permission is `null`, and no microphone is `[]`. It also covers resolution: the id first, then exactly one device with the same label, otherwise missing.
+- It drives the real `DictationRecorder`: the exact constraint is used, and a missing microphone opens nothing and fails as `mic_missing`. An exact-constraint `OverconstrainedError` or `NotFoundError` is `mic_missing` too, and `useDefault` records with `{ audio: true }`.
+- It drives the real `VoiceConversation`: a change applies at the next listening turn of the same session, with one stream per turn, and a missing microphone stops it with its line.
+- It checks the provider's write path in source: no log, no sync and no problem report.
+
+`test/mic-input.test.tsx` renders the real VoiceProvider, the dictation addon and the row, for an adult seat and a minor seat.
+- An unserved seat draws nothing and touches no browser API.
+- Opening the row never opens the microphone, and a pick posts `setMicInput` with the id and label.
+- The hidden, empty and unplugged states each say so in words, and a plug-in event re-selects the device.
+- An unplugged choice never records: the line offers `기본 마이크로 녹음`, which records once with the default, and the next press asks again.
+- 마이크 시험 is behind the disclosure and the explainer. It records from the chosen microphone, shows the real level, and gives the heard or silent result. It closes the tracks and the meter when it ends, when stopped early and when the dialog closes, and shows no bar under reduced motion.
+- The minimal DOM has no `select.options` and does not deselect sibling options. The test adds both with their browser meaning, because React's controlled select depends on them.
+
+`test/mic-input-browser.smoke.mjs` runs the real App in headless Chromium.
+- Both seats, Dark+ and Light+, at 320, 480 and 800px: 44px controls and 14px text inside the dialog, no sideways scroll, no microphone on open, and one write.
+- 마이크 시험 runs on a real AudioContext stream: the bar, `시험 멈추기` stopping every track, a tone heard after 5 s, and closing the dialog mid-test stopping the tracks. Reduced motion draws no bar.
+- An unserved seat has no row. HC Dark, HC Light and forced colours keep a visible edge and 4.5:1 ink.
+
+Red on #4164's head 55e8ae6e2. With only the pure module and copy present, the smoke fails on the exact constraint and 8 of 9 render cases fail. Real microphones and device-id stability on Windows and macOS are NOT RUN (#3626).
+
 ## Microphone explainer before the OS prompt (CGP-SHELL-R-010 / CGP-SHELL-D-009)
 
 `test/dictation-recovery-table.smoke.mjs` checks every dictation cause against every (retry, clipKept)
