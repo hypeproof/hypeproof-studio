@@ -283,7 +283,7 @@ try {
   // The contribution pushes the effective value at startup, on settings changes and on lock changes;
   // the model, the toolbar precondition and the command use the same value.
   const contribution = read(CONTRIB);
-  assert.match(contribution, /const push = \(\) => \{ const safe = hpSafeSessionOptions\(configurationService, storageService\); active\.set\(!!safe\); void browserViewService\.setSafeSession\(safe\); \};\n\t\tpush\(\);/, "startup push of the effective value");
+  assert.match(contribution, /const push = \(\) => \{\n\t\t\tconst safe = hpSafeSessionOptions\(configurationService, storageService\);\n\t\t\tactive\.set\(!!safe\);\n\t\t\tvoid browserViewService\.setSafeSession\(safe\);\n[\s\S]{0,160}void browserViewService\.setOutboundPolicy\(hpOutboundPolicy\(configurationService, storageService\)\);\n\t\t\};\n\t\tpush\(\);/, "startup push of the effective value");
   assert.match(contribution, /storageService\.onDidChangeValue\(StorageScope\.PROFILE, HP_CHAT_EXTENSION_ID, this\._store\)\(\(\) => push\(\)\)/, "lock change (profile) pushes");
   assert.match(contribution, /storageService\.onDidChangeValue\(StorageScope\.APPLICATION, HP_CHAT_EXTENSION_ID, this\._store\)\(\(\) => push\(\)\)/, "lock change (default profile) pushes");
   assert.match(model, /const safe = hpSafeSessionOptions\(this\.configurationService, this\.storageService\);/, "new views use the effective value");

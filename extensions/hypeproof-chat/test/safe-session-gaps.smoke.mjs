@@ -209,9 +209,22 @@ try {
   assert.deepEqual(hpSafeSessionOptions(conf({ hardenedSessionEnabled: true, safeSession: true, safeAllowlist: ["a.example"] })), { allowlist: ["a.example"] });
   assert.deepEqual(hpSafeSessionOptions(conf({ hardenedSessionEnabled: true, safeSession: true, safeAllowlist: "a.example" })), { allowlist: [] }, "a malformed list narrows to local pages");
 
+  // #4209: the outbound policy is on for a minor seat whether or not the hardened session is (lock or setting).
+  const ofn = model.slice(model.indexOf("export function hpOutboundPolicy("), model.indexOf("\n}\n", model.indexOf("export function hpOutboundPolicy(")) + 3);
+  const ofnFile = path.join(tmp, "outbound.ts");
+  const lockFor = (lock) => `\nfunction hpBrowserSettingsLock(_s: any) { return ${JSON.stringify(lock)} ?? undefined; }\n`;
+  const outboundWith = async (lock, name) => { const f = ofnFile.replace(".ts", `-${name}.ts`); fs.writeFileSync(f, ofn.replace(/: IConfigurationService/, ": any").replace(/, storageService: IStorageService/, ", storageService: any").replace(/: IBrowserOutboundPolicy \| undefined/, "") + lockFor(lock)); return (await import(pathToFileURL(f).href)).hpOutboundPolicy; };
+  const noLock = await outboundWith(null, "none");
+  assert.equal(noLock(conf({ hardenedSessionEnabled: false, safeSession: false }), {}), undefined, "adult seat: no outbound policy");
+  assert.deepEqual(noLock(conf({ hardenedSessionEnabled: false, safeSession: true, safeAllowlist: ["a.example"] }), {}), { allowlist: ["a.example"] }, "minor by setting, hardened session off: policy on");
+  const minorLock = await outboundWith({ hardened: false, safeSession: true, allowlist: ["lesson.example"] }, "minor");
+  assert.deepEqual(minorLock(conf({ safeSession: false, safeAllowlist: ["wide.example"] }), {}), { allowlist: ["lesson.example"] }, "minor by lock: the lock's list, settings cannot loosen");
+  const adultLock = await outboundWith({ hardened: false, safeSession: false, allowlist: [] }, "adult");
+  assert.equal(adultLock(conf({}), {}), undefined, "adult lock: no policy");
+  assert.match(read(PLATFORM), /setOutboundPolicy\(policy: IBrowserOutboundPolicy \| undefined\): Promise<void>;/, "IPC surface (#4209)");
   assert.match(read(PLATFORM), /setSafeSession\(safe: IBrowserSafeSessionOptions \| undefined\): Promise<void>;/, "IPC surface");
   const contribution = read(CONTRIB);
-  assert.match(contribution, /const push = \(\) => \{ const safe = hpSafeSessionOptions\(configurationService, storageService\); active\.set\(!!safe\); void browserViewService\.setSafeSession\(safe\); \};\n\t\tpush\(\);/, "pushed at startup");
+  assert.match(contribution, /const push = \(\) => \{\n\t\t\tconst safe = hpSafeSessionOptions\(configurationService, storageService\);\n\t\t\tactive\.set\(!!safe\);\n\t\t\tvoid browserViewService\.setSafeSession\(safe\);\n[\s\S]{0,160}void browserViewService\.setOutboundPolicy\(hpOutboundPolicy\(configurationService, storageService\)\);\n\t\t\};\n\t\tpush\(\);/, "pushed at startup");
   assert.match(contribution, /if \(e\.affectsConfiguration\('hypeproof\.browser'\)\) \{\n\t\t\t\tpush\(\);/, "pushed on every change");
   assert.match(contribution, /registerWorkbenchContribution2\(HpSafeSessionContribution\.ID, HpSafeSessionContribution, WorkbenchPhase\.BlockStartup\);/, "before editors restore");
   const actions = read(ACTIONS);

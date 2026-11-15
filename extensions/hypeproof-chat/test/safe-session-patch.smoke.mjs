@@ -63,7 +63,12 @@ try {
   // 3. Hardening on the session and the contents.
   const session = read(FILES[1]);
   assert.match(session, /if \(this\.sessionKind === 'safe'\) \{[\s\S]{0,700}setPermissionRequestHandler\(\(_webContents, _permission, callback\) => callback\(false\)\);[\s\S]{0,200}setPermissionCheckHandler\(\(\) => false\);[\s\S]{0,200}'will-download', \(event\) => event\.preventDefault\(\)/, "deny-all permissions and downloads");
-  assert.match(session, /webRequest\.onBeforeRequest\(\(details, callback\) => \{\n\t\t\t\tcallback\(\{ cancel: details\.resourceType === 'mainFrame' && !this\.isUrlAllowed\(details\.url\) \}\);/, "main-process loads (loadURL, CDP) meet the allowlist");
+  assert.match(session, /webRequest\.onBeforeRequest\(\(details, callback\) => \{\n\t\t\t\tcallback\(\{ cancel: \(details\.resourceType === 'mainFrame' && !this\.isUrlAllowed\(details\.url\)\) \|\| hpsOutboundBlockedRequest\(details, BrowserSession\.hpOutbound\) \}\);/, "main-process loads (loadURL, CDP) meet the allowlist; the #4209 outbound rule joins the one listener");
+  // #4209: non-safe sessions get the outbound rule too (the hardened session is off by default).
+  assert.match(session, /\} else \{[\s\S]{0,700}webRequest\.onBeforeRequest\(\(details, callback\) => \{\n\t\t\t\tcallback\(\{ cancel: hpsOutboundBlockedRequest\(details, BrowserSession\.hpOutbound\) \}\);/, "every browser session applies the minor seat's outbound rule");
+  assert.match(read(FILES[3]), /async setOutboundPolicy\(policy: IBrowserOutboundPolicy \| undefined\): Promise<void> \{\n\t\tBrowserSession\.hpOutbound = policy \? \{ allowlist: \[\.\.\.policy\.allowlist\] \} : undefined;/, "the main service sets the policy");
+  assert.match(contribution, /void browserViewService\.setOutboundPolicy\(hpOutboundPolicy\(configurationService, storageService\)\);/, "the workbench pushes the policy with or without the hardened session");
+  assert.match(model, /const minor = lock\?\.safeSession === true \|\| configurationService\.getValue<boolean>\('hypeproof\.browser\.safeSession'\) === true;/, "a minor seat: the lock or the setting");
   assert.match(session, /static getOrCreateSafe\(allowlist: readonly string\[\] = \[\]\): BrowserSession \{\n\t\tconst electronSession = session\.fromPartition\('persist:hp-safe'\);/);
   const view = read(FILES[2]);
   assert.match(view, /if \(this\.session\.sessionKind === 'safe'\) \{\n\t\t\t\treturn \{ action: 'deny' \};/, "no popups");
@@ -77,7 +82,7 @@ try {
   assert.ok(fn.startsWith("export function hpsSafeUrlAllowed(url: string, allowlist: readonly string[]): boolean {"));
   const modFile = path.join(tmp, "matcher.ts");
   fs.writeFileSync(modFile, fn);
-  const { hpsSafeUrlAllowed } = await import(pathToFileURL(modFile).href);
+  const { hpsSafeUrlAllowed, hpsOutboundBlocked, hpsOutboundBlockedRequest, hpsLoopbackHost } = await import(pathToFileURL(modFile).href);
   const list = ["example.org", "*.school.example", ".kids.example", "https://docs.example.net/guide", "https://hypeproof-ai.xyz/live/x/gallery", " HTTPS://Upper.Example/ ", "", "https://", "exa mple.org", "/example.org", 42];
   const URLS = [
     // admitted
@@ -97,6 +102,43 @@ try {
   for (const u of ["javascript:alert(1)", "data:text/html,<h1>x</h1>", "blob:https://example.org/1", "mailto:a@example.org", "not a url", "https://example.org/"]) {
     assert.equal(hpsSafeUrlAllowed(u, []), false, u);
   }
+
+  // 4b. #4209 (Jay 2026-11-15): the outbound rule, run as shipped. A minor seat's AI-made (loopback) page may not open a
+  // WebSocket to a host that is neither loopback nor on the list; everything else is unchanged.
+  const pol = { allowlist: ["https://hypeproof-ai.xyz/live/x/gallery", "lesson.example"] };
+  const AI = "http://127.0.0.1:5500/index.html";
+  const blocked = [
+    ["webSocket", AI, "ws://collect.example/s"], ["webSocket", AI, "wss://collect.example/s"], ["webSocket", "http://localhost:3000/", "wss://evil.example:443/x"],
+    ["webSocket", "http://[::1]:8080/", "ws://lesson.example.evil.com/"], ["webSocket", AI, "wss://hypeproof-ai.xyz/live/y/"], ["webSocket", AI, "not a url"],
+    ["webSocket", AI, "ftp://collect.example/"],
+    // Optional second commit: fetch/XHR/EventSource (xhr) and sendBeacon (ping) in core too (workers included).
+    ["xhr", AI, "https://collect.example/s"], ["ping", AI, "https://collect.example/s"],
+  ];
+  const allowed = [
+    ["webSocket", AI, "ws://127.0.0.1:5173/__vite_hmr"], ["webSocket", AI, "ws://localhost:35729/livereload"], ["webSocket", AI, "wss://lesson.example/chat"],
+    ["webSocket", AI, "wss://hypeproof-ai.xyz/live/x/gallery/room"], ["webSocket", "https://news.example/", "wss://collect.example/s"],
+    ["webSocket", "not a url", "wss://collect.example/s"], ["xhr", AI, "https://lesson.example/api"], ["ping", AI, "http://127.0.0.1:8080/log"],
+    ["xhr", "https://news.example/", "https://collect.example/s"],
+    ["mainFrame", AI, "https://collect.example/"], ["image", AI, "https://cdn.example/a.png"],
+  ];
+  for (const [t, top, u] of blocked) assert.equal(hpsOutboundBlocked(t, top, u, pol), true, `blocked: ${t} ${top} -> ${u}`);
+  for (const [t, top, u] of allowed) assert.equal(hpsOutboundBlocked(t, top, u, pol), false, `unchanged: ${t} ${top} -> ${u}`);
+  for (const [t, top, u] of blocked) assert.equal(hpsOutboundBlocked(t, top, u, undefined), false, `adult seat (no policy): ${u}`);
+  // One meaning of loopback, the same as the extension's isLoopbackHost (#4222), for the top and the target.
+  const host = (u) => new URL(u).hostname;
+  for (const u of ["http://localhost/", "http://localhost./", "http://LOCALHOST../", "http://a.localhost/", "http://b.a.localhost./", "http://127.255.1.2/", "http://2130706433/",
+    "http://0x7f.1/", "http://[::1]/", "http://[::ffff:127.0.0.1]/", "http://[::ffff:7f12:3456]/", "http://0.0.0.0/", "http://[::]/"]) assert.equal(hpsLoopbackHost(host(u)), true, `loopback: ${u}`);
+  for (const u of ["http://localhost.evil.com/", "http://localhostx/", "http://127.0.0.1.nip.io/", "http://128.0.0.1/", "http://[::ffff:8.8.8.8]/", "http://[::2]/", "http://10.0.0.1/", "http://0.0.0.1/"])
+    assert.equal(hpsLoopbackHost(host(u)), false, `not loopback: ${u}`);
+  for (const top of ["http://a.localhost:5173/", "http://localhost.:5500/", "http://0.0.0.0:3000/", "http://[::ffff:7f00:1]/"])
+    assert.equal(hpsOutboundBlocked("webSocket", top, "wss://collect.example/", pol), true, `a top on ${top} is held`);
+  for (const target of ["ws://a.localhost:24678/", "ws://0.0.0.0:35729/", "ws://[::ffff:127.0.0.1]:8080/", "ws://localhost./x"])
+    assert.equal(hpsOutboundBlocked("webSocket", AI, target, pol), false, `a target on ${target} is loopback, not off-list`);
+  // The details shape: frame.top.url first, then the contents' URL; a throwing getter is no top (unchanged).
+  assert.equal(hpsOutboundBlockedRequest({ resourceType: "webSocket", url: "wss://collect.example/", frame: { top: { url: AI } } }, pol), true, "frame.top.url");
+  assert.equal(hpsOutboundBlockedRequest({ resourceType: "webSocket", url: "wss://collect.example/", frame: null, webContents: { getURL: () => AI } }, pol), true, "webContents fallback");
+  assert.equal(hpsOutboundBlockedRequest({ resourceType: "webSocket", url: "wss://collect.example/", frame: { top: { url: "https://news.example/" } } }, pol), false, "a non-loopback top");
+  assert.equal(hpsOutboundBlockedRequest({ resourceType: "webSocket", url: "wss://collect.example/", webContents: { getURL: () => { throw new Error("gone"); } } }, pol), false, "no readable top");
 
   // 5. Staging.
   const fake = path.join(tmp, "studio");
