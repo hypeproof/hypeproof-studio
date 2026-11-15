@@ -213,6 +213,34 @@ await test("ops host: a report still being queued when the connection stops neve
     assert.equal(await b, "accepted", "the new stream's report gets its own answer");
     assert.equal(await a, "unconfirmed", "the old stream's report is never called accepted by the new stream's seq 1");
   }
+  // D5 (verify-r027): the NEW stream's answer for seq 1 lands before the old report's addSeq returns (no one waits for it
+  // yet, so it is buffered as early). The old report must not read the new stream's early buffer.
+  {
+    let releaseA; const gateA = new Promise((r) => { releaseA = r; });
+    const h = Object.assign(Object.create(Host.prototype), stopStubs, { loop: { nudge() {}, stop() {} }, log() {}, inboxChanged() {} });
+    h.outbox = { addSeq: async () => { await gateA; return 1; }, close: async () => {} };
+    h.onReports({ served: true, outcomes: [], rejected: [] }, live);
+    const a = h.materialReport({ reason: "wrong" });
+    await tick();
+    await h.stopConnection();
+    h.outbox = { addSeq: async () => 1, close: async () => {} }; h.loop = { nudge() {}, stop() {} };
+    h.onReports({ served: true, outcomes: [{ seq: 1, outcome: "accepted" }], rejected: [] }, live);
+    releaseA();
+    assert.equal(await a, "unconfirmed", "D5: the new stream's early answer for seq 1 is not the old report's");
+  }
+  // Guard A on its own: the outbox is replaced without a stop (no fresh maps). The old report is still unconfirmed.
+  {
+    let releaseA; const gateA = new Promise((r) => { releaseA = r; });
+    const h = Object.assign(Object.create(Host.prototype), { loop: { nudge() {}, stop() {} }, log() {}, inboxChanged() {} });
+    h.outbox = { addSeq: async () => { await gateA; return 1; } };
+    h.onReports({ served: true, outcomes: [], rejected: [] }, live);
+    const a = h.materialReport({ reason: "wrong" });
+    await tick();
+    h.outbox = { addSeq: async () => 1 };
+    h.onReports({ served: true, outcomes: [{ seq: 1, outcome: "accepted" }], rejected: [] }, live);
+    releaseA();
+    assert.equal(await a, "unconfirmed", "another outbox's seq 1 is never this report's answer, even without a stop");
+  }
   // R2: an early answer buffered on the old stream (seq 3) does not answer a new stream's seq 3.
   {
     const h = Object.assign(Object.create(Host.prototype), stopStubs, { loop: { nudge() {}, stop() {} }, log() {}, inboxChanged() {} });

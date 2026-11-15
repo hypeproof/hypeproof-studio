@@ -954,15 +954,17 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
   async materialReport(payload: Record<string, unknown>): Promise<MaterialReportOutcome | "not_sent" | "unconfirmed"> {
     const outbox = this.outbox, loop = this.loop;
     if (!outbox || !loop || this.reportsServed !== true) return "not_sent";
-    this.reportWaits ??= new Map();
-    const waits = this.reportWaits;
+    this.reportWaits ??= new Map(); this.reportEarly ??= new Map();
+    // Both maps are captured with the outbox: everything this report reads or writes belongs to the connection it was
+    // queued on. A later connection's maps (fresh on stop) can never answer it.
+    const waits = this.reportWaits, earlyMap = this.reportEarly;
     const seq = await outbox.addSeq("material_report", payload, "student");
     if (seq === null) return "not_sent";
     // The connection stopped (and maybe reconnected) while the event was being written: its seq belongs to the old stream,
     // so no answer on the current one is about it. It is unconfirmed, never another report's "accepted".
     if (this.outbox !== outbox || this.reportWaits !== waits) return "unconfirmed";
-    const early = this.reportEarly?.get(seq);
-    if (early) { this.reportEarly.delete(seq); return early; }
+    const early = earlyMap.get(seq);
+    if (early) { earlyMap.delete(seq); return early; }
     const answer = new Promise<MaterialReportOutcome | "unconfirmed">((resolve) => {
       const timer = setTimeout(() => { if (waits.get(seq) === done) waits.delete(seq); resolve("unconfirmed"); }, ClassroomOpsHost.REPORT_ANSWER_MS);
       const done = (o: MaterialReportOutcome | "unconfirmed") => { clearTimeout(timer); resolve(o); };
