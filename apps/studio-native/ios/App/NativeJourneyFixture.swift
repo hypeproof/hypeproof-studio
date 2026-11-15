@@ -15,6 +15,7 @@ import CryptoKit
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
     }
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
+    static var queuedVoice: Bool { enabled && JourneyConfiguration.scenario == "queued-voice" }
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
     static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
@@ -43,7 +44,7 @@ import CryptoKit
     static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
     static func synchronizationStarted(automatic: Bool) {
-        if periodicVoice || (enabled && JourneyConfiguration.scenario == "queued-voice") {
+        if periodicVoice || queuedVoice {
             JourneyTransport.store.synchronizationStarted(automatic: automatic)
         }
     }

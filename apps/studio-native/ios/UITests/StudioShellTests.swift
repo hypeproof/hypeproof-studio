@@ -298,7 +298,9 @@ final class StudioJourneyTests: XCTestCase {
                   let value = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
             return (value[key] as? Int ?? 0) >= count
         }, object: node)
-        XCTAssertEqual(XCTWaiter.wait(for: [observed], timeout: 10), .completed, "Observe the actual request boundary before judging readiness.")
+        let result = XCTWaiter.wait(for: [observed], timeout: 10)
+        if result != .completed { readinessFailure("request-boundary-" + key, app: app, queries: [("trace", node)]) }
+        XCTAssertEqual(result, .completed, "Observe the actual request boundary before judging readiness.")
         return try trace(app)
     }
     @MainActor func testPersonalQuestionReadyAndSendWhileDesktopListIsHeld() throws {
