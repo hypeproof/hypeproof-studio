@@ -1045,8 +1045,38 @@ final class StudioJourneyTests: XCTestCase {
         enabled(app.buttons["restoreFailedReflectionDraft"])
         XCTAssertTrue(error.waitForExistence(timeout: 10)); XCTAssertTrue(error.label.contains("AI 이용 권한"))
         assertSingleRecordedQuestion(words, in: app)
-        app.buttons["restoreFailedReflectionDraft"].tap()
-        XCTAssertEqual(field(app).value as? String, words)
+        // Hold an actual ordinary periodic GET. The existing failed request is
+        // local recovery data: reading history must not disable its restore.
+        app.buttons["conversationSettings"].tap()
+        let hold = app.buttons["nativeJourneyHoldHistory"]
+        XCTAssertTrue(hold.waitForExistence(timeout: 5)); XCTAssertTrue(hold.isHittable)
+        hold.tap()
+        let held = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertEqual(held["active_history_reads"] as? Int, 1)
+        XCTAssertEqual(held["delayed_history_reads"] as? Int, 1)
+        XCTAssertEqual(held["history_sync_automatic"] as? Bool, true)
+        XCTAssertEqual(held["history_barrier_completions"] as? Int, 0)
+        XCTAssertEqual(held["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(held["history_barrier_cancellations"] as? Int, 0)
+        let restore = app.buttons["restoreFailedReflectionDraft"]
+        if !restore.isEnabled || !restore.isHittable {
+            readinessFailure("failed-draft-held-history", app: app, queries: [("restore", restore), ("input", field(app))])
+        }
+        XCTAssertTrue(restore.isEnabled); XCTAssertTrue(restore.isHittable)
+        restore.tap()
+        let restoredInput = field(app)
+        if restoredInput.value as? String != words {
+            readinessFailure("failed-draft-after-tap", app: app, queries: [("restore", restore), ("input", restoredInput)])
+        }
+        XCTAssertEqual(restoredInput.value as? String, words)
+        let released = try waitForTraceCount("failed_draft_history_applications", atLeast: 1, in: app)
+        XCTAssertEqual(released["failed_draft_restore_attempts"] as? [Bool], [true])
+        XCTAssertEqual(released["restored_failed_drafts"] as? Int, 1)
+        XCTAssertEqual(released["history_barrier_completions"] as? Int, 1)
+        XCTAssertEqual(released["active_history_reads"] as? Int, 0)
+        XCTAssertEqual(released["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(released["history_barrier_cancellations"] as? Int, 0)
+        XCTAssertEqual(field(app).value as? String, words, "The completed GET must keep the restored local draft.")
         app.terminate(); app.launch(); _ = field(app)
         XCTAssertEqual(field(app).value as? String, words)
         XCTAssertFalse(app.buttons["restoreFailedReflectionDraft"].isEnabled)

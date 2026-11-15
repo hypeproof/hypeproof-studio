@@ -258,9 +258,11 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
-                if NativeJourneyFixture.logoutSync {
+                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied {
                     settingsButton("Hold next history read") { leaveSettings(for: .holdHistory) }.accessibilityIdentifier("nativeJourneyHoldHistory")
-                    settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
+                    if NativeJourneyFixture.logoutSync {
+                        settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
+                    }
                 }
 #endif
                 Section("음성") {
@@ -336,7 +338,10 @@ struct SharedConversationView: View {
 #if DEBUG
         case .finishPlayback: voice.finishFixturePlayback()
         case .advanceHistory: NativeJourneyFixture.advanceHistory()
-        case .holdHistory: NativeJourneyFixture.holdNextHistory(); model.refresh()
+        case .holdHistory:
+            NativeJourneyFixture.holdNextHistory()
+            // The failed-draft journey observes the ordinary periodic GET.
+            if !NativeJourneyFixture.accessDenied { model.refresh() }
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
         case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
@@ -644,7 +649,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in
