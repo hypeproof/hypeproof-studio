@@ -17748,6 +17748,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/VoiceConversationControl.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/micInput.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MicInputSetting.tsx"
         }
       ]
     },
@@ -17794,6 +17800,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/dictation-level-meter.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mic-input.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mic-input.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mic-input-browser.smoke.mjs"
         }
       ]
     },

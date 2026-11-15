@@ -173,6 +173,11 @@ export interface ChatConfig {
   textSize?: import('./textSize').TextSize;
   /** CGP-SHELL-R-019: lesson tips are shown on this device (false only after 팁 그만 보기). */
   lessonTips?: boolean;
+  /**
+   * CGP-VOICE-R-019: the microphone this computer records from; absent for the system default. Local only: the
+   * label can name a person, so it is never logged, sent to the Service or put in a problem report.
+   */
+  micInput?: { id: string; label: string };
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
   /**
@@ -826,6 +831,8 @@ export type WebviewMessage = (
   | { type: "setTextSize"; size: string }
   /** CGP-SHELL-R-019: the learner turned lesson tips off (팁 그만 보기) or back on. */
   | { type: "setLessonTips"; on: boolean }
+  /** CGP-VOICE-R-019 — the learner picked a microphone (null: 시스템 기본값); the host keeps it for this computer. */
+  | { type: "setMicInput"; choice: { id: string; label: string } | null }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }

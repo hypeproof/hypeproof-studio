@@ -3,6 +3,7 @@
 import { DictationRecorder, type Clip, type DictationEnv, type StreamLike } from './voiceDictation.ts';
 import type { HostMessage } from './protocol.ts';
 import type { ReadAloud } from './voiceReadAloud.ts';
+import { CONVERSATION_MIC_MISSING } from './voiceCopy.ts';
 
 export type ConversationPhase = 'idle' | 'starting' | 'listening' | 'transcribing' | 'answering' | 'speaking' | 'stopped';
 export interface ConversationView { phase: ConversationPhase; note: string }
@@ -67,7 +68,8 @@ export class VoiceConversation {
         this.deadline(50_000);
         env.transcribe(this.request, clip);
       },
-      onFailure: () => this.stop('녹음을 마치지 못했어요. 마이크 권한을 확인하거나 글로 계속해 주세요.'),
+      // R-019: the chosen microphone is not connected: stop and say so; a conversation never falls back silently.
+      onFailure: kind => this.stop(kind === 'mic_missing' ? CONVERSATION_MIC_MISSING : '녹음을 마치지 못했어요. 마이크 권한을 확인하거나 글로 계속해 주세요.'),
     });
   }
   get active(): boolean { return ACTIVE.has(this.view.phase); }
