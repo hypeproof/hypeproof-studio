@@ -103,6 +103,7 @@ import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMod
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, isInsideFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { freeBytesAt, lowDiskKey, lowDiskNotice, lowDiskThresholdBytes, LOW_DISK_SETTING, type LowDiskNotice, type Statfs } from './lowDisk';
+import { askServiceStatus, nextServiceStatusAt } from './serviceStatus';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED, FOLDER_CONSENT_TIMED_OUT } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -160,7 +161,7 @@ import { logsAvailable, readSessionLogs } from "./reportLogsHost";
 import { collectReportMetadata } from "./reportProblem";
 import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
 import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
-import { acceptFocus, acceptWork, collapseSeat, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { acceptFocus, acceptWork, collapseSeat, materialReportPayload, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -399,6 +400,7 @@ import {
   pendingCloseLabel,
   WRITE_TOOL_NAMES,
   resolveInstructorTokenFromSecrets,
+  looksLikeIssuerTokenUnverified,
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
 import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
@@ -1912,6 +1914,81 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     })();
     this.lowDiskRun = run;
     void run.finally(() => { if (this.lowDiskRun === run) this.lowDiskRun = undefined; if (rerun) void this.refreshLowDisk(); });
+    return run;
+  }
+  /**
+   * CGP-AGENT-R-031 — the Service's busy signal for the banner above the composer. Asked only for a
+   * signed-in participant seat on the Service: a local coach has no Service to ask, and an instructor or issuer
+   * seat would only get the route's 401. An unchanged state is not re-posted; concurrent asks share one request.
+   */
+  private serviceStatusPosted: string | undefined;
+  private serviceStatusRun: Promise<void> | undefined;
+  /** Not before this time (normal minute, or backoff after errors). */
+  private serviceStatusNextAt = 0;
+  private serviceStatusErrors = 0;
+  /** The Service and token a 404 came back for: that Service has no such route, so this seat is not asked again. */
+  private serviceStatusUnserved: string | undefined;
+  /** Test seams: the fetch used to ask (undefined = the global fetch) and the clock. */
+  serviceStatusFetch: Parameters<typeof askServiceStatus>[0] | undefined;
+  serviceStatusNow: (() => number) | undefined;
+  /** The last answer, re-posted to a remounted panel without asking the Service again. */
+  private serviceStatusLast: boolean | undefined;
+  /**
+   * The learner closed the banner for THIS busy episode. Kept here, not in the panel, so a remount (a task switch) does
+   * not bring it back. It ends when the Service reads not busy, so the next busy episode shows the banner again.
+   */
+  private serviceStatusDismissed = false;
+  /**
+   * A remount (a task switch, the panel coming back) re-posts the last state and never adds a Service request of its
+   * own: it asks only once the interval has passed. A seat the route does not serve is asked again only after its token
+   * or the Service address changes.
+   */
+  resetServiceStatus(): void { this.serviceStatusPosted = undefined; }
+  private async postServiceStatus(busy: boolean): Promise<void> {
+    const dismissed = busy && this.serviceStatusDismissed === true;
+    const key = JSON.stringify([busy, dismissed]);
+    if (key === this.serviceStatusPosted) return;
+    if (await this.post({ type: "serviceStatus", busy, dismissed }) !== false) this.serviceStatusPosted = key;
+  }
+  /** The banner's close button: hidden for this busy episode, across remounts, until the Service reads not busy. */
+  async dismissServiceStatus(): Promise<void> {
+    if (this.serviceStatusLast !== true) return;
+    this.serviceStatusDismissed = true;
+    await this.postServiceStatus(true);
+  }
+  refreshServiceStatus(): Promise<void> {
+    if (this.serviceStatusRun) return this.serviceStatusRun;
+    const run = (async () => {
+      try {
+        const repost = async () => { if (this.serviceStatusLast !== undefined) await this.postServiceStatus(this.serviceStatusLast); };
+        const now = (this.serviceStatusNow ?? Date.now)();
+        const proxyUrl = this.proxyUrl();
+        const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
+        const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
+        // An instructor or issuer seat: the route answers 401 to an issuer token every time, so asking would only back
+        // off forever. Not a gate (the Service decides what a token may do); it only saves a request that cannot succeed.
+        const staff = this._instructorMode?.isInstructor === true || looksLikeIssuerTokenUnverified(token);
+        const seat = `${proxyUrl}\n${token ?? ""}`;
+        if (this.serviceStatusUnserved === seat) { await repost(); return; }
+        if (this.serviceStatusUnserved !== undefined) { this.serviceStatusUnserved = undefined; this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; }
+        if (!staff && now < (this.serviceStatusNextAt ?? 0)) { await repost(); return; }
+        const answer = staff ? { busy: false, outcome: 'skipped' as const } : await askServiceStatus(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof askServiceStatus>[0]), { proxyUrl, token });
+        // `?? 0`: a test harness built with Object.create skips the field initialisers.
+        this.serviceStatusErrors = answer.outcome === 'error' ? (this.serviceStatusErrors ?? 0) + 1 : 0;
+        if (answer.outcome === 'unserved') this.serviceStatusUnserved = seat;
+        // No token yet, or a staff seat, is not a verdict on the seat: ask again on the next request.
+        this.serviceStatusNextAt = answer.outcome === 'skipped' || answer.outcome === 'unserved' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
+        this.serviceStatusLast = answer.busy;
+        // Only a confirmed healthy answer ends the busy episode. An error (network, timeout, 5xx, 401, 403) reads as not busy
+        // and hides the banner, but it is no verdict on the episode, so a closed banner stays closed when busy is seen again.
+        if (answer.outcome === 'ok' && !answer.busy) this.serviceStatusDismissed = false;
+        await this.postServiceStatus(answer.busy);
+      } catch (error) {
+        console.warn('[serviceStatus] check failed', error);
+      }
+    })();
+    this.serviceStatusRun = run;
+    void run.finally(() => { if (this.serviceStatusRun === run) this.serviceStatusRun = undefined; });
     return run;
   }
   /** A send while the folder is missing is held: the text goes back to the composer, the notice is shown, no turn starts. */
@@ -7993,8 +8070,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return result;
   }
   /**
-   * The quarantine of one task goes with it: archived or moved to another activity. The handler does not wait for it,
-   * and it never throws or rejects:
+   * The quarantine of one task goes with it: archived or moved to another activity (a refused move throws before this,
+   * so it keeps it). The handler does not wait for the delete, but the task folder is renamed away before this returns control
+   * (purgeTaskQuarantine), so a new turn in a restored task writes into a fresh folder. It never throws or rejects:
    * the archive or move has already happened, and the task handler's own flow (its result, the rename undo, the
    * switch) must run exactly as without it (task-workspace-host). A host without global storage has nothing to purge.
    */
@@ -9040,6 +9118,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "turnReviewRequest": this.postTurnReview(); return;
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
       case "lowDiskRequest": if (msg.mount === true) this.lowDiskPosted = undefined; await this.refreshLowDisk(); return;
+      case "serviceStatusRequest": if (msg.mount === true) this.resetServiceStatus(); await this.refreshServiceStatus(); return;
+      case "serviceStatusDismiss": await this.dismissServiceStatus(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
@@ -9705,6 +9785,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.workspaceState.update("hps.lessonWork", { ...all, [lesson.sha256]: { ...(all[lesson.sha256] ?? {}), [saved.stepId]: saved.work } });
         this.spool?.recordWorkflow({ event: "lesson_work_saved", payload: { lesson_version: lesson.version, step_id: saved.stepId, kind: saved.work.kind } });
         await this.post({ type: "lessonWorkState", sha256: lesson.sha256, work: this.lessonWorkFor(lesson.sha256) });
+        return;
+      }
+      // CGP-LEARN-R-011 — "자료가 틀린 것 같아요". Only a block the served lesson draws on that step, and one of three reasons;
+      // it goes to the class board over the classroom-ops outbox (ids only, no text). The answer is the Service's own outcome.
+      case "materialReport": {
+        const lesson = this.cachedProfile?.lesson;
+        const payload = materialReportPayload(lesson, msg);
+        // "sent" only after the Service accepted it (or already holds the same report); a queued report is not sent.
+        let outcome: string = "not_sent";
+        if (payload) { try { outcome = (await this.opsObserver?.materialReport?.(payload)) ?? "not_sent"; } catch { outcome = "not_sent"; } }
+        const state = outcome === "accepted" ? "sent" : outcome === "duplicate" ? "already" : outcome === "capped" ? "capped" : outcome === "unconfirmed" ? "unconfirmed" : "not_sent";
+        if (lesson) await this.post({ type: "materialReportResult", sha256: lesson.sha256, stepId: msg.stepId, state });
         return;
       }
       // AE-01 (#554) — the learner's own goal and completion criteria for this lesson revision. Kept on this device beside

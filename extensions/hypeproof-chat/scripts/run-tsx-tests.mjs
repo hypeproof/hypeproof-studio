@@ -71,6 +71,7 @@ const OVERRIDES = {
   "checkpoint": { banner: BANNER_POSTED },
   "memory-write-line": { banner: BANNER_POSTED },
   "voice-ui": { banner: BANNER_POSTED_STATE },
+  "dictation-recovery": { banner: BANNER_POSTED_STATE },
   "voice-mount": { banner: BANNER_POSTED },
   "voice-mute": { banner: BANNER_POSTED },
   "voice-agent-status": { banner: BANNER_POSTED },

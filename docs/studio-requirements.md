@@ -3611,7 +3611,11 @@ against the slice's label set (AI/Studio/올림/기록 없음 only). Cases cover
   while its bytes stay, anything else reads 기록 없음;
 - a ledger file carrying a learner-change event is rejected as damaged;
 - a lock that the label table, event kinds, host-write actors, provider and webview contain no
-  `내가 고침`, no learner-save kind and no editor save subscription;
+  `내가 고침` and no learner-save kind;
+- an import-graph lock (`test/artifact-provenance-imports.smoke.mjs`, #4124): no module that imports
+  `artifactProvenance` or `artifactProvenanceView` subscribes to an editor or notebook save event, except
+  `previewProvider.ts` (it reloads the watched preview), whose save callback must not reach a provenance import,
+  directly or through a method of the same class. It parses the TypeScript AST, and planted violations are caught;
 - the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
 - the hash cache and skipped Python environments.
 
@@ -7743,6 +7747,94 @@ personal and classroom, dark/light, 320/1420 px). This serves PI#1 (useful work 
 before losing work) and the access principle that limits never hide or take away the
 learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
 
+## Busy banner (CGP-AGENT-R-031)
+
+REQ-CGP-AGENT-66 / CGP-AGENT-R-031 / DES-CGP-AGENT-66 / CGP-AGENT-D-027 / PI#4 / ADAPT:
+while the AI side is struggling, Studio says so before the learner sends, calmly, and
+never stops them from sending.
+
+- Signal: the Service serves `GET /v1/service-status` → `{"busy": true|false}` to an
+  authenticated participant seat only (hypeproof-service#465). It is derived from the
+  upstream failures learner turns already meet (429, 529, 5xx and unreachable, not a
+  learner's own Stop), over a short window. The body names no provider, model, status
+  or count, and the public `/health` carries no such flag.
+- When Studio asks: the panel asks on mount, when it comes back into view, on window
+  focus, and once a minute while the view is visible and the window is focused. The host
+  asks only for a signed-in participant seat on the Service (no token, a local coach, or an
+  instructor or issuer seat asks nothing, because the route answers 401 to an issuer token), and never more than once a minute: a remount inside that minute (a task switch, the panel
+  coming back) re-posts the last answer without asking again. After an error (network, timeout, 5xx)
+  the wait doubles up to 15 minutes and a good answer returns it to a minute. When the Service
+  has no such route (404), that seat stops asking until its token or the Service address changes.
+  A 401 or 403 is an error and backs off like one: a 403 `session_inactive` clears when the class
+  opens with the same token. An
+  unchanged answer is not re-posted, and concurrent asks share one request
+  (`src/serviceStatus.ts`, `ChatPanelProvider.refreshServiceStatus`).
+- Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,
+  a 5-second timeout, a 401, a 404 from a Service without the route, or a malformed body
+  reads as not busy. The offline banner (CGP-SHELL-R-011) covers a lost network.
+- What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요", and one
+  close button ("붐빔 알림 닫기"). It is `role="status"`. It
+  leaves on its own when the Service reads healthy and comes back if busy returns. Closing it
+  hides it for that busy episode: the host keeps the closed state with the last answer, so a
+  remount (a task switch) re-posts it closed. The episode ends only when the Service answers
+  healthy (a 200 with `busy: false`); an error answer hides the banner but keeps it closed for
+  the episode. The next busy episode shows the banner again. Focus returns to the composer.
+- Not: it never holds a send, disables the composer, names a provider or a cause, or
+  replaces the stall watchdog (REQ-M26), which still handles a turn that does not answer.
+- Design (DES-CGP-AGENT-66): an amber edge (`--hp-border-warn-default`) on the widget
+  background, one line of text at least 14px from 320 to 1420 px, a 44px close with the
+  shared focus ring, no animation or transition at all (so reduced motion needs no
+  override), and in forced colours the edge becomes a text-coloured line and the ring
+  stays.
+
+Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
+fail-quiet fetch with positive and negative controls, outcomes and backoff; the real
+`ChatPanelProvider` for busy, dedupe, recovery, the minimum interval, backoff and its cap,
+the 404 stop and 401/403 backoff (a 403 that clears with the same token), remount, shared requests, a seat without a token,
+instructor and issuer seats that never ask (control: a participant seat with the same token does), and a dismissal that
+survives remounts for the busy episode and ends when the Service reads not busy) and
+`busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
+classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
+44px close, focus ring, Enter still sends, healthy removes it, closing tells the host, and after a remount the host's
+`dismissed` keeps it closed (control: busy without `dismissed` shows it); fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser). The installed app against the
+deployed Service is NOT RUN.
+
+## Lesson skill shelf (CGP-AGENT-R-020)
+
+REQ-CGP-AGENT-36 / CGP-AGENT-R-020 / DES-CGP-AGENT-36 / CGP-AGENT-D-017 / PI#1 / PI#3: Jay approved this on 2026-11-14.
+A lesson can offer the learner up to six skill cards. An instructor authors them in Chalk (CH-13: a name, a one-line
+summary and a starter prompt), and they are frozen with the lesson version (`skill_cards`, hypeproof-service#488).
+
+- Source: `/v1/profile` serves `skill_cards` only when the frozen lesson has them. Studio re-validates them
+  (`src/lessonSkillCards.ts`) and skips anything malformed:
+  - more than 6 cards;
+  - a name over 30 units, a summary over 80, or a prompt over 300 units or 6 lines;
+  - control, bidi or zero-width characters;
+  - a link, by the Service's `hasLink`. It applies NFKC and folds colon look-alikes, then refuses `<scheme>://`, a
+    known scheme directly followed by `:` (http(s), ftp(s), javascript, vbscript, data, file, blob, mailto, tel,
+    sms, intent, about, vscode*, hypeproof*, x-*; marks stripped and Cyrillic/Greek look-alikes folded), a bare
+    `http:`/`https:`, `www.` plus a domain, and `//` plus a host. Coding text with colons passes (`color:red`,
+    `a:hover`, `std::cout`, `C:\Users`, `//주석`, `Q:답`). The cases live in `chalk/test/fixtures/link-cases.json`;
+  - a duplicate name.
+- What: a collapsed "이 수업의 스킬 (N)" disclosure above the composer, after the starter chips. Each card
+  shows its name and summary and one "써 보기" button ("써 보기: <name>"). It stays after the learner's first
+  message (unlike starters). Instructor surfaces draw no shelf.
+- 써 보기 puts the card's starter prompt into the draft through the same rule as a starter chip: a manual draft is
+  kept, a second press replaces the first card's text, and nothing is sent.
+- Not: no install, enable, delete or source control, and no "보기". The coach's SKILL.md and `Profile.skills` are
+  never shown. The cards never reach the coach. The Service drops them from the coach's lesson JSON, and the dev
+  local runtime drops them too (`devCoachVisibleLesson`).
+- A lesson without cards renders byte-identical to before.
+- Design (DES-CGP-AGENT-36): one column at every width, 44px summary and buttons, 14px text, tokens only.
+
+Evidence:
+- `extensions/hypeproof-chat/test/lesson-skill-cards.test.tsx`: the real ChatPanel on the minimal DOM. It covers
+  placement and collapse, the controls, insert without send, the manual draft, the shelf staying after a send,
+  byte-identity without cards, the reader's refusals, HTML as text, no instructor shelf, and the CSS floors.
+- `test/local-runtime.smoke.mjs`: the dev prompt carries no card text.
+- The installed app against the deployed Service is NOT RUN.
+
 ## Browser downloads (CGP-KNOW-R-021)
 
 REQ-STUDIO-BROWSER-DOWNLOADS (REQ-KNOW-38 / CGP-KNOW-038, design CGP-KNOW-D-021, PI#1;
@@ -8883,8 +8975,7 @@ no host message, saved work kept, quiet 44px/14px buttons, disabled colour and d
 
 REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
 REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
-it back. **Partial:** this covers only (c) "접기". The report half, (a) and (b), is not built: the "자료가 틀린 것 같아요" item,
-its optional field and the report reaching the lesson's instructor in Chalk. That half needs a Service and Chalk route.
+it back. This row covers (c) "접기". The report half, (a) and (b), is REQ-STUDIO-LEARNING-BLOCK-REPORT below.
 
 The open 자료 card has a 자료 메뉴 button in its head, after 닫기. It is a quiet 44×44 button, named "자료 메뉴: <block title>",
 with `aria-haspopup="menu"`. The closed card keeps DES-CGP-LEARN-01's one row and has no menu button, because a fourth head
@@ -8924,6 +9015,61 @@ Evidence:
   - another step and a new lesson version are shown;
   - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
 - `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
+
+REQ-STUDIO-LEARNING-BLOCK-REPORT / REQ-CGP-LEARN-11 (a) and DES-CGP-LEARN-11, report half (traces to
+REQ-STUDIO-LEARNING-BLOCK-COLLAPSE, CGP-LEARN-R-011) / PI#2: a learner can tell the class instructor that a learning block looks
+wrong, and the instructor learns which block it was without reading anything the learner wrote.
+
+The open card's 자료 메뉴 gains "자료가 틀린 것 같아요", before 접기, only while this window has a live class connection to a
+Service that stores material reports. The inbox view must have a run, be neither offline nor ended, and carry `reports`.
+The host sets `reports` only after the Service's sync answer names `material_report` in `event_kinds`, which it sends to a
+device that declares the `material_report` capability. Without that, there is no instructor to reach, or the Service would
+drop the report, so the item is not drawn. Instructor windows and rehearsals never draw it. The item opens the report inline, as a row under the card head, never as a
+modal. The row asks "어떤 점이 이상한가요?" and offers three reasons as native radios in 44px labels at a 14px floor: 내용이 틀려요,
+열리지 않아요, 이해하기 어려워요. Focus moves to the first reason. A note says "어떤 자료인지와 고른 이유만 선생님께 가요. 대화 내용은
+가지 않아요." "선생님께 보내기" stays disabled until a reason is picked, and "취소" or Escape closes the row with focus on the
+menu button.
+
+**There is no text field, for any seat.** DES-CGP-LEARN-11's optional 0–300 character field is deferred (decisions.md
+CGP-LEARN-R-011 (a)). The class board this goes to never carries a learner's words, and an optional field would break that.
+
+The webview posts `{ type: "materialReport", stepId, reason }` and nothing else. The host builds the payload from the served
+lesson only (`lessonFocus.ts` `materialReportPayload`):
+- the course, version and step;
+- the block type and pinned version of the block that step draws;
+- the reason.
+
+A step that draws no block, or an unknown reason, gives nothing. The host queues the payload as a classroom-ops
+`material_report` event with actor student (`ClassroomOpsHost.materialReport`). It then waits up to 15 seconds for the
+Service's outcome for that event's seq in the sync answer (`material_reports`). **A queued report is never called sent.**
+- `accepted` → "sent": the row closes, the toast "선생님께 전달했어요" is announced in the polite live region, and focus returns to
+  the menu button.
+- `duplicate` → "already": the Service already holds this learner's report of that block. The row closes, and the toast says
+  "이미 선생님께 전달한 자료예요".
+- `capped` → the row stays and says "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요."
+- No answer in time, or the connection dropped → "unconfirmed": the row stays and says "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시
+  뒤 다시 보내 보세요." Sending again is safe, because a report the Service already has comes back as "already".
+- `rejected`, no connection, a Service that does not store the kind, or a refused outbox → "not_sent": the row stays and says
+  "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요."
+
+The report is not work, not evidence and not a spool line, and it carries no transcript. The Service lists it
+on the run's instructor board, and Chalk `/manage` shows it as "자료 신고" (hypeproof-service material_report; Chalk
+`chalk/test/material-report.test.mjs`). Seats: classroom seats with a live class connection. Default: on.
+
+Evidence:
+- `extensions/hypeproof-chat/test/learning-block-report-browser.smoke.mjs` runs in headless Chromium with real key events,
+  light and dark, at 800 and 1420px. It checks:
+  - with no connection, an offline one, an ended one, or a Service that does not store the kind, the menu holds only 접기 (the control);
+  - the inline row has no dialog, nothing positioned and no text field, three 44px/14px radios, focus on the first and a focus ring;
+  - opening it sends nothing, and the post is exactly a step and a reason;
+  - "not_sent", "capped" and "unconfirmed" are said with no toast, and another lesson's answer is ignored;
+  - "sent" and "already" close it with their polite announcement, and "sent" returns focus to the menu button;
+  - Escape closes it, and a dropped connection removes the item and the open row.
+- `extensions/hypeproof-chat/test/learning-block-report-host.smoke.mjs` runs the pure payload with positive and negative controls
+  against the Service allowlist. It drives the real `ChatPanelProvider.handleMessage`, which drops webview-supplied block fields
+  and text, records no spool line and maps each Service outcome (only `accepted` is "sent"). The sync loop hands every 200
+  answer of its own stream to the host. The real `ClassroomOpsHost.materialReport` answers with the outcome for its own seq:
+  an older Service that does not name the kind, a rejected seq, a timeout and the real `stopConnection` are never "sent".
 
 ## Activity memory state line (CGP-KNOW-R-022)
 
@@ -9554,7 +9700,12 @@ catches what the checks above cannot see: a shell command that builds the path a
       counts as oldest; one within 60 s is clamped to now. Known residual: an entry Studio really wrote while the clock
       ran more than 60 s fast, after the clock is corrected, is taken for a planted one and removed at the next prune.
     - Nothing older than seven days is kept, applied at every check and at activation.
-    - A task's folder is removed when the task is archived or moved.
+    - A task's folder is removed when the task is archived or moved. The folder is renamed to a `.purge-…` tombstone at
+      once, before the handler moves on, and only the tombstone is deleted afterwards, so a turn right after a restore
+      writes into a fresh folder the late delete cannot reach. A tombstone a crash left behind is removed at the next
+      prune. A host without global storage, or a seat without a memory scope, archives and moves as before with nothing
+      to purge. Tested by behaviour (`test/memory-quarantine-purge.smoke.mjs`: archive, move, refused move, the race,
+      the tombstone sweep and the no-op hosts), not by source text.
     - Nothing reads it back into memory, uploads it or logs it (tested).
     - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
   - **Write side, with this check.** A new or deleted memory file, or a changed one among the read entries, does not
@@ -9643,6 +9794,15 @@ REQ-CGPV-04/17/18/19/24/33).** 기존 Service 프로필이 받아쓰기와 읽�
 실제 Recorder/Analyser, 일반 UI→호스트→디스크 기록, 두 턴·중지·이전 범위 응답을 검증한다.
 한국어 종료 임계값은 임시값이다. 설치 앱·물리 마이크·실제 청취·운영 이용량은 NOT RUN이며,
 이 클라이언트 변경은 운영 플래그·권한·요금·예산을 변경하지 않는다.
+
+### Dictation as its own control; failures by cause, each with one recovery (CGP-VOICE-R-014, R-015, D-010, D-012)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-17c | PI#1 / VO-36 / VO-09: dictation (`받아쓰기`) and the voice conversation (`자동 음성 대화 시작`) are separate buttons with their own names, and only one holds the microphone. While one runs the other is disabled and says why, in its accessible name and its tooltip (`받아쓰기, 음성 대화 중에는 받아쓰기를 쓸 수 없어요`; `자동 음성 대화 시작, 받아쓰기가 끝나면 쓸 수 있어요`). The dictation key Alt+Shift+M pressed during a conversation is refused with the same line in the composer's notice slot and never asks for the microphone. | `dictation-recovery.test.tsx` (the refusal by name, tooltip and key; no `getUserMedia`), `voice-conversation-browser.smoke.mjs` (the real App during a live conversation) |
+| REQ-CGPV-18 | PI#1 / CGP-VOICE-018: every failure is said by its cause and offers exactly one recovery action, chosen by the cause (`src/dictationRecovery.ts`), with `닫기` as the quiet way out. `다시 보내기` resends the same clip, only for a failure the host marked retryable, and only while the clip is still in memory. Policy 3 applies to every seat, minors included: memory only, dropped after transcription, on dismiss, on a task or seat switch, on window hide or after 10 minutes, never on disk. When the copy goes while the line is shown, its `다시 보내기` turns into `다시 말하기` in place. A press under the `다시 보내기` label never opens the microphone: a stale press only updates the label. `다시 말하기` starts a new recording. It is offered for no microphone, microphone busy, too short, too large, too long, unreadable and a recorder failure. `글로 쓰기` closes the line and puts the caret in the composer. It is offered for unsupported, the daily cap, sign-in, voice unavailable and anything unknown. The permission card (REQ-CGPV-03) keeps its settings action. The Service's sentences are shown as written, and the draft is never touched. | `dictation-recovery.test.tsx` (every cause's line and its one action for an adult seat and a minor seat; resend sends the same bytes without reopening the microphone; after 10 minutes resend records instead; 글로 쓰기 focuses the composer; the draft is untouched; for both seats the kept copy is dropped on success, 닫기, a hidden window, pagehide, leaving the chat and 10 minutes, with no storage API, blob URL, webview state or other host message holding the audio); `voice-ui.test.tsx` |
+| DES-CGPV-17 | The button is the `mic` stroke glyph, distinct from the conversation's `level` glyph. Starting is said in words, `마이크를 켜는 중이에요`, with `취소`, which also closes a microphone granted after it. There is no spinner: an unbounded indicator is not allowed and the OS prompt can take any time. While recording: the dot, `듣고 있어요`, the seconds and `취소`, plus a decorative input-level bar. The bar is `aria-hidden` and fed by an `AnalyserNode` on the same stream that is never connected to the speakers. Only the current level is read (no samples kept), and the analyser is disconnected and its context closed when recording ends. Under reduced motion no bar is drawn. Then `글로 바꾸는 중이에요` and `입력창에 넣었어요. 고쳐서 보내세요.`. Every state has words, Esc cancels, and the text box keeps its height across states (within 4px). | `dictation-recovery.test.tsx` (the starting line and its cancel; the bar follows the meter, is flat for silence, is absent under reduced motion; the meter is closed on stop); `voice-browser.smoke.mjs` (the real recorder on an AudioContext stream draws the bar; the text box height idle vs recording vs failure within 4px; 320/480/800, both seats and themes) |
+| DES-CGPV-18 | A failure line in the composer's notice slot, not modal: the `alert` glyph (20px), one sentence at 14px, one recovery action and `닫기`, all 44px. Only too short goes away on its own, after 8 s, and not while focus is inside it. The timer belongs to that line, keyed on its id, so a parent re-render never restarts it, for example while an answer streams. Permission, no-microphone and every other line stay until the learner acts. Placement is the composer's existing notice slot above the text box rather than "under composer" (agent choice, decisions.md CGP-VOICE-R-014). | `dictation-recovery.test.tsx` (too short gone after 8 s, the no-microphone line stays); `voice-browser.smoke.mjs` (icon 20px, sentence 14px, both buttons 44px, inside the viewport and clear of the composer) |
 
 Not covered, by design: real-device behaviour. This row set is synthetic and headless; nothing is on for any seat
 (Service flags default off) and nothing was run in the installed app. The microphone core patch (DEC-03) and
@@ -9811,13 +9971,19 @@ today's layout (same DOM, same classes, the static `ChipRack`), and the instruct
 - **Chrome.** The mission header is one wrapping row; a collapsed lesson card, the model row, the collapsed access card
   and (classroom seats) the composer lose padding and stacked rows. Every control keeps the learner's 44px floor
   (`--hp-control-min`); only padding, margins and rows shrink.
-- **Composer footer.** The cohort-managed model reason ("선생님이 정한 설정이에요", `small.hps-managed-reason`) stays in the
-  DOM, visually hidden, because the disabled model select describes itself through it (`aria-describedby`). The collapsed
+- **Composer footer.** The model control (the "모델" select and its "선생님이 정한 설정이에요" note) is not drawn at all
+  (class owner decision 2026-11-15, replacing the earlier "note stays visually hidden"). The model control inside the
+  settings sheet is unchanged. The collapsed
   "이용권 · 사용량" panel (`AccessControl`) is not drawn in the footer on ANY activity (instructor decision 2026-11-13,
   replacing the earlier "only where the header chip carries it"); it stays in the gear dialog next to "AI가 할 수 있는 일".
   The one exception is a funding choice the learner must make before sending (`requiresFundingSelection`): that blocks
   sending, so the footer panel and its "이용권을 선택해 주세요" summary stay. Limit errors and notices are separate
   messages and are unchanged. The automation seat's summary says "대화 설정" when the panel is not inside it.
+- **Changed-page card and "AI가 한 일".** Neither the "이번 답에서 바뀐 페이지" card (`PageCard`, with its version label
+  and check status) nor the "AI가 한 일" panel (`TaskActivity`) is drawn (class owner decision 2026-11-15: jargon for a
+  non-developer learner). The "이번 요청 동안 바뀐 파일 N개" block with "모두 되돌리기 / 이대로 둘게요" and the
+  preview-server row are unchanged. Covered by `test/coach-layout-compact.test.tsx`; the standard layout's page card
+  markup is pinned by `test/fixtures/coach-layout-head-page-card.html`.
 - **Command approval (위험한 명령).** Only a prompt whose heading would read "코치가 위험한 명령을 실행하려고 해요"
   (`purpose: 'destructive'`) changes. Title: `이 명령을 실행할까요?`. The fixed "되돌릴 수 없어요" line becomes one small
   line (`.hps-command-warning-compact`, caption size) in the same slot. The prompt carries no reason code (the classifier

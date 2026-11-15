@@ -876,6 +876,8 @@ export type WebviewMessage = (
   | { type: "lessonFocus"; stepId: string; helpMode: string | null }
   // #751 G2 — a work-surface save (criterion_form → criterion, decision_form → decision) for one step of the current lesson.
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
+  // CGP-LEARN-R-011 — "자료가 틀린 것 같아요": a step and a reason chip only. The host builds the block identity from the served lesson.
+  | { type: "materialReport"; stepId: string; reason: import("./lessonFocus").MaterialReportReason }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
   | { type: "rehearsalSeatEnd" }
@@ -892,6 +894,10 @@ export type WebviewMessage = (
   | { type: "missingTaskFolderRequest" }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — ask the host to measure free space on the work folder's volume now; `mount` = the panel has no state yet, so the host re-sends even an unchanged one. */
   | { type: "lowDiskRequest"; mount?: boolean }
+  /** CGP-AGENT-R-031: ask whether the Service reads as busy (mount, back in view, focus, once a minute). */
+  | { type: "serviceStatusRequest"; mount?: boolean }
+  /** CGP-AGENT-R-031: the learner closed the busy banner; the host keeps it closed for this busy episode, across remounts. */
+  | { type: "serviceStatusDismiss" }
   /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — ask whether a 느려요 기록 is running; stop the one recording `id` names (the pill's own id). */
   | { type: "perfTraceStateRequest" }
   | { type: "perfTraceStop"; id: string }
@@ -1031,6 +1037,12 @@ export type HostMessage = (
   | { type: "lessonWorkState"; sha256: string; work: Record<string, import("./lessonFocus").StepWork> }
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
   /**
+   * CGP-LEARN-R-011 — what the Service did with a material report: `sent` (accepted), `already` (it already holds this
+   * learner's report of that block), `capped` (the daily limit), `unconfirmed` (no answer in time), `not_sent` (no live
+   * class connection, the Service does not store the kind, no block, or refused).
+   */
+  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "already" | "capped" | "unconfirmed" | "not_sent" }
+  /**
    * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
    * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the
    * newer goal a `stale` save lost to; any other refusal carries none, so every view keeps the goal and the text it shows.
@@ -1046,6 +1058,8 @@ export type HostMessage = (
   | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */
   | { type: "lowDisk"; notice: import("./lowDisk").LowDiskNotice | null }
+  /** CGP-AGENT-R-031: the Service's busy signal; only a confirmed `true` shows the banner. */
+  | { type: "serviceStatus"; busy: boolean; /** Closed by the learner for this busy episode (kept by the host). */ dismissed?: boolean }
   /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — a 느려요 기록 is running (red 기록 중 · 멈추기 pill above the composer) or not; `id` names the recording. */
   | { type: "perfTraceState"; recording: boolean; id: string | null }
   /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */
