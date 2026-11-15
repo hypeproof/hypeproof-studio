@@ -1,0 +1,16 @@
+{
+  "schema": "hps-desktop-smoke-policy/1",
+  "native_prefixes": [
+    "apps/studio-native/"
+  ],
+  "native_files": [
+    ".github/workflows/studio-native-mobile.yml"
+  ],
+  "docs_files": [
+    "docs/testing/native-mobile-growth.md",
+    "docs/testing/desktop-smoke-scope.md"
+  ],
+  "traceability_nodes": [
+    "ST-TEST-NATIVE-MOBILE"
+  ]
+}
