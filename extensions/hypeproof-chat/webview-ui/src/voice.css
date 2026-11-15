@@ -143,3 +143,25 @@
 .hps-voice-agent-status[data-agent-status="approval"] > .hps-icon { color: var(--hp-text-accent-default); }
 .hps-voice-agent-status[data-agent-status="error"] > .hps-icon { color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); }
 .hps-voice-agent-speech-failed { margin: 0; color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+
+/* ---- CGP-VOICE-R-026 / DES-CGPV-38: push-to-talk ----
+   A large hold button (at least 64px), pressed = inset and the words 듣고 있어요 (never colour alone); the mode switch is a
+   native checkbox on a 44px label. Nothing animates. */
+.hps-voice-hold {
+  min-block-size: calc(var(--hp-control-min) * 1.5); min-inline-size: calc(var(--hp-control-min) * 1.5); padding-block: 0; padding-inline: var(--hp-space-4);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
+  background: transparent; color: var(--hp-text-primary-default); font: inherit; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong);
+  line-height: var(--hp-leading-label); cursor: pointer; touch-action: none; user-select: none;
+  transition: background-color var(--hp-dur-press) var(--hp-ease);
+}
+.hps-voice-hold:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-voice-hold:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-voice-hold[aria-pressed="true"] { background-color: var(--hp-bg-control-pressed); border-color: var(--hp-ring-focus-default); box-shadow: inset 0 0 0 var(--ds-c-studio-styles-size-3) var(--hp-ring-focus-default); }
+.hps-voice-hold:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-voice-hold:disabled { opacity: 0.5; cursor: default; }
+.hps-voice-mode { display: inline-flex; align-items: center; gap: var(--hp-space-2); min-block-size: var(--hp-control-min); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer; }
+.hps-voice-mode input:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+@media (forced-colors: active) {
+  .hps-voice-hold { border-color: ButtonText; }
+  .hps-voice-hold[aria-pressed="true"] { border-color: Highlight; box-shadow: inset 0 0 0 var(--ds-c-studio-styles-size-3) Highlight; }
+}

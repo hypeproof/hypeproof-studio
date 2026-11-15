@@ -137,3 +137,18 @@ export const MIC_TEST_SILENT = "소리가 들리지 않았어요. 마이크가 �
 export const MIC_MISSING = "선택한 마이크가 연결되어 있지 않아요";
 export const RECOVER_USE_DEFAULT = "기본 마이크로 녹음";
 export const CONVERSATION_MIC_MISSING = "선택한 마이크가 연결되어 있지 않아 멈췄어요. 대화 설정에서 마이크를 바꾸거나 글로 계속할 수 있어요.";
+
+// CGP-VOICE-R-026 / R-027 (REQ-CGPV-38 / 39, DES-CGPV-38 / 39): push-to-talk in the voice conversation. Agent copy.
+export const PTT_MODE_LEGEND = "말하는 방법";
+export const PTT_MODE_AUTO = "말이 끝나면 자동으로 보내기";
+export const PTT_MODE_HOLD = "누르고 말하기";
+export const PTT_MODE_NEXT = "다음 대화부터 바뀌어요";
+export const PTT_HOLD = "누르고 말하기";
+export const PTT_HOLDING = "듣고 있어요";
+export const PTT_READY = "버튼을 누르고 있는 동안 들어요. 손을 떼면 보내요.";
+export const PTT_TOO_SHORT = "너무 짧게 들렸어요. 버튼을 누른 채로 말해 주세요.";
+export const PTT_TOO_LONG = "한 번에 1분 안으로 말해 주세요. 보내지 않았어요.";
+export const PTT_START_LABEL = "음성 대화 시작";
+export const PTT_GROUP_LABEL = "음성 대화";
+/** R-027: the endpoint detector could not start; this session switches to push-to-talk (the stored mode is unchanged). */
+export const VAD_FALLBACK = "자동 말끝 감지를 쓸 수 없어 눌러서 말하기로 바꿨어요";

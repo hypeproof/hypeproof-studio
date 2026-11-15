@@ -17781,6 +17781,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/MicInputSetting.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceConversationMode.ts"
         }
       ]
     },
@@ -17836,6 +17839,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/mic-input-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-ptt.smoke.mjs"
         }
       ]
     },

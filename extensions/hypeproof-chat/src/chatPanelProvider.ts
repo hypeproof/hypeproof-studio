@@ -323,6 +323,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
 import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
+import { VOICE_CONVERSATION_MODE_KEY, readConversationMode, writeConversationMode } from "./voiceConversationMode";
 import { RunFailureTracker, hintSeatFor, joinTurnContext } from "./runFailureHint";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
@@ -9543,6 +9544,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (typeof msg.on !== "boolean") return;
         await this.setLessonTips(msg.on);
         return;
+      case "setVoiceConversationMode": {
+        // CGP-VOICE-R-026 — kept per computer like the microphone; the default (automatic) is no record. A refused value changes nothing.
+        const next = writeConversationMode(msg.mode);
+        if (next === undefined) return;
+        await this.context.globalState.update(VOICE_CONVERSATION_MODE_KEY, next ?? undefined);
+        await this.postConfig();
+        return;
+      }
       case "setMicInput": {
         // CGP-VOICE-R-019 — kept per computer (the microphone is the PC's), an id and a label only. The label can
         // name a person, so it stays here: never logged, never sent. A refused value changes nothing.
@@ -12519,6 +12528,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
     const micInput = readMicChoice(this.context.globalState?.get(MIC_INPUT_KEY));
+    const voiceConversationMode = readConversationMode(this.context.globalState?.get(VOICE_CONVERSATION_MODE_KEY));
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
     this.lessonTips.forSeat(tipsSeat);
@@ -12570,6 +12580,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
         // CGP-VOICE-R-019 — only when a microphone was chosen: the default config is unchanged.
         ...(micInput ? { micInput } : {}),
+        // CGP-VOICE-R-026 — only when push-to-talk was chosen: the default config is unchanged.
+        ...(voiceConversationMode ? { voiceConversationMode } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
