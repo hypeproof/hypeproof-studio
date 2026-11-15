@@ -7,7 +7,8 @@
 //    재생 and 한 단계 and does not move by itself; 재생 plays at >= 334 ms a frame even when the block asks for 50 ms (<= 3 Hz);
 //    멈춤 keeps the frame; 한 단계 moves one frame; play stops on the last frame. With the host's reduced-motion setting, and
 //    separately with the OS prefers-reduced-motion, 재생 is not offered, a running play stops on its frame, 한 단계 stays, and
-//    the controls' transitions compute to at most 0.01 ms (the reduced-motion token).
+//    the controls' transitions compute to at most 0.01 ms (the reduced-motion token). Focus never drops to the page (end of
+//    play, end of 한 단계, reduced motion removing 멈춤), and a hidden page stops play without resuming it.
 // 3. 44px buttons and 14px text in light/dark at 320/800/1420 px; in forced colours a disabled button keeps a visible border.
 // Fails under FOCUS_REQUIRE_BROWSER=1 without a browser; prints NOT RUN otherwise.
 import assert from 'node:assert/strict';
@@ -109,8 +110,39 @@ try {
     await ev(`btn('step').click()`); await settle(40);
     assert.equal(await ev('frame()'), '장면 ' + (Number(kept.split(' ')[1]) + 1), `${tag}: 한 단계 moves one frame`);
     await ev(`btn('play').click()`); await settle(1500);
-    assert.deepEqual(await ev(`[frame(),scene(),btn('play').disabled,btn('step').disabled,document.querySelector('[data-block-playback]').dataset.playing]`), ['장면 5', '5 / 5 장면', true, true, 'false'], `${tag}: play stops on the last frame`);
+    assert.deepEqual(await ev(`[frame(),scene(),btn('play').getAttribute('aria-disabled'),btn('step').getAttribute('aria-disabled'),document.querySelector('[data-block-playback]').dataset.playing]`), ['장면 5', '5 / 5 장면', 'true', 'true', 'false'], `${tag}: play stops on the last frame`);
     checks += 7;
+
+    // Focus never drops to the page: at the end of play, at the end of 한 단계, and when reduced motion removes 멈춤.
+    const inControls = `(()=>{const a=document.activeElement;return a&&a!==document.body&&!!a.closest('[data-block-playback]')?(a.dataset.playbackStep!==undefined?'step':'toggle'):'lost'})()`;
+    await ev('mountFixture()'); await settle(60);
+    await ev(`btn('play').focus();btn('play').click()`); await settle(1700);
+    assert.deepEqual(await ev(`[frame(),${inControls},btn('play').getAttribute('aria-disabled')]`), ['장면 5', 'toggle', 'true'], `${tag}: play reaches the end and focus stays on 재생 (now unavailable)`);
+    await ev(`btn('play').click()`); await settle(400);
+    assert.equal(await ev('frame()'), '장면 5', `${tag}: an unavailable 재생 does nothing`);
+    await ev('mountFixture()'); await settle(60);
+    await ev(`btn('step').focus();for(let i=0;i<4;i++)btn('step').click()`); await settle(60);
+    assert.deepEqual(await ev(`[frame(),${inControls},btn('step').getAttribute('aria-disabled')]`), ['장면 5', 'step', 'true'], `${tag}: 한 단계 reaches the end and keeps focus`);
+    await ev(`btn('step').click()`); await settle(60);
+    assert.equal(await ev('frame()'), '장면 5', `${tag}: an unavailable 한 단계 does nothing`);
+    await ev('mountFixture()'); await settle(60);
+    await ev(`btn('play').focus();btn('play').click()`); await settle(400);
+    assert.equal(await ev(`btn('pause')===document.activeElement`), true, `${tag}: 재생 becomes 멈춤 on the same focused button`);
+    await ev(`document.documentElement.dataset.reducedMotion='true'`); await settle(80);
+    assert.equal(await ev(inControls), 'step', `${tag}: reduced motion removes 멈춤 and focus moves to 한 단계`);
+    await ev(`delete document.documentElement.dataset.reducedMotion`); await settle(60);
+    checks += 5;
+
+    // A hidden page stops play, and coming back does not resume it.
+    await ev('mountFixture()'); await settle(60);
+    await ev(`btn('play').click()`); await settle(400);
+    await ev(`Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'))`); await settle(40);
+    const hid = await ev('frame()'); await settle(900);
+    assert.deepEqual(await ev(`[frame(),document.querySelector('[data-block-playback]').dataset.playing]`), [hid, 'false'], `${tag}: hidden: play stops on its frame`);
+    await ev(`Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'))`); await settle(900);
+    assert.deepEqual(await ev(`[frame(),document.querySelector('[data-block-playback]').dataset.playing,!!btn('play')]`), [hid, 'false', true], `${tag}: visible again: still paused, 재생 offered`);
+    await ev(`delete document.hidden`);
+    checks += 2;
 
     // Reduced motion: the host setting, then the OS setting. 재생 is not offered; a running play stops on its frame.
     for (const via of ['host', 'os']) {
@@ -137,7 +169,7 @@ try {
     assert.ok(g.overflow <= 0, `${tag}: no horizontal scroll (${g.overflow})`);
     if (forced) {
       await ev(`for(let i=0;i<4;i++)btn('step').click()`); await settle(60);
-      const b = await ev(`(()=>{const s=getComputedStyle(btn('step'));return [btn('step').disabled,s.borderTopStyle,parseFloat(s.borderTopWidth)]})()`);
+      const b = await ev(`(()=>{const s=getComputedStyle(btn('step'));return [btn('step').getAttribute('aria-disabled')==='true',s.borderTopStyle,parseFloat(s.borderTopWidth)]})()`);
       assert.ok(b[0] && b[1] !== 'none' && b[2] >= 1, `${tag}: a disabled button keeps a visible border ${JSON.stringify(b)}`);
       checks += 1;
     } else {
