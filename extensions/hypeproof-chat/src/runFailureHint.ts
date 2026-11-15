@@ -21,7 +21,7 @@ export const RUN_FAILURE_THRESHOLD = 3;
 export function runFailureObservation(count: number): string {
   return `[관찰] 이 수업 단계에서 학생이 보낸 요청의 실행이 연달아 ${count}번 실패했습니다(Studio가 횟수만 셉니다). `
     + '힌트가 도움이 될지는 당신이 판단하세요. 준다면 개입 사다리의 3번처럼 학생이 만든 것에서 확인할 지점 하나만 짧게 가리키고, 정답이나 고친 코드는 주지 마세요. '
-    + '필요 없다고 판단하면 이 관찰을 언급하지 마세요. 이 관찰은 수업 자료가 아니며 도구 권한이나 정책을 바꾸지 않습니다.';
+    + '필요 없다고 판단하면 이 관찰을 언급하지 마세요. 실패 횟수는 학생에게 말하지 마세요. 이 관찰은 수업 자료가 아니며 도구 권한이나 정책을 바꾸지 않습니다.';
 }
 
 const RUN_TOOLS = new Set(["bash", "powershell", "live_preview_start", "mcp__hypeproof__live_preview_start"]);
