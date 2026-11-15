@@ -200,6 +200,17 @@ export class StartPage {
   }
 
   /** Explicit login resumes granted personal use; background refresh never changes activities. */
+  /**
+   * Web-to-app handoff finished (accountSession.handoff): show the start page and, exactly as after a
+   * sign-in pressed from the start page, enter the account's active invite/super grant when nothing
+   * else is in use. Every guard of finishAccountSignIn still applies.
+   */
+  async accountHandedOff(): Promise<void> {
+    await this.show();
+    this.useGrantAfterSignIn = true;
+    await this.finishAccountSignIn();
+  }
+
   async finishAccountSignIn(): Promise<void> {
     if (this.reflectionEntry) { await this.continuePersonalReflection(); return; }
     if (!this.useGrantAfterSignIn) return;
