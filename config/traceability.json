@@ -17817,6 +17817,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/voice-conversation-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-recovery-table.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-level-meter.smoke.mjs"
         }
       ]
     },

@@ -83,6 +83,36 @@ export interface LevelMeter {
   close(): void;
 }
 
+/** The Web Audio pieces the meter uses (the browser's AudioContext; tests pass a fake). */
+export interface AudioContextLike {
+  createMediaStreamSource(stream: never): { connect(to: unknown): unknown; disconnect(): void };
+  createAnalyser(): { fftSize: number; getFloatTimeDomainData(block: Float32Array): void; connect?(to: unknown): unknown; disconnect(): void };
+  close(): Promise<void>;
+}
+
+/**
+ * CGP-VOICE-D-010: the recording's input level, decorative. An analyser on the same stream that is never
+ * connected to the output; `read` overwrites one reused block (no samples are kept); `close` disconnects the
+ * source and the analyser and closes the context. Null without Web Audio.
+ */
+export function webAudioLevelMeter(Ctx: (new () => AudioContextLike) | undefined, stream: StreamLike): LevelMeter | null {
+  if (!Ctx) return null;
+  const context = new Ctx();
+  const source = context.createMediaStreamSource(stream as never);
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  source.connect(analyser);
+  const block = new Float32Array(1024);
+  return {
+    read: () => { analyser.getFloatTimeDomainData(block); return levelOf(block); },
+    close: () => {
+      try { source.disconnect(); } catch { /* ignore */ }
+      try { analyser.disconnect(); } catch { /* ignore */ }
+      void context.close().catch(() => {});
+    },
+  };
+}
+
 /** RMS of one block of time-domain samples, mapped to 0..1 (-60 dB is 0, 0 dB is 1). */
 export function levelOf(samples: ArrayLike<number>): number {
   let sum = 0;

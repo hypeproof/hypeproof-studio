@@ -227,11 +227,11 @@ try {
       await send({ type: 'voiceTranscribeResult', requestId: clip[0].requestId, ok: true, text: '고양이 사진을 넣어 줘' });
       assert.equal(await b.evaluate(`${composer}.value`), '고양이 사진을 넣어 줘', `${label}: transcript in the composer`);
       assert.equal(await b.evaluate(`window.__posts.filter(m=>m.type==='sendMessage').length`), 0, `${label}: never auto-sent`);
-      // Unreadable clip: the softer line, 44px retry.
+      // A retryable failure (network) with the clip kept: its line, 44px 다시 보내기.
       await b.evaluate(`window.__media=0`);
       await click('.hps-voice-mic'); await settle(900); await click('.hps-voice-mic'); await settle(400);
       const second = await b.evaluate(`window.__posts.filter(m=>m.type==='voiceTranscribe').at(-1)`);
-      await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'unreadable', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
+      await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'network', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
       const notice = '.hps-voice-note[role="status"]';
       assert.equal(await b.evaluate(`document.querySelectorAll('${notice}').length`), 1, `${label}: exactly one manual dictation status`);
       const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-primary`, close: `${notice} .hps-voice-link`, icon: `${notice} svg[data-icon="alert"]`, text: `${notice} .hps-voice-failure-text`, box: '.hps-input textarea' });
