@@ -546,6 +546,21 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   ×. Its dark circle is a `::before` that the instrument does not read as a backdrop (white on a dark disc), so it is an
   instrument limit, not a defect. HP Light is therefore measured like the default light themes.
 
+## DEC-SHELL-R-031: daily class usage in Chalk budgets (2026-11-14, agent choice)
+
+- Day basis: Korea time (`Asia/Seoul`), as #270 sends it. The header names it.
+- Source: hypeproof-service#270 `budgets[].daily_usage[]`, from another lane. A duplicate Service route of mine
+  (service#464) was closed in its favour. Chalk follows #270's contract exactly.
+- Unknown amounts (agent choice): #270 sends `unconfirmed_amount: null` while unresolved costs remain, and gives no
+  count. The chart gets a dashed cap and the table says `미확인 (금액 확인 전)`; a malformed amount reads the same way. It
+  is never drawn or written as 0 (AB-15).
+- Colour (agent choice): the chart is monochrome (`currentColor`). Solid, hatched and dashed patterns plus a worded legend
+  carry the meaning. In forced-colours mode the chart takes `CanvasText`: SVG keeps its author colour by default, which
+  measured 1.19:1 on a light canvas (verify-3956). The day labels are HTML under the chart, so they keep their size
+  when the chart scales down at 320 px.
+- Stale (agent choice): the page reads once per open or refresh. After 30 minutes the header says so, and a minute timer
+  updates that label without reading again.
+
 Confirmed by Jay: no.
 
 ## DEC-ART-R-013: 7-day counts per test version (2026-11-13, agent choice)
