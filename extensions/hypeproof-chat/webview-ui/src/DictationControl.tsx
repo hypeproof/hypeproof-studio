@@ -11,7 +11,7 @@ import { useVoice } from "./VoiceProvider";
 import { onHostMessage, postToHost } from "./vscode";
 import type { ComposerAddonApi } from "./composerAddon";
 import {
-  DictationRecorder, base64Of, levelOf, needsMicExplainer, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState, type LevelMeter, type MicPermission,
+  DictationRecorder, base64Of, needsMicExplainer, webAudioLevelMeter, type AudioContextLike, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState, type LevelMeter, type MicPermission,
 } from "../../src/voiceDictation";
 import { autoDismissMs, recoveryFor, type DictationRecovery } from "../../src/dictationRecovery";
 import { DICTATE_STARTING, RECOVER_RESEND, RECOVER_SPEAK_AGAIN, RECOVER_TYPE } from "../../src/voiceCopy";
@@ -84,27 +84,10 @@ export const browserDictationEnv = (): DictationEnv => ({
   levelMeter: browserLevelMeter,
 });
 
-/**
- * CGP-VOICE-D-010: the recording's input level, decorative. An AnalyserNode on the same stream, never connected
- * to the speakers; `read` overwrites one reused block (no samples are kept) and `close` disconnects everything.
- */
+/** CGP-VOICE-D-010: the browser's Web Audio for the decorative level meter (voiceDictation.ts webAudioLevelMeter). */
 function browserLevelMeter(stream: unknown): LevelMeter | null {
   const Ctx = typeof window === "undefined" ? undefined : (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-  if (!Ctx) return null;
-  const context = new Ctx();
-  const source = context.createMediaStreamSource(stream as MediaStream);
-  const analyser = context.createAnalyser();
-  analyser.fftSize = 1024;
-  source.connect(analyser);
-  const block = new Float32Array(analyser.fftSize);
-  return {
-    read: () => { analyser.getFloatTimeDomainData(block); return levelOf(block); },
-    close: () => {
-      try { source.disconnect(); } catch { /* ignore */ }
-      try { analyser.disconnect(); } catch { /* ignore */ }
-      void context.close().catch(() => {});
-    },
-  };
+  return webAudioLevelMeter(Ctx as unknown as (new () => AudioContextLike) | undefined, stream as never);
 }
 export const DictationEnvContext = createContext<() => DictationEnv>(browserDictationEnv);
 
@@ -176,8 +159,10 @@ function useDictation(api: ComposerAddonApi): DictationController {
         return;
       }
       if (m.kind === "class_off") { dropClip(); voice.markClassOff(); set({ kind: "idle" }); return; }
-      if (m.retry) keepForRetry(kept); else dropClip();
-      set({ kind: "notice", id: nextNoticeId(), text: m.message, cause: m.kind, recovery: recoveryFor(m.kind, m.retry, m.retry) });
+      // The clip stays in memory only when the line will offer to resend it (never for a problem with the clip itself).
+      const recovery = recoveryFor(m.kind, m.retry, m.retry);
+      if (recovery === "resend") keepForRetry(kept); else dropClip();
+      set({ kind: "notice", id: nextNoticeId(), text: m.message, cause: m.kind, recovery });
     });
     offInFlight.current = off;
     postToHost({ type: "voiceTranscribe", requestId, mime: kept.mime, seconds: kept.seconds, audio: base64Of(kept.bytes) });
