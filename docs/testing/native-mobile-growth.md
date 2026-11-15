@@ -328,6 +328,20 @@ run binds package bytes and app/run identity without claiming availability.
 Existing native-gate controls still reject stale or mismatched CI artifacts.
 These controls perform no signing, Apple call or workflow dispatch.
 
+For Studio #4233 / MENT-05, `ios-verify.sh` also runs
+`check-ios-push-metadata.py` against the actual unsigned device app: its push
+metadata must be present and disabled, with the existing bundle/display/usage
+metadata retained. Three tiny real Xcode C app controls use the tracked input
+plist to distinguish missing custom-key generation from explicit enabled and
+disabled values. Each build has a three-minute bound; any failure stops the
+recipe and preserves `push-metadata.json` and its available probe logs. A host
+without Xcode cannot establish this evidence. The existing signed IPA guard
+still qualifies the actual enabled release before upload. Portable upload tests
+remove the source input/key, inject signature/entitlement/profile failures and
+check fixed phase/check diagnostics without private values. Neither these
+controls nor the tiny native app proves physical delivery or identifies the
+unretained historical failed IPA's exact exception.
+
 For Studio #3866, `test_native_workflow_source.py` adds two-source contract and
 real CLI/shell controls. A candidate containing an obsolete helper must use the
 separate trusted control checkout. Main may advance normally without changing

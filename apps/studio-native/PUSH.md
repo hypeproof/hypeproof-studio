@@ -26,6 +26,11 @@ revocation; the Service also checks active sessions before delivery.
   Unsafe/ambiguous/oversized IPA archives are refused before private extraction.
   `push-configuration.json` records sanitized configuration/package digests and
   the completed phase, separately from the unchanged release/upload receipt.
+  `App/Info.plist` explicitly expands the existing push setting; both app build
+  configurations merge that input with Xcode's generated standard metadata.
+  A user-defined `INFOPLIST_KEY_` setting alone does not generate a custom key.
+  Qualification failures name a fixed `phase` and `check`, never profile values,
+  signing-tool output, credentials or arbitrary exception text.
   No App ID, provider credential or entitlement is enabled by default. The actual APNs callback must succeed;
   there is no sample token or permission fallback.
 - Android: `firebase-messaging:26.0.2` is pinned to the official current SDK. Supply
@@ -64,3 +69,15 @@ failure fences; they do not establish Apple signing or device delivery. The
 additional local validation makes no provider call or new CI dispatch. Existing
 release request identity, environment protection, package hashing and receipt
 authority remain unchanged.
+
+The existing iOS recipe also runs `check-ios-push-metadata.py` after its unsigned
+device build. It checks that actual app's disabled default and standard metadata,
+then uses the tracked input plist in three tiny unsigned C app builds: missing
+explicit input (custom key absent despite the enabled setting), explicit enabled,
+and explicit disabled. `push-metadata.json` and the three probe logs are native
+metadata evidence; they do not establish signing, APNs or device delivery.
+Portable source-negative controls remove the input setting or custom key and
+require refusal before upload. They remain synthetic Apple-tool tests.
+
+Apple documents the custom-setting limitation and explicit-input merge in
+[Managing information property list values](https://developer.apple.com/documentation/bundleresources/managing-your-app-s-information-property-list).
