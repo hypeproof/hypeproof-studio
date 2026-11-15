@@ -111,11 +111,14 @@ try {
     ["webSocket", AI, "ws://collect.example/s"], ["webSocket", AI, "wss://collect.example/s"], ["webSocket", "http://localhost:3000/", "wss://evil.example:443/x"],
     ["webSocket", "http://[::1]:8080/", "ws://lesson.example.evil.com/"], ["webSocket", AI, "wss://hypeproof-ai.xyz/live/y/"], ["webSocket", AI, "not a url"],
     ["webSocket", AI, "ftp://collect.example/"],
+    // Optional second commit: fetch/XHR/EventSource (xhr) and sendBeacon (ping) in core too (workers included).
+    ["xhr", AI, "https://collect.example/s"], ["ping", AI, "https://collect.example/s"],
   ];
   const allowed = [
     ["webSocket", AI, "ws://127.0.0.1:5173/__vite_hmr"], ["webSocket", AI, "ws://localhost:35729/livereload"], ["webSocket", AI, "wss://lesson.example/chat"],
     ["webSocket", AI, "wss://hypeproof-ai.xyz/live/x/gallery/room"], ["webSocket", "https://news.example/", "wss://collect.example/s"],
-    ["webSocket", "not a url", "wss://collect.example/s"], ["xhr", AI, "https://collect.example/s"], ["ping", AI, "https://collect.example/s"],
+    ["webSocket", "not a url", "wss://collect.example/s"], ["xhr", AI, "https://lesson.example/api"], ["ping", AI, "http://127.0.0.1:8080/log"],
+    ["xhr", "https://news.example/", "https://collect.example/s"],
     ["mainFrame", AI, "https://collect.example/"], ["image", AI, "https://cdn.example/a.png"],
   ];
   for (const [t, top, u] of blocked) assert.equal(hpsOutboundBlocked(t, top, u, pol), true, `blocked: ${t} ${top} -> ${u}`);

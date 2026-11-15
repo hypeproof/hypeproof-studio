@@ -1,6 +1,6 @@
 Studio persist:hp-safe hardened integrated-browser session for minor cohorts (REQ-N11, ported from vscodium fork branch feat/306-hp-safe-session, #306).
 Off unless hypeproof.browser.hardenedSessionEnabled is true (default false until a real-device check); then a minor seat the chat extension marks
-with hypeproof.browser.safeSession gets a deny-all session (permissions, downloads, popups, devtools, external-browser exits) confined to hypeproof.browser.safeAllowlist, for every tab (CDP and pre-flip tabs too). For a minor or safe seat the chat extension's lock in its globalState decides; settings can only tighten. Studio #4209: on a minor seat (lock or setting, with or without the hardened session) every browser session cancels a ws/wss upgrade from a loopback page to a host neither loopback nor on the allowlist.
+with hypeproof.browser.safeSession gets a deny-all session (permissions, downloads, popups, devtools, external-browser exits) confined to hypeproof.browser.safeAllowlist, for every tab (CDP and pre-flip tabs too). For a minor or safe seat the chat extension's lock in its globalState decides; settings can only tighten. Studio #4209: on a minor seat (lock or setting, with or without the hardened session) every browser session cancels a ws/wss upgrade, and (optional second commit) an xhr or ping request, from a loopback page to a host neither loopback nor on the allowlist.
 
 diff --git a/src/vs/platform/browserView/common/browserView.ts b/src/vs/platform/browserView/common/browserView.ts
 index ca9ad6d..cd59726 100644
@@ -64,7 +64,7 @@ index ca9ad6d..cd59726 100644
  	/**
  	 * Destroy a browser view instance
 diff --git a/src/vs/platform/browserView/electron-main/browserSession.ts b/src/vs/platform/browserView/electron-main/browserSession.ts
-index dc23d2e..870b36f 100644
+index dc23d2e..e9db25e 100644
 --- a/src/vs/platform/browserView/electron-main/browserSession.ts
 +++ b/src/vs/platform/browserView/electron-main/browserSession.ts
 @@ -7,7 +7,7 @@ import { session } from 'electron';
@@ -293,15 +293,15 @@ index dc23d2e..870b36f 100644
 +/**
 + * Studio (#4209, Jay 2026-11-15) — is this request one a minor seat's AI-made page may not send?
 + *
-+ * Only with a policy (a minor seat). Only a WebSocket handshake (`resourceType` `webSocket`): the
-+ * extension's CDP guard already holds `fetch`, XHR, beacons and EventSource, and the Fetch domain
-+ * cannot pause a WebSocket. Only when the top document is loopback (an AI-made page): pages on
++ * Only with a policy (a minor seat). A WebSocket handshake (`resourceType` `webSocket`), and (optional
++ * second commit) `xhr` (fetch, XMLHttpRequest, EventSource) and `ping` (sendBeacon): core sees these
++ * from dedicated, shared and service workers too, which the extension's CDP guard cannot reach. Only when the top document is loopback (an AI-made page): pages on
 + * other sites, the lesson's own included, are unchanged. Cancelled when the target, read as
 + * http(s), is neither loopback nor admitted by the allowlist ({@link hpsSafeUrlAllowed}).
 + * A malformed URL is cancelled (fail closed); a missing top document is read from the contents.
 + */
 +export function hpsOutboundBlocked(resourceType: string, topUrl: string, targetUrl: string, policy: IBrowserOutboundPolicy | undefined): boolean {
-+	if (!policy || resourceType !== 'webSocket') {
++	if (!policy || (resourceType !== 'webSocket' && resourceType !== 'xhr' && resourceType !== 'ping')) {
 +		return false;
 +	}
 +	let top: URL;
