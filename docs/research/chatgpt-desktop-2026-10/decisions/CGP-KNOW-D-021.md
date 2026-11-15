@@ -1,0 +1,9 @@
+## CGP-KNOW-D-021: download status lines (2026-10-27, agent-selected conservative implementation)
+
+- Size: personal chat uses the 14px learner caption (owner rule: the 14px learner minimum beats the register's 13px), below the 16px answer body. The classroom chat sets its answers at 13px and its tool rows at 12px; a 14px line there would sit above the answers, so the line takes the chat's 13px (the register's size, never above the answers). The classroom type scale itself is not changed in this row.
+- Subordinate: no box or bubble, muted text colour, a status mark with a Korean name; colour is never the only cue (the status word says 완료/실패/막힘/다운로드 중).
+- 열기 opens the file in a Studio editor tab (`vscode.open`: text, image or binary view), never the OS default application, so nothing downloaded is run. 폴더에서 보기 uses `revealFileInOS`, which only selects the file. Both act only on a stored done line of the open task and re-check the file against the download policy in force at the press; a link, a missing or renamed file and a name the line shortened or cleaned are refused, not guessed. A cohort that is denied downloads now (including no loaded profile) cannot open earlier lines either.
+- Running line (supersedes "no progress line" in CGP-KNOW-R-021): shown at once and at most once a second, never stored (a reload or task switch drops it until the final line), only in the task where the download began. A percentage appears only when Chromium reports a total that the received count fits in; otherwise "받는 중" with the bytes received. Screen readers hear its start and end, not each refresh.
+- Default state: on for every seat that shows the timeline; no new data destination, no permission change.
+- Not built: pause/resume/stop controls, time left, a downloads popover (CGP-KNOW-38 observations beyond DES-KNOW-38).
+

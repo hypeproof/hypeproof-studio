@@ -5466,7 +5466,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       guards.set(tab, { dispose: () => undefined });
       // A minor seat fails closed on the two ways round the guard: a tab a page opened (window.open, target=_blank),
       // and a tab whose page moved to another site before the guard attached. Either is closed and its address goes
-      // through the confirm dialog; 열기 opens it again as a Studio tab. Adults: known gap (decisions.md).
+      // through the confirm dialog; 열기 opens it again as a Studio tab. Adults: known gap (decisions/README.md).
       // A popup the guard is deciding right now (its dialog is open): wait for that answer before judging the tab.
       for (let i = 0; isNew && this.linkConfirmRequest.open && i < 1300; i++) await new Promise((r) => setTimeout(r, 100));
       if (isNew && studioTabs.refused(tab.url)) { void Promise.resolve(tab.close()).catch(() => undefined); guards.delete(tab); return; }

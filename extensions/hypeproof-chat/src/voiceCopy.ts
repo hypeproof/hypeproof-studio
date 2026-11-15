@@ -3,7 +3,7 @@
 //
 // Confirmed by Jay (2026-11-09, policy record Appendix B, `hps-voice-policy/1`): the three disclosure
 // paragraphs, the button, the class-off line and the cap line. Agent-chosen, not confirmed: every other
-// string here (decisions.md, CGP-VOICE-D-003 / D-018 / R-003 / R-012 / R-016 entries).
+// string here (decisions/README.md, CGP-VOICE-D-003 / D-018 / R-003 / R-012 / R-016 entries).
 import type { VoicePolicyVersion } from "./voiceServed.ts";
 
 // ---- Disclosure sheet (D-003, REQ-CGPV-04). Rendered only from an approved, versioned policy. ----
@@ -76,7 +76,7 @@ export const RECOVERED_COPIED = "복사했어요";
 export const RETRY_TEXT_LABEL = "받아쓴 글";
 
 // ---- Read-aloud ----
-// The control's two labels are the design row's own copy (CGP-CHAT-D67, decisions.md CGP-CHAT-D-009).
+// The control's two labels are the design row's own copy (CGP-CHAT-D67, decisions/CGP-CHAT-D-009.md CGP-CHAT-D-009).
 export const READ_ALOUD_LABEL = "읽어 주기";
 export const READ_ALOUD_STOP = "그만 읽기";
 export const READ_ALOUD_PLAYING = "읽는 중이에요";
@@ -107,7 +107,7 @@ export const AGENT_STATUS_LABEL = "AI가 하는 일";
 /** Reading a status aloud failed: said apart from any tool failure (VO-20). */
 export const AGENT_STATUS_SPEECH_FAILED = "작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.";
 
-// ---- Dictation states and recovery (CGP-VOICE-R-014 / R-015 / D-010 / D-012). Agent-written, decisions.md. ----
+// ---- Dictation states and recovery (CGP-VOICE-R-014 / R-015 / D-010 / D-012). Agent-written, decisions/CGP-VOICE-R-014.md. ----
 /** D-010: the start before the microphone is open (the OS prompt may be up). Static text, no spinner. */
 export const DICTATE_STARTING = "마이크를 켜는 중이에요";
 /** R-015: the one recovery action of a failure line. */

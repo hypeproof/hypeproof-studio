@@ -1,0 +1,13 @@
+## CGP-SHELL-R-027 / CGP-SHELL-D-026: account and data deletion request (2026-11-13, agent-selected)
+
+Service PR hypeproof/hypeproof-service#440 adds the contract (migration 0087, retry-safe; `docs/requirements/data-deletion-requests.md`); this slice draws it in Studio. Requirement: `docs/requirements/classroom-admin.md#adm-14-deletion-request`; Studio: `docs/studio-requirements.md` REQ-STUDIO-DATA-DELETION-REQUEST.
+
+- Default off (tick rule; DEC-23 is decided only for its interim guardian half, 2026-11-14, and the learner request flow is not confirmed): one Service flag gates the routes and the `/v1/profile` advertisement, so Studio needs no flag of its own.
+- Record, never execute (agent choice): processing stays a human operator action (`/admin/data-deletion/requests`, operator guard only; instructor tokens cannot read or move requests). The operator runbook lives with the Service requirement.
+- Subject (agent choice): the seat from the verified token (cohort + cohort-local user id; an account seat by its account id). No name, email or learner-written text. One open request per seat; a second press returns it.
+- Hold reason (agent choice): one line of at most 200 characters, no control, bidi or `<>` characters, shown to the learner as text.
+- Confirm (agent choice): an in-place two-step group in the dialog with `취소` focused first, not a native modal; the action records a request and deletes nothing, so a second native confirm would add a step without protecting data.
+- Local files (agent choice): never touched. The request screen says so, which meets "local files are not deleted without a separate confirmation" without building a local deletion path.
+- Guardian requests (DEC-23 guardian half, decided by Jay 2026-11-14, confirmed: yes): the long-term path is the guardian account (GRD-12: the guardian deletes the child profile from their own account). Until it exists, when a guardian contacts HypeProof, an operator or support verifies the relationship outside the product and processes the deletion by hand with the existing operator tools. Not implemented, by design: no operator or instructor route creates a request on a learner's behalf, so such a case leaves no request row; the learner can still file from their own seat. The alternatives not chosen were a Lab form verified by the instructor, and no guardian path at all before the guardian account. The Service requirement (hypeproof-service `docs/requirements/data-deletion-requests.md`) used the same wording while this was parked.
+- Not covered: a live Studio run, a real screen reader, a deployed Service, status after the seat credential expired.
+

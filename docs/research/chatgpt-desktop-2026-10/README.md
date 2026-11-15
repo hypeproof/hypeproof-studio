@@ -114,7 +114,7 @@ This folder is research input, not a requirement document: it sits outside
   per slice.
 - Order: section 5 waves, P0 first, then by epic.
 - Decisions (section 6), per Jay 2026-10-19: proceed with the recommended option and record
-  the choice in `decisions.md` here. Legal or minor-safety choices (DEC-05 audio retention,
+  the choice in `decisions/README.md` here. Legal or minor-safety choices (DEC-05 audio retention,
   DEC-22 self-harm escalation, DEC-23 guardian/PIPA) ship **default off** until Jay
   confirms them.
 - No ChatGPT code is copied. The bundle is proprietary; slices reimplement observed
