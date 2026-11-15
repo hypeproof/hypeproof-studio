@@ -63,6 +63,9 @@ t("solo seats get no classroom or teacher words (trial diagnosis D3)", () => {
   const card = /<details class="hp-rail-lesson hp-ai-can-do">[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
   if (!card.includes("여기서 AI가 할 수 있는 일")) throw new Error("solo title missing");
   for (const word of ["수업", "선생님"]) if (card.includes(word)) throw new Error(`solo card says ${word}`);
+  // #4179: free and account seats read this note today; it no longer says 체험.
+  if (!card.includes("지금 연결된 활동에서 정해진 범위예요.")) throw new Error("solo note missing");
+  if (card.includes("체험")) throw new Error("solo card says 체험");
 });
 
 // CGP-AGENT-D-002: assert the rendered words and names, never infer from colour.

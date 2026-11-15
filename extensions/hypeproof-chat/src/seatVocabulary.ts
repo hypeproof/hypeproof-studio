@@ -38,7 +38,7 @@ export const transportFailureText = (a: SeatAudience): string =>
 
 /** SDK stream stalled on a 429. */
 export const RATE_LIMIT_STALL_CLASSROOM =
-  "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)";
+  "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 사용 한도를 확인해 주세요. (429)";
 export const RATE_LIMIT_STALL_SOLO = "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요. (429)";
 export const rateLimitStallText = (a: SeatAudience): string =>
   a === "solo" ? RATE_LIMIT_STALL_SOLO : RATE_LIMIT_STALL_CLASSROOM;
