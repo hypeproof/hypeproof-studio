@@ -815,6 +815,12 @@ export type WebviewMessage = (
   | { type: "planFirstRedo"; planId: string; text: string }
   | { type: "planFirstDecline"; planId: string }
   | { type: "whatsNewRequest"; requestId: string }
+  /** CGP-VOICE-R-029 — is the voice tip due for this seat? `taskEmpty`: the current task has no messages yet. */
+  | { type: "voiceTipRequest"; requestId: string; taskEmpty: boolean }
+  /** CGP-VOICE-R-029 — the tip was drawn: this seat has now seen it (it stays open in this window until closed). */
+  | { type: "voiceTipShown" }
+  /** CGP-VOICE-R-029 — the drawn tip went away (closed, the task started, or voice became unavailable): never again. */
+  | { type: "voiceTipDismiss" }
   | { type: "whatsNewShown"; notesId: string }
   | { type: "whatsNewDismiss"; notesId: string }
   /**
@@ -1195,6 +1201,8 @@ export type HostMessage = (
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
   | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null; available?: false; switchedOff?: true }
   | { type: "whatsNewChanged" }
+  /** CGP-VOICE-R-029 — the host's answer to `voiceTipRequest`. */
+  | { type: "voiceTip"; requestId: string; show: boolean }
   | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
   // the editor and opens them). The host reads the bytes and hands the webview

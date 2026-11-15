@@ -322,6 +322,7 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
+import { VOICE_TIP_KEY, voiceTipDue, voiceTipStore, withVoiceTipSeen } from "./voiceTip";
 import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
 import { RunFailureTracker, hintSeatFor, joinTurnContext } from "./runFailureHint";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
@@ -9262,6 +9263,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "planFirstRequest": case "planFirstSet": case "planFirstApprove": case "planFirstRedo": case "planFirstDecline": await this.handlePlanFirst(msg); return;
       case "whatsNewRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postWhatsNew(msg.requestId); return;
+      case "voiceTipRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postVoiceTip(msg.requestId, msg.taskEmpty === true); return;
+      case "voiceTipShown": await this.noteVoiceTip(true); return;
+      case "voiceTipDismiss": await this.noteVoiceTip(false); return;
       case "whatsNewShown": {
         if (this._instructorMode.isInstructor) return;
         const notes = learnerNotes(LEARNER_RELEASE_NOTES);
@@ -12403,6 +12407,36 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * provider made without the constructor (host test harnesses build one with Object.create) never throws in postConfig.
    */
   private lessonTipsPref: LessonTipsPreference | undefined;
+  /**
+   * CGP-VOICE-R-029 — the voice tip is due only for a known seat with 팁 보기 on, not yet shown on this computer,
+   * at the start of a task, never for an instructor. Never throws.
+   */
+  private async postVoiceTip(requestId: string, taskEmpty: boolean): Promise<void> {
+    let show = false;
+    try {
+      const seat = this.lessonTips.currentSeat;
+      show = voiceTipDue(this.context.globalState?.get(VOICE_TIP_KEY), {
+        seat, taskEmpty, instructor: this._instructorMode?.isInstructor === true, openSeat: this.voiceTipOpenSeat,
+        tipsOn: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
+      });
+    } catch { show = false; }
+    await this.post({ type: "voiceTip", requestId, show });
+  }
+  /** CGP-VOICE-R-029 — the seat whose tip is drawn in this window and not closed yet (memory only). */
+  private voiceTipOpenSeat?: string;
+  /**
+   * CGP-VOICE-R-029 — drawn (`open`) or gone: either way this seat has seen the tip. A late "shown" after a close
+   * cannot reopen it (the seat is already recorded). An empty seat stores nothing (it never shows).
+   */
+  private async noteVoiceTip(open: boolean): Promise<void> {
+    const seat = this.lessonTips.currentSeat;
+    if (!seat) return;
+    const seen = voiceTipStore(this.context.globalState?.get(VOICE_TIP_KEY)).seen.includes(seat);
+    if (open && !seen) this.voiceTipOpenSeat = seat;
+    else if (!open && this.voiceTipOpenSeat === seat) this.voiceTipOpenSeat = undefined;
+    if (seen) return;
+    try { await this.context.globalState.update(VOICE_TIP_KEY, withVoiceTipSeen(this.context.globalState.get(VOICE_TIP_KEY), seat)); } catch { /* the tip stays closed here */ }
+  }
   private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
   /** CGP-SHELL-R-019 — failed runs per lesson step, this window only (memory; nothing stored or sent but the observation). */
   private runFailuresTracker: RunFailureTracker | undefined;
