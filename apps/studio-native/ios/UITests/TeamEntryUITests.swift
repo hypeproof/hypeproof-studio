@@ -2,6 +2,46 @@ import XCTest
 
 /// Existing synthetic member fixture; actual account adoption and sheet entry.
 final class TeamEntryUITests: XCTestCase {
+    @MainActor func testNotificationReceivedDuringRegistrationOpensOnceWhenRegistrationFinishes() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "push-registration-held"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launch(); let login = app.buttons["linkDesktop"]
+        XCTAssertTrue(login.waitForExistence(timeout: 10)); login.tap()
+        // No second tap/refresh opens this sheet. The actual reference observer
+        // must see busy=true before the fixture releases the registration PUT.
+        let choice = app.buttons["방법이 막혔어요"]
+        let opened = choice.waitForExistence(timeout: 10)
+        if !opened {
+            let node = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+            let evidence = XCTAttachment(string: "\(node.value as? String ?? "missing trace")\n\(app.debugDescription)")
+            evidence.name = "pending-push-failure"; evidence.lifetime = .keepAlways; add(evidence)
+            let screen = XCTAttachment(screenshot: app.screenshot()); screen.lifetime = .keepAlways; add(screen)
+        }
+        XCTAssertTrue(opened); XCTAssertTrue(choice.isHittable)
+        let team = try teamTrace(app)
+        XCTAssertEqual(team["triggers"] as? Int, 0)
+        XCTAssertEqual(team["answers"] as? Int, 0)
+        XCTAssertEqual(team["events"] as? [String], [])
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "native-pending-push-opened-after-registration"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["닫기"].tap()
+        XCTAssertTrue(app.navigationBars["도착한 질문"].waitForNonExistence(timeout: 5))
+        let node = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+        XCTAssertTrue(node.waitForExistence(timeout: 5))
+        let raw = try XCTUnwrap(node.value as? String)
+        let trace = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
+        XCTAssertEqual(trace["push_events"] as? [String], ["registration-held", "notification-observed-busy", "registration-released", "opened"])
+        let paths = try XCTUnwrap(trace["paths"] as? [String])
+        XCTAssertEqual(paths.filter { $0.hasPrefix("PUT /v1/me/push-devices/") }.count, 1)
+        XCTAssertEqual(paths.filter { $0.hasPrefix("POST /v1/me/push-devices/") && $0.hasSuffix("/opened") }.count, 1)
+        XCTAssertEqual(trace["accepted_turns"] as? Int, 0)
+        XCTAssertEqual(trace["desktop_requests"] as? Int, 0)
+        let evidence = XCTAttachment(string: raw)
+        evidence.name = "native-pending-push-order"; evidence.lifetime = .keepAlways; add(evidence)
+    }
     @MainActor func testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft() throws {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launchArguments = ["--native-journey"]

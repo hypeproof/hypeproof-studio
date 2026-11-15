@@ -157,8 +157,18 @@ struct SharedConversationView: View {
         }
         .onReceive(pushCenter.$token) { token in if let token { Task { if await pushCenter.permits(token) { await model.push.controller?.register(token) } } } }
         .onChange(of: pushCenter.registrationFailed) { _, failed in if failed { model.push.controller?.unavailable("시스템 알림 등록을 확인하지 못했어요. 다시 시도해 주세요.") } }
-        .onChange(of: pushCenter.reference) { _, _ in openPendingNotification() }
-        .onReceive(model.push.$state) { state in if !state.busy { openPendingNotification() } }
+        .onChange(of: pushCenter.reference) { _, reference in
+            openPendingNotification()
+#if DEBUG
+            if reference != nil { NativeJourneyFixture.pendingPushObserved(busy: model.push.state.busy) }
+#endif
+        }
+        .onReceive(model.push.$state) { state in
+            guard !state.busy else { return }
+            // @Published emits in willSet. Read the committed presentation state
+            // on the next MainActor turn, retaining all current-session guards.
+            Task { @MainActor in openPendingNotification() }
+        }
         .task { openPendingNotification() }
         .sheet(isPresented: $showPush) { AccountPushView(model: model.push) }
         .sheet(isPresented: $showExperience) { ProductExperienceView(model: model.experience) }
@@ -166,7 +176,14 @@ struct SharedConversationView: View {
         .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false; showPush = false } else { openPendingNotification() } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
-        .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
+        .onChange(of: model.syncing) { _, syncing in
+            if !syncing {
+                reconcileVoiceReply()
+#if DEBUG
+                if model.signedIn && !model.loggingOut { NativeJourneyFixture.startPendingPushRegistration(model.push.controller) }
+#endif
+            }
+        }
         .onChange(of: model.cache.messages.last) { _, _ in reconcileVoiceReply() }
         .onChange(of: speakAnswers) { _, enabled in
             if !enabled && voice.turn.phase == .speaking { voice.stop(); voiceRequestID = nil }
@@ -627,7 +644,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.pendingPush {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

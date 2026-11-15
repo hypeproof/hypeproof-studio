@@ -18,6 +18,19 @@ import CryptoKit
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
     static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
+    static var pendingPush: Bool { enabled && JourneyConfiguration.scenario == "push-registration-held" }
+    private static var pendingPushStarted = false
+    static func startPendingPushRegistration(_ controller: AccountPushController?) {
+        guard pendingPush, !pendingPushStarted, let controller else { return }
+        pendingPushStarted = true
+        // Synthetic permission/token only: retain the actual controller, private
+        // preference file, authenticated HTTP adapter and published-state path.
+        guard controller.enable() else { return }
+        Task { await controller.register(String(repeating: "d", count: 64)) }
+    }
+    static func pendingPushObserved(busy: Bool) {
+        if pendingPush { JourneyTransport.store.observePendingPush(busy: busy) }
+    }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
@@ -146,7 +159,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -165,6 +178,16 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         do {
+            if let response = try Self.store.beginHeldPushRegistration(request) {
+                delayedResponse = response
+                Task { @MainActor in
+                    NativePushCenter.shared.received(["hps": ["schema": "hps-push/1",
+                        "delivery_id": JourneyStore.pushDeliveryID, "kind": "question",
+                        "id": "fixture-question", "revision": 1]])
+                }
+                waitForPushObservation(deadline: ProcessInfo.processInfo.systemUptime + 8)
+                return
+            }
             // Hold only the desktop discovery response, after validating and
             // recording its actual authenticated request. The production HTTP
             // deadline or app teardown owns cancellation; no fixture retry.
@@ -191,6 +214,18 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         stopLock.lock(); defer { stopLock.unlock() }
         guard !stopped else { return true }
         return try Self.store.beginHeldDesktopList(request, id: historyID)
+    }
+    private func waitForPushObservation(deadline: TimeInterval) {
+        stopLock.lock(); let cancelled = stopped; stopLock.unlock()
+        guard !cancelled else { return }
+        if Self.store.releaseObservedPush() { complete(); return }
+        if ProcessInfo.processInfo.systemUptime >= deadline {
+            delayedResponse = (599, ["error": "fixture_push_observation_timeout"]); complete(); return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.waitForPushObservation(deadline: deadline) }
+        stopLock.lock(); delayed = work; let stoppedBeforeSchedule = stopped; stopLock.unlock()
+        if stoppedBeforeSchedule { work.cancel(); return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05, execute: work)
     }
     private func waitForCancelAcknowledgement(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
@@ -290,6 +325,7 @@ private struct JourneySnapshot: Codable {
     var approvalDecisionChoice: String?
 }
 private final class JourneyStore: @unchecked Sendable {
+    static let pushDeliveryID = "11111111-1111-4111-8111-111111111111"
     private let lock = NSLock()
     private let defaults = UserDefaults.standard
     private let key = "native-journey-server-" + JourneyConfiguration.namespace
@@ -311,6 +347,8 @@ private final class JourneyStore: @unchecked Sendable {
     private var periodicHistoryHolds = 0
     private var secondSpeechReleaseRequests = 0
     private var secondSpeechDelivered = false
+    private var pushEvents: [String] = []
+    private var pushInstallation: String?
     init() {
         let key = "native-journey-server-" + JourneyConfiguration.namespace
         value = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(JourneySnapshot.self, from: $0) } ?? JourneySnapshot()
@@ -363,8 +401,29 @@ private final class JourneyStore: @unchecked Sendable {
             "second_speech_release_requests": secondSpeechReleaseRequests,
             "logout_requests": value.paths.filter { $0 == "POST /v1/auth/logout" }.count,
             "logout_during_history": logoutDuringHistory,
+            "push_events": pushEvents,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+    }
+    func beginHeldPushRegistration(_ request: URLRequest) throws -> (Int, [String: Any])? {
+        guard JourneyConfiguration.scenario == "push-registration-held", request.httpMethod == "PUT",
+              request.url?.path.hasPrefix("/v1/me/push-devices/") == true else { return nil }
+        let response = try respond(request)
+        guard response.0 == 200 else { throw URLError(.badServerResponse) }
+        lock.lock(); defer { lock.unlock() }
+        pushEvents.append("registration-held")
+        return response
+    }
+    func observePendingPush(busy: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        guard pushEvents == ["registration-held"], busy else { return }
+        pushEvents.append("notification-observed-busy")
+    }
+    func releaseObservedPush() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard pushEvents == ["registration-held", "notification-observed-busy"] else { return false }
+        pushEvents.append("registration-released")
+        return true
     }
     func beginHeldResponse(_ request: URLRequest) throws -> Bool {
         guard JourneyConfiguration.scenario.hasPrefix("response-stop"), request.httpMethod == "POST",
@@ -597,6 +656,26 @@ private final class JourneyStore: @unchecked Sendable {
         default: break
         }
         guard request.value(forHTTPHeaderField: "Authorization") == "Bearer " + accessToken else { return (401, ["error": "account_required"]) }
+        if JourneyConfiguration.scenario == "push-registration-held", path.hasPrefix("/v1/me/push-devices/") {
+            let parts = path.split(separator: "/")
+            guard parts.count >= 4, UUID(uuidString: String(parts[3]))?.uuidString.lowercased() == String(parts[3]) else { return (400, ["error": "invalid_fixture_installation"]) }
+            let installation = String(parts[3])
+            if method == "PUT", parts.count == 4, pushInstallation == nil,
+               Set(body.keys) == Set(["schema", "platform", "token", "permission"]),
+               body["schema"] as? String == "hps-push-device/1", body["platform"] as? String == "ios",
+               body["token"] as? String == String(repeating: "d", count: 64), body["permission"] as? String == "granted" {
+                pushInstallation = installation
+                return (200, ["schema": "hps-push-device/1", "id": installation, "active": true, "generation": 1])
+            }
+            if method == "POST", parts.count == 5, parts[4] == "opened", pushInstallation == installation,
+               Set(body.keys) == Set(["schema", "delivery_id"]), body["schema"] as? String == "hps-push-open/1",
+               body["delivery_id"] as? String == Self.pushDeliveryID,
+               pushEvents == ["registration-held", "notification-observed-busy", "registration-released"] {
+                pushEvents.append("opened")
+                return (200, ["recorded": true, "evidence_kind": "client_observed"])
+            }
+            return (409, ["error": "unexpected_fixture_push_request"])
+        }
         switch (method, path) {
         case ("GET", "/v1/me"):
             return (200, ["account": ["id": accountID, "status": "active"], "session_id": sessionID])
