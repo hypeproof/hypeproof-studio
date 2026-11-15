@@ -86,9 +86,10 @@ try {
     await press('PageDown'); assert.equal((await ev('vals()')).padding, 43, `${tag}: PageDown is 10 % of 48 (5)`);
     await press('Home'); await press('ArrowLeft'); assert.equal((await ev('vals()')).padding, 0, `${tag}: not below min`);
     // The range keys are handled in code (same step in every engine), so a handled key is never left to the browser.
-    await ev(`(()=>{window.__kp=[];if(!window.__kpOn){window.__kpOn=true;document.addEventListener('keydown',e=>window.__kp.push([e.key,e.defaultPrevented]));}})()`);
+    await ev(`(()=>{window.__kp=[];const h=e=>window.__kp.push([e.key,e.defaultPrevented]);document.addEventListener('keydown',h);window.__kpOff=()=>document.removeEventListener('keydown',h);})()`);
     await press('PageUp'); await press('End'); await press('Home');
-    assert.deepEqual(await ev('window.__kp'), [['PageUp', true], ['End', true], ['Home', true]], `${tag}: PageUp/End/Home are handled by the block, not the browser`);
+    const handled = await ev('window.__kp'); await ev('window.__kpOff()');
+    assert.deepEqual(handled, [['PageUp', true], ['End', true], ['Home', true]], `${tag}: PageUp/End/Home are handled by the block, not the browser`);
     assert.equal((await ev('vals()')).padding, 0);
     // No range key acts while an IME composition is open.
     await ev(`(()=>{for(const key of ['End','PageUp','ArrowRight'])range('padding').dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true,isComposing:true}));})()`); await settle();

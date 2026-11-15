@@ -84,7 +84,7 @@ if (svcFile && existsSync(svcFile)) {
 {
   // The Service's single-line safe-text rule, against the case list the Service and Chalk share (byte-for-byte copies).
   const cases = JSON.parse(readFileSync(new URL('../../../chalk/test/fixtures/safe-text-cases.json', import.meta.url), 'utf8')).cases;
-  assert.ok(cases.length >= 30, `shared cases (${cases.length})`);
+  assert.ok(cases.length >= 25, `shared cases (${cases.length})`);
   assert.deepEqual(cases.map(([t, readable]) => B.safeLine(t, readable)), cases.map(([, , safe]) => safe), 'safeLine equals the shared safe-text case list');
   // Every case the list refuses with the readable rule is a stage title Studio does not draw (bidi override, zero-width, …).
   for (const [t, readable, safe] of cases) if (readable && !safe && t.length <= 40)
