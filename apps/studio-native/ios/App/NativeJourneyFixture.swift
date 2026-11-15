@@ -43,7 +43,9 @@ import CryptoKit
     static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
     static func synchronizationStarted(automatic: Bool) {
-        if periodicVoice { JourneyTransport.store.synchronizationStarted(automatic: automatic) }
+        if periodicVoice || (enabled && JourneyConfiguration.scenario == "queued-voice") {
+            JourneyTransport.store.synchronizationStarted(automatic: automatic)
+        }
     }
     static func finishSecondSpeech() { if periodicVoice { JourneyTransport.store.finishSecondSpeech() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
@@ -466,7 +468,10 @@ private final class JourneyStore: @unchecked Sendable {
         lock.lock(); defer { save(); lock.unlock() }
         guard request.httpMethod == "GET", request.url?.path == "/v1/me/reflection" else { return false }
         value.historyReads += 1
-        let queuedVoice = JourneyConfiguration.scenario == "queued-voice" && value.historyReads == 2
+        // The queued-voice journey deliberately refreshes from Settings. A quiet
+        // periodic read may arrive first, but must not consume its held request.
+        let queuedVoice = JourneyConfiguration.scenario == "queued-voice"
+            && !automaticSynchronization && value.historyReads >= 2 && value.delayedHistoryReads == 0
         let logout = JourneyConfiguration.scenario == "logout-sync" && historyArmed
         let periodicVoice = JourneyConfiguration.scenario == "voice-periodic-poll"
             && automaticSynchronization && value.accepted.count == 1
