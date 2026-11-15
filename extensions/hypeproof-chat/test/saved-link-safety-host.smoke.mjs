@@ -51,23 +51,25 @@ assert.equal(savedLinkSafetyStale(saved, linkSeatKey(otherToken)), true, "a seat
 // ---- Pure: the click policy ----
 const policy = (o) => learnerLinkPolicy({ profile: null, saved: null, persistedSafeSession: undefined, persistedAllowlist: undefined, setting: undefined, ...o });
 const route = (o, url) => { const { safety, enforceAllowlist } = policy(o); return routeExternalLink(url, safety, { enforceAllowlist }).kind; };
-// Loading / refetch / expiry with this seat's copy: the minor block holds.
-assert.equal(route({ saved }, "https://news.example.com/story"), "blocked", "copy: outside the list is blocked");
+// CGP-SHELL-R-026 (Jay, 2026-11-14): the minor seat asks before a link outside the list opens (no block any more).
+// Loading / refetch / expiry with this seat's copy: the minor rule holds.
+assert.equal(route({ saved }, "https://news.example.com/story"), "confirm", "copy: outside the list asks first");
 assert.equal(route({ saved }, "https://hypeproof-ai.xyz/live/x/gallery/abc"), "integrated", "copy: the class gallery opens");
 assert.equal(route({ saved }, "http://127.0.0.1:5500/"), "integrated", "copy: the learner's own preview opens");
 // The copy outranks the settings a failed fetch or a learner can change.
-assert.equal(route({ saved, persistedSafeSession: false, persistedAllowlist: [] }, "https://news.example.com/story"), "blocked");
-// The support override still wins.
-assert.equal(route({ saved, setting: false }, "https://news.example.com/story"), "integrated");
+assert.equal(route({ saved, persistedSafeSession: false, persistedAllowlist: [] }, "https://news.example.com/story"), "confirm");
+// The support override no longer trusts the list: the gallery asks too.
+assert.equal(route({ saved, setting: false }, "https://news.example.com/story"), "confirm");
+assert.equal(route({ saved, setting: false }, "https://hypeproof-ai.xyz/live/x/gallery/abc"), "confirm", "override: the list is not trusted");
 // A loaded profile wins over the copy in both directions.
-assert.equal(route({ saved, profile: adultProfile }, "https://news.example.com/story"), "confirm");
-assert.equal(route({ saved: savedLinkSafetyFrom(adultProfile, seat, 1), profile: kidProfile }, "https://news.example.com/story"), "blocked");
-// An adult copy keeps the adult path; a minor copy with an empty list keeps the integrated route (not block-all).
-assert.equal(route({ saved: savedLinkSafetyFrom(adultProfile, seat, 1) }, "https://news.example.com/story"), "confirm");
-assert.equal(route({ saved: savedLinkSafetyFrom({ minor_cohort: true, browser_session: { mode: "safe", allowlist: [] } }, seat, 1) }, "https://news.example.com/story"), "integrated");
-// No copy: unchanged from before this row (negative control for the gap it closes).
-assert.equal(route({}, "https://news.example.com/story"), "integrated", "no copy, nothing persisted: integrated, not blocked");
-assert.equal(route({ persistedSafeSession: true, persistedAllowlist: ["example.org"] }, "https://news.example.com/story"), "blocked");
+assert.equal(route({ saved, profile: adultProfile }, "https://news.example.com/story"), "system", "adult: the confirm is off by default");
+assert.equal(route({ saved: savedLinkSafetyFrom(adultProfile, seat, 1), profile: kidProfile }, "https://news.example.com/story"), "confirm");
+// An adult copy keeps the adult path; a minor copy with an empty list asks for every link.
+assert.equal(route({ saved: savedLinkSafetyFrom(adultProfile, seat, 1) }, "https://news.example.com/story"), "system");
+assert.equal(route({ saved: savedLinkSafetyFrom({ minor_cohort: true, browser_session: { mode: "safe", allowlist: [] } }, seat, 1) }, "https://news.example.com/story"), "confirm");
+// No copy: unknown fails closed to the safe session, so the link asks first.
+assert.equal(route({}, "https://news.example.com/story"), "confirm", "no copy, nothing persisted: asks, inside Studio's browser");
+assert.equal(route({ persistedSafeSession: true, persistedAllowlist: ["example.org"] }, "https://news.example.com/story"), "confirm");
 console.log("PASS saved link safety: seat keys, copies, stale removal, click policy");
 
 // ---- Real provider ----
@@ -114,9 +116,10 @@ function host() {
     },
     cachedProfile: null, profileFetchPromise: null, profileGeneration: 0, lastProfileFailure: null, servedWorkspaceRoot: null,
     funnel: { active: false, setTarget() {} }, preview: { setLabels() {} },
-    post: async (m) => { posted.push(m); },
+    post: async (m) => { posted.push(m); return true; },
     refreshSitePublishContext() {}, clearElementContext() {}, refreshCrBytesContext: async () => {}, startLiveness() {}, stopLiveness() {},
     refreshFunnelTarget: async () => {}, migrateLegacyStateForActiveCohort: async () => {},
+    _instructorMode: { isInstructor: false, reset() {} },
   };
   for (const [key, value] of Object.entries(fields)) Object.defineProperty(h, key, { value, writable: true, configurable: true });
   return h;
@@ -145,24 +148,36 @@ const minimalProfile = (extra) => ({ ux: { coach: {} }, ...extra });
   assert.equal(await h.ensureProfile(), null);
   assert.deepEqual(updates, [], "a failed fetch writes no hypeproof.browser setting (it used to write safeSession=false)");
   posted.length = 0; opened.length = 0;
-  await h.openLearnerLink(NEWS);
-  assert.deepEqual(opened, [], "outside the saved list: nothing opens");
-  assert.deepEqual(posted.map((m) => [m.type, m.host]), [["externalLinkBlocked", "news.example.com"]]);
+  h.view = { visible: true };
+  const asked = h.openLearnerLink(NEWS);
+  await new Promise((r) => setTimeout(r, 0));
+  const prompt = posted.find((m) => m.type === "linkConfirmPrompt" && m.prompt)?.prompt;
+  assert.equal(prompt?.host, "news.example.com", "outside the saved list: the confirm dialog");
+  assert.equal(prompt.where, "integrated", "a minor's 열기 stays in Studio's browser");
+  h.linkConfirmRequest.respond(prompt.id, "cancel");
+  assert.equal(await asked, "cancelled");
+  assert.deepEqual(opened, [], "취소: nothing opens");
   await h.openLearnerLink(GALLERY);
-  assert.deepEqual(opened, [["integrated", GALLERY]], "inside the saved list: the integrated browser");
+  assert.deepEqual(opened, [["integrated", GALLERY]], "inside the saved list: the integrated browser, no dialog");
   // Even when the persisted settings say "adult" (an older build wrote that on a failed fetch).
   settings["hypeproof.browser"] = { safeSession: false, safeAllowlist: [] };
-  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "blocked");
-  // Chalk's contract op agrees.
-  assert.equal(JSON.stringify(await h.chalkOps().openExternal(NEWS)), JSON.stringify({ ok: false, reason: "blocked" }));
+  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "confirm");
+  // Chalk's contract op goes through the same dialog: 열기 opens, 취소 is not ok.
+  posted.length = 0; opened.length = 0;
+  const chalk = h.chalkOps().openExternal(NEWS);
+  await new Promise((r) => setTimeout(r, 0));
+  h.linkConfirmRequest.respond(posted.find((m) => m.type === "linkConfirmPrompt" && m.prompt).prompt.id, "open");
+  assert.equal(JSON.stringify(await chalk), JSON.stringify({ ok: true }));
+  assert.deepEqual(opened, [["integrated", NEWS]]);
   settings["hypeproof.browser"] = {};
 }
 
-// 3. The support override still turns the block off.
+// 3. The support override: the list is not trusted, so every external link asks (CGP-SHELL-R-026).
 {
   const h = host();
   settings.hypeproofChat = { safeLinkAllowlistEnabled: false };
-  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "integrated");
+  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "confirm");
+  assert.equal((await h.learnerLinkRoute(GALLERY)).kind, "confirm");
   settings.hypeproofChat = {};
 }
 
@@ -172,9 +187,10 @@ const minimalProfile = (extra) => ({ ux: { coach: {} }, ...extra });
   token = otherToken;
   // REQ-N11 (2026-11-07): the minor seat's settings lock stays until another seat's profile is served, so until
   // then the other seat's click is still blocked outside the served list (fail closed); without the lock it is integrated.
-  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "blocked", "another seat before its profile: the lock still decides");
+  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "confirm", "another seat before its profile: the lock still decides");
+  assert.equal((await h.learnerLinkRoute(GALLERY)).kind, "integrated", "and the locked list is still trusted");
   const lockCopy = state.get("hypeproofChat.browserSettingsLock"); state.delete("hypeproofChat.browserSettingsLock");
-  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "integrated", "another seat, no copy, no lock: integrated, as before");
+  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "confirm", "another seat, no copy, no lock: unknown fails closed, asks");
   state.set("hypeproofChat.browserSettingsLock", lockCopy);
   await h.reconcileSavedLinkSafety();
   assert.equal(state.has(SAVED_LINK_SAFETY_KEY), false, "seat change removes the copy");
@@ -201,7 +217,7 @@ const minimalProfile = (extra) => ({ ux: { coach: {} }, ...extra });
   await h.ensureProfile();
   assert.equal(state.get(SAVED_LINK_SAFETY_KEY)?.minor, false);
 }
-console.log("PASS saved link safety host: real ensureProfile saves the copy; refetch/expiry keeps the block; override, seat change and sign-out");
+console.log("PASS saved link safety host: real ensureProfile saves the copy; refetch/expiry keeps the minor confirm; override, seat change and sign-out");
 
 // Wiring: sign-out and token changes reconcile; the copy is written only from a served profile.
 const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");

@@ -324,7 +324,7 @@ Owner is Jay unless stated. Blocked IDs are canonical master IDs.
 | DEC-20 | Block rendering runtime: sandboxed iframe per block vs in-webview component (bundle weight, CSP REQ-L2). **Ruled 2026-10-28:** Render blocks as in-webview components. | CGP-LEARN-R-003, CGP-LEARN-R-005, CGP-LEARN-R-006, CGP-LEARN-R-007, CGP-LEARN-R-009, CGP-LEARN-R-010 | Jay |
 | DEC-21 | Does a sampling-block expectation ever become a criterion_set event (risk of a disguised quiz, SX-57) | CGP-LEARN-R-008 | Jay (MC/SX owner) |
 | DEC-22 | Self-harm escalation: PIPA/legal review, responsible adult outside class hours for 14+ personal preview, no mid-class account pause | CGP-LEARN-R-013 | Jay |
-| DEC-23 | PIPA guardian/consent decisions: guardian linking, trusted contact, account/data deletion by learner or guardian | CGP-SHELL-R-027, CGP-SHELL-052, CGP-SHELL-056 | Jay |
+| DEC-23 | PIPA guardian/consent decisions: guardian linking, trusted contact, account/data deletion by learner or guardian. **Ruled 2026-11-14 (interim guardian half only):** until the guardian account (GRD-12) exists, an operator or support handles a guardian's deletion request by hand outside the product. Guardian linking and trusted contact stay open. | CGP-SHELL-R-027, CGP-SHELL-052, CGP-SHELL-056 | Jay |
 | DEC-24 | Cohort update freeze vs security fixes: who may override, and is there a Service minimum-version gate | CGP-SHELL-R-003, CGP-SHELL-R-034 | Jay |
 | DEC-25 | Service must expose the class window end time to the client | CGP-SHELL-R-025 | Service owner |
 | DEC-26 | Service must expose a confirmed remaining-request count with an as-of time (AB-15 forbids inventing one) | CGP-SHELL-R-029, CGP-SHELL-R-030 | Service owner |
@@ -376,6 +376,49 @@ ALREADY vs ADAPT/ADOPT pairs usually mean partial coverage (the ADAPT side adds 
 | CGP-CHAT-040 | Math (LaTeX) rendering + graphs | ADAPT | CGP-DS-040 DEFER |
 
 Some of these are fact checks rather than product calls: CGP-CHAT-066 vs CGP-AGENT-016 (is UX22 recovery-fork "fork chat"?), CGP-VOICE-023 vs CGP-SHELL-038 (does a mic picker exist?), CGP-KNOW-068 vs CGP-SHELL-083 (is a learner-facing "AI unavailable" status screen shipped?).
+
+## 7. Requirement rows already shipped, and rows only partly met (marked 2026-11-14)
+
+These 26 requirement rows were still counted as open. Most landed under their design-row id or in a verified batch PR,
+so a search for the requirement id in commit subjects missed them. Each row was checked against its domain-doc text and
+the code on `origin/main` (2026-11-14, verify-r004). 20 are fully met. 6 are only partly met or were superseded, so they
+stay open work. "Batch" means the requirement id is named in that batch PR's verified rows.
+
+### 7.1 Shipped (20)
+
+| Row | What | PR / commit | Implementing file |
+|---|---|---|---|
+| CGP-CHAT-R-014 | Sources labelled by kind | #2730 (c737b9752) | `extensions/hypeproof-chat/src/sdkWebCitations.ts`, `extensions/hypeproof-chat/webview-ui/src/citationKind.ts` |
+| CGP-CHAT-R-015 | Real elapsed work time per turn | #2732 (76809a97d) | `extensions/hypeproof-chat/src/turnElapsed.ts` |
+| CGP-CHAT-R-016 | A failed turn render does not break the transcript | #2734 (e543907d1) | `extensions/hypeproof-chat/webview-ui/src/TurnBoundary.tsx` |
+| CGP-CHAT-R-017 | Long paste becomes a chip (the label reads "붙여넣은 글 · N줄", not "(N줄)") | #2737 (8f1e34512) | `extensions/hypeproof-chat/webview-ui/src/PasteChip.tsx`, `extensions/hypeproof-chat/webview-ui/src/pastedDraft.ts` |
+| CGP-CHAT-R-018 | `@` workspace file mentions | #2762 (86f0c33a2) | `extensions/hypeproof-chat/src/workspaceFileMentions.ts` |
+| CGP-CHAT-R-020 | Draw and attach a sketch | #2764 (6fae6e1a8) | `extensions/hypeproof-chat/webview-ui/src/SketchDialog.tsx` |
+| CGP-CHAT-R-026 | Search own tasks | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/taskSearch.ts` |
+| CGP-AGENT-R-027 | Checkpoint with a reviewed message | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/checkpoint.ts` |
+| CGP-AGENT-R-030 | Local performance trace | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/perfTrace.ts` |
+| CGP-ART-R-006 | Style tweak for a picked element | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/webview-ui/src/StyleTweakPanel.tsx` |
+| CGP-ART-R-016 | Slide suggestion chips | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/slideSuggestion.ts` |
+| CGP-ART-R-017 | 따라 보기 while the coach edits | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/liveFollow.ts` |
+| CGP-ART-R-020 | "AI가 한 일" summary per task | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/taskActivity.ts` |
+| CGP-ART-R-021 | Overwrite change summary in the approval | batch #2846 (bd782e4cc); D-021 #3062 | `extensions/hypeproof-chat/src/writeApprovalPrompt.ts` (the labels), `extensions/hypeproof-chat/src/writeApprovalChange.ts` (the summary), `extensions/hypeproof-chat/src/diffGuard.ts` (`changed_ratio`) |
+| CGP-SHELL-R-018 | Reduced motion from the OS and a setting | #1896, #2433 (DS-D-012) | `extensions/hypeproof-chat/src/motionPreference.ts` |
+| CGP-SHELL-R-020 | Project ideas only after "몰라요" | batch #2970 (f05d6382e) | `extensions/hypeproof-chat/webview-ui/src/ProjectIdeas.tsx` |
+| CGP-SHELL-R-028 | Export my work | batch #2972 (84e9f9a7d) | `extensions/hypeproof-chat/src/workExport.ts` |
+| CGP-SHELL-R-035 | What's new after an update | #3102 (D-034), #3217 | `extensions/hypeproof-chat/src/learnerReleaseNotes.ts`, `extensions/hypeproof-chat/webview-ui/src/WhatsNew.tsx` |
+| CGP-DS-R-030 | Tabular figures in Chalk | batch #2972 (84e9f9a7d) | `chalk/src/ui/manage.html`, `chalk/src/ui/budgets.html`, `chalk/src/ui/console.html` (`font-variant-numeric:tabular-nums`) |
+| CGP-DS-R-032 | Startup and empty states use only HP marks | batch #2972 (84e9f9a7d) | `extensions/hypeproof-chat/webview-ui/src/StartPage.tsx`, `extensions/hypeproof-chat/webview-ui/src/start.css` (reduced-motion block at :362). Evidence: `extensions/hypeproof-chat/test/brand-marks.smoke.mjs`, `extensions/hypeproof-chat/test/startup-brand-computed.smoke.mjs` |
+
+### 7.2 Partial or superseded (6, still open)
+
+| Row | What | Status | PR / commit | Gaps (file:line on `origin/main`) |
+|---|---|---|---|---|
+| CGP-CHAT-R-030 | Shortcuts help sheet | **Partial** | batch #2846 (bd782e4cc) | The sheet lists only bound keys, which is right, but two keys the row names do not exist: Esc to stop an answer, and a focus-the-composer key (`extensions/hypeproof-chat/webview-ui/src/chatShortcuts.ts:2-3`). |
+| CGP-ART-R-023 | Deck PDF and open folder | **Partial** | batch #2846 (bd782e4cc); D-023 #3066 | The PDF ships (`extensions/hypeproof-chat/src/deckPdf.ts`). The result is a notice line with no 폴더에서 보기 action (`extensions/hypeproof-chat/src/chatPanelProvider.ts:2869`, `DECK_PDF_COPY.saved`). The page card's 폴더에서 보기 reveals a nested page's own folder, not the served root. That is an agent choice (decisions.md:1140) the owner has not confirmed. |
+| CGP-SHELL-R-014 | Learner settings sheet | **Partial** | batch #2970 (f05d6382e); export row 2026-11-14 | 4 of 6 rows exist: `START_SETTING_ROWS_AVAILABLE = ["textSize","reduceMotion","notices","export"]` (`extensions/hypeproof-chat/src/startSettings.ts:23`). 내 작업 내보내기 runs the shipped export (CGP-SHELL-R-028). Still missing: 화면 밝기(테마), which comes with #4053 (CGP-SHELL-R-016), and 팁 보기, which waits for CGP-SHELL-R-019 (tips are not built). 고급 설정 is hidden for minors, which is met. |
+| CGP-SHELL-R-017 | Chat text size | **Met (known difference)** | #1902, #1954, #2716 (DS-D-006), CGP-SHELL-R-017 | The choice applies to personal and classroom chat, the help sheets in the chat and the start page with its 설정 sheet (`chatDetails.css` and `start.css` step rules, `test/text-size-reach.smoke.mjs`). Kept as shipped: 16/18/20 px and the label 기본 instead of the row's 15/17/20 px and 보통 (decisions.md "CGP-SHELL-R-017"; Jay can overrule). |
+| CGP-SHELL-R-026 | Minor external links | **Met** | #1862, #3484, #3489 (ART-D-008); CGP-SHELL-R-026 | Jay 2026-11-14 (#4090): minors confirm every link the lesson allowlist does not admit, with the full URL and 취소 as the default (`LinkConfirmDialog`); adults confirm only with `hypeproofChat.confirmExternalLinks`; preview links always confirm, rate-limited on the host; the browser panel holds page-requested cross-site navigations (`LinkNavigationGuard`). CGP-ART-D-008's block is superseded for this scope. |
+| CGP-SHELL-R-030 | Ask the instructor for more allowance | **Partial** | #2710 (SHELL-D-029) | The reason is required, not optional, because the Service requires it (`extensions/hypeproof-chat/webview-ui/src/AccessControl.tsx:61-65`). The form shows whenever `can_request` holds and nothing is pending, not only at 10% or less or when exhausted; only the hint sentence uses that threshold (`AccessControl.tsx:46-47`). The resolved state shows the Service's resolution text, not 승인/거절 labels (`AccessControl.tsx:45`). The 10-minute repeat block is not in the app and has not been checked on the Service. |
 
 ## 6. Technical unknowns (not human decisions, but they can flip a row)
 

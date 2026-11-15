@@ -10,7 +10,7 @@
 // path, so its bytes go to the host as base64 and the host runs the picker's checks on them. The drop
 // stops here: it never reaches the shell, which would attach it to the composer instead.
 
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import type { MaterialItemView, MaterialsView } from '../../src/activityMaterialsView';
 import { MATERIALS_COPY, MATERIALS_DROP_MAX_BYTES } from '../../src/activityMaterialsView';
 import { ChatIcon } from './ChatDetails';
@@ -21,37 +21,42 @@ let seq = 0;
 const nextId = () => `material-${Date.now().toString(36)}-${(++seq).toString(36)}`;
 
 /** One subscription per mounted surface; both read the same host message. */
-function useMaterials() {
+function useMaterials(enabled = true) {
   const [view, setView] = useState<MaterialsView | null>(null);
   // CGP-KNOW-R-002: the activity home tells "not answered yet" from "the host has no list here".
   const [answered, setAnswered] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // The answer to the last press this surface made (its own request id): a form reads only its own.
+  const [settled, setSettled] = useState<{ id: string; error: string } | null>(null);
   const pending = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    if (!enabled) return;
     const dispose = onHostMessage(message => {
       if (message.type !== 'materialsState') return;
       setView(message.view);
       setAnswered(true);
       // An answer to another surface's press updates the list, not this surface's messages.
       if (message.requestId !== undefined && message.requestId !== pending.current) return;
-      if (message.requestId !== undefined) { pending.current = null; setBusy(false); }
+      if (message.requestId !== undefined) { setSettled({ id: message.requestId, error: message.error ?? '' }); pending.current = null; setBusy(false); }
       setError(message.error ?? '');
       setNotice(message.notice ?? '');
     });
     postToHost({ type: 'materialsRequest' });
     return dispose;
-  }, []);
-  const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0]) => {
-    if (pending.current) return;
+  }, [enabled]);
+  /** Posts the press and returns its request id, or null when another press is still pending. */
+  const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0]): string | null => {
+    if (pending.current) return null;
     const requestId = nextId();
     pending.current = requestId; setBusy(true); setError(''); setNotice('');
     postToHost(build(requestId));
+    return requestId;
   };
   /** A refusal decided here, with no host request (several files in one drop). */
   const refuse = (message: string) => { setError(message); setNotice(''); };
-  return { view, answered, error, notice, busy, ask, refuse };
+  return { view, answered, error, notice, busy, ask, refuse, settled };
 }
 
 const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some(item => item.kind === 'file');
@@ -151,6 +156,99 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
     {error && <p role="alert" className="hp-materials-error">{error}</p>}
     {notice && <p role="status" className="hp-materials-notice">{notice}</p>}
   </Root>;
+}
+
+// ── Compact coach layout (ux.coach_layout === 'compact') ────────────────────────────────────────
+// The rail card is gone there. Its actions live in the composer's "+" menu and its list becomes tags
+// above the composer, all reading ONE subscription (this scope) so a refusal from a menu press is
+// drawn by the tags. The host messages are the ones the rail card sends; nothing host-side changes.
+
+type MaterialsScopeValue = ReturnType<typeof useMaterials> & { urlOpen: boolean; setUrlOpen: (open: boolean) => void; closeUrl: () => void };
+const MaterialsScopeContext = createContext<MaterialsScopeValue | null>(null);
+
+/** Owns the 자료 subscription for the composer. `enabled` false: no request, no context. */
+export function MaterialsScope({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  const materials = useMaterials(enabled);
+  const [urlOpen, setUrlOpen] = useState(false);
+  // REQ-STUDIO-FOCUS-RESTORE: closing the address form hands focus back to the "+" button (or the text box), never <body>.
+  const closeUrl = () => {
+    setUrlOpen(false);
+    requestAnimationFrame(() => {
+      try { (document.querySelector<HTMLElement>('.hps-input .hps-tool-trigger') ?? document.querySelector<HTMLElement>('.hps-input textarea'))?.focus({ preventScroll: true }); } catch { /* no DOM focus available */ }
+    });
+  };
+  return <MaterialsScopeContext.Provider value={enabled ? { ...materials, urlOpen, setUrlOpen, closeUrl } : null}>{children}</MaterialsScopeContext.Provider>;
+}
+
+/** The scope's controls, or null outside an enabled scope. */
+export const useMaterialsScope = () => useContext(MaterialsScopeContext);
+
+/** The "+" menu's two entries; they ask for the same things the rail card's buttons asked for. */
+export function materialsMenuActions(scope: MaterialsScopeValue) {
+  return {
+    addFile: () => scope.ask(requestId => ({ type: 'materialAddFile', requestId })),
+    openUrl: () => scope.setUrlOpen(true),
+  };
+}
+
+function MaterialsUrlForm({ scope }: { scope: MaterialsScopeValue }) {
+  const [url, setUrl] = useState('');
+  const [sentId, setSentId] = useState<string | null>(null);
+  // Only this form's own request closes it, and only when the host accepted it; a refusal keeps the address for a correction.
+  useEffect(() => {
+    if (sentId && scope.settled?.id === sentId && !scope.settled.error) { setSentId(null); scope.closeUrl(); }
+  }, [sentId, scope.settled]);
+  const submit = () => { if (url.trim()) setSentId(scope.ask(requestId => ({ type: 'materialAddUrl', requestId, url }))); };
+  return <form className="hp-materials-url" onSubmit={event => { event.preventDefault(); submit(); }}>
+    <label>
+      <span>주소 넣기 (https)</span>
+      <input type="url" name="material-url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://" value={url} autoFocus
+        onChange={event => setUrl(event.target.value)}
+        onKeyDown={event => {
+          if (event.key === 'Enter' && imeComposing(event)) event.preventDefault();
+          if (event.key === 'Escape' && !imeComposing(event)) { event.stopPropagation(); scope.closeUrl(); }
+        }} />
+    </label>
+    <button type="submit" className="hp-cta-quiet" disabled={scope.busy || !url.trim()}>주소 넣기</button>
+    <button type="button" className="hp-cta-quiet" onClick={() => scope.closeUrl()}>닫기</button>
+  </form>;
+}
+
+/**
+ * Compact layout: the activity's 자료 as small tags directly above the composer. Pressing a tag
+ * puts it in (or takes it out of) the next question — only tags in `aria-pressed` go with it, as
+ * in the rail card — and × removes a removable item from the list. Nothing is pre-selected.
+ */
+export function MaterialsTags() {
+  const scope = useMaterialsScope();
+  if (!scope) return null;
+  const { view, busy, ask, error, notice, urlOpen } = scope;
+  const unavailable = view?.unavailable ?? [];
+  const blocked = new Set(unavailable.map(item => item.id));
+  const items = view?.items.filter(item => !blocked.has(item.id)) ?? [];
+  if (!view || (!items.length && !unavailable.length && !urlOpen && !error && !notice)) return null;
+  const takeOut = (id: string) => ask(requestId => ({ type: 'materialSelect', requestId, scope: view.scope, id, selected: false }));
+  return <div className="hp-materials-tags" role="group" aria-label="이 활동의 자료" data-testid="materials-tags">
+    {(items.length > 0 || unavailable.length > 0) && <span className="hp-materials-meta">{MATERIALS_COPY.note}</span>}
+    {items.map(item => <span key={item.id} className="hp-materials-tag" data-material-origin={item.origin} data-selected={item.selected ? '' : undefined}>
+      <button type="button" className="hp-materials-tag-pick" aria-pressed={item.selected} aria-label={selectLabel(item)} disabled={busy}
+        title={`${item.title} · 추가: ${item.originLabel}`} data-hp-tooltip={`${item.title} · 추가: ${item.originLabel}`}
+        onClick={() => ask(requestId => ({ type: 'materialSelect', requestId, scope: view.scope, id: item.id, selected: !item.selected }))}>
+        <ChatIcon kind={item.selected ? 'check' : item.kind === 'url' ? 'link' : item.kind === 'note' ? 'book' : 'file'} size={16} />
+        <span className="hp-materials-tag-title">{item.title}</span>
+      </button>
+      {item.removable && <button type="button" className="hp-materials-tag-remove" data-material-remove="" aria-label={`목록에서 빼기: ${item.title}`} disabled={busy}
+        onClick={() => ask(requestId => ({ type: 'materialRemove', requestId, scope: view.scope, id: item.id }))}><span aria-hidden="true">×</span></button>}
+    </span>)}
+    {unavailable.map(item => <span key={item.id} className="hp-materials-tag" data-material-unavailable="">
+      <span className="hp-materials-tag-title">{item.title} · 보낼 수 없음: {item.reason}</span>
+      <button type="button" className="hp-materials-tag-remove" aria-label={`${item.title} 빼기 (보낼 수 없는 자료)`} disabled={busy} onClick={() => takeOut(item.id)}><span aria-hidden="true">×</span></button>
+    </span>)}
+    {urlOpen && <MaterialsUrlForm scope={scope} />}
+    {unavailable.length > 0 && <p role="alert" className="hp-materials-error" data-testid="materials-unavailable">{MATERIALS_COPY.unavailableNote}</p>}
+    {error && <p role="alert" className="hp-materials-error">{error}</p>}
+    {notice && <p role="status" className="hp-materials-notice">{notice}</p>}
+  </div>;
 }
 
 /**

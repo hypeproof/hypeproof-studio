@@ -5,6 +5,8 @@ import type { OfferReason, ProblemReportFormView } from '../../src/problemReport
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
 import {BrowserApprovalDialog} from './BrowserApprovalDialog';
 import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
+import type {LinkConfirmPrompt} from '../../src/linkConfirm';
+import {LinkConfirmDialog} from './LinkConfirmDialog';
 import type {DelegationStopState} from "../../src/delegationStop";
 import {CommandApprovalDialog} from './CommandApprovalDialog';
 import type {CommandApprovalPrompt} from '../../src/commandApprovalPrompt';
@@ -90,6 +92,7 @@ interface State {
   safetyNotice: import("../../src/safetyNotice").SafetyNoticeView | null;
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
   errorRetry: boolean;             // REQ-M45 — false when resending cannot help (missing SDK binary)
+  pageNoticeAction?: import("../../src/protocol").PageNoticeAction; // CGP-ART-R-023 — the notice's one action
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;
@@ -144,7 +147,7 @@ type Action =
   | { type: "toolLog"; entry: ToolEntry }
   // CGP-KNOW-D-021 — a download line lands like a tool row but is not turn progress (no long-step reset).
   | { type: "downloadLine"; entry: ToolEntry }
-  | { type: "pageAttached"; label: string }
+  | { type: "pageAttached"; label: string; action?: import("../../src/protocol").PageNoticeAction }
   | { type: "annotations"; enabled: boolean; annotations: import("../../src/annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
   | { type: "pageAttachment"; attachment: import('../../src/pageContext').PageAttachmentPreview | null }
@@ -251,7 +254,7 @@ function reducer(state: State, action: Action): State {
       return { ...state, timeline: timelineTool(state.timeline, action.entry, Date.now()) };
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
-      return { ...state, pageNotice: action.label };
+      return { ...state, pageNotice: action.label, pageNoticeAction: action.action };
     case "annotations": return { ...state, annotations: action.annotations, annotationsEnabled: action.enabled };
     case "elementAttached":
       return { ...state, elementPreview: action.element };
@@ -360,7 +363,7 @@ function reducer(state: State, action: Action): State {
     case "userSent":
       return {
         ...state,
-        pageNotice: null,   // #308 — clear the "붙였어요" notice once the user sends
+        pageNotice: null, pageNoticeAction: undefined,   // #308 — clear the "붙였어요" notice once the user sends
         elementPreview: null, // CR-09 — the picked element went with this turn
         // CGP-ART-R-007 / CGP-CHAT-R-011 — the page and file chips are host-owned: the host clears them
         // when a model turn actually takes them, so a send turned away earlier leaves them visible.
@@ -440,6 +443,8 @@ export function App() {
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
   const [browserApproval,setBrowserApproval]=useState<BrowserApprovalPrompt|null>(null);
+  // CGP-SHELL-R-026 — the external link confirm dialog.
+  const [linkConfirm,setLinkConfirm]=useState<LinkConfirmPrompt|null>(null);
   const [commandApproval,setCommandApproval]=useState<CommandApprovalPrompt|null>(null);
   const [annotationLeave,setAnnotationLeave]=useState<AnnotationLeavePrompt|null>(null);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
@@ -513,6 +518,7 @@ export function App() {
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
+        case 'linkConfirmPrompt': setLinkConfirm(msg.prompt); return;
         case 'commandApprovalPrompt': setCommandApproval(msg.prompt); return;
         case 'annotationLeavePrompt': setAnnotationLeave(msg.prompt); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
@@ -577,7 +583,7 @@ export function App() {
         case "downloadNotice":
           if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "downloadLine", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
           break;
-        case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
+        case "pageAttached": dispatch({ type: "pageAttached", label: msg.label, action: msg.action }); break;
         case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
         case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;
@@ -838,8 +844,9 @@ export function App() {
       {doctorNotice && !problemForm && <DoctorNoticeLine notice={doctorNotice} onAnswer={fix=>{postToHost({type:'doctorNoticeAnswer',id:doctorNotice.id,fix});setDoctorNotice(null);}}/>}
       {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
       {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
+      {linkConfirm && <LinkConfirmDialog key={linkConfirm.id} prompt={linkConfirm} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'linkConfirmAnswer',id,choice});setLinkConfirm(null);}}/>}
       {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
-      {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} compact={state.config?.profile?.ux?.coach_layout === "compact"} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}} onDiff={(id,index)=>postToHost({type:'writeApprovalDiff',id,index})}/>}
       <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor} activityTitle={homeTitle(state.config?.activity)} personalReflection={state.config?.activity?.kind === "personal" && !state.config?.isInstructor} personalMaking={state.config?.personalMaking}>
@@ -903,7 +910,7 @@ export function App() {
         incomingImage={incomingImage}
         config={state.config}
         messages={messages}
-        pageNotice={state.pageNotice}
+        pageNotice={state.pageNotice} pageNoticeAction={state.pageNoticeAction}
         elementPreview={state.elementPreview}
         pageAttachment={state.pageAttachment}
         onRemovePageAttachment={(undoId) => {
@@ -918,7 +925,7 @@ export function App() {
           dispatch({ type: "fileAttachment", attachment: null });
           postToHost({ type: "removeFileContext", ...(undoId ? { undoId } : {}) });
         }}
-        verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} compact={state.config?.profile?.ux?.coach_layout === "compact"} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         questionId={automationQuestion?.id}
         questionPanel={state.config?.profile?.automations?.enabled && automationQuestion ? <UserQuestionCard key={`${state.config.activity?.id ?? 'activity'}:${automationQuestion.id}`} question={automationQuestion} onAnswer={answer => postToHost({ ...answer, activityId: state.config?.activity?.id })} /> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error || !!automationQuestion}
@@ -986,6 +993,7 @@ export function App() {
           postToHost({ type: "saveCoach", name, personality })
         }
         onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
+        onEndRehearsalSeat={() => postToHost({ type: "rehearsalSeatEnd" })}
         onDiagnose={() => postToHost({ type: "runDoctor" })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}

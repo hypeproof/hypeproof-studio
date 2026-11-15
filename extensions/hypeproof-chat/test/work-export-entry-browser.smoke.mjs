@@ -40,7 +40,7 @@ let states = 0;
 try {
   for (const seat of ['personal', 'classroom']) for (const dark of [true, false]) for (const width of [320, 800, 1420]) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(page(vars, dark), { width, height: 900, dark });
+    await b.load(page(vars, dark), { width, height: 900, dark, appReady: true });
     await send({ type: 'config', config: configFor(seat) });
     await send({ type: 'history', messages: [] });
     const label = `${seat} ${dark ? 'dark' : 'light'} ${width}px`;
@@ -67,7 +67,7 @@ try {
   }
   // Forced colours: the entry keeps a visible border.
   for (const seat of ['personal', 'classroom']) {
-    await b.load(page('', true), { width: 800, height: 900, forcedColors: true });
+    await b.load(page('', true), { width: 800, height: 900, forcedColors: true, appReady: true });
     await send({ type: 'config', config: configFor(seat) }); await send({ type: 'history', messages: [] });
     await openSettings(seat);
     const fc = await b.evaluate(`(()=>{const s=getComputedStyle(${entry});return {style:s.borderTopStyle,width:parseFloat(s.borderTopWidth),h:(${entry}).getBoundingClientRect().height}})()`);

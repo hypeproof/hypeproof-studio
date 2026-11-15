@@ -38,7 +38,7 @@ const rgb=c=>{const m=c.match(/[\d.]+/g).map(Number);return {r:m[0],g:m[1],b:m[2
 const lum=({r,g,b})=>{const f=v=>{v/=255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4;};return .2126*f(r)+.7152*f(g)+.0722*f(b);};
 const over=(top,under)=>({r:top.r*top.a+under.r*(1-top.a),g:top.g*top.a+under.g*(1-top.a),b:top.b*top.a+under.b*(1-top.a)});
 const contrast=(fg,bg)=>{const [x,y]=[lum(fg),lum(bg)].sort((a,b)=>b-a);return (x+.05)/(y+.05);};
-const open=async(seat,{dark=true,width=800,forcedColors=false,extra={}}={})=>{await b.send('Page.navigate',{url:'about:blank'});await b.load(page(vars(dark?'Dark+':'Light+'),dark),{width,height:900,dark,forcedColors});await send({type:'config',config:configFor(seat,extra)});await send({type:'history',messages:[]});};
+const open=async(seat,{dark=true,width=800,forcedColors=false,extra={}}={})=>{await b.send('Page.navigate',{url:'about:blank'});await b.load(page(vars(dark?'Dark+':'Light+'),dark),{width,height:900,dark,forcedColors,appReady:true});await send({type:'config',config:configFor(seat,extra)});await send({type:'history',messages:[]});};
 let cases=0;
 try{
  for(const seat of ['personal','classroom']){

@@ -91,4 +91,56 @@ const B = { sha256: "b".repeat(64), version: "m2026.09.22-12", content: { steps:
   }
   ok("block pins: only the catalog versions this App draws; v2 of a v1-only block is the unsupported notice");
 }
+{
+  // CGP-LEARN-R-010 — reset to the preset and undo one change; pure, so no host message can come from it.
+  const A1 = { text: "a", reason: "" }, B1 = { text: "ab", reason: "" };
+  let h = F.EMPTY_HISTORY;
+  h = F.historyEdit(h, F.BLOCK_PRESET); h = F.historyEdit(h, A1); // one burst: only the state before it is recorded
+  assert.deepEqual(h.past, [F.BLOCK_PRESET]);
+  h = F.historyBoundary(h); h = F.historyEdit(h, B1);                // a new burst after a pause or blur
+  assert.deepEqual(h.past, [F.BLOCK_PRESET, B1]);
+  const cur = { text: "abc", reason: "이유" };
+  const r = F.historyReset(F.historyBoundary(h), cur);
+  assert.deepEqual(r.fields, F.BLOCK_PRESET, "처음으로 restores the preset exactly");
+  assert.deepEqual(r.history.past.at(-1), cur, "the reset itself is one change");
+  assert.equal(F.historyReset(r.history, F.BLOCK_PRESET), null, "nothing to reset at the preset (button disabled)");
+  let u = F.historyUndo(r.history);
+  assert.deepEqual(u.fields, cur, "undo reverts the reset");
+  u = F.historyUndo(u.history); assert.deepEqual(u.fields, B1, "then the second burst");
+  u = F.historyUndo(u.history); assert.deepEqual(u.fields, F.BLOCK_PRESET, "then the first");
+  assert.equal(F.historyUndo(u.history), null, "empty history: undo disabled");
+  let big = F.EMPTY_HISTORY; for (let i = 0; i < 80; i++) big = F.historyBoundary(F.historyEdit(big, { text: String(i), reason: "" }));
+  assert.equal(big.past.length, F.BLOCK_HISTORY_MAX, "history is bounded");
+  assert.deepEqual(big.past.at(-1), { text: "79", reason: "" });
+  ok("block reset/undo: preset exactly, one change per burst or reset, empty history disables undo, bounded");
+}
+{
+  // CGP-LEARN-R-011 (c) — the collapsed-block set: per block key, restorable, bounded, malformed state dropped.
+  let c = F.collapseBlock([], "k1", true);
+  c = F.collapseBlock(c, "k2", true);
+  assert.deepEqual(c, ["k1", "k2"]);
+  assert.deepEqual(F.collapseBlock(c, "k1", true), ["k2", "k1"], "collapsing again moves it to the newest end, no duplicate");
+  assert.deepEqual(F.collapseBlock(c, "k1", false), ["k2"], "다시 보기 removes only that block");
+  assert.deepEqual(F.collapseBlock(c, "other", false), c, "restoring a block that is not collapsed changes nothing");
+  let many = []; for (let i = 0; i < 80; i++) many = F.collapseBlock(many, "k" + i, true);
+  assert.equal(many.length, F.COLLAPSED_BLOCKS_MAX, "bounded");
+  assert.equal(many.at(-1), "k79");
+  assert.deepEqual(F.collapsedBlocksFrom(undefined), []);
+  assert.deepEqual(F.collapsedBlocksFrom("k1"), []);
+  assert.deepEqual(F.collapsedBlocksFrom(["k1", 3, "", null, "k1", "x".repeat(600), "k2"]), ["k1", "k2"], "malformed entries dropped");
+  ok("block collapse: per key, restorable, bounded, malformed webview state dropped");
+  // The seat the set belongs to: Service seat id, else the capability receipt, else the local activity; never a guess.
+  const A = "a".repeat(64);
+  assert.equal(F.collapseSeat({ activityId: A, entryId: "e1", localActivityId: "l1" }), "seat:" + A);
+  assert.equal(F.collapseSeat({ activityId: "short", entryId: "e1", localActivityId: "l1" }), "entry:e1", "a malformed seat id is not a seat");
+  assert.equal(F.collapseSeat({ localActivityId: "l1" }), "local:l1");
+  assert.equal(F.collapseSeat({}), "");
+  const st = F.collapsedStateFrom({ seat: "seat:" + A, keys: ["k1", 3, "k2"] });
+  assert.deepEqual(st, { seat: "seat:" + A, keys: ["k1", "k2"] });
+  assert.deepEqual(F.collapsedFor(st, "seat:" + A), ["k1", "k2"], "its own seat sees its set");
+  assert.deepEqual(F.collapsedFor(st, "seat:" + "b".repeat(64)), [], "another seat sees nothing");
+  assert.equal(F.collapsedStateFrom(["k1"]), null, "#4023's bare array (no seat) is dropped");
+  assert.equal(F.collapsedStateFrom({ keys: ["k1"] }), null);
+  ok("block collapse seat: Service seat, receipt, local activity; a seat sees only its own set");
+}
 console.log(`${n} lesson focus checks passed`);

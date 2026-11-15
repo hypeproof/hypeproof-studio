@@ -65,11 +65,17 @@ export function resolveBrowserSafety(
  * after a confirmation that names the host. Anything but an absolute http(s) URL
  * is refused.
  */
+/**
+ * CGP-SHELL-R-026 (Jay, 2026-11-14, #4090; supersedes CGP-ART-D-008's block for this scope). `integrated` / `system`
+ * open with no dialog; `confirm` asks first (LinkConfirmDialog) and then opens `where`.
+ */
 export type ExternalLinkRoute =
   | { kind: "refuse" }
   | { kind: "integrated"; url: string }
-  | { kind: "blocked"; url: string; host: string }
-  | { kind: "confirm"; url: string; host: string };
+  | { kind: "system"; url: string }
+  | { kind: "confirm"; url: string; host: string; where: "integrated" | "system" };
+/** Where the click came from. A link from the preview (generated HTML) always asks, for every seat. */
+export type LinkSource = "chat" | "preview" | "browser";
 
 /** CGP-ART-D-008 — the learner's own machine (live preview, local server). WHATWG-normalized hostnames only. */
 export function isLoopbackHost(hostname: string): boolean {
@@ -104,8 +110,11 @@ export function hostAllowed(url: URL, allowlist: readonly string[]): boolean {
 }
 
 export interface LinkRouteOptions {
-  /** From `safeLinkEnforced`: a safe-session link outside the allowlist is blocked. */
+  /** From `safeLinkEnforced`: the lesson allowlist is trusted, so an admitted link opens with no dialog. */
   enforceAllowlist?: boolean;
+  /** `hypeproofChat.confirmExternalLinks` (default false): an adult seat asks before the system browser opens. */
+  confirmAdult?: boolean;
+  source?: LinkSource;
 }
 
 /**
@@ -322,28 +331,69 @@ export function learnerLinkPolicy(input: {
 }
 
 /**
- * CGP-ART-R-008 / CGP-ART-D-008. Order: refuse non-web input; the learner's own loopback preview opens in the integrated
- * browser for everyone, with no dialog; a safe session opens the integrated browser, or, with `enforceAllowlist`, is
- * blocked when the allowlist does not admit the URL (an empty list admits nothing: fail closed); everyone else confirms.
+ * CGP-ART-R-008 / CGP-SHELL-R-026. Order:
+ *   1. anything but an absolute http(s) URL with a host is refused (javascript:, file:, data:, blob:, about:, vscode:…);
+ *      userinfo (`user@`) is stripped, so the host shown and opened is the real one;
+ *   2. the learner's own loopback preview opens in the integrated browser, with no dialog, for everyone;
+ *   3. a safe session (minor seat) stays in the integrated browser (CGP-ART-R-008): a link the trusted lesson allowlist
+ *      admits opens with no dialog, every other link asks first. Without `enforceAllowlist` (no minor flag, no usable
+ *      list, or the support override `safeLinkAllowlistEnabled: false`) the list is not trusted and every link asks;
+ *   4. an adult seat opens the system browser, asking first only when `confirmAdult` is on;
+ *   5. a link from the preview (generated HTML) always asks, whatever the seat or setting.
  */
 export function routeExternalLink(raw: unknown, safety: BrowserSafetyConfig, opts: LinkRouteOptions = {}): ExternalLinkRoute {
   if (typeof raw !== "string" || !/^https?:\/\//i.test(raw)) return { kind: "refuse" };
   let parsed: URL;
   try { parsed = new URL(raw); } catch { return { kind: "refuse" }; }
-  if (!parsed.hostname) return { kind: "refuse" };
-  const url = parsed.toString();
-  if (isLoopbackHost(parsed.hostname)) return { kind: "integrated", url };
+  if (!parsed.hostname || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) return { kind: "refuse" };
+  parsed.username = ""; parsed.password = "";
+  const url = parsed.toString(), host = parsed.hostname;
+  if (isLoopbackHost(host)) return { kind: "integrated", url };
+  const preview = opts.source === "preview";
   if (safety.safeSession) {
-    if (opts.enforceAllowlist && !hostAllowed(parsed, safety.safeAllowlist)) return { kind: "blocked", url, host: parsed.hostname };
-    return { kind: "integrated", url };
+    if (!preview && opts.enforceAllowlist && hostAllowed(parsed, safety.safeAllowlist)) return { kind: "integrated", url };
+    return { kind: "confirm", url, host, where: "integrated" };
   }
-  return { kind: "confirm", url, host: parsed.hostname };
+  if (preview || opts.confirmAdult) return { kind: "confirm", url, host, where: "system" };
+  return { kind: "system", url };
 }
 
 /** CGP-ART-D-008 — the host as the dialog and banner show it: whole up to 48 characters, middle ellipsis beyond. */
 export const LINK_HOST_MAX = 48;
 
-/** The adult confirmation. The host is the dialog's (bold) message line; the full address is the plain detail. */
-export function externalLinkDialog(route: { url: string; host: string }): { message: string; detail: string; open: string; copy: string } {
-  return { message: `바깥 사이트를 열까요?\n${middleEllipsis(route.host, LINK_HOST_MAX)}`, detail: route.url, open: "열기", copy: "링크 복사" };
+/**
+ * CGP-SHELL-R-026 — the host as the confirm dialog shows it. `ascii` is the WHATWG hostname (IDN labels in punycode,
+ * `xn--…`), middle-ellipsized past LINK_HOST_MAX; `unicode` is the decoded form when it differs; `warning` is set
+ * when the host has an IDN label or a label that mixes scripts (Latin with Cyrillic, Greek, Hangul…), the usual
+ * shape of a look-alike. `toUnicode` is injected (node:url `domainToUnicode` on the host) so this stays pure.
+ */
+export function linkHostDisplay(hostname: string, toUnicode: (h: string) => string): { ascii: string; unicode: string | null; warning: boolean } {
+  const host = hostname.toLowerCase();
+  let unicode: string | null = null;
+  try { const u = toUnicode(host); if (u && u !== host) unicode = u; } catch { /* keep ascii */ }
+  const idn = host.split(".").some((label) => label.startsWith("xn--"));
+  const mixed = (unicode ?? host).split(".").some(mixedScripts);
+  return { ascii: middleEllipsis(host, LINK_HOST_MAX), unicode: unicode && middleEllipsis(unicode, LINK_HOST_MAX), warning: idn || mixed };
+}
+const SCRIPTS: Array<[string, RegExp]> = [["Latin", /\p{Script=Latin}/u], ["Cyrillic", /\p{Script=Cyrillic}/u], ["Greek", /\p{Script=Greek}/u],
+  ["Hangul", /\p{Script=Hangul}/u], ["Han", /\p{Script=Han}/u], ["Kana", /[\p{Script=Hiragana}\p{Script=Katakana}]/u], ["Arabic", /\p{Script=Arabic}/u],
+  ["Hebrew", /\p{Script=Hebrew}/u], ["Armenian", /\p{Script=Armenian}/u], ["Thai", /\p{Script=Thai}/u]];
+function mixedScripts(label: string): boolean {
+  let n = 0;
+  for (const [, re] of SCRIPTS) if (re.test(label)) n++;
+  return n > 1;
+}
+
+/** CGP-SHELL-R-026 — at most one preview-originated open per `windowMs` (2 s): a generated page cannot queue prompts. */
+export class LinkOpenLimiter {
+  private last = -Infinity;
+  private readonly windowMs: number;
+  private readonly now: () => number;
+  constructor(windowMs = 2000, now: () => number = Date.now) { this.windowMs = windowMs; this.now = now; }
+  take(): boolean {
+    const t = this.now();
+    if (t - this.last < this.windowMs) return false;
+    this.last = t;
+    return true;
+  }
 }

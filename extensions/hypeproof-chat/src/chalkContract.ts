@@ -1,4 +1,5 @@
 import { createContractWaits, type ContractWaits, type HumanWait, type WaitSignalResult } from "./localRuntime/humanWait.ts";
+import { ENTER_OPEN_FAILED } from "./rehearsalSeat.ts";
 // Studio side of the Chalk command contract v0 (docs/contract/studio-chalk.md).
 // Kept free of the vscode module: the command bus, the local runner and the studio
 // operations are injected, so the contract is testable with stubs. The extension wires
@@ -71,8 +72,11 @@ export interface RunTurnInput {
 export interface LocalRunner {
   /** Non-null only where a local executor exists (the Dev app with HPS_DEV_RUNTIME=1). */
   available(): boolean;
-  /** The executor's own model (local.model). `model?` from Chalk is recorded, never used to run. */
-  executorModel(): string | undefined;
+  /**
+   * The model a turn with this requested value would run on (chalk#25). A value inside the allowlist is used;
+   * anything else, or none, runs on the default. Chalk compares this with requestedModel to show a notice.
+   */
+  executorModel(requested?: string): string | undefined;
   run(input: RunTurnInput): Promise<void>;
   previewOpen(webPath: string): Promise<{ ok: boolean; error?: string }>;
 }
@@ -85,6 +89,10 @@ export interface ContractOps {
   inboxOpened(objectId: string, generation: number): Promise<void>;
   inboxLink(objectId: string, url: string, generation: number, action: "open" | "copy"): Promise<{ ok: boolean }>;
   reviewPrepare(week: number | undefined): Promise<{ ok: boolean; message?: string }>;
+  /** #4048 — start a same-window rehearsal in this window. Absent on a host without the seat. */
+  enterRehearsalSeat?(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void>;
+  /** #4048 — show one approved sentence to the instructor on a failed entry. */
+  notify?(message: string): void;
 }
 
 /** Approval kinds that Chalk shows as its own prompt, and only when the studio policy asks for one. */
@@ -157,7 +165,40 @@ export class ChalkContractHost {
       this.bus.registerCommand("hypeproof.runtime.inboxLink", (args) => this.inboxLink(args)),
       this.bus.registerCommand("hypeproof.runtime.reviewPrepare", (args) => this.reviewPrepare(args)),
       this.bus.registerCommand("hypeproof.runtime.humanWait", (args) => this.humanWait(args)),
+      this.bus.registerCommand("hypeproof.runtime.enterRehearsalSeat", (args) => this.enterRehearsalSeat(args)),
     ];
+  }
+
+  /**
+   * #4048 — Chalk asks for the same-window rehearsal. Only a live instructor contract with the right nonce may enter.
+   * The token goes to the host and never into a result or a reason. A null expiry is passed as 0: the seat treats it as
+   * already expired on the next start (no question, return).
+   */
+  private async enterRehearsalSeat(args: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
+    // #4052 — every result that is not ok shows the approved sentence exactly once (Chalk shows no sentence of its own).
+    const refuse = (reason: string): { ok: false; reason: string } => {
+      this.ops.notify?.(ENTER_OPEN_FAILED);
+      return { ok: false, reason };
+    };
+    if (!args || typeof args !== "object") return refuse("invalidArgs");
+    const a = args as Record<string, unknown>;
+    if (a.contractVersion !== CONTRACT_VERSION) return refuse("contractVersion");
+    if (this.nonce === null) return refuse("inactive");
+    if (a.sessionNonce !== this.nonce) return refuse("stale");
+    const enter = this.ops.enterRehearsalSeat;
+    if (!enter) return refuse("unavailable");
+    const token = a.token, rehearsalId = a.rehearsalId;
+    if (typeof token !== "string" || token.length === 0 || typeof rehearsalId !== "string" || rehearsalId.length === 0) return refuse("invalidArgs");
+    // A null expiry is passed as 0: the seat treats it as already expired on the next start (approved, #4052).
+    const expiresAt = a.expiresAt === null ? 0 : a.expiresAt;
+    if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return refuse("invalidArgs");
+    try {
+      await enter.call(this.ops, { token, expiresAt, rehearsalId });
+      return { ok: true };
+    } catch {
+      // The host's message stays out of the result: the reason is only a code.
+      return refuse("failed");
+    }
   }
 
   get active(): boolean { return this.nonce !== null; }
@@ -278,7 +319,7 @@ export class ChalkContractHost {
     return {
       accepted: true,
       requestedModel: requested ?? null,
-      executorModel: this.runner.executorModel() ?? null,
+      executorModel: this.runner.executorModel(requested) ?? null,
     };
   }
 

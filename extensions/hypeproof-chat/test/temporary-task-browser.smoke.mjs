@@ -40,7 +40,7 @@ try {
   for (const dark of [true, false]) for (const width of [320, 800, 1420]) for (const forcedColors of width === 800 && dark ? [false, true] : [false]) for (const seat of ['adult', 'refused', 'classroom']) {
     const tag = `${seat}-${width}-${dark ? 'dark' : 'light'}${forcedColors ? '-forced' : ''}`;
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 720, dark, forcedColors });
+    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 720, dark, forcedColors, appReady: true });
     const personal = seat !== 'classroom';
     const workspace = { scope: 'tt-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '발표', createdAt: 1, updatedAt: 1, messageCount: 2 }], sourceSelection: null };
     const config = chatConfig(3, { activity: { ...chatConfig().activity, kind: personal ? 'personal' : 'classroom' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: personal ? workspace : undefined, temporaryTask: { allowed: seat === 'adult' } });

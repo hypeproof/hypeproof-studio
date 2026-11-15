@@ -37,20 +37,28 @@ The compliance question therefore reduces to: **can anyone other than the
 enrolled, age-known participants reach the model?** The gating chain below is
 designed so the answer is no.
 
-## Personal-account preview: public signup for 14+ only
+## Personal accounts: 14+ only, invite-only access
 
-The October 2026 account plan adds a separate public signup path for people
-who self-declare they are **14 or older**. Under-14 signup is refused with
-“수업 참여 코드를 받아 시작해 주세요”. Lab records the age declaration and
-required consent versions before Service creates an account. This declaration
-is an age gate, not independently verified identity or age evidence.
+Personal accounts are for people who self-declare they are **14 or older**.
+Under-14 signup is refused with “수업 참여 코드를 받아 시작해 주세요”. Lab
+records the age declaration and required consent versions before Service
+creates an account. This declaration is an age gate, not independently verified
+identity or age evidence.
 
-Children's cohorts remain instructor-code-only. A personal account or its paid
-pass never authorizes a minor cohort profile; classroom roster, moderation and
-guardian-consent controls below still apply. A Google identity alone grants no
-model access. Service must validate the account session and an owned, usable
-pass for the personal path. The previous “no public signup” premise applies
-only to the classroom path, not to this new account flow.
+Since 2026-11-12 Studio is invite-only (Lab decision record
+`2026-11-12-studio-invite-only.md`): an account gets model access only through
+an invite, which HypeProof pays for up to a monthly cap, or through Lab
+membership. There is no open public start, and no Studio pass is sold since
+2026-11-11. Under-14 learners join only through a class, or later through a
+guardian account with child profiles (planned, not built).
+
+Children's cohorts remain instructor-code-only. A personal account or its
+invite grant never authorizes a minor cohort profile; classroom roster,
+moderation and guardian-consent controls below still apply. A Google identity
+alone grants no model access. Service must validate the account session and an
+owned, usable grant (an invite grant, a Lab member's access or a pass sold
+before 2026-11-11) for the personal path. The previous “no public signup”
+premise applies only to the classroom path, not to this account flow.
 
 Studio currently exposes this flow only behind an off-by-default loopback
 preview flag. Local synthetic signup and native-app checks do not establish

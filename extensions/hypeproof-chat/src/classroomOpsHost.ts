@@ -14,7 +14,7 @@ import { copyFileNames, freezeCollection, freezeSnapshot, normalizeKinds, upload
 import { removeFrozenCopy } from "./evidenceSnapshotStore";
 import { resetPostcondition, runPreservingReset, stopAndConfirm, type Preservation, type ResetManifest, type ResetSteps } from "./runtimeReset";
 import {
-  ChangeGate, OPS_CLIENT_CAPABILITIES, OPS_PROTOCOL, OpsOutbox, activationPayload, classifyFailure, errorPayload,
+  ChangeGate, MATERIAL_REPORT_CAPABILITY, OPS_CLIENT_CAPABILITIES, OPS_PROTOCOL, OpsOutbox, type MaterialReportOutcome, activationPayload, classifyFailure, errorPayload,
   evidencePayload, runtimePayload, stepPayload, turnObservations, uploadPayload, startOpsSync, tokenIdentityUnverified,
   RECOVERY_FOLLOWUP_CAPABILITY, RecoveryWatch, profileCheckClears, recoveryPayload, turnFailureClass, type OpsSyncLoop, type OutboxState, type RuntimeStatus, type SyncResponse,
 } from "./classroomOps";
@@ -141,6 +141,13 @@ export interface ClassroomOpsObserver {
   lessonStep(lessonVersion: string, stepId: string, status: "in_progress" | "submitted"): void;
   /** A real change to the learner's artifact, as digests only. */
   artifactChanged(before: string | undefined, after: string, stepId?: string): void;
+  /**
+   * CGP-LEARN-R-011 — the learner reported a lesson block (lessonFocus.ts materialReportPayload: ids and a reason chip, no
+   * text). The answer is what the SERVICE did with it: `accepted` / `duplicate` only after the sync answer says so; `not_sent`
+   * when this window has no live class connection, the Service does not store the kind, or the outbox refused it;
+   * `unconfirmed` when no answer came in time. A queued report is never called sent.
+   */
+  materialReport?(payload: Record<string, unknown>): Promise<MaterialReportOutcome | "not_sent" | "unconfirmed">;
 }
 
 export class ClassroomOpsHost implements ClassroomOpsObserver {
@@ -469,7 +476,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       placeHolder: "XXXX-XXXX 또는 XXXX-XXXX-XXXX", ignoreFocusOut: true, validateInput: (v) => (connectCodeKind(v) ? null : "수업 코드 8자리 또는 좌석 코드 12자리를 입력하세요"),
     });
     if (!code) return;
-    const device = { app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY, INBOX_COMMENT_CAPABILITY], app_version: this.version() };
+    const device = { app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, MATERIAL_REPORT_CAPABILITY, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY, INBOX_COMMENT_CAPABILITY], app_version: this.version() };
     const b = connectCodeKind(code) === "join" ? await this.joinWithClassCode(code, device) : await this.connectWithSeatCode(code, device);
     if (!b) return;
     await this.finishConnect(b, got.notice);
@@ -585,7 +592,8 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       const view = await inboxView(new InboxStore(inboxDir(this.context.globalStorageUri.fsPath, p)), { run: p.run, student: p.student, generation: gen, ...presence });
       const placed = await this.placeComments(view.cards);
       const cards = placed.map((c) => { const slot = `${c.object_id}:${c.revision}`, note = this.answerNotes.get(slot); return (c.kind === "question" || c.kind === "comment") && !c.withdrawn ? { ...c, ...(note ? { answer_note: note } : {}), ...(this.answerBusy.has(slot) ? { answer_busy: true } : {}) } : c; });
-      return { ...view, cards, unread: cards.filter((c) => c.is_new).length };
+      // CGP-LEARN-R-011 — the report is offered only on this window's live connection to a Service that stores the kind.
+      return { ...view, cards, unread: cards.filter((c) => c.is_new).length, ...(connected && this.reportsAvailable() ? { reports: true } : {}) };
     }
     catch (err) { this.log(`[inbox] read: ${(err as Error).message}`); return emptyView(gen); }
   }
@@ -708,6 +716,10 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const outbox = this.outbox, openingOutbox = this.openingOutbox;
     this.generation++; this.inbox = null; this.inboxStore = null;
     this.loop?.stop(); this.runner?.close(); this.loop = null; this.runner = null; this.outbox = null;
+    // A report still waiting is not known to have arrived: it is unconfirmed, never sent.
+    // Fresh maps, not clear(): a report still being queued on the old stream holds the old map, so the next stream's answers
+    // (whose seqs restart at 1) can never reach it.
+    this.reportsServed = false; for (const w of [...(this.reportWaits?.values() ?? [])]) w("unconfirmed"); this.reportWaits = new Map(); this.reportEarly = new Map();
     // Disconnecting ends the instructor's pause on this device; the Service's own admission still applies.
     this.paused = false; this.stopUnconfirmed = false; this.applyHold();
     this.recoveryWatch.clear(); this.faultClass = null; this.automationGate.reset();
@@ -785,8 +797,9 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     }
     this.loop = startOpsSync({
       ...(inbox ? { distribution: inbox } : {}),
-      capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, INBOX_QUESTION_CAPABILITY, INBOX_COMMENT_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
+      capabilities: [...OPS_CLIENT_CAPABILITIES, MATERIAL_REPORT_CAPABILITY, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, INBOX_QUESTION_CAPABILITY, INBOX_COMMENT_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
       commands: runner as unknown as NonNullable<Parameters<typeof startOpsSync>[0]["commands"]>,
+      onReports: (answer) => this.onReports(answer, live),
       post: (body, timeoutMs) => this.post(credential, body, timeoutMs), outbox, appInstanceId: this.appInstanceId,
       sample: () => { const base = this.runtime(); const r = { ...base, status: automationOpsRuntime(live() ? this.refreshAutomation(false) : null, base.status) }; const changed = this.runtimeGate.next(r.status); if (changed) void this.outbox?.add("runtime", runtimePayload(changed)); return { idle_ms: Math.max(0, Math.round(r.idleMs)), runtime_status: r.status, control_revision: this.controlRevision }; },
       // The revision is reported only after the hold is actually in place on this device.
@@ -908,6 +921,57 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     // "I finished this step" is the learner's own statement: self-reported, not a verified completion.
     if (status === "submitted") void this.outbox.add("evidence", evidencePayload("decision", { sourceState: "self_reported", stepId }), "student");
     this.loop?.nudge();
+  }
+  /** CGP-LEARN-R-011 — the Service named `material_report` in its last answer on this connection (reset when it ends). */
+  private reportsServed = false;
+  /** Reports waiting for the Service's outcome, by outbox seq, on this connection's stream. */
+  private reportWaits = new Map<number, (o: MaterialReportOutcome | "unconfirmed") => void>();
+  /**
+   * Outcomes that arrived before their report was waited for: the sync loop can send an event while `addSeq` is still
+   * persisting it, and the answer can land before the wait is set up. Kept by seq (bounded) and read once by that report.
+   */
+  private reportEarly = new Map<number, MaterialReportOutcome>();
+  static REPORT_EARLY_MAX = 64;
+  /** How long a learner waits for the Service's answer before being told it is not confirmed yet. */
+  static REPORT_ANSWER_MS = 15_000;
+  /** Whether this window may offer the report: a live connection to a Service that stores the kind. */
+  reportsAvailable(): boolean { return !!this.outbox && !!this.loop && this.reportsServed === true; }
+  private onReports(answer: ReturnType<typeof import("./classroomOps").readReportAnswer>, live: () => boolean): void {
+    if (!live()) return;
+    const was = this.reportsServed === true; this.reportsServed = answer.served;
+    this.reportEarly ??= new Map();
+    const settle = (seq: number, outcome: MaterialReportOutcome) => {
+      const w = this.reportWaits?.get(seq);
+      if (w) { this.reportWaits.delete(seq); w(outcome); return; }
+      // No one waits yet: keep it for the report that is still being queued (only a report ever reads it).
+      if (!this.reportEarly.has(seq)) this.reportEarly.set(seq, outcome);
+      while (this.reportEarly.size > ClassroomOpsHost.REPORT_EARLY_MAX) this.reportEarly.delete(this.reportEarly.keys().next().value as number);
+    };
+    for (const { seq, outcome } of answer.outcomes) settle(seq, outcome);
+    for (const seq of answer.rejected) settle(seq, "rejected");
+    if (was !== answer.served) this.inboxChanged(false);
+  }
+  async materialReport(payload: Record<string, unknown>): Promise<MaterialReportOutcome | "not_sent" | "unconfirmed"> {
+    const outbox = this.outbox, loop = this.loop;
+    if (!outbox || !loop || this.reportsServed !== true) return "not_sent";
+    this.reportWaits ??= new Map(); this.reportEarly ??= new Map();
+    // Both maps are captured with the outbox: everything this report reads or writes belongs to the connection it was
+    // queued on. A later connection's maps (fresh on stop) can never answer it.
+    const waits = this.reportWaits, earlyMap = this.reportEarly;
+    const seq = await outbox.addSeq("material_report", payload, "student");
+    if (seq === null) return "not_sent";
+    // The connection stopped (and maybe reconnected) while the event was being written: its seq belongs to the old stream,
+    // so no answer on the current one is about it. It is unconfirmed, never another report's "accepted".
+    if (this.outbox !== outbox || this.reportWaits !== waits) return "unconfirmed";
+    const early = earlyMap.get(seq);
+    if (early) { earlyMap.delete(seq); return early; }
+    const answer = new Promise<MaterialReportOutcome | "unconfirmed">((resolve) => {
+      const timer = setTimeout(() => { if (waits.get(seq) === done) waits.delete(seq); resolve("unconfirmed"); }, ClassroomOpsHost.REPORT_ANSWER_MS);
+      const done = (o: MaterialReportOutcome | "unconfirmed") => { clearTimeout(timer); resolve(o); };
+      waits.set(seq, done);
+    });
+    loop.nudge();
+    return answer;
   }
   artifactChanged(before: string | undefined, after: string, stepId?: string): void {
     if (!this.outbox || before === after) return;

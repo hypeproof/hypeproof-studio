@@ -95,7 +95,7 @@ try {
   const stub = `window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>undefined,setState:()=>{}});`;
   for (const dark of [true, false]) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';') + `;--vscode-font-family:${HOSTS.mac}`;
-    await browser.load(`<html style="${vars}"><style>${appCss}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>${stub}</script><script>${appJs}</script></body></html>`, { width: 1420, height: 900, dark });
+    await browser.load(`<html style="${vars}"><style>${appCss}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>${stub}</script><script>${appJs}</script></body></html>`, { width: 1420, height: 900, dark, appReady: true });
     const workspace = { scope: 'emoji-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '고양이 페이지', createdAt: 1, updatedAt: 9, messageCount: 1, appearance: { emoji: 'cat' } }], sourceSelection: null };
     const config = chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: workspace });
     for (const data of [{ type: 'config', config }, { type: 'history', messages: [] }]) { await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(data)}}))`); await new Promise(r => setTimeout(r, 80)); }

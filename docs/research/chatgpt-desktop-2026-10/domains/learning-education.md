@@ -277,6 +277,21 @@ The Studio side is the next paragraph. No real type has params yet, so (a) is pr
 
 REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 Studio side (2026-11-14): REQ-STUDIO-LEARNING-BLOCK-PIN in `docs/studio-requirements.md`. Studio draws a block only at a pinned version it renders (v1 today, with an unpinned lesson meaning v1). Any other version gets the unsupported notice, and the learner's text never shows a type id or a version.
 
+REQ-CGP-LEARN-11 / DES-CGP-LEARN-11 status (2026-11-15, CGP-LEARN-R-011 / D-011): implemented except the optional learner text field (deferred, below). (c), "접기", is REQ-STUDIO-LEARNING-BLOCK-COLLAPSE (`docs/studio-requirements.md`).
+- The open card's 자료 메뉴, after 닫기, has "접기". Collapsed, the card is one row, "접은 자료: <title>" with "다시 보기", which restores it open.
+- The state is per lesson version and step, local to the webview, and kept across a re-mount. It is never posted to the host and is not an evidence event.
+- (a) and (b), report half (2026-11-15): REQ-STUDIO-LEARNING-BLOCK-REPORT in `docs/studio-requirements.md`, the classroom-admin row "Material report", and the hypeproof-service classroom-ops `material_report` event.
+  - The 자료 메뉴 gains "자료가 틀린 것 같아요" while the window has a live class connection. It opens inline with three reason chips (내용이 틀려요 / 열리지 않아요 / 이해하기 어려워요), and the toast is "선생님께 전달했어요".
+  - The payload is lesson course, version, step, block type, pinned version, a params digest and the reason. There is no transcript.
+  - The run's instructor sees it in Chalk `/manage` as "자료 신고", with "확인함". It goes over the class connection, not `/v1/report`, so it never reaches the operator, Discord or GitHub.
+- Deferred: the optional 0–300 learner text field, for every seat. The class board never carries a learner's words, so (a)'s "optional learner text" is not built (decisions.md CGP-LEARN-R-011 (a)).
+
+REQ-CGP-LEARN-10 / DES-CGP-LEARN-10 status (2026-11-14, CGP-LEARN-R-010 / D-010): implemented in Studio as REQ-STUDIO-LEARNING-BLOCK-RESET-UNDO (`docs/studio-requirements.md`).
+- "처음으로" restores the preset, which is empty fields for every drawn block today.
+- "되돌리기" reverts one change: a typing burst or a reset. It is disabled when there is nothing to undo.
+- Neither posts anything to the host, so they create no observation event.
+- Both are quiet 44px buttons, and a disabled one reads differently in colour and boundary style.
+
 DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions.md`.
 
 Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px (28 rem) → diagram 50 % beside

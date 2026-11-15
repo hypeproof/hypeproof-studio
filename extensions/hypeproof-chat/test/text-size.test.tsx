@@ -58,12 +58,17 @@ t("personal base is 16px for body and composer (the steps build on the real base
   ok(/--hp-font-body: calc\(16px \+ var\(--hp-font-step\)\);/.test(tokens) && /--hp-font-step: 0px;/.test(tokens), "body token is 16px at step 0");
 });
 t("크게 / 아주 크게 are +2 / +4px over base for body, composer and reply choices", () => {
-  ok(css.includes(`${P}[data-text-size="large"] { --hp-font-step: 2px; }`), "large step");
-  ok(css.includes(`${P}[data-text-size="xlarge"] { --hp-font-step: 4px; }`), "xlarge step");
-  ok(/:root, \.hps-shell \{[^}]*--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/.test(tokens), "size tokens are re-declared on the shell, where the step is set");
+  ok(css.includes('.hps-shell[data-text-size="large"] { --hp-font-step: 2px; }'), "large step");
+  ok(css.includes('.hps-shell[data-text-size="xlarge"] { --hp-font-step: 4px; }'), "xlarge step");
+  ok(/:root, \.hps-shell, \.studio-start \{[^}]*--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/.test(tokens), "size tokens are re-declared on the shell and the start page root, where the step is set");
   for (const part of [".hps-reply-choices button", ".hps-choice-help button"]) ok(/^var\(--hp-font-[a-z]+\)$/.test(lastSize(`${P} ${part}`) || lastSize(`${part} {`)), `${part} uses a size token`);
 });
-t("no dead classroom rules: every size rule is scoped to personal chat", () => ok(!/\.hps-shell\[data-text-size=/.test(css), "classroom-only size rule present"));
+// CGP-SHELL-R-017: the step is set on every chat shell, so the classroom seat (no text-size picker in its 대화 설정;
+// the start page 설정 sheet sets it) reads the same 16/18/20px. A personal-only step would leave it at 16px.
+t("the step is not scoped to personal chat (classroom seats follow the choice)", () => {
+  ok(!css.includes(`${P}[data-text-size=`), "step still scoped to personal chat");
+  ok(css.includes('.hps-shell[data-text-size="large"] { --hp-font-step: 2px; }') && css.includes('.hps-shell[data-text-size="xlarge"] { --hp-font-step: 4px; }'), "shell step rules");
+});
 
 const personal = { ...config("large"), profile: { ...config().profile, activity_kind: "personal" }, activity: { id: "p1", name: "내 작업", kind: "personal", workspace: "/tmp/p", verified: true },
   taskWorkspace: { scope: "s", revision: 1, activeTaskId: "t1", tasks: [{ id: "t1", title: "작업", createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null } } as unknown as ChatConfig;

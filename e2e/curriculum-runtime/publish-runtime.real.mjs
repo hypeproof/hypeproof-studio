@@ -318,6 +318,8 @@ try {
     record("CR-T22 (browser)", stillV0 ? "PASS" : "FAIL", { v0_link_after_v1_publish_shows_v1: !stillV0 });
     // The tab's own origin asks again after revocation (what a refresh or a cached path would get).
     const entry = page.url();
+    // The product's own title, read before revocation: after it the page must not show it any more.
+    const productHeading = await page.evaluate(() => document.querySelector("h1, h2")?.textContent?.trim() || null);
     await f.api(`/v1/curriculum/links/${s.link.id}/revoke`, { method: "POST", token, body: {} });
     const after = await page.evaluate(async (u) => {
       const out = {};
@@ -333,10 +335,14 @@ try {
     } catch (e) {
       reload = /ERR_HTTP_RESPONSE_CODE_FAILURE/.test(e.message) ? "410, Chromium shows its own error page" : e.message;
     }
-    const heading = await page.evaluate(() => document.querySelector("h1")?.textContent ?? null).catch(() => null);
+    // Wait for the navigation to settle before reading: reading mid-navigation raced Chromium's own error page (its heading
+    // "This … page can't be found" was read as if it were the product's). What must be absent is the PRODUCT's title.
+    await page.waitForLoadState("load", { timeout: 10_000 }).catch(() => {});
+    const shown = await page.evaluate(() => ({ heading: document.querySelector("h1, h2")?.textContent?.trim() || null, text: document.body?.innerText ?? "" })).catch(() => ({ heading: null, text: "" }));
     await ctx.close();
     const gone = Object.values(after).every((r) => r.status === 410 && r.bytes === 0 && r.cache === "no-store");
-    record("CR-T19 (browser)", gone && heading === null ? "PASS" : "FAIL", { after, reload, product_heading_after_reload: heading });
+    const productAbsent = !!productHeading && shown.heading !== productHeading && !shown.text.includes(productHeading);
+    record("CR-T19 (browser)", gone && productAbsent ? "PASS" : "FAIL", { after, reload, product_heading_before: productHeading, heading_after_reload: shown.heading, product_absent: productAbsent });
   }
 
   // ── CR-T19 with a service worker: nothing serves the product after revocation ──

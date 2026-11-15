@@ -256,6 +256,7 @@
         "CH-10",
         "CH-11",
         "CH-12",
+        "CH-13",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -297,7 +298,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "88ec11969dc83ff874d562d7dc764e467478d9b20177af0def6effb1ad3bcf18",
+      "sha256": "2ecbd44840932c97d82eab1a6effc5111c3abe3607c5f0b1aee60192a8adb28c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -397,7 +398,7 @@
         "ADM-CMT-06"
       ],
       "inline_prefixes": [],
-      "sha256": "55e8096e4c5d111fcf745a402d2ca0beaa2e2833b639a9c496fd6588407b24aa",
+      "sha256": "42a1f025ce5a03ea1cf30a5adb8a3f8a40828f3080508a55dddc604dd693ba03",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -981,7 +982,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "a0436e4d7ae49fd4e1ac4ef5e9c093d8126b25ee41cc3312c343001e8b4f4b87",
+      "sha256": "bf82d5ca25b4f1a4bc8704aa1a1c65e4859378216d9e7c2f87dbf4bbfc32a67b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -1009,6 +1010,25 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-design.md",
       "test": "docs/testing/classroom-admin.md"
+    },
+    {
+      "path": "docs/requirements/member-approval-inbox.md",
+      "ids": [
+        "MAI-01",
+        "MAI-02",
+        "MAI-03",
+        "MAI-04",
+        "MAI-05",
+        "MAI-06"
+      ],
+      "inline_prefixes": [
+        "MAI"
+      ],
+      "sha256": "0ac35a9343641ebdac207d7f8f61a3e361ff7d05ce9879a4b0dc38f00a1bfd5b",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/design/member-approval-inbox.md",
+      "test": "docs/testing/member-approval-inbox.md"
     }
   ],
   "work_items": [
@@ -1408,7 +1428,8 @@
             "CH-09",
             "CH-10",
             "CH-11",
-            "CH-12"
+            "CH-12",
+            "CH-13"
           ]
         }
       ],
@@ -5105,6 +5126,58 @@
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
+      ]
+    },
+    {
+      "id": "member-approval-inbox-v1",
+      "title": "Shared member confirmation cards in existing desktop and native iPhone",
+      "issue": 3788,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/member-approval-inbox.md",
+          "ids": [
+            "MAI-01",
+            "MAI-02",
+            "MAI-03",
+            "MAI-04",
+            "MAI-05",
+            "MAI-06"
+          ]
+        }
+      ],
+      "depends_on": [
+        "native-first-answer-friction-v1"
+      ],
+      "next_action": "Validate the integrated client source against Service415/Harness584, including actual Apple member journeys, then separately collect installed enrollment and one exact-head personal GitHub result.",
+      "design_delta": "Existing account custody, short safe card, durable bound choice before dispatch and GET-only reconciliation.",
+      "positive_control": "One explicit fresh member choice is stored before POST and observed through both existing clients.",
+      "negative_control": "Disk failure, stale lease, account switch, conflicting device, timeout or restart cannot create or claim another approval.",
+      "evidence_required": "Exact-source local/Linux tests, native CI, installed clients and live enrolled member/GitHub receipt separately.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/memberApproval.ts",
+        "extensions/hypeproof-chat/src/accountSession.ts",
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/src/startPageProtocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/MemberApprovalInbox.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/memberApproval.css",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "apps/studio-native/ios/Sources/StudioCore/MemberApproval.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/MemberApprovalView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/member-approval.smoke.mjs",
+        "extensions/hypeproof-chat/test/member-approval-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/member-approval.test.tsx",
+        "apps/studio-native/ios/Tests/StudioCoreTests/MemberApprovalTests.swift",
+        "docs/testing/member-approval-inbox.md",
+        "apps/studio-native/ios/App/NativeJourneyFixture.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
       ]
     }
   ]

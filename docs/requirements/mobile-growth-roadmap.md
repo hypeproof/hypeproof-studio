@@ -152,6 +152,24 @@ outside capture. A failed or cancelled service reply preserves the already saved
 human message; it is not automatically replayed. Silence without words cannot
 send a turn.
 
+For iPhone playback continuation (#4024), already granted OS permissions do not
+require another permission-request round trip. Show the active listening,
+finalizing, waiting or playback phase; if a concurrent draft or unavailable
+conversation blocks the next capture, explain it and preserve the words. A
+bounded memory-only enum/timing record can be deliberately shared for diagnosis;
+it contains no audio, conversation content, identity or credentials. Actual OS
+playback callbacks, synthetic next capture and physical Korean continuation are
+separate evidence; this hardening alone does not establish the incident's cause.
+
+Conversation settings use an explicitly presented native sheet. Opening it,
+closing it or swiping it away must not stop an active voice turn. Refresh and
+Logout explicitly dismiss settings even when a history read changes state;
+Logout records its accepted intent immediately. Context, notebook, privacy and
+export destinations open once after settings has dismissed, with current account
+guards rechecked. Actions have at least 44pt targets and settings remain scrollable
+at larger text sizes. This preserves the existing voice/sync acceptance, including
+the requirement that settings has actually closed before the next voice tap.
+
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
 No raw audio is written to files or uploaded by the app. Optional self-listening
 retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,
@@ -220,6 +238,15 @@ An example path is: install and use the same account → “요즘 어떤 일에
 | MPER-05 | A clear making request is acknowledged without completing self-introduction; guide to an existing desktop task. The desktop action lets the person review their own words and creates an ordinary unsent task draft atomically, without copying the whole conversation or running tools. Cancel, account change and failed persistence preserve the original conversation. | Prompt/policy review, real task-store controls and actual conversation review before broader rollout. |
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
+
+Under MPER-03/04 and MIRS-01, an explicit iPhone logout remains available during
+background history synchronization. It waits for the existing credential/read
+operation without cancelling one-use token rotation, then revokes the same
+account/session once using its current credentials. Pending logout blocks new
+edits and execution, takes precedence over an in-memory queued Send, and retains
+the durable request ID and words in that account's cache. Stale callbacks cannot
+clear a newer account. The app shows pending status until confirmation; an
+uncertain revoke retains the account and requires another explicit action.
 
 ### Conversation from the first screen (Studio #3937)
 
@@ -378,6 +405,22 @@ outcome or change account eligibility, financial limits or desktop tool authorit
 | MFR-04 | Stop, navigation, background, account/conversation change and interruption invalidate old callbacks, stop microphone/playback and prevent late sends. Silence without words cannot send; capture remains bounded to 30 seconds. | MFR-T04; actual microphone indicator separately. |
 | MFR-05 | Tests cover the full visible login-to-answer path with a deterministic transport, including desktop-off, denied access, offline/uncertain send and restart. Fixtures cannot replace app identity/outbox logic or reach live providers. | MFR-T05. |
 | MFR-06 | Release evidence lists required simulator journeys by exact name and marks absent/skipped/failed cases honestly. Package availability, simulator evidence, live sign-in and physical-device acceptance are separate. Unverified TestFlight candidates may be distributed for testing but cannot be reported as accepted. | MFR-T06; existing Foundry and Harness receipts. |
+
+Studio #4093 refines MFR-01–05 after observed expiry, persistent checking and
+empty-recognition failures. A successful personal history read makes the question
+composer ready without waiting for desktop discovery. Failed personal reads end
+checking and expose an explicit retry while retaining the account and draft;
+automatic polling pauses only for real failures, never for cancellation. Each
+HTTP operation has an elapsed deadline as well as its existing idle timeout,
+without automatic credential exchange or POST replay. A verified expired callback
+and a network timeout remain different errors.
+
+Within an already-started voice conversation, an empty recognizer update cannot
+retract earlier words. A useful partial is finalized once. A capture with no words
+sends nothing and may restart at most twice with a 350 ms cancellable delay before
+pausing. Useful speech or a deliberate new conversation start resets that budget.
+Stop stays available during the delay; foreground, account, conversation, draft
+and outstanding-request checks still govern every automatic continuation.
 
 Cost: no new hosted ASR/TTS calls. Existing Service money limits and routing apply
 to each automatically submitted conversation turn. Device energy, CI minutes and

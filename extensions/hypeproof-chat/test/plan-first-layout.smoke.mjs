@@ -28,7 +28,7 @@ const posts=async()=>JSON.parse(await b.evaluate('JSON.stringify(window.__posts)
 const lastPost=async type=>(await posts()).filter(m=>m.type===type).at(-1);
 const vars=theme=>Object.entries(THEMES[theme]).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
 const PLAN={id:'p1',text:'1. 고양이 사진을 넣을 index.html 파일을 새로 만들어요\n2. 제목과 소개 글을 한국어로 써요\n3. 미리보기에서 눈으로 확인해 보고 어색한 곳을 알려 드려요'};
-const open=async(seat,{dark=true,width=800}={})=>{await b.send('Page.navigate',{url:'about:blank'});await b.load(page(vars(dark?'Dark+':'Light+'),dark),{width,height:900,dark});await send({type:'config',config:configFor(seat)});await send({type:'history',messages:[]});};
+const open=async(seat,{dark=true,width=800}={})=>{await b.send('Page.navigate',{url:'about:blank'});await b.load(page(vars(dark?'Dark+':'Light+'),dark),{width,height:900,dark,appReady:true});await send({type:'config',config:configFor(seat)});await send({type:'history',messages:[]});};
 const clickText=async t=>{await b.evaluate(`[...document.querySelectorAll('.hps-plan-card button')].find(e=>e.textContent==${JSON.stringify(t)}).click()`);await settle();};
 const click=async sel=>{await b.evaluate(`document.querySelector(${JSON.stringify(sel)}).click()`);await settle();};
 const geometry=()=>b.evaluate(`(()=>{

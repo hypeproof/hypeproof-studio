@@ -188,6 +188,8 @@ export class ActivityConnections {
       if (!ref.startsWith(PREFIX)) continue;
       const r = await this.read(ref);
       if (r?.service !== activityService(this.service())) continue;
+      // #4048 — a same-window rehearsal's folder is not a saved activity of the instructor.
+      if (this.inRehearsalSeat(r.workspace)) continue;
       if (!found.has(r.id) || found.get(r.id)!.savedAt < r.savedAt) found.set(r.id, r);
     }
     return [...found.values()].map(({ref,id,name,kind,pass,free,lesson,workspace}) => ({ref,id,name,kind,...(pass?{pass:true}:{}),...(free&&!pass?{free:true}:{}),...(lesson?{lesson:true}:{}),workspace}));
@@ -238,6 +240,15 @@ export class ActivityConnections {
   /** The binding files that may hold this folder, under the current and the pre-canonicalRoot spelling. */
   private bindingFiles(root: string): string[] {
     return [this.bindingPath(root), this.legacyBindingPath(root)].filter((f): f is string => !!f && fs.existsSync(f));
+  }
+  /**
+   * True when any activity (including the current one) has a binding record for `root`, whether or
+   * not the folder still exists on disk. "Start new" uses it to skip names whose record would make
+   * claim() refuse the folder. Never throws: if the records cannot be inspected we answer true so the
+   * caller moves on to the next name instead of landing on a possibly taken folder.
+   */
+  hasBinding(root: string): boolean {
+    try { return this.bindingFiles(root).length > 0; } catch { return true; }
   }
   /**
    * Resolve who holds `root` (see FolderOwner) before the synchronous `prepare()` and the claim
@@ -376,6 +387,31 @@ export class ActivityConnections {
         await this.raw.secrets.delete(ref);
       } finally { unlock(); }
     };
+  }
+  /** #4048 — the folder root where same-window rehearsal folders live (`globalStorage/rehearsal-seat/<id>`). */
+  private rehearsalSeatRoot(): string {
+    const root = path.join(this.raw.globalStorageUri.fsPath, 'rehearsal-seat');
+    try { return canonicalLoose(root); } catch { return root; }
+  }
+  /** #4048 — true for a workspace folder inside the rehearsal seat root. */
+  inRehearsalSeat(workspace: string): boolean {
+    const root = this.rehearsalSeatRoot();
+    return upperDrive(workspace).startsWith(root + path.sep);
+  }
+  /**
+   * #4048 — drop a rehearsal folder's binding: its saved record, its binding file, and this window's pointer when
+   * the window is that folder. Leaves every other folder's binding and record alone.
+   */
+  async dropBindingFor(root: string): Promise<void> {
+    for (const file of this.bindingFiles(root)) {
+      let bound: { ref?: unknown } | undefined;
+      try { bound = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { bound = undefined; }
+      if (bound && typeof bound.ref === 'string' && bound.ref.startsWith(PREFIX)) await this.raw.secrets.delete(bound.ref);
+      fs.unlinkSync(file);
+    }
+    let workspace: string | undefined;
+    try { workspace = canonical(root); } catch { workspace = undefined; }
+    if (this.active && workspace && this.active.workspace === workspace) await this.disconnect();
   }
   async disconnect(): Promise<void> {
     if (this.active) await this.raw.workspaceState.update(DISCONNECTED_REF, this.active.ref);

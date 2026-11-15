@@ -136,9 +136,11 @@ const q = (sel) => `document.querySelector(${JSON.stringify(sel)})`;
 // CGP-DS-D-008: the root class list of every dialog in webview-ui/src (grep '<dialog' and 'hp-modal'). A new dialog
 // that is missing here fails the inventory check below.
 const DIALOGS = [
+  ['member-approval hp-modal', 'MemberApprovalInbox.tsx'],
   ['hps-annotation-leave hp-modal', 'AnnotationLeaveDialog.tsx'],
   ['hps-write-approval hps-browser-approval hp-modal', 'BrowserApprovalDialog.tsx'],
   ['hps-write-approval hps-command-approval hp-modal', 'CommandApprovalDialog.tsx'],
+  ['hps-write-approval hps-link-confirm hp-modal', 'LinkConfirmDialog.tsx'],
   ['hps-delegation-panel hp-modal', 'DelegationGroup.tsx'],
   ['hps-file-context-preview hp-modal', 'FileContextChip.tsx'],
   ['hps-outbound hp-modal hps-folder-consent', 'FolderConsentDialog.tsx'],
@@ -267,7 +269,7 @@ async function run(b, { evidence } = {}) {
         await new Promise((r) => setTimeout(r, 60));
         const task = [
           { name: 'task menu', sel: '.tw-task-menu-panel', want: all(12) },
-          { name: 'task menu item (nested)', sel: '.tw-task-menu-panel button[role="menuitem"]', outer: '.tw-task-menu-panel', nested: true, want: 6 },
+          { name: 'task menu item (nested)', sel: '.tw-task-menu-panel button[role="menuitem"]', outer: '.tw-task-menu-panel', nested: true, want: 8 }, // CGP-DS-R-022: shared menu gutter (12 - 4)
         ];
         judge(label, task, await readAt(b, task));
         await click(b, label, '.tw-task-menu-toggle');
