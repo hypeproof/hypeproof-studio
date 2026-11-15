@@ -243,6 +243,8 @@ ChatGPT's.
 
 REQ-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-R-003): implemented in Studio's lesson step panel. Every block kind has a Korean title, controls help and state sentence in the block catalog (`MATERIAL_TEXT`, checked by `materialTextGaps()`); the state sentence sits in a visible polite live region that changes within 500 ms of each state change. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-TEXT. Tests: `learning-block-text.smoke.mjs`, `learning-block-text-browser.smoke.mjs`. (c) VoiceOver run is NOT RUN (manual). Owner choices in `decisions.md`.
 
+REQ-CGP-LEARN-07 status (2026-11-15, CGP-LEARN-R-007): guard + controller; no animated kind yet. Every shipped kind is marked static and is checked to stay unchanged with no input; `BlockPlayback.tsx` is the controller an animated kind must use (paused start, 재생 / 멈춤 / 한 단계, ≥ 334 ms frames, reduced motion hides 재생). No animated block type exists, so (a)–(c) are met by the controller on a test fixture, not by a shipped block. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-MOTION. Tests: `block-playback.smoke.mjs`, `learning-block-motion-browser.smoke.mjs`.
+
 REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/authoring` as the completion-condition helper. Requirement: `docs/requirements/chalk-authoring.md` "완료 조건 도우미". Test: T-49. Owner choices are in `decisions.md`: bare 점 is allowed, the check runs on the page and in the Chalk forwarder, and there is no Service text check.
 
 ## 3. Design requirements (same rows)

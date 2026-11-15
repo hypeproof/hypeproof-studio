@@ -9026,6 +9026,33 @@ two parametric blocks, drawn in the existing 자료 card. Studio part only; Chal
     moves, keys and the IME guard, no autoplay, `<img onerror>` and `<script>` stage text drawn literally with no element
     made, and 44px / 14px / 16px with focus rings.
 
+REQ-STUDIO-LEARNING-BLOCK-MOTION / REQ-CGP-LEARN-07 and DES-CGP-LEARN-07 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH,
+CGP-LEARN-R-007) / PI#3: animated blocks start paused, play is the learner's explicit action, and step-by-step is always there.
+**No shipped block kind animates yet**, so this row delivers a guard and a ready controller, not an animated block:
+
+- **Guard.** `MATERIAL_MOTION` (`src/lessonFocus.ts`) marks every kind `static` or `animated`. All nine are `static` today. A static
+  kind must not change on its own: opened and left alone for 3 s, its text, field values, markup and computed styles stay the
+  same and no animation runs. This catches a future autoplay or timer in any block.
+- **Controller.** An `animated` kind must draw its frames through `webview-ui/src/BlockPlayback.tsx`, with its rules in
+  `src/blockPlayback.ts`:
+  - It starts paused on the first frame. 재생 / 멈춤 / 한 단계 are 44px quiet buttons, and the position reads as text, "2 / 4 장면"
+    (2–8 frames).
+  - Only 재생 starts play. A frame lasts at least 334 ms, whatever the block asks, so nothing changes faster than 3 Hz.
+  - 멈춤 keeps the current frame. 한 단계 moves one frame, playing or not. Play stops on the last frame.
+  - When motion is reduced, by the host's `workbench.reduceMotion` or the OS `prefers-reduced-motion` (`motion.ts`), 재생 is not
+    offered, a running play stops on its frame, 한 단계 stays, and the tokens.css override zeroes transitions.
+- **Not in this row:** an animated block type. The catalog is unchanged; the first one needs a Service catalog version and an
+  owner decision on its content.
+- **Evidence.**
+  - `test/block-playback.smoke.mjs`: the pure rules, the 334 ms floor, the 2–8 frames, and every kind having a motion flag
+    (all static).
+  - `test/learning-block-motion-browser.smoke.mjs` (headless Chromium):
+    - the guard over all nine kinds on the mounted ChatPanel;
+    - the controller on a test-only 5-frame block: paused start, ≥ 334 ms frames, pause, step, the end, host and OS reduced
+      motion;
+    - 44px / 14px in light/dark at 320/800/1420 px and forced colours.
+  - `test/sx-audit.mjs` allows "N / M 장면" only in the same tight shape as "N / M 단계", with its own negative controls.
+
 REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
 REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
 it back. This row covers (c) "접기". The report half, (a) and (b), is REQ-STUDIO-LEARNING-BLOCK-REPORT below.

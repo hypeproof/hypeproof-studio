@@ -2638,3 +2638,11 @@ Confirmed by Jay: no. The coordinator chose box_spacing v1 as the first parametr
   - Stage text uses the Service's single-line safe-text rule, checked against the shared case list.
   - The SX audit's `stage_position` allowance covers only a stepper position: single digits within 2–8 stages, no score word before it and no judgment word after 단계. "3 / 4 단계 통과" and "90 / 100 단계" are flagged.
 - **Not covered:** a real installed App and a real screen reader. Chalk authoring is the next PR.
+
+## CGP-LEARN-R-007 / D-007: guard + controller; no animated kind yet (2026-11-15, agent-selected)
+
+- **Status: guard + controller; no animated kind yet.** No shipped block kind animates, so nothing a learner sees changes. What ships is a guard (every static kind stays unchanged with no input, so a future autoplay is caught) and the controller the first animated kind must use. This is not a delivered animated block.
+- **Catalog unchanged (coordinator).** No animated type is invented. The first one needs a Service catalog version and Jay's call on its content.
+- **Controller kept small (coordinator).** Paused start, 재생 / 멈춤 / 한 단계, a 334 ms frame floor (≤ 3 Hz), 2–8 frames, and reduced motion from the host or the OS hides 재생. There are no options beyond those, and no key shortcuts, so there is no IME path.
+- **Scene numeral (coordinator).** "N / M 장면" is allowed in the SX audit in the same tight shape as "N / M 단계", with its own negative controls.
+- Confirmed by Jay: no.

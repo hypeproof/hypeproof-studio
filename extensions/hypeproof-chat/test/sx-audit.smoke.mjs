@@ -161,7 +161,7 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
   const s = auditRegionText("남은 단계 2", { region: "work" });
   assert.equal(s.ok, true, `"남은 단계 2"를 수치로 잡았다 → 계측기 결함: ${describe(s)}`);
   console.log("ok 양성: 3주차 · 남은 단계 2 는 허용 수치다");
-  for (const ok of ["1 / 8 단계", "8 / 8 단계", "2 / 4 단계두 번째 단계", "1 / 3 단계 첫 장면", "봐요.1 / 2 단계"]) {
+  for (const ok of ["1 / 8 단계", "8 / 8 단계", "2 / 4 단계두 번째 단계", "1 / 3 단계 첫 장면", "봐요.1 / 2 단계", "1 / 4 장면", "4 / 4 장면", "2 / 5 장면 한 단계"]) {
     const r = auditRegionText(ok, { region: "work" });
     assert.equal(r.ok, true, `단계 넘겨 보기의 위치 ${JSON.stringify(ok)} 를 수치로 잡았다 → 계측기 결함: ${describe(r)}`);
   }
@@ -264,6 +264,12 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
     ["90 / 100 단계", "ratio_hundred"],
     ["3 / 12 단계", "bare_number"],
     ["1.5 / 4 단계", "bare_number"],
+    // The same for an animated block's scene position (CGP-LEARN-R-007).
+    ["3 / 4 장면 통과", "bare_number"],
+    ["4 / 4 장면 성공!", "bare_number"],
+    ["정답률 2 / 4 장면", "bare_number"],
+    ["90 / 100 장면", "ratio_hundred"],
+    ["3 / 12 장면", "bare_number"],
   ];
   for (const [sample, rule] of negatives) {
     const r = auditRegionText(sample, { region: "work" });
