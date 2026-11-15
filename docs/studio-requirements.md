@@ -4739,9 +4739,29 @@ percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same se
   that changed during the read. The webview renders only a `data:image/(png|jpeg|gif|webp)`
   answer; anything else (a URL, SVG, HTML) keeps the glyph. Nothing is loaded from the network
   or from outside the work folder.
+- **Open a listed file (CGP-KNOW-R-011 / REQ-KNOW-20).** Each row is one 44px button (name:
+  the path, then the provenance label). Pressing it asks the host to open that file
+  (`myWorksOpen`). The host opens only a path the last list it sent showed, for the same seat
+  (activity scope and profile) and work folder; any sign-in change (the token, the issuer token,
+  the account, a rehearsal seat) drops that list. It runs the thumbnail's canonical check again
+  at open time (`resolveMyWorksFile`). That check refuses any absolute path, `..`, empty or dot
+  segment, control character or backslash, a colon anywhere in a segment, a trailing dot or
+  space (Windows names), any link on the way, a folder, and a hard-linked file, and it catches a
+  file replaced by a link after the list was built.
+  - An `.html`/`.htm` page opens in Studio's preview.
+  - An allowlisted image (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`) opens in VS Code's
+    built-in image preview, where an SVG's scripts do not run.
+  - Anything else opens in the default text editor with `vscode.openWith(uri, "default")`, so no
+    custom editor or notebook renderer is chosen. `.ipynb` and `.code-workspace` open as text, and
+    a `.vsix` gets the binary notice.
+  - Never `vscode.open`, the OS default app or an external browser.
+  - An open the host carried out closes the drawer. A refusal keeps it open and shows one line,
+    "이 파일은 지금 열 수 없어요. 내 작품을 닫았다가 다시 열어 주세요.", with focus left on the row.
+  - Evidence: `my-works-open.smoke.mjs` (real temp folders, the provider with a scripted
+    `vscode`) and `my-works-drawer.smoke.mjs` (row buttons, Enter, a forged answer ignored, the
+    refusal line, close on success).
 - Not built: HTML page thumbnails (rendering the page would run it and could load network
-  resources; the page glyph is shown instead); opening a file from a row (REQ-KNOW-20's
-  "opening an item reveals it"); trash actions in the drawer (they stay in the 작업 자료
+  resources; the page glyph is shown instead); trash actions in the drawer (they stay in the 작업 자료
   panel, CGP-KNOW-D-013); remembering the grid choice across openings.
 - **기억 filter (CGP-KNOW-D-030 / DES-KNOW-48).** A `파일`/`기억` group (aria-pressed, 44px) sits in
   the header; `기억` shows the activity's memory view (state line, 작업별 기억 and files;

@@ -296,6 +296,7 @@ import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, scanForPoint, takeRestorePoint, turnRestoreStoreDir, folderFitsRestoreLimits, TurnWriteTracker, TRACKED_SHELL_NOTICE, trackedTooLargeLine, type RestoreManifest, type TrackedCapture } from "./turnRestore";
 import { readWorkspaceThumbnail } from "./artifactThumbnail";
+import { MY_WORKS_EDITOR, MY_WORKS_OPEN_REFUSED, resolveMyWorksFile } from "./myWorksOpen";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
@@ -3785,6 +3786,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
+      this.noteWorksIdentityChange(e.key);
       if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); this._annotationLeaveRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); void this.reconcileSavedLinkSafety(); }
       // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
@@ -7798,7 +7800,43 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         view = await recorder.view(root, scan && idle() ? scan : undefined, generation);
       }
     } catch { view = null; }
+    // CGP-KNOW-R-011: the paths this list showed are the only ones a 내 작품 row may open.
+    this.worksListed = { seat: this.worksSeat(), cwd: cwd ?? "", paths: new Set((view?.entries ?? []).map((entry) => entry.path)) };
     await this.post({ type: "artifactProvenance", view });
+  }
+  private worksListed: { seat: string; cwd: string; paths: Set<string> } | undefined;
+  /**
+   * CGP-KNOW-R-011 (verify-r027): any change of who is signed in (a token, an issuer token, an account, a rehearsal
+   * seat) drops the 내 작품 list; nothing opens until a list is shown for the new identity. The keys are read here,
+   * not at module load: TOKEN_KEY comes from extension.ts, which imports this module.
+   */
+  private noteWorksIdentityChange(key: string): void {
+    if ([TOKEN_KEY, ISSUER_TOKEN_KEY, ACCOUNT_SECRET_KEY, REHEARSAL_SEAT_KEY].includes(key)) this.worksListed = undefined;
+  }
+  /** The seat a 내 작품 list belongs to (activity scope and profile); a list from another seat opens nothing. */
+  private worksSeat(): string { try { return this.voiceSeatKey(); } catch { return ""; } }
+  /**
+   * CGP-KNOW-R-011 (REQ-KNOW-20) — open one 내 작품 row, on the same seats as the list. Only a path the last list
+   * showed, for the same seat and work folder, checked again now (`resolveMyWorksFile`). An HTML page opens in
+   * Studio's preview, an allowlisted image in VS Code's image preview, anything else in the default text editor
+   * (`vscode.openWith(uri, "default")`: no custom editor or notebook). Never the OS default app. A refusal posts the
+   * one drawer line. Never throws.
+   */
+  private async openMyWorksFile(msg: Extract<WebviewMessage, { type: "myWorksOpen" }>): Promise<void> {
+    if (typeof msg.requestId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId)) return;
+    const refuse = () => this.post({ type: "myWorksOpened", requestId: msg.requestId, ok: false, error: MY_WORKS_OPEN_REFUSED });
+    const cwd = this.currentTaskStore() && this._instructorMode?.isInstructor !== true ? this.resolveCoachCwd() : undefined;
+    const listed = this.worksListed;
+    if (!cwd || !listed || listed.cwd !== cwd || listed.seat !== this.worksSeat()) { await refuse(); return; }
+    const target = resolveMyWorksFile(cwd, msg.path, listed.paths);
+    if (!target.ok) { await refuse(); return; }
+    try {
+      const uri = vscode.Uri.file(target.absPath);
+      if (target.via === "preview") await vscode.commands.executeCommand("hypeproof-chat.previewActiveFile", uri);
+      // Never vscode.open: it would let a custom editor or a notebook renderer take the file (verify-r027).
+      else await vscode.commands.executeCommand("vscode.openWith", uri, MY_WORKS_EDITOR[target.via], { preview: false });
+    } catch { await refuse(); return; }
+    await this.post({ type: "myWorksOpened", requestId: msg.requestId, ok: true });
   }
   /** CGP-KNOW-D-011 (DES-KNOW-20) — one 내 작품 thumbnail, on the same seats as the provenance list. Never throws. */
   private async postArtifactThumbnail(msg: Extract<WebviewMessage, { type: "artifactThumbnailRequest" }>): Promise<void> {
@@ -9175,6 +9213,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "memoryUseRequest": await this.runMemoryUse(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
+      case "myWorksOpen": await this.openMyWorksFile(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "deckPdfReveal": await this.deckPdfReveal(); return;

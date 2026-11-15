@@ -102,6 +102,7 @@ reproduces the former file byte for byte.
 - [CGP-KNOW-R-001](CGP-KNOW-R-001.md): CGP-KNOW-R-001: task rail search (2026-10-25, agent choice)
 - [CGP-KNOW-R-005](CGP-KNOW-R-005.md): CGP-KNOW-R-005: memory scoped to one personal activity (2026-10-29, agent-selected conservative implementation)
 - [CGP-KNOW-R-008](CGP-KNOW-R-008.md): CGP-KNOW-R-008: task emoji and colour (2026-10-25, agent choice)
+- [CGP-KNOW-R-011](CGP-KNOW-R-011.md): CGP-KNOW-R-011: open a file from 내 작품 (2026-11-16, agent choices within the coordinator's constraints)
 - [CGP-KNOW-R-020](CGP-KNOW-R-020.md): Attachment recovery (CGP-KNOW-R-020)
 - [CGP-KNOW-R-021](CGP-KNOW-R-021.md): CGP-KNOW-R-021: Studio-browser downloads (2026-10-25, agent-selected conservative implementation)
 - [CGP-KNOW-R-022](CGP-KNOW-R-022.md): CGP-KNOW-R-022: memory state line (2026-10-29, agent-selected conservative implementation)
