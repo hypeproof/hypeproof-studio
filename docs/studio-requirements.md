@@ -3615,7 +3615,9 @@ against the slice's label set (AI/Studio/올림/기록 없음 only). Cases cover
 - an import-graph lock (`test/artifact-provenance-imports.smoke.mjs`, #4124): no module that imports
   `artifactProvenance` or `artifactProvenanceView` subscribes to an editor or notebook save event, except
   `previewProvider.ts` (it reloads the watched preview), whose save callback must not reach a provenance import,
-  directly or through a method of the same class. It parses the TypeScript AST, and planted violations are caught;
+  directly or through a method of the same class. It parses the TypeScript AST, and planted violations are caught. The
+  call check is a heuristic (one level of `this.method()`); any other call in an allowed save callback fails closed
+  unless it is listed with a reason;
 - the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
 - the hash cache and skipped Python environments.
 
@@ -9049,8 +9051,13 @@ Service's outcome for that event's seq in the sync answer (`material_reports`). 
 - `capped` → the row stays and says "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요."
 - No answer in time, or the connection dropped → "unconfirmed": the row stays and says "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시
   뒤 다시 보내 보세요." Sending again is safe, because a report the Service already has comes back as "already".
-- `rejected`, no connection, a Service that does not store the kind, or a refused outbox → "not_sent": the row stays and says
+- `rejected` (the connection is fine, but the Service refused this report, for example because the lesson on this
+  computer is not the class's lesson) → "rejected": the row stays and says "이 자료는 선생님께 보낼 수 없었어요. 선생님께 직접
+  말해 주세요."
+- No connection, a Service that does not store the kind, or a refused outbox → "not_sent": the row stays and says
   "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요."
+- An outcome that arrives while the report is still being queued (the sync loop can send it before the outbox write
+  returns) is kept by seq and given to that report, never dropped as unconfirmed.
 
 The report is not work, not evidence and not a spool line, and it carries no transcript. The Service lists it
 on the run's instructor board, and Chalk `/manage` shows it as "자료 신고" (hypeproof-service material_report; Chalk
@@ -9070,6 +9077,10 @@ Evidence:
   and text, records no spool line and maps each Service outcome (only `accepted` is "sent"). The sync loop hands every 200
   answer of its own stream to the host. The real `ClassroomOpsHost.materialReport` answers with the outcome for its own seq:
   an older Service that does not name the kind, a rejected seq, a timeout and the real `stopConnection` are never "sent".
+- `extensions/hypeproof-chat/test/learning-block-report-gate-host.test.mjs` runs the real `ClassroomOpsHost` with fetch
+  intercepted: the device declares `material_report` on connect and every sync; the inbox view offers reports only after
+  a sync answer names the kind (never for an older Service, withdrawn when a later answer stops naming it); and after a
+  disconnect, the next connection offers nothing before its own first answer.
 
 ## Activity memory state line (CGP-KNOW-R-022)
 

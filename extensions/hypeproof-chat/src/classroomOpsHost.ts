@@ -717,7 +717,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     this.generation++; this.inbox = null; this.inboxStore = null;
     this.loop?.stop(); this.runner?.close(); this.loop = null; this.runner = null; this.outbox = null;
     // A report still waiting is not known to have arrived: it is unconfirmed, never sent.
-    this.reportsServed = false; for (const w of [...(this.reportWaits?.values() ?? [])]) w("unconfirmed"); this.reportWaits?.clear();
+    this.reportsServed = false; for (const w of [...(this.reportWaits?.values() ?? [])]) w("unconfirmed"); this.reportWaits?.clear(); this.reportEarly?.clear();
     // Disconnecting ends the instructor's pause on this device; the Service's own admission still applies.
     this.paused = false; this.stopUnconfirmed = false; this.applyHold();
     this.recoveryWatch.clear(); this.faultClass = null; this.automationGate.reset();
@@ -924,6 +924,12 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
   private reportsServed = false;
   /** Reports waiting for the Service's outcome, by outbox seq, on this connection's stream. */
   private reportWaits = new Map<number, (o: MaterialReportOutcome | "unconfirmed") => void>();
+  /**
+   * Outcomes that arrived before their report was waited for: the sync loop can send an event while `addSeq` is still
+   * persisting it, and the answer can land before the wait is set up. Kept by seq (bounded) and read once by that report.
+   */
+  private reportEarly = new Map<number, MaterialReportOutcome>();
+  static REPORT_EARLY_MAX = 64;
   /** How long a learner waits for the Service's answer before being told it is not confirmed yet. */
   static REPORT_ANSWER_MS = 15_000;
   /** Whether this window may offer the report: a live connection to a Service that stores the kind. */
@@ -931,8 +937,16 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
   private onReports(answer: ReturnType<typeof import("./classroomOps").readReportAnswer>, live: () => boolean): void {
     if (!live()) return;
     const was = this.reportsServed === true; this.reportsServed = answer.served;
-    for (const { seq, outcome } of answer.outcomes) { const w = this.reportWaits?.get(seq); if (w) { this.reportWaits.delete(seq); w(outcome); } }
-    for (const seq of answer.rejected) { const w = this.reportWaits?.get(seq); if (w) { this.reportWaits.delete(seq); w("rejected"); } }
+    this.reportEarly ??= new Map();
+    const settle = (seq: number, outcome: MaterialReportOutcome) => {
+      const w = this.reportWaits?.get(seq);
+      if (w) { this.reportWaits.delete(seq); w(outcome); return; }
+      // No one waits yet: keep it for the report that is still being queued (only a report ever reads it).
+      if (!this.reportEarly.has(seq)) this.reportEarly.set(seq, outcome);
+      while (this.reportEarly.size > ClassroomOpsHost.REPORT_EARLY_MAX) this.reportEarly.delete(this.reportEarly.keys().next().value as number);
+    };
+    for (const { seq, outcome } of answer.outcomes) settle(seq, outcome);
+    for (const seq of answer.rejected) settle(seq, "rejected");
     if (was !== answer.served) this.inboxChanged(false);
   }
   async materialReport(payload: Record<string, unknown>): Promise<MaterialReportOutcome | "not_sent" | "unconfirmed"> {
@@ -942,6 +956,8 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const waits = this.reportWaits;
     const seq = await outbox.addSeq("material_report", payload, "student");
     if (seq === null) return "not_sent";
+    const early = this.reportEarly?.get(seq);
+    if (early) { this.reportEarly.delete(seq); return early; }
     const answer = new Promise<MaterialReportOutcome | "unconfirmed">((resolve) => {
       const timer = setTimeout(() => { if (waits.get(seq) === done) waits.delete(seq); resolve("unconfirmed"); }, ClassroomOpsHost.REPORT_ANSWER_MS);
       const done = (o: MaterialReportOutcome | "unconfirmed") => { clearTimeout(timer); resolve(o); };

@@ -86,7 +86,7 @@ await test("handler: only the Service's accepted answer is sent; every other out
     [{ materialReport: async () => "duplicate" }, { stepId: "s1", reason: "wrong" }, "already"],
     [{ materialReport: async () => "capped" }, { stepId: "s1", reason: "wrong" }, "capped"],
     [{ materialReport: async () => "unconfirmed" }, { stepId: "s1", reason: "wrong" }, "unconfirmed"],
-    [{ materialReport: async () => "rejected" }, { stepId: "s1", reason: "wrong" }, "not_sent"],
+    [{ materialReport: async () => "rejected" }, { stepId: "s1", reason: "wrong" }, "rejected"],
     [{ materialReport: async () => "not_sent" }, { stepId: "s1", reason: "wrong" }, "not_sent"],
     [{ materialReport: async () => true }, { stepId: "s1", reason: "wrong" }, "not_sent"],
     [undefined, { stepId: "s1", reason: "wrong" }, "not_sent"],
@@ -167,6 +167,26 @@ await test("ops host: the answer is the Service's outcome for that seq; a reject
   assert.equal(await pd, "unconfirmed", "a dropped connection leaves it unconfirmed");
   assert.equal(h.reportsAvailable(), false, "and the report is no longer offered");
   const n = inbox.length; h.onReports({ served: true, outcomes: [], rejected: [] }, () => false); assert.equal(inbox.length, n, "a stale connection's answer changes nothing");
+});
+
+await test("ops host: an outcome that arrives while the report is still being queued is kept for it, not lost as unconfirmed", async () => {
+  const Host = await load("classroomOpsHost", "ClassroomOpsHost");
+  Host.REPORT_ANSWER_MS = 200;
+  const live = () => true;
+  for (const [outcome, how] of [["accepted", "outcomes"], ["duplicate", "outcomes"], ["capped", "outcomes"], ["rejected", "rejected"]]) {
+    let next = 0;
+    const h = Object.assign(Object.create(Host.prototype), { loop: { nudge() {} }, log() {} });
+    h.inboxChanged = () => {};
+    // The sync loop sends the event and its answer lands before addSeq returns (the persist is still running).
+    h.outbox = { addSeq: async () => { const seq = ++next; h.onReports({ served: true, outcomes: how === "outcomes" ? [{ seq, outcome }] : [], rejected: how === "rejected" ? [seq] : [] }, live); return seq; } };
+    h.onReports({ served: true, outcomes: [], rejected: [] }, live);
+    assert.equal(await h.materialReport({ reason: "wrong" }), outcome, `${outcome}: the early answer is the report's answer`);
+  }
+  // Control: with no early answer and none later, it is still unconfirmed (the buffer never invents one).
+  const h = Object.assign(Object.create(Host.prototype), { loop: { nudge() {} }, outbox: { addSeq: async () => 7 }, log() {} });
+  h.inboxChanged = () => {};
+  h.onReports({ served: true, outcomes: [{ seq: 6, outcome: "accepted" }], rejected: [] }, live);
+  assert.equal(await h.materialReport({ reason: "wrong" }), "unconfirmed", "another seq's early answer is not this report's");
 });
 
 console.log(`learning-block-report-host: ${passed} passed`);

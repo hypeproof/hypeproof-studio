@@ -1036,10 +1036,11 @@ export type HostMessage = (
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
   /**
    * CGP-LEARN-R-011 — what the Service did with a material report: `sent` (accepted), `already` (it already holds this
-   * learner's report of that block), `capped` (the daily limit), `unconfirmed` (no answer in time), `not_sent` (no live
-   * class connection, the Service does not store the kind, no block, or refused).
+   * learner's report of that block), `capped` (the daily limit), `unconfirmed` (no answer in time), `rejected` (the
+   * Service refused this report, e.g. a lesson it does not match), `not_sent` (no live class connection, the Service does
+   * not store the kind, no block, or the outbox refused).
    */
-  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "already" | "capped" | "unconfirmed" | "not_sent" }
+  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "already" | "capped" | "unconfirmed" | "rejected" | "not_sent" }
   /**
    * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
    * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the

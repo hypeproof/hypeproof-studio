@@ -15,6 +15,8 @@ const REPORT_FAILED: Partial<Record<string, string>> = {
   not_sent: "수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요.",
   capped: "오늘은 자료를 더 알릴 수 없어요. 선생님께 직접 말해 주세요.",
   unconfirmed: "선생님께 전달됐는지 아직 확인하지 못했어요. 잠시 뒤 다시 보내 보세요.",
+  // The connection is fine; the Service refused this report (e.g. the lesson on this computer is not the class's lesson).
+  rejected: "이 자료는 선생님께 보낼 수 없었어요. 선생님께 직접 말해 주세요.",
 };
 
 /** CGP-LEARN-D-001 — the 자료 card's 48px thumbnail icon for each block kind (the card's title is MATERIAL_TEXT's). */
@@ -112,7 +114,7 @@ export function LessonStepPanel(props: {
   // field for any seat, and 선생님께 보내기. The host builds the block identity from the served lesson and sends it on the class
   // connection; the toast "선생님께 전달했어요" appears only after the Service accepted it. Not an evidence event, no transcript.
   const [reportFor, setReportFor] = useState(""), [reportReason, setReportReason] = useState<MaterialReportReason | "">("");
-  type ReportState = "sending" | "sent" | "already" | "capped" | "unconfirmed" | "not_sent";
+  type ReportState = "sending" | "sent" | "already" | "capped" | "unconfirmed" | "rejected" | "not_sent";
   const [reportState, setReportState] = useState<{ key: string; state: ReportState } | null>(null);
   const reportOpen = !!props.canReport && reportFor === blockKey;
   const reportPanel = useRef<HTMLDivElement>(null);
