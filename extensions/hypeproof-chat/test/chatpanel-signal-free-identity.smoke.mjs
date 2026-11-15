@@ -12,7 +12,12 @@ const RECORD = process.env.RECORD === "1";
 process.env.TZ = "UTC";
 
 // Expected for origin/main (recorded with RECORD=1 in a worktree of origin/main, 2026-11-14).
-const EXPECTED = "30789eb22060cf8c229396d82b8aa28c0e32ade1fed6487d11df39d76f29ac89";
+// Re-recorded for CGP-SHELL-R-019 (#4086): the fixture's lesson step has a hint, so its tip row now also draws the
+// 팁 그만 보기 button. A line-by-line diff of the render against origin/main 7e8e1fafb shows exactly that one added
+// element and no other change (no useId shift, no moved band), so the rehearsal-band guard still holds.
+// Re-recorded for CGP-SHELL-R-026: ChatPanel lost the blocked-link banner's two state hooks, so React's useId values
+// (:R…:) shift; with ids normalized the render is byte-identical to origin/main (the same check as orchestrator-panel's).
+const EXPECTED = "1fc07c592fe456d7e542849f483a47295ff4006b0beffcacfe21217fee35b375";
 
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 const webviewDir = new URL("../webview-ui/", import.meta.url);

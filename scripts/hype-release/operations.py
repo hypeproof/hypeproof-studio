@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import html
+import copy
+import hashlib
 import json
 import re
 import subprocess
 import tempfile
 from pathlib import Path
 
-from core import Blocked, canonical, committed_cost, digest, public_payload, require
+from core import Blocked, canonical, committed_cost, digest, now, public_payload, require, utc
 from transport import ApiError, file_hash, safe_name
 import macos_signing
 
@@ -54,6 +56,194 @@ def tag_message(candidate, checkout):
     message = p.stdout.strip()
     require(message.startswith("hps-managed-draft/1\n"), "unexpected product build contract")
     return message
+
+
+def tag_trigger_contract(candidate, checkout):
+    """Bind the supported desktop producer triggers before reserving any write."""
+    try:
+        import yaml
+    except ImportError as error:
+        raise Blocked("PyYAML is required; install the declared Harness requirements before build planning") from error
+    class TriggerLoader(yaml.BaseLoader):
+        def construct_mapping(self, node, deep=False):
+            result = {}
+            for key_node, value_node in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                require(isinstance(key, str) and key not in result, "ambiguous build workflow mapping")
+                result[key] = self.construct_object(value_node, deep=deep)
+            return result
+    checkout = product_checkout(checkout, candidate)
+    def source(relative):
+        # Untracked lookalikes must not stand in for files in the release commit.
+        return subprocess.check_output(["git", "-C", str(checkout), "show",
+                                        candidate["sourceSha"] + ":" + relative], stderr=subprocess.PIPE)
+    try:
+        platform_bytes = source("config/release-platforms.json")
+        config = json.loads(platform_bytes)
+        required = ["darwin-arm64", "win32-x64"]
+        require(isinstance(config, dict) and type(config.get("version")) is int and config['version'] == 1 and
+                config.get("platforms") == required, "tag adapter requires the declared Mac and Windows platform set")
+        workflows = []
+        for platform, filename in zip(required, ["build-mac.yml", "build-windows.yml"]):
+            path = ".github/workflows/" + filename
+            raw = source(path)
+            # BaseLoader keeps GitHub's `on` key a string (YAML 1.1 calls it true).
+            workflow = yaml.load(raw, Loader=TriggerLoader)
+            events = workflow.get("on") if isinstance(workflow, dict) else None
+            push = events.get("push") if isinstance(events, dict) else None
+            unsupported = (f"{platform} has an unsupported trigger contract; use the existing release-cut path, "
+                           "do not create a tag or issue an independent dispatch (see #633)")
+            require(isinstance(events, dict) and set(events) <= {'push', 'workflow_dispatch'}, unsupported)
+            row = {"platform": platform, "path": path, "sha256": hashlib.sha256(raw).hexdigest()}
+            if 'push' in events:
+                require(isinstance(push, dict) and set(push) == {"tags"} and push["tags"] == ["v*"], unsupported)
+                row.update(trigger="push", tags=["v*"])
+            else:
+                # Only Windows has a supported dispatch-only producer. Never
+                # dispatch Mac in addition to the tag-triggered Mac build.
+                dispatch = events.get('workflow_dispatch')
+                inputs = dispatch.get('inputs') if isinstance(dispatch, dict) else None
+                fields = {'ref', 'candidate_sha', 'managed_draft', 'release_version'}
+                require(platform == 'win32-x64' and isinstance(inputs, dict) and
+                        fields <= set(inputs) <= fields | {'override_live_session'}, unsupported)
+                for key, value in inputs.items():
+                    require(isinstance(value, dict) and value.get('required', 'false') in {'false', 'true'}, unsupported)
+                    if key in {'managed_draft', 'override_live_session'}:
+                        require(value.get('type') == 'boolean' and value.get('default', 'false') == 'false', unsupported)
+                    else:
+                        require(value.get('type', 'string') == 'string', unsupported)
+                if 'override_live_session' in inputs:
+                    require(inputs['override_live_session'].get('required', 'false') == 'false', unsupported)
+                row.update(trigger='workflow_dispatch', dispatch={
+                    'ref': candidate['tag'], 'return_run_details': True,
+                    'inputs': {'ref': candidate['sourceSha'], 'candidate_sha': candidate['sourceSha'],
+                               'managed_draft': 'true', 'release_version': candidate['version']}})
+            require(candidate["tag"].startswith("v"), "candidate tag does not match the supported v* trigger")
+            workflows.append(row)
+        return {"schema": "hps-desktop-build-trigger-contract/1", "sourceSha": candidate["sourceSha"],
+                "platformConfigSha256": hashlib.sha256(platform_bytes).hexdigest(), "workflows": workflows}
+    except Blocked:
+        raise
+    except (OSError, ValueError, subprocess.SubprocessError, yaml.YAMLError) as error:
+        raise Blocked("invalid candidate build trigger contract") from error
+
+
+DESKTOP_BUILD_ADAPTER = 'github-managed-desktop/1'
+
+
+def desktop_build_runs(github, candidate, request):
+    """Observe exact runs, refusing truncated listings and ambiguous identities."""
+    result = {}
+    for workflow in request['triggerContract']['workflows']:
+        filename = workflow['path'].split('/')[-1]
+        rows = []
+        for page in range(1, 11):
+            payload = github.api(f"repos/{candidate['repository']}/actions/workflows/{filename}/runs"
+                                 f"?head_sha={candidate['sourceSha']}&per_page=100&page={page}")
+            part = payload.get('workflow_runs')
+            require(isinstance(part, list), 'malformed desktop build listing')
+            rows.extend(part)
+            if len(part) < 100:
+                break
+        else:
+            raise Blocked('desktop build listing exceeds bounded scan; preserve UNKNOWN')
+        matches = [r for r in rows if r.get('head_branch') == candidate['tag']]
+        require(len(matches) <= 1, 'multiple candidate build runs; preserve UNKNOWN, never choose the latest')
+        if matches:
+            row = matches[0]
+            require(row.get('head_sha') == candidate['sourceSha'] and
+                    row.get('event') == workflow['trigger'] and
+                    row.get('path') in {workflow['path'], workflow['path'] + '@' + candidate['tag']} and
+                    row.get('head_repository', {}).get('full_name') == candidate['repository'] and
+                    type(row.get('id')) is int and row['id'] > 0 and row.get('run_attempt') == 1,
+                    'desktop build run identity differs; preserve UNKNOWN')
+            result[workflow['platform']] = {k: row[k] for k in
+                ('id', 'status', 'conclusion', 'html_url', 'run_attempt', 'created_at')}
+    return result
+
+
+def save_build_effect(session, operation_id, name, effect):
+    state = copy.deepcopy(session.state)
+    operation = state['operations'][operation_id]
+    require(operation['status'] == 'UNKNOWN', 'build operation is already settled')
+    operation.setdefault('effects', {})[name] = effect
+    session.save(state)  # CAS before each effect prevents competing workers.
+
+
+def observe_desktop_build(session, operation_id, github):
+    operation = session.state['operations'][operation_id]
+    request, candidate = operation['request'], session.candidate
+    tag = observe_tag(github, candidate, request['message'])
+    if not tag:
+        return None
+    effects = operation.get('effects', {})
+    require('tag' in effects, 'unattributed candidate tag; preserve UNKNOWN')
+    previous = effects['tag'].get('observation')
+    require(previous is None or previous['tagObject'] == tag['tagObject'], 'managed tag object changed')
+    if effects['tag']['status'] != 'OBSERVED':
+        save_build_effect(session, operation_id, 'tag', {**effects['tag'], 'status': 'OBSERVED', 'observation': tag})
+    runs = desktop_build_runs(github, candidate, request)
+    for workflow in request['triggerContract']['workflows']:
+        if workflow['trigger'] != 'workflow_dispatch':
+            continue
+        effect = session.state['operations'][operation_id].get('effects', {}).get(workflow['platform'])
+        if effect is None:
+            require(workflow['platform'] not in runs, 'unattributed Windows run; preserve UNKNOWN')
+            return None  # Only resume-build may start this never-attempted effect.
+        run = runs.get(workflow['platform'])
+        if run is None:
+            return None
+        require(utc(run['created_at']) >= utc(effect['startedAt']), 'Windows run predates the dispatch intent')
+        if effect.get('runId') is not None:
+            require(run['id'] == effect['runId'], 'Windows dispatch response identifies another run')
+        save_build_effect(session, operation_id, workflow['platform'],
+                          {**effect, 'status': 'OBSERVED', 'runId': run['id'], 'observation': run})
+    if len(runs) != len(request['triggerContract']['workflows']):
+        return None
+    return {'tagObject': tag['tagObject'], 'sourceSha': candidate['sourceSha'],
+            'status': 'BUILD_RUNS_OBSERVED', 'builds': runs,
+            'acceptance': 'NOT_RUN; collect immutable packages and use the product acceptance gates'}
+
+
+def execute_desktop_build(session, operation_id, github, actions):
+    """Continue only effects without a saved intent; never replay an unknown POST."""
+    operation = session.state['operations'][operation_id]
+    request, candidate = operation['request'], session.candidate
+    dispatches = [w for w in request['triggerContract']['workflows'] if w['trigger'] == 'workflow_dispatch']
+    for workflow in dispatches:
+        metadata = actions.api(f"repos/{candidate['repository']}/actions/workflows/{workflow['path'].split('/')[-1]}")
+        require(metadata.get('path') == workflow['path'] and metadata.get('state') == 'active',
+                'Windows workflow unavailable; no new build effect attempted')
+    if 'tag' not in operation.get('effects', {}):
+        require(observe_tag(github, candidate, request['message']) is None,
+                'candidate tag already exists without this operation; preserve UNKNOWN')
+        require(not desktop_build_runs(github, candidate, request), 'candidate already has unaccounted build runs')
+        save_build_effect(session, operation_id, 'tag', {'status': 'INTENT', 'startedAt': now()})
+        tag = create_tag(github, candidate, request['message'])
+        require(tag is not None, 'tag response uncertain; reconcile before recovery')
+        save_build_effect(session, operation_id, 'tag', {'status': 'OBSERVED', 'observation': tag})
+    else:
+        observe_desktop_build(session, operation_id, github)
+    tag = session.state['operations'][operation_id]['effects']['tag']
+    require(tag['status'] == 'OBSERVED', 'tag creation uncertain; reconcile, never replay')
+    require(observe_tag(github, candidate, request['message']) == tag['observation'], 'candidate tag changed')
+    for workflow in dispatches:
+        name = workflow['platform']
+        if name in session.state['operations'][operation_id]['effects']:
+            continue  # An intent can outlive a lost response; it is never resent.
+        require(name not in desktop_build_runs(github, candidate, request), 'unattributed Windows run; do not dispatch')
+        # GitHub timestamps have second precision. Use that same precision for
+        # the persisted lower bound, not a later local response timestamp.
+        started = utc(now()).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+        save_build_effect(session, operation_id, name, {'status': 'INTENT', 'startedAt': started})
+        response = actions.api(f"repos/{candidate['repository']}/actions/workflows/{workflow['path'].split('/')[-1]}/dispatches",
+                               'POST', workflow['dispatch'])
+        if response is not None:
+            require(isinstance(response, dict) and type(response.get('workflow_run_id')) is int and response['workflow_run_id'] > 0,
+                    'dispatch response uncertain; reconcile without replay')
+            save_build_effect(session, operation_id, name,
+                              {'status': 'REQUESTED', 'startedAt': started, 'runId': response['workflow_run_id']})
+    return observe_desktop_build(session, operation_id, github)
 
 
 def observe_tag(github, candidate, expected_message):

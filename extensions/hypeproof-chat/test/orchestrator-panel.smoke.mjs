@@ -285,13 +285,16 @@ const OLD_SCREENS = {
 // 되돌리기, after 기준 저장) and its controls help sentence names them. Removing that div and the appended help sentence from the
 // HPS_A5_DUMP_DIR dumps gives main's (b9b869d5e) markup byte for byte; nothing outside the block changed; the five
 // EffortControl digests are unchanged.
+// Re-recorded for CGP-SHELL-R-026 (TZ=UTC): ChatPanel lost the blocked-link banner's state hooks, so React's useId
+// counters (:R…:) shift by two. With the ids normalized every ChatPanel render is byte-identical to main's; the
+// EffortControl digests are unchanged.
 const BASE = {
   // Re-recorded for CGP-CHAT-R-004 (TZ=UTC): a non-personal ChatPanel draws the 계획 먼저 chip in the composer's button row;
   // that button is the only markup change, so the composer height is unchanged (the personal seat uses the tools menu).
-  "ChatPanel/adult-plain": "6a8621fc7b6b454332e60be1e4a7f2177f5ecde7f72b7b02cc6acf1d17540f7b",
-  "ChatPanel/adult-effort-observed": "c96c21159941626b367e6a6f34982f795ebc2cd31ad7186a83fd92e313b8f8ea",
-  "ChatPanel/adult-timeline": "c3dee67fe98dd768e720e1b9719503f56ca5960cdfa5ec2daf9a739b280e58ad",
-  "ChatPanel/kids": "30789eb22060cf8c229396d82b8aa28c0e32ade1fed6487d11df39d76f29ac89",
+  "ChatPanel/adult-plain": "9dd26509f4d51fbe9be29b9026b78a299515b2266e9c2a29c2ad90b0c99a8de7",
+  "ChatPanel/adult-effort-observed": "633eec920f792b9b59dccf7c377f52a167a60f8b11fe76824548e65e1859c1c8",
+  "ChatPanel/adult-timeline": "8e16becd7c169dc22147b10e441b7b92ca16284605f1930d8c9163cee0f8f81f",
+  "ChatPanel/kids": "1fc07c592fe456d7e542849f483a47295ff4006b0beffcacfe21217fee35b375",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -311,8 +314,11 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "0a8d2e6516e1134d4865b87385e1add40a545a9e22c51c3d73b25b9a50d6674e",
-  "ChatPanel/classroom-access-unknown": "e2dfd4b3ab0e7ee2d7dc5f95aadd695a74aa4268c4c28334da1751d7e3ad1748",
+  // Re-recorded for CGP-SHELL-R-019 (#4086, TZ=UTC): the six ChatPanel screens' lesson tip row now also draws the
+  // 팁 그만 보기 button. Diffed against origin/main 7e8e1fafb with HPS_A5_DUMP_DIR: that one added element is the
+  // only change on each screen; the five EffortControl digests are unchanged.
+  "ChatPanel/classroom-class-funded": "bf44e7ebadcb688823157d781bd041111b28c86ea7490fb6daabbf26abe94fee",
+  "ChatPanel/classroom-access-unknown": "211625537ad6ad1037d937706f6158248414a9e4bd11aebfda643ad9b877ede6",
 };
 
 const status = rendererStatus();

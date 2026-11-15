@@ -225,6 +225,29 @@ def resume_upload(state, policy, actor, operation_id, quote, timestamp=None):
     return result
 
 
+def resume_build(state, policy, actor, operation_id, quote, timestamp=None):
+    """Refresh the whole-build bound; only never-attempted effects may execute."""
+    authorize(state, policy, actor)
+    operation = state['operations'].get(operation_id)
+    require(operation and operation['kind'] == 'build' and operation['status'] == 'UNKNOWN' and
+            operation['request'].get('adapter') == 'github-managed-desktop/1', 'only a journaled desktop build can resume')
+    require(quote.get('status') == 'CONFIRMED' and quote.get('evidence') and quote.get('paidFallback') is False,
+            'confirmed whole-build quote without paid fallback required')
+    require(quote.get('kind') == 'build' and quote.get('candidateDigest') == state['candidateDigest'] and
+            quote.get('requestDigest') == operation['requestDigest'], 'resume quote must bind the original build')
+    instant = utc(timestamp or now())
+    require(utc(quote['observedAt']) <= instant < utc(quote['expiresAt']), 'resume quote expired or future')
+    require(len(operation.get('resumes', [])) + 1 < policy['maxAttempts'], 'build resume limit exhausted')
+    bound = max(money(operation['reservedUsd']), money(quote.get('upperBoundUsd')))
+    require(committed_cost(state) + bound - money(operation['reservedUsd']) <= money(policy['budgetLimitUsd']),
+            'candidate budget exhausted')
+    result = copy.deepcopy(state)
+    op = result['operations'][operation_id]
+    op['reservedUsd'] = str(bound)
+    op.setdefault('resumes', []).append({'at': timestamp or now(), 'actor': actor, 'quote': copy.deepcopy(quote)})
+    return result
+
+
 def settle(state, operation_id, status, result):
     require(status in {"DONE", "FAILED"}, "invalid operation outcome")
     updated = copy.deepcopy(state)

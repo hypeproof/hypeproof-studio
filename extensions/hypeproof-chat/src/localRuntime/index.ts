@@ -127,16 +127,17 @@ export function mergeBrowserTools(
 
 /**
  * The lesson as the dev local runtime puts it in the prompt. Mirrors the Service's `coachVisibleLesson` for the DEC-30
- * fields: `assistant.role`, `assistant.tone` and `starters` are removed, because the raw values are unclamped (a
- * `playful`/`formal` tone on a minor seat, a hostile role string) and starters are learner chips, not teaching data.
+ * fields: `assistant.role`, `assistant.tone`, `starters` and `skill_cards` are removed, because the raw values are
+ * unclamped (a `playful`/`formal` tone on a minor seat, a hostile role string) and starters and skill cards
+ * (CGP-AGENT-R-020) are learner-facing text, not teaching data.
  * When none of those keys is present the object is returned as is (same reference, same bytes).
  */
-export function devCoachVisibleLesson<T extends { assistant?: object; starters?: unknown }>(content: T): T {
+export function devCoachVisibleLesson<T extends { assistant?: object; starters?: unknown; skill_cards?: unknown }>(content: T): T {
   const a = content.assistant as Record<string, unknown> | undefined;
   const hasA = !!a && ("role" in a || "tone" in a);
-  const hasS = "starters" in content;
+  const hasS = "starters" in content || "skill_cards" in content;
   if (!hasA && !hasS) return content;
-  const { starters: _s, ...rest } = content;
+  const { starters: _s, skill_cards: _k, ...rest } = content;
   const base = (hasS ? rest : content) as T;
   if (!hasA) return base;
   const { role: _r, tone: _t, ...keep } = a!;

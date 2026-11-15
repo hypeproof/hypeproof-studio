@@ -198,18 +198,24 @@ t("Service refusals are calm: cap verbatim with no retry; unreadable gets the so
   const cap = "오늘 쓸 수 있는 음성 받아쓰기를 다 썼어요. 글로는 계속 이야기할 수 있어요.";
   await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "cap", message: cap, retry: false });
   ok(all((e) => e.textContent.includes(cap)).length > 0, "the cap line, verbatim");
-  ok(!byText("다시 시도"), "no retry button at a cap");
+  ok(!byText("다시 보내기"), "no retry button at a cap");
   await act(() => click(byText("닫기") as never));
   await press();
   id = posted("voiceTranscribe").at(-1)!.requestId;
   await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "unreadable", message: "소리가 잘 들리지 않았어요. 다시 말해 볼까요?", retry: true });
   ok(all((e) => e.textContent.includes("소리가 잘 들리지 않았어요. 다시 말해 볼까요?")).length > 0, "the softer line");
+  // An unreadable clip is never resent (the same silence, the same failure, paid again): it asks to speak again.
+  ok(!byText("다시 보내기") && byText("다시 말하기"), "unreadable: 다시 말하기, never 다시 보내기");
+  await act(() => click(byText("닫기") as never));
+  await press();
+  id = posted("voiceTranscribe").at(-1)!.requestId;
+  await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "network", message: "인터넷 연결을 확인해 주세요. 글로는 계속 이야기할 수 있어요.", retry: true });
   // retry sends the SAME clip from memory; the recovered text needs an explicit insert
-  await act(() => click(byText("다시 시도") as never));
+  await act(() => click(byText("다시 보내기") as never));
   const again = posted("voiceTranscribe");
-  eq(again.length, 3, "one more send");
-  eq(again[2].audio, again[1].audio, "the clip kept in memory is the one retried");
-  await hostSays({ type: "voiceTranscribeResult", requestId: again[2].requestId, ok: true, text: "다시 들은 문장" });
+  eq(again.length, 4, "one more send");
+  eq(again[3].audio, again[2].audio, "the clip kept in memory is the one retried");
+  await hostSays({ type: "voiceTranscribeResult", requestId: again[3].requestId, ok: true, text: "다시 들은 문장" });
   eq(rig.inserted, [], "recovered text is not inserted by itself");
   await act(() => click(byText("메시지에 넣기") as never));
   eq(rig.inserted, ["다시 들은 문장"], "inserted on the explicit press");
@@ -358,9 +364,9 @@ t("hiding the window drops a clip kept for retry; the pagehide event does the sa
   await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); await flush();
   const id = posted("voiceTranscribe")[0].requestId;
   await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "network", message: "연결", retry: true });
-  ok(byText("다시 시도"), "retry offered");
+  ok(byText("다시 보내기"), "retry offered");
   await hide("hidden"); await hide("visible");
-  ok(!byText("다시 시도"), "kept clip gone");
+  ok(!byText("다시 보내기"), "kept clip gone");
   await startRecording();
   await act(() => { g.window.dispatchEvent({ type: "pagehide", bubbles: false }); });
   eq(posted("voiceTranscribe").length, 1, "pagehide discards the recording too");
@@ -376,10 +382,10 @@ t("hiding the window while a clip is being transcribed drops that clip: a late f
     await startRecording();
     await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); await flush();
     const id = posted("voiceTranscribe")[0].requestId;
-    ok(all((e) => (e.getAttribute("class") ?? "").includes("hps-voice")).length > 0 && !byText("다시 시도"), "transcribing, nothing to retry yet");
+    ok(all((e) => (e.getAttribute("class") ?? "").includes("hps-voice")).length > 0 && !byText("다시 보내기"), "transcribing, nothing to retry yet");
     await hide("hidden"); await hide("visible");
     await hostSays({ type: "voiceTranscribeResult", requestId: id, ...late });
-    ok(!byText("다시 시도"), "no retry offered: the clip is not kept");
+    ok(!byText("다시 보내기"), "no retry offered: the clip is not kept");
     eq(rig.inserted, [], "nothing inserted from a clip the learner hid");
     ok(byLabel("받아쓰기"), "idle");
     eq(posted("voiceTranscribe").length, 1, "and nothing was re-sent");
@@ -456,7 +462,7 @@ t("a full record, transcribe, retry cycle persists no audio: no setState, storag
   const first = posted("voiceTranscribe")[0];
   eq(first.audio, b64, "the cycle really carried the audio");
   await hostSays({ type: "voiceTranscribeResult", requestId: first.requestId, ok: false, kind: "network", message: "연결", retry: true });
-  await act(() => click(byText("다시 시도") as never));
+  await act(() => click(byText("다시 보내기") as never));
   const second = posted("voiceTranscribe")[1];
   await hostSays({ type: "voiceTranscribeResult", requestId: second.requestId, ok: true, text: "받아쓴 문장" });
   const copyKeep = (navigator as unknown as { clipboard?: unknown }).clipboard;

@@ -43,7 +43,8 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     private var timeout: Task<Void, Never>?
     private var endpointTask: Task<Void, Never>?
     private var endpoint: VoiceEndpoint?
-    private var latestText = ""
+    private var emptyCaptureRetries = 0
+    private var automaticContinuation = false
     private var nextTurn: (() -> Void)?
 #if DEBUG
     private var fixtureSpeech: Task<Void, Never>?
@@ -73,7 +74,9 @@ private final class VoiceReviewCapture: @unchecked Sendable {
                nextTurn: (() -> Void)? = nil,
                transcript: @escaping (String) -> Void,
                final: @escaping (String, VoiceTurn.Mode) -> Bool) {
+        let retries = automaticContinuation ? emptyCaptureRetries : 0
         stop(reason: .restart); self.transcript = transcript; self.final = final; reviewEnabled = reviewRecording
+        emptyCaptureRetries = retries
         self.nextTurn = mode == .conversation ? nextTurn : nil
         let token = turn.start(projectID: projectID, mode: mode)
         record(.start)
@@ -149,11 +152,17 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         if NativeJourneyFixture.enabled {
             guard turn.advance(token, from: [.authorizing], to: .listening) else { return }
             record(.syntheticCaptureStarted)
-            endpoint = VoiceEndpoint(now: ProcessInfo.processInfo.systemUptime); latestText = ""
+            endpoint = VoiceEndpoint(now: ProcessInfo.processInfo.systemUptime)
             watchEndpoint(token)
-            fixtureSpeech = NativeJourneyFixture.speech { [weak self] text, isFinal in
+            fixtureSpeech = NativeJourneyFixture.speech(deliver: { [weak self] text, isFinal in
                 self?.receiveTranscript(text, isFinal: isFinal, token: token)
-            }
+            }, stopAfterEmpty: { [weak self] in
+                guard let self, self.turn.token == token else { return }
+                // Deterministic controller cancellation at the actual scheduled
+                // retry boundary; the separate UI Stop journey remains required.
+                NativeJourneyFixture.recordEmptyStopBoundary(active: self.isActive, phase: self.turn.phase.rawValue)
+                self.stop()
+            })
             return
         }
 #endif
@@ -177,7 +186,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             self.request = request
             let review = reviewEnabled ? VoiceReviewCapture(format: format) : nil
             reviewCapture = review
-            endpoint = VoiceEndpoint(now: ProcessInfo.processInfo.systemUptime); latestText = ""; captureObserved = false
+            endpoint = VoiceEndpoint(now: ProcessInfo.processInfo.systemUptime); captureObserved = false
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
                 request.append(buffer); review?.append(buffer)
                 guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
@@ -210,9 +219,15 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     }
     private func receiveTranscript(_ text: String, isFinal: Bool, token: UUID) {
         guard turn.token == token, [.listening, .finalizing].contains(turn.phase) else { return }
-        latestText = text; endpoint?.recognized(text, now: ProcessInfo.processInfo.systemUptime)
-        transcript(text)
-        if isFinal { finish(text, token: token) }
+        endpoint?.recognized(text, now: ProcessInfo.processInfo.systemUptime)
+        let words = endpoint?.transcript ?? ""
+        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            emptyCaptureRetries = 0
+            transcript(words)
+        } else {
+            record(words.isEmpty ? .emptyRecognition : .partialRetained)
+        }
+        if isFinal { finish(words, token: token) }
     }
     private func watchEndpoint(_ token: UUID) {
         status = turn.mode == .conversation ? "듣고 있어요. 말을 마치면 자동으로 보내요." : "듣고 있어요. 말을 마치면 입력창에 담아요."
@@ -222,7 +237,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
                     guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .listening else { return }
                     switch self.endpoint?.decision(now: ProcessInfo.processInfo.systemUptime) {
                     case .finish: self.endSpeech(); return
-                    case .noSpeech: self.fail("말소리가 들리지 않아 마이크를 껐어요. 준비되면 다시 켜 주세요."); return
+                    case .noSpeech: self.finish("", token: token); return
                     default: break
                     }
                 }
@@ -238,21 +253,57 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .finalizing else { return }
             // Some on-device recognizers never emit a final result after endAudio.
             // The stable partial is already visible; use it once after endpoint detection.
-            if !self.latestText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { self.finish(self.latestText, token: token) }
-            else { self.fail("음성 인식을 마치지 못했어요. 입력창의 글은 남겨 두었어요.") }
+            self.finish(self.endpoint?.transcript ?? "", token: token)
         }
     }
     private func finish(_ text: String, token: UUID) {
         let mode = turn.mode
+        guard turn.token == token, [.listening, .finalizing].contains(turn.phase) else { return }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            recoverEmptyCapture(token); return
+        }
         guard turn.advance(token, from: [.listening, .finalizing], to: mode == .conversation ? .waiting : .ready) else { return }
         timeout?.cancel(); endpointTask?.cancel(); stopInput(); request?.endAudio(); recognition?.cancel()
         recognition = nil; request = nil
         reviewData = reviewCapture?.finish(); canReplayOwnVoice = reviewData != nil
         deactivateAudio()
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { fail("인식된 말이 없어요. 다시 말하거나 글로 적어 주세요."); return }
         if mode == .dictation { status = "입력창에 담았어요. 확인하고 직접 기록하거나 보내 주세요." }
         else { status = "답변을 기다리고 있어요." }
         if !final(text, mode) { fail("인식한 글을 입력창에 남겼어요. 연결 상태를 확인하고 직접 보내 주세요.") }
+    }
+    private func recoverEmptyCapture(_ token: UUID) {
+        guard turn.token == token, [.listening, .finalizing].contains(turn.phase) else { return }
+        guard turn.mode == .conversation, nextTurn != nil, emptyCaptureRetries < 2 else {
+            stop(reason: .noSpeechPaused)
+            status = "말씀이 없어 잠시 쉬고 있어요. 준비되면 다시 말하거나 글로 이어가세요."
+            return
+        }
+        guard turn.advance(token, from: [.listening, .finalizing], to: .authorizing) else { return }
+        emptyCaptureRetries += 1
+        timeout?.cancel(); endpointTask?.cancel(); endpointTask = nil
+#if DEBUG
+        fixtureSpeech?.cancel(); fixtureSpeech = nil
+#endif
+        stopInput(); request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil
+        reviewCapture = nil; reviewData = nil; canReplayOwnVoice = false
+        endpoint = nil; authorizedToken = nil; deactivateAudio()
+        status = "말씀을 기다리고 있어요. 준비되면 편하게 말해 주세요."
+        record(.noSpeechRetryScheduled)
+        // Bound empty-result recovery and let the screen recheck its current
+        // account, foreground, request and draft before starting another capture.
+        // The authorizing phase keeps Stop reachable during this short backoff.
+        timeout = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .authorizing else { return }
+            guard UIApplication.shared.applicationState == .active else { self.stop(reason: .background); return }
+            self.record(.noSpeechRetry)
+            self.requestNextTurn()
+        }
+    }
+    private func requestNextTurn() {
+        automaticContinuation = true
+        defer { automaticContinuation = false }
+        nextTurn?()
     }
     func reply(_ text: String, projectID: String) {
         guard turn.projectID == projectID, turn.advance(turn.token, from: [.waiting], to: .speaking) else { return }
@@ -305,7 +356,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     func stop(reason: VoiceTimeline.Event = .stopped) {
         record(reason)
         turn.stop(); timeout?.cancel(); timeout = nil; endpointTask?.cancel(); endpointTask = nil
-        endpoint = nil; latestText = ""; nextTurn = nil; authorizedToken = nil
+        endpoint = nil; emptyCaptureRetries = 0; nextTurn = nil; authorizedToken = nil
 #if DEBUG
         fixtureSpeech?.cancel(); fixtureSpeech = nil
 #endif
@@ -348,13 +399,13 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         guard turn.advance(turn.token, from: [.waiting, .speaking], to: .ready) else { return }
         record(.ready)
         utteranceID = nil; deactivateAudio()
-        guard turn.mode == .conversation, UIApplication.shared.applicationState == .active, let nextTurn else {
+        guard turn.mode == .conversation, UIApplication.shared.applicationState == .active, nextTurn != nil else {
             status = "답변을 받았어요. 준비되면 다시 말해 주세요."; return
         }
         // The screen checks its current account, request and draft before opening
         // a new capture. Stop/navigation clears this callback and invalidates tokens.
         record(.continuationRequested)
-        nextTurn()
+        requestNextTurn()
     }
     private func stopInput() {
         engine.stop()

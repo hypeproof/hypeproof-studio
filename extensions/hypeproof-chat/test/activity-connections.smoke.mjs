@@ -22,6 +22,23 @@ const raw=context(),store=new ActivityConnections(raw,()=>origin,()=>root,async(
 try{
  await store.initialize();assert.equal(await store.token(),undefined,'legacy credential is never promoted to an unknown origin');
  await store.commit('synthetic-a',profile('a'),a);const first=store.current;
+ // "Start new" never lands on a folder that has a binding record, even when it is gone from disk.
+ {
+  const {nextFreeFolder}=await import('../src/publish/githubContinue.ts');
+  const base=path.join(tmp,'fresh'),n=(i)=>i===1?base:base+'-'+i;
+  const own=new Map(),c0=context(),iso={...c0,globalStorageUri:{fsPath:path.join(tmp,'storage-new-folder')},secrets:{...c0.secrets,keys:async()=>[...own.keys()],get:async k=>own.get(k),store:async(k,v)=>{own.set(k,v);},delete:async k=>own.delete(k)}};
+  const st=new ActivityConnections(iso,()=>origin,()=>base,async()=>profile('f'));
+  const pick=()=>nextFreeFolder(base,(p)=>fs.existsSync(p)||st.hasBinding(p));
+  assert.equal(store.hasBinding(a),true,'a bound folder is reported');assert.equal(st.hasBinding(base),false);
+  assert.equal(pick(),base,'(c) nothing bound: unchanged');
+  fs.mkdirSync(base);await st.commit('synthetic-fresh',profile('f'),base);fs.rmSync(base,{recursive:true,force:true});
+  assert.equal(fs.existsSync(base),false);assert.equal(st.hasBinding(base),true,'binding outlives the folder');
+  assert.equal(pick(),n(2),'(a) missing on disk but bound: skipped');
+  fs.mkdirSync(n(2));fs.mkdirSync(n(3));await st.commit('synthetic-fresh3',profile('e'),n(3));fs.rmSync(n(3),{recursive:true});
+  assert.equal(pick(),n(4),'(b) next name bound too: skipped');
+  fs.rmSync(n(2),{recursive:true});assert.equal(pick(),n(2),'free name still used');
+  fs.mkdirSync(base);assert.equal(pick(),n(2),'existing base skipped');fs.rmSync(base,{recursive:true});
+ }
  const other=new ActivityConnections(raw,()=>origin,()=>a,async()=>profile('a'));await other.initialize();
  const undo=await store.commit('synthetic-b',profile('b'),b);
  assert.equal(await other.token(),'synthetic-a','another window keeps its credential');

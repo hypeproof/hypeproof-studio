@@ -19,6 +19,10 @@ on:
         description: 'Harness SHA-256 request digest'
         required: false
         type: string
+      distribution_audience:
+        description: 'internal (default) or external; external is refused unless the signed-in journey for this exact source is PASS'
+        required: false
+        type: string
   push:
     branches: ['release/studio-unified-preview']
     paths: ['apps/studio-native/**', '.github/workflows/studio-apple-testflight.yml', '.github/workflows/studio-native-mobile.yml']
@@ -29,6 +33,7 @@ env:
   NATIVE_EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
   NATIVE_OPERATION_ID: ${{ inputs.operation_id }}
   NATIVE_REQUEST_DIGEST: ${{ inputs.request_digest }}
+  NATIVE_DISTRIBUTION_AUDIENCE: ${{ inputs.distribution_audience }}
 concurrency:
   group: studio-apple-testflight
   cancel-in-progress: false

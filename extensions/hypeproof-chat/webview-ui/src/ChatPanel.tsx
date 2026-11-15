@@ -44,11 +44,14 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { LowDiskBar } from './LowDiskBar';
+import { BusyBanner, busyBannerShown } from './BusyBanner';
+import { SERVICE_STATUS_POLL_MS } from '../../src/serviceStatus';
 import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { insertAtCaret, PassThrough } from './composerAddon';
+import { CONVERSATION_BLOCKED_BY_DICTATION, DICTATE_BLOCKED_BY_CONVERSATION } from "../../src/voiceCopy";
 import { VoiceConversationControl } from './VoiceConversationControl';
 import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
@@ -78,6 +81,7 @@ import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
 import { MemorySettingsList } from './MemorySettingsList';
 import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
+import { useChatKeys } from './chatKeys';
 import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
@@ -98,10 +102,11 @@ import type { StepWork } from '../../src/lessonFocus';
 import { collapseSeat } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
-import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
+import { MaterialsChips, MaterialsPanel, MaterialsScope, MaterialsTags } from './MaterialsPanel';
+import { NextStepChips } from './NextStepChips';
+import { nextSteps, nextStepsBody } from './nextStepsParser';
 import { ActivityHomeContext } from './activityHome';
 import { HelpRequest } from './HelpRequest';
-import { ExternalLinkBlocked, blockedLinkHelpText } from './ExternalLinkBlocked';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
@@ -127,7 +132,8 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
 import { DataDeletionRequest } from "./DataDeletionRequest";
-import { LessonTip } from "./LessonTip";
+import { TaskMemorySwitches } from "./TaskMemorySwitches";
+import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
@@ -147,6 +153,8 @@ import { servedApprovalPreset } from "../../src/approvalPreset";
 import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
 import { learnerHasSent, servedLessonStarters } from "../../src/lessonStarters";
 import { LessonStarters } from "./LessonStarters";
+import { servedSkillCards } from "../../src/lessonSkillCards";
+import { SkillShelf } from "./SkillShelf";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
@@ -331,12 +339,12 @@ function ConversationSupport({ compact, children }: { compact: boolean; children
   return compact ? <details className="hps-conversation-support"><summary>수업 안내 · 도움</summary>{children}</details> : <>{children}</>;
 }
 
-function ConversationSettings({ compact, required, questionId, children }: { compact: boolean; required: boolean; questionId?: string; children: ReactNode }) {
+function ConversationSettings({ compact, required, questionId, usage = true, children }: { compact: boolean; required: boolean; questionId?: string; /** False when the usage panel is not inside (compact layout): the summary must not promise it. */ usage?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(required);
   useEffect(() => { setOpen(required); }, [required]);
   useEffect(() => { if (questionId && !required) setOpen(false); }, [questionId, required]);
   return compact ? <details className="hps-conversation-settings" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{required ? "이용권을 선택해 주세요" : "대화 설정 · 이용권"}</summary>{children}
+    <summary>{required ? "이용권을 선택해 주세요" : usage ? "대화 설정 · 이용권" : "대화 설정"}</summary>{children}
   </details> : <>{children}</>;
 }
 /** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
@@ -572,6 +580,9 @@ export function ChatPanel(props: Props) {
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
   const [dismissedTips, setDismissedTips] = useState<string[]>(() => readDismissed(readWebviewState<Record<string, unknown>>()));
+  // CGP-SHELL-R-019 — the note that says tips are off and how to get them back, shown once after 팁 그만 보기.
+  const [tipsOffNote, setTipsOffNote] = useState(false);
+  const tipsResumeRef = useRef<HTMLDivElement | null>(null);
   // CGP-SHELL-R-020 — idea lists the learner closed with "내가 정할래요", per task and answer.
   const [dismissedIdeas, setDismissedIdeas] = useState<string[]>(() => readIdeaDismissals(readWebviewState<Record<string, unknown>>()));
   // #751 F4 — local display state for the learner's step self-report; it is separate from task completion.
@@ -841,6 +852,21 @@ export function ChatPanel(props: Props) {
     const stop = () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
     return stop;
   }, []);
+  // CGP-AGENT-R-031 — the Service's busy signal. The panel asks on mount, when it comes back into view, on focus and
+  // once a minute while visible and focused; only the host's confirmed `true` shows the banner. Closing it is kept by the
+  // host for this busy episode, so a remount (task switch) re-posts it closed; the next busy episode shows it again.
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [busyDismissed, setBusyDismissed] = useState(false);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "serviceStatus") { setServiceBusy(msg.busy === true); setBusyDismissed(msg.dismissed === true); } });
+    // Only while the view is visible and the window is focused; the host adds backoff and stops for a seat it is not served to.
+    const ask = () => { if (document.visibilityState !== "hidden" && document.hasFocus()) postToHost({ type: "serviceStatusRequest" }); };
+    postToHost({ type: "serviceStatusRequest", mount: true });
+    document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
+    const timer = setInterval(ask, SERVICE_STATUS_POLL_MS);
+    (timer as unknown as { unref?: () => void }).unref?.();
+    return () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
+  }, []);
   // REQ-STUDIO-PREVIEW-RECOVERY — the host measures the learner's preview tab (server state, HTTP status) and pushes it when a
   // browser tab changes; the panel asks again on mount, when it comes back into view and when the window regains focus.
   const [previewSignals, setPreviewSignals] = useState<PreviewSignals | null>(null);
@@ -862,10 +888,9 @@ export function ChatPanel(props: Props) {
   }, []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
-  // CGP-ART-D-008 — the last safe-session link that did not open, and the host line "선생님께 알리기" puts in the help draft.
-  const [linkBlocked, setLinkBlocked] = useState<{ host: string; at: number } | null>(null);
+  // A text the help panel puts in the learner's draft once (CGP-ART-D-008 used it for blocked links; CGP-SHELL-R-026 replaced
+  // the block with a confirm dialog, so nothing sets it today).
   const [helpPrefill, setHelpPrefill] = useState<{ text: string; nonce: number } | null>(null);
-  useEffect(() => onHostMessage((msg) => { if (msg.type === "externalLinkBlocked" && typeof msg.host === "string") setLinkBlocked({ host: msg.host, at: msg.at }); }), []);
   useEffect(() => {
     // The host numbers its draws; one that arrives after a newer draw (an older learner's, or an older read) is not shown.
     const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => guardHostPayload("help", () => acceptHelp(prev, msg.help), null)); });
@@ -944,6 +969,9 @@ export function ChatPanel(props: Props) {
   const dismissQuote = () => { dropAnswerQuote(); document.getSelection?.()?.removeAllRanges?.(); recoverToComposer(undefined); };
 
   const ux: UxConfig = config?.profile?.ux ?? DEFAULT_UX;
+  // `ux.coach_layout: 'compact'` is a per-cohort opt-in. Everything it changes is gated on this one flag, so
+  // any other value (or none) draws exactly the standard layout. Never on for the instructor console.
+  const compactLayout = ux.coach_layout === 'compact' && !props.instructor;
   // Image paste is a per-profile opt-in (website-copyclone). Default-off so
   // minor cohorts never expose the image flow — the worker enforces the same
   // gate server-side, this just keeps the UI honest (no thumbnail, plain text
@@ -989,6 +1017,11 @@ export function ChatPanel(props: Props) {
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
   // CGP-CHAT-R-021 — the step the rail shows (the first before any is picked); no tip for the instructor console.
   const lessonTip = props.instructor ? null : lessonTipFor(config?.profile?.lesson, currentStepId);
+  // CGP-SHELL-R-019 — the "tips are off" note is said once: the next send (or turning tips back on) ends it.
+  useEffect(() => { if (streaming || props.sendPending) setTipsOffNote(false); }, [streaming, props.sendPending]);
+  // A different learner on this window (shared classroom PCs) never sees the previous learner's note.
+  const tipsSeat = collapseSeat({ activityId: config?.profile?.activity_id, entryId: config?.lessonCapabilityEntry?.id, localActivityId: config?.activity?.id });
+  useEffect(() => { setTipsOffNote(false); }, [tipsSeat]);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
@@ -1085,7 +1118,11 @@ export function ChatPanel(props: Props) {
   const [dictationBusy, setDictationBusy] = useState(false);
   const dictationBusyRef = useRef(false);
   const reportDictationBusy = useCallback((busy: boolean) => { dictationBusyRef.current = busy; setDictationBusy(busy); }, []);
-  const addonApi = { insert: insertFromAddon, get disabled() { return unavailable || folderMissing || !!props.questionPanel || voiceActive || voiceActiveRef.current; }, onDictationBusy: reportDictationBusy };
+  const addonApi = { insert: insertFromAddon, get disabled() { return unavailable || folderMissing || !!props.questionPanel || voiceActive || voiceActiveRef.current; }, onDictationBusy: reportDictationBusy,
+    // CGP-VOICE-R-014: a dictation press during a voice conversation is refused with this line, not silently.
+    get disabledReason() { return voiceActive || voiceActiveRef.current ? DICTATE_BLOCKED_BY_CONVERSATION : null; },
+    // CGP-VOICE-R-015: 글로 쓰기 puts the caret back in the composer.
+    focusComposer: () => { requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true })); } };
   // Unrelated work belongs to the person. Automatic speech never sends their text/attachments.
   const voiceInterrupted = unavailable || folderMissing || !!props.questionPanel || !!props.sendLocked ||
     !!draft || pendingImages.length > 0 || stagedPhotos.length > 0 || imports.length > 0 || queued !== null ||
@@ -1098,11 +1135,6 @@ export function ChatPanel(props: Props) {
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
   const approvalPreset = useTurnBoundaryPreset(servedApprovalPreset(config?.profile), streaming);
-  // CGP-ART-D-008 — "선생님께 알리기" only while this learner's class help channel can take a new request.
-  const canAskTeacher = !props.instructor && classroomPanels.help && help?.availability.state === "ready" && !!help.draft_key && !help.envelope;
-  const linkBlockedBanner = linkBlocked && <ExternalLinkBlocked key={linkBlocked.at} host={linkBlocked.host} canAskTeacher={canAskTeacher}
-    onAskTeacher={() => { setHelpPrefill({ text: blockedLinkHelpText(linkBlocked.host), nonce: linkBlocked.at }); setLinkBlocked(null); }}
-    onDismiss={() => setLinkBlocked(null)} />;
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
   const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial, Date.now(), !!config.activity.free) : null;
@@ -1369,6 +1401,13 @@ export function ChatPanel(props: Props) {
     setToolMode(queuedToolMode);
     setQueued(null); setQueuedPaused(false);
   };
+  // CGP-CHAT-R-030 — Esc stops the answer (only while one streams, only an Escape nobody else handled) and Alt+Shift+K
+  // puts the cursor in the message box. Same stop as the stop button: a parked message goes back to the draft.
+  useChatKeys({
+    streaming,
+    stop: () => { restoreQueuedToDraft(); props.onCancel(); },
+    focusComposer: () => { const box = textareaRef.current; if (!box || box.disabled) return false; box.focus({ preventScroll: false }); return true; },
+  });
 
   // Shared attach path for both clipboard paste (⌘V) and drag-and-drop.
   // Downscales oversized screenshots instead of rejecting them (#384), bounds
@@ -1502,7 +1541,6 @@ export function ChatPanel(props: Props) {
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
-      {linkBlockedBanner}
       {updateBanner}
       <NamingCard
         namingPromptMd={config.profile.ux.coach.naming_prompt_md}
@@ -1702,6 +1740,8 @@ export function ChatPanel(props: Props) {
       : ux.suggestions.initial;
   // DEC-30 step 3 (CGP-KNOW-R-037): the lesson's starters, learner seats only, until the learner has sent a message in this task.
   const lessonStarters = props.instructor || learnerHasSent(messages) ? [] : servedLessonStarters(config?.profile);
+  // CGP-AGENT-R-020 — the lesson's learner skill cards; unlike starters they stay after the first message.
+  const skillCards = props.instructor ? [] : servedSkillCards(config?.profile);
   const showInitialChips =
     messages.length === 0 &&
     !streaming &&
@@ -1711,11 +1751,6 @@ export function ChatPanel(props: Props) {
   // assistant" is judged by the last **bubble**. Otherwise the follow-up chips vanish
   // on a turn that ended with a tool.
   const lastSpoken = [...messages].reverse().find((m) => m.role !== "tool");
-  const showFollowUpChips =
-    !streaming &&
-    messages.length > 0 &&
-    lastSpoken?.role === "assistant" &&
-    ux.suggestions.follow_up.length > 0;
   // #414 — if a real activity log showed up this turn, the spinner does not invent fake stages.
   const turnHasActivity = hasActivityThisTurn(messages);
   const longStep = streaming ? runningProgressStep(messages) : null;
@@ -1734,6 +1769,24 @@ export function ChatPanel(props: Props) {
       !!config?.taskWorkspace?.sourceSelection || props.openWorldId !== null || props.publish !== null) : null;
   const ideaKey = ideaOffer ? ideaOfferKey(activityId, taskId, ideaOffer.messageId) : null;
   const showIdeas = !!ideaKey && !dismissedIdeas.includes(ideaKey);
+  // Compact layout: the coach's own next steps (a trailing 다음에 해볼 만한 것 block) replace the static follow-ups. They
+  // come only from a reply that ended cleanly: not while streaming, not after an error, not after a stopped turn (its
+  // last line may be cut off), and not while the project-ideas offer takes this slot. The same message, and only that
+  // one, loses the block from its bubble (`nextStepsMode` below): coach text never disappears without a chip for it.
+  const lastSpokenAt = lastSpoken ? messages.lastIndexOf(lastSpoken) : -1;
+  const turnStopped = lastSpokenAt >= 0 && messages.slice(lastSpokenAt).some((m) => m.elapsedTurn?.outcome === "stopped");
+  const nextStepChips = compactLayout && !streaming && !error && !turnStopped && !showIdeas && lastSpoken?.role === "assistant" && lastSpoken.id === latestAssistantId
+    ? nextSteps(lastSpoken.content) : null;
+  // Compact layout: the "이용권 · 사용량" panel is not drawn in the footer on any activity (the settings dialog still
+  // has it). The one exception is a funding choice the learner must make before sending: that is a blocking action,
+  // not routine usage. Limit errors and notices are separate messages and are untouched.
+  const footerUsagePanel = !compactLayout || requiresFundingSelection(config);
+  const showFollowUpChips =
+    !streaming &&
+    messages.length > 0 &&
+    lastSpoken?.role === "assistant" &&
+    ux.suggestions.follow_up.length > 0 &&
+    !nextStepChips;
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   // CGP-CHAT-R-023 — read-only step dividers where the served step changes, and the "지금 단계로" target: the
@@ -1804,6 +1857,7 @@ export function ChatPanel(props: Props) {
     <CopyFeedbackRegion><div
       className={`hps-shell${automationCompact ? " hps-shell-automation" : ""}${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
+      data-coach-layout={compactLayout ? 'compact' : undefined}
       data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -1907,7 +1961,7 @@ export function ChatPanel(props: Props) {
           {/* REQ-STUDIO-FEEDBACK-ENTRY (#3413) — a visible way to send a complaint or a problem: the same in-panel form
               (and the same automatic attachments) as the error card's 문제 보내기, opened as a learner's own report. */}
           {personalWorkspace && <button type="button" className="tw-feedback-open" onClick={() => props.onReportProblem()} data-hp-tooltip="불편한 점이나 안 되는 것을 운영팀에 알려요">{FEEDBACK_ENTRY_LABEL}</button>}
-          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
+          <button onClick={personalWorkspace || compactLayout ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
@@ -1963,7 +2017,6 @@ export function ChatPanel(props: Props) {
         } : null}
       />}</PanelBoundary>}
       {draftError && <p role="alert">{draftError}</p>}
-      {linkBlockedBanner}
       {updateBanner}
 
       <ConversationSupport compact={automationCompact}>
@@ -2001,7 +2054,8 @@ export function ChatPanel(props: Props) {
             </details>
             <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile!.rehearsal} busy={streaming} post={postToHost}
               seat={collapseSeat({ activityId: config.profile?.activity_id, entryId: config.lessonCapabilityEntry?.id, localActivityId: config.activity?.id })}
-              work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult} />
+              work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult}
+              canReport={!props.instructor && !config.profile?.rehearsal && !!inbox?.run && !inbox.offline && !inbox.ended && inbox.reports === true} />
             {/* #751 F4 — a learner self-report for the current step, separate from region D's task completion gate. */}
             <p className="hp-rail-step-report">
               <button type="button" className="hp-cta-quiet hps-lesson-done" aria-pressed={lessonSteps[step.id] === 'submitted'} disabled={lessonSteps[step.id] === 'submitted'} onClick={() => { postToHost({ type: 'lessonStep', stepId: step.id, status: 'submitted' }); setLessonSteps(prev => ({ ...prev, [step.id]: 'submitted' })); }}>{lessonSteps[step.id] === 'submitted' ? '마쳤다고 표시함 · 강사 확인 전' : '이 단계를 마쳤어요'}</button>
@@ -2013,11 +2067,11 @@ export function ChatPanel(props: Props) {
       {/* #751 U2 — instructor notices/materials: the coach rail's "강사 메시지" kind (SX-06), outside the message stream
           (SX-05), closed by default, no Primary (SX-04). Drawn with or without a lesson. */}
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
-      {!props.instructor && !entryOpen && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
+      {!props.instructor && !entryOpen && !compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
       <PanelBoundary panel="instructor-inbox"><InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} /></PanelBoundary>
       {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate.
           CGP-KNOW-R-002: a task workspace draws it as the activity home's 자료 view instead (classroom seats keep it here). */}
-      {!props.instructor && config?.materials && !materialsHome && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
+      {!props.instructor && config?.materials && !materialsHome && !compactLayout && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
       {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} prefill={helpPrefill} onPrefillUsed={() => setHelpPrefill(null)} /></PanelBoundary>}
@@ -2139,6 +2193,7 @@ export function ChatPanel(props: Props) {
               onRunCode={props.onRunCode}
               onRetry={(prompt, source) => { sendWhenOnline(() => props.onRetry(prompt, source), 'press'); }}
               personal={personalWorkspace}
+              nextStepsMode={compactLayout && m.role === "assistant" ? (streaming && m.id === streamingId ? "streaming" : nextStepChips && m.id === lastSpoken?.id ? "strip" : undefined) : undefined}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
               onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
@@ -2174,7 +2229,8 @@ export function ChatPanel(props: Props) {
           {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
             onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}
-          {!props.instructor && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
+          {/* Compact classroom layout: the changed-page card is not drawn at all. */}
+          {!props.instructor && !compactLayout && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
             const card = pageCards.get(m.id)!;
             return <PageCard view={card} onOpen={(path) => postToHost({ type: "pageCardOpen", turnId: card.turnId, path })} onReveal={(path) => postToHost({ type: "pageCardReveal", turnId: card.turnId, path })} />;
           }}</PanelBoundary>}
@@ -2224,7 +2280,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
-        {!props.instructor && config?.materials && <MaterialsChips />}
+        {!props.instructor && config?.materials && !compactLayout && <MaterialsChips />}
 
         {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray key={`${config?.activity?.id ?? ""}/${config?.taskWorkspace?.activeTaskId ?? ""}`} annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
@@ -2283,12 +2339,13 @@ export function ChatPanel(props: Props) {
         )}
 
         {/* CGP-ART-R-020 — what the AI did in this task, from its tool events only. */}
-        <PanelBoundary panel="task-activity"><TaskActivity
+        {/* Compact classroom layout: the "AI가 한 일" panel is not drawn at all. */}
+        {!compactLayout && <PanelBoundary panel="task-activity"><TaskActivity
           summary={taskActivity}
           reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
           onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
           onSavePdf={(path) => postToHost({ type: "savePagePdf", path })}
-        /></PanelBoundary>
+        /></PanelBoundary>}
 
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
@@ -2328,6 +2385,7 @@ export function ChatPanel(props: Props) {
             label="이어서 이런 것도 해볼래요?"
           />
         )}
+        {nextStepChips && <NextStepChips steps={nextStepChips.steps} onPick={text => handleChip({ style: "good", text })} />}
 
         {error && props.safetyNotice ? (
           <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
@@ -2359,8 +2417,9 @@ export function ChatPanel(props: Props) {
       )}
 
       <AddonScope api={addonApi}>
+      <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
-      {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice }} onActive={reportVoiceActive} />}
+      {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice, get blockedReason() { return dictationBusy || dictationBusyRef.current ? CONVERSATION_BLOCKED_BY_DICTATION : null; } }} onActive={reportVoiceActive} />}
 
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -2373,6 +2432,8 @@ export function ChatPanel(props: Props) {
         {/* CGP-AGENT-D-026: the 느려요 기록 pill; renders nothing unless the host says a recording runs. */}
         <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
+        {/* CGP-AGENT-R-031: renders nothing unless the Service reads busy; never holds a send. */}
+        {busyBannerShown(serviceBusy, busyDismissed) && <BusyBanner onDismiss={() => { setBusyDismissed(true); postToHost({ type: "serviceStatusDismiss" }); textareaRef.current?.focus({ preventScroll: true }); }} />}
         {/* CGP-KNOW-R-031: the one-time memory notice; renders nothing unless the host says it is due here. */}
         {!props.instructor && <MemoryNotice scopeKey={JSON.stringify([activityId, taskId])} streaming={streaming} onDone={() => textareaRef.current?.focus({ preventScroll: true })} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
@@ -2382,6 +2443,7 @@ export function ChatPanel(props: Props) {
         {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
         {/* DEC-30 step 3: starters insert into the draft (a manual draft is kept) and never send. */}
         {lessonStarters.length > 0 && <LessonStarters starters={lessonStarters} onPick={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
+        {skillCards.length > 0 && <SkillShelf cards={skillCards} onTry={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -2391,10 +2453,11 @@ export function ChatPanel(props: Props) {
         <AttachmentFailures items={attachmentFailures.items} retry={attachmentFailures.retry} remove={attachmentFailures.remove} />
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
-        {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId}>
-          <ModelControl config={config} streaming={streaming} />
+        {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId} usage={footerUsagePanel}>
+          {/* Compact classroom layout: the model control (select and its note) is not drawn at all. */}
+          {!compactLayout && <ModelControl config={config} streaming={streaming} />}
           <EffortControl config={config} post={postToHost} />
-          <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} /></ConversationSettings>}
+          {footerUsagePanel && <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} />}</ConversationSettings>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
@@ -2479,13 +2542,25 @@ export function ChatPanel(props: Props) {
           requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
         }} />}
         {/* CGP-CHAT-R-021 — at most one tip, from the served step's Chalk-authored hint only. Hidden while a turn runs. */}
-        {lessonTip && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
+        {/* CGP-SHELL-R-019 — 팁 그만 보기 hides only this row (never the lesson's steps, instructions or mission header). */}
+        {(tipsOffNote || (lessonTip && config?.lessonTips === false && !dismissedTips.includes(lessonTip.key))) && !streaming && !props.sendPending && <div ref={tipsResumeRef}><LessonTipsOffNote announce={tipsOffNote} onResume={() => {
+          setTipsOffNote(false);
+          postToHost({ type: "setLessonTips", on: true });
+          requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+        }} /></div>}
+        {lessonTip && config?.lessonTips !== false && !tipsOffNote && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
           tip={lessonTip}
           disabled={frozen || unavailable || !!props.sendLocked || folderMissing}
           onUse={() => {
             if (streaming || frozen || unavailable || props.sendLocked || props.sendPending || folderMissing) return;
             setDraft(current => prefillWithTip(current, lessonTip.text));
             requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+          }}
+          onStopTips={() => {
+            setTipsOffNote(true);
+            postToHost({ type: "setLessonTips", on: false });
+            // Focus moves to the note's 다시 켜기, so the way back is one key press away.
+            requestAnimationFrame(() => tipsResumeRef.current?.querySelector("button")?.focus({ preventScroll: true }));
           }}
           onDismiss={() => {
             const next = withDismissed(dismissedTips, lessonTip.key);
@@ -2560,6 +2635,7 @@ export function ChatPanel(props: Props) {
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         {addon && <addon.Notice />}
+        {compactLayout && config?.materials && <MaterialsTags />}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2579,9 +2655,9 @@ export function ChatPanel(props: Props) {
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} materials={compactLayout && !!config?.materials} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
-          {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
+          {!personalWorkspace && (fileAttachShown || sketchAllowed || (compactLayout && !!config?.materials)) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} materials={compactLayout && !!config?.materials} />}
           {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
           {fileMentions.view}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
@@ -2722,14 +2798,18 @@ export function ChatPanel(props: Props) {
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
         <CopyFeedbackOutlet />
       </footer>
+      </MaterialsScope>
       </AddonScope>
       {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
         if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
         imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
       }} />}
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
-      {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
+      {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={compactLayout && !preferencesUsage ? undefined : ".hps-access > summary"} opener={() => preferencesOpener.current}>
+        {compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-019 — the lasting way back after 팁 그만 보기: only where a lesson can show tips, never the instructor console. */}
+        {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -2738,6 +2818,8 @@ export function ChatPanel(props: Props) {
         {config.dataDeletion && preferencesOpen && <DataDeletionRequest />}
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
+        {/* Compact layout: the header gear opens this dialog, so the app's own settings editor is one press away here. */}
+        {compactLayout && <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); props.onSettings(); }}>앱 설정 열기</button>}
       </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
@@ -2760,7 +2842,10 @@ export function ChatPanel(props: Props) {
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
             Mounted while the dialog is open, so each opening reads the store fresh; nothing on a seat without the store. */}
         {preferencesOpen && <MemorySettingsList onOpenTask={taskId => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'taskSelect', id: taskId }); }} />}
+        {/* CGP-KNOW-R-028 — the open task's two memory switches (host-computed; absent without the store or in a temporary task). */}
+        {config.taskMemory && <TaskMemorySwitches view={config.taskMemory} post={postToHost} />}
         {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
+        {compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -3315,6 +3400,7 @@ function MessageItem({
   onRunCode,
   onRetry,
   personal = false,
+  nextStepsMode,
   isLatest = false,
   freeSeat = false,
   onPickReply,
@@ -3355,6 +3441,8 @@ function MessageItem({
   onRunCode: (html: string) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   personal?: boolean;
+  /** Compact layout: "strip" cuts the trailing 다음에 해볼 만한 것 block from this answer (its steps are drawn as chips); "streaming" hides a block that is still arriving. */
+  nextStepsMode?: "strip" | "streaming";
   /** Personal chat: retry is offered on the latest coach answer only (the ChatGPT/Claude pattern). */
   isLatest?: boolean;
   /**
@@ -3455,6 +3543,7 @@ function MessageItem({
             hasActivity={hasActivity}
             personal={personal}
             messageId={message.id}
+            nextStepsMode={nextStepsMode}
           />
         ) : (
           <>
@@ -3577,6 +3666,7 @@ function AssistantContent({
   hasActivity = false,
   personal = false,
   messageId,
+  nextStepsMode,
 }: {
   content: string;
   streaming: boolean;
@@ -3587,8 +3677,17 @@ function AssistantContent({
   personal?: boolean;
   /** CGP-CHAT-R-008: scopes this answer's code-block wrap choices. */
   messageId?: string;
+  /** Compact layout: cut a trailing next-steps block out of what is drawn ("strip": finished, drawn as chips; "streaming": still arriving). */
+  nextStepsMode?: "strip" | "streaming";
 }) {
-  const segments = useMemo(() => splitFences(content), [content]);
+  const shown = useMemo(() => {
+    if (!nextStepsMode) return content;
+    if (nextStepsMode === "streaming") return nextStepsBody(content, true);
+    // A reply that is nothing but the block keeps it: an empty bubble would hide what the coach said.
+    const block = nextSteps(content);
+    return block && block.body.trim() ? block.body : content;
+  }, [content, nextStepsMode]);
+  const segments = useMemo(() => splitFences(shown), [shown]);
   const hasOpenFence = segments.some((s) => s.type === "code-open");
 
   if (content.length === 0) {

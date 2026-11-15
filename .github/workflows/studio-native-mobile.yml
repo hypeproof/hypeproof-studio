@@ -36,13 +36,24 @@ jobs:
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    timeout-minutes: 40 # allow the combined UI suite, result finalization, cleanup and evidence upload
+    timeout-minutes: 45 # 31 UI cases plus result finalization, cleanup and evidence upload
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Build device binary and test native simulator
+        env:
+          NATIVE_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash apps/studio-native/scripts/ios-verify.sh
+      # Per-hop signed-in journey record for this exact run attempt. The TestFlight gate reads it;
+      # a missing record means NOT_RUN, never PASS.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-native-signin-journey-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native/evidence/signin-journey.json
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:

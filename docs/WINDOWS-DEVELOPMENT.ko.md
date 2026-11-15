@@ -97,3 +97,10 @@ WSL kernel 문자열도 확인하므로 일반 Linux 실행을 WSL 검증으로 
 
 WSL CI 설치 도구는 [setup-wsl v7.2.0](https://github.com/Vampire/setup-wsl/tree/4c48163d9f981914dd8caa0fc335fe19cca5bff4)를
 고정 commit으로 사용하며, 변경은 임시 hosted runner 안에서만 이루어진다.
+이 action 앞에서 `prepare-wsl.ps1`이 공식 `--web-download` 경로로 WSL을
+갱신하고 Ubuntu-24.04를 `--no-launch`로 설치한다. Store 경로의 403을
+반복하거나 무시하지 않는다. 각 명령의 종료 코드와 시간 제한, 정확한 배포판의
+`true` 실행을 확인한 뒤에만 기존 action의 패키지·wrapper 설정과 실제 WSL2
+테스트로 진행한다. 대화형 초기 설정이 필요하면 실패로 남기며 기본 사용자 설정을
+자동으로 우회하지 않는다. 제어된 PowerShell 테스트는 명령 순서·실패·시간 제한만
+검증한다. 실제 Windows 설치와 WSL2 테스트 통과는 해당 소스의 hosted CI로 별도 확인한다.

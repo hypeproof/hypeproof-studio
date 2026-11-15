@@ -62,6 +62,11 @@ export const MIC_DENIED_BODY = "이 컴퓨터에서 마이크 사용이 허용�
 export const MIC_SETTINGS_BUTTON = "마이크 설정 열기";
 export const MIC_SETTINGS_FAILED = "설정을 열지 못했어요. 시스템 설정에서 마이크 권한을 확인해 주세요.";
 export const MIC_DENIED_DISMISS = "글로 계속하기";
+// ---- Microphone explainer before the OS prompt (CGP-SHELL-R-010 / DES-SHELL-09) ----
+export const MIC_EXPLAIN_TITLE = "목소리로 말하려면 마이크가 필요해요";
+export const MIC_EXPLAIN_BODY = "허용하기를 누르면 이 컴퓨터가 마이크를 써도 되는지 물어요. 허용하지 않아도 글로는 계속 이야기할 수 있어요.";
+export const MIC_EXPLAIN_ALLOW = "허용하기";
+export const MIC_EXPLAIN_LATER = "나중에";
 
 // ---- A failed clip kept in memory for one retry (R-016, REQ-CGPV-19) ----
 export const RETRY = "다시 시도";
@@ -101,3 +106,14 @@ export const AGENT_TOOL_DONE = "끝났어요";
 export const AGENT_STATUS_LABEL = "AI가 하는 일";
 /** Reading a status aloud failed: said apart from any tool failure (VO-20). */
 export const AGENT_STATUS_SPEECH_FAILED = "작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.";
+
+// ---- Dictation states and recovery (CGP-VOICE-R-014 / R-015 / D-010 / D-012). Agent-written, decisions.md. ----
+/** D-010: the start before the microphone is open (the OS prompt may be up). Static text, no spinner. */
+export const DICTATE_STARTING = "마이크를 켜는 중이에요";
+/** R-015: the one recovery action of a failure line. */
+export const RECOVER_SPEAK_AGAIN = "다시 말하기";
+export const RECOVER_RESEND = "다시 보내기";
+export const RECOVER_TYPE = "글로 쓰기";
+/** R-014: why a control is off while the other one holds the microphone. */
+export const DICTATE_BLOCKED_BY_CONVERSATION = "음성 대화 중에는 받아쓰기를 쓸 수 없어요";
+export const CONVERSATION_BLOCKED_BY_DICTATION = "받아쓰기가 끝나면 쓸 수 있어요";

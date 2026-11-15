@@ -1,6 +1,7 @@
 import { dragRectangle, intersects, marker, markerComment, isAnnotationOverlayNode, type MarkerOptions } from "./annotationCapture";
 import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
+import { openStudioTab } from "./studioTabs";
 import { denialCopy, denialToolText, lessonFeatureOff } from "./denialSource.ts";
 import { CdpSession } from "./cdpSession";
 import { safeNavigateUrl, quadCenter, buildAxSnapshot } from "./browserControlHelpers";
@@ -438,7 +439,7 @@ export class BrowserControl {
     if (!tab) {
       // No tab yet — open one (this is the only tool that may create a tab).
       // 열자마자 고정한다: 그래야 다음 호출부터 포커스와 무관하게 이 탭을 운전한다.
-      const opened = await vscode.window.openBrowserTab(url, {
+      const opened = await openStudioTab(url, {
         viewColumn: vscode.ViewColumn.Beside,
       });
       this.setTargetTab(opened);

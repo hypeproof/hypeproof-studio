@@ -39,7 +39,10 @@ Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{speak:u
 // The VS Code webview is a secure context and has mediaDevices; a page loaded into about:blank may not.
 if(!navigator.mediaDevices)Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{}});
 navigator.mediaDevices.getUserMedia=async()=>{window.__media++;if(window.__mic==='denied'){const e=new Error('denied');e.name='NotAllowedError';throw e;}
- const ctx=new AudioContext();const osc=ctx.createOscillator();const dest=ctx.createMediaStreamDestination();osc.connect(dest);osc.start();return dest.stream;};`;
+ const ctx=new AudioContext();const osc=ctx.createOscillator();const dest=ctx.createMediaStreamDestination();osc.connect(dest);osc.start();return dest.stream;};
+// CGP-SHELL-R-010: the permission state the explainer reads. 'ok' is an already granted microphone, so the
+// existing flows run unchanged; 'prompt' is a first use, where Studio's card comes before the OS prompt.
+Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:window.__mic==='denied'?'denied':window.__mic==='prompt'?'prompt':'granted'})}});`;
 const page = (vars, dark, mic) => `<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>${host(mic)}</script><script>${script}</script></body></html>`;
 const MODS = { altKey: 1, ctrlKey: 2, metaKey: 4, shiftKey: 8 };
 const press = async (focus, { key, code, vk, ...mods }) => {
@@ -175,13 +178,36 @@ try {
       assert.deepEqual(handoff, [['type']], `${label}: settings handoff is one message that names no URL`);
       await shot(`${label.replaceAll(' ', '-')}-denied`);
 
+      // CGP-SHELL-R-010 / DES-SHELL-09: a first use shows Studio's own card before the OS prompt, inline, at 320 and 480.
+      await load('prompt');
+      await send({ type: 'config', config: configFor(seat, VOICE) }); await send({ type: 'history', messages: MESSAGES });
+      await send({ type: 'voiceDisclosureState', acknowledged: [V1] });
+      await click('.hps-voice-mic'); await settle(150);
+      const explain = await measure({ card: '.hps-voice-explain', input: '.hps-input', allow: '.hps-voice-explain .hps-voice-primary', later: '.hps-voice-explain .hps-voice-link' });
+      assert.ok(explain.items.card, `${label}: microphone explainer shown`);
+      assert.equal(await b.evaluate(`window.__media`), 0, `${label}: no microphone request before the explainer is answered`);
+      assert.equal(await b.evaluate(`document.querySelectorAll('dialog[open]').length`), 0, `${label}: the explainer is not a modal`);
+      assert.ok(inside(explain.items.card, explain.vw) && !explain.scrollX && !overlap(explain.items.card, explain.items.input), `${label}: explainer inside the viewport and clear of the composer`);
+      assert.ok(explain.items.allow.h >= 43.5 && explain.items.later.h >= 43.5, `${label}: explainer buttons are 44px targets`);
+      assert.ok(explain.items.card.fs >= 13.99, `${label}: explainer text ${explain.items.card.fs}px`);
+      assert.equal(await b.evaluate(`document.activeElement && document.activeElement.textContent.trim()`), '허용하기', `${label}: 허용하기 has focus`);
+      await shot(`${label.replaceAll(' ', '-')}-mic-explainer`);
+      await clickText('허용하기'); await settle(300);
+      assert.equal(await b.evaluate(`window.__media`), 1, `${label}: 허용하기 asks for the microphone once`);
+      assert.ok(await b.evaluate(`!!document.querySelector('.hps-voice-recording')`), `${label}: recording after 허용하기`);
+
       await load('ok');
       await send({ type: 'config', config: configFor(seat, VOICE) }); await send({ type: 'history', messages: MESSAGES });
       await send({ type: 'voiceDisclosureState', acknowledged: [V1] });
       await b.evaluate(`${composer}.focus()`);
       // Alt+Shift+M starts, the real recorder runs on an AudioContext stream.
+      const idleInput = (await measure({ input: '.hps-input textarea' })).items.input;
       await press(composer, { key: 'M', code: 'KeyM', vk: 77, altKey: true, shiftKey: true }); await settle(400);
-      const rec = await measure({ card: '.hps-voice-recording', input: '.hps-input', stop: '.hps-voice-mic-on' });
+      const rec = await measure({ card: '.hps-voice-recording', input: '.hps-input', stop: '.hps-voice-mic-on', box: '.hps-input textarea', level: '.hps-voice-level' });
+      // CGP-VOICE-D-010: the text box keeps its height across states (no jump over 4px), and the recording shows a
+      // decorative input level from the real stream (aria-hidden; the words carry the state).
+      assert.ok(Math.abs(rec.items.box.h - idleInput.h) <= 4, `${label}: the text box keeps its height while recording (${idleInput.h} -> ${rec.items.box.h})`);
+      assert.ok(rec.items.level && await b.evaluate(`document.querySelector('.hps-voice-level').getAttribute('aria-hidden')`) === 'true', `${label}: a decorative input level while recording`);
       assert.ok(rec.items.card, `${label}: recording card shown`);
       assert.ok(inside(rec.items.card, rec.vw) && !rec.scrollX && !overlap(rec.items.card, rec.items.input), `${label}: recording card inside the viewport and clear of the composer`);
       assert.ok(rec.items.card.fs >= 13.99 && rec.items.stop && rec.items.stop.h >= 43.5, `${label}: recording text and stop control`);
@@ -201,16 +227,20 @@ try {
       await send({ type: 'voiceTranscribeResult', requestId: clip[0].requestId, ok: true, text: '고양이 사진을 넣어 줘' });
       assert.equal(await b.evaluate(`${composer}.value`), '고양이 사진을 넣어 줘', `${label}: transcript in the composer`);
       assert.equal(await b.evaluate(`window.__posts.filter(m=>m.type==='sendMessage').length`), 0, `${label}: never auto-sent`);
-      // Unreadable clip: the softer line, 44px retry.
+      // A retryable failure (network) with the clip kept: its line, 44px 다시 보내기.
       await b.evaluate(`window.__media=0`);
       await click('.hps-voice-mic'); await settle(900); await click('.hps-voice-mic'); await settle(400);
       const second = await b.evaluate(`window.__posts.filter(m=>m.type==='voiceTranscribe').at(-1)`);
-      await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'unreadable', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
+      await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'network', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
       const notice = '.hps-voice-note[role="status"]';
       assert.equal(await b.evaluate(`document.querySelectorAll('${notice}').length`), 1, `${label}: exactly one manual dictation status`);
-      const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-link` });
+      const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-primary`, close: `${notice} .hps-voice-link`, icon: `${notice} svg[data-icon="alert"]`, text: `${notice} .hps-voice-failure-text`, box: '.hps-input textarea' });
       assert.ok(note.items.card && inside(note.items.card, note.vw) && !overlap(note.items.card, note.items.input), `${label}: refusal note inside the viewport and clear of the composer`);
-      assert.ok(note.items.retry.h >= 43.5, `${label}: retry is a 44px target`);
+      // CGP-VOICE-R-015 / D-012: the alert icon, one sentence at 14px, one recovery action (다시 보내기 here) and 닫기, all 44px.
+      assert.ok(note.items.retry && note.items.retry.h >= 43.5 && note.items.close && note.items.close.h >= 43.5, `${label}: the recovery action and 닫기 are 44px targets`);
+      assert.equal(await b.evaluate(`document.querySelector('${notice} .hps-voice-primary').textContent`), '다시 보내기', `${label}: the retryable cause offers 다시 보내기`);
+      assert.ok(note.items.icon && Math.abs(note.items.icon.w - 20) <= 0.5 && note.items.text.fs >= 13.99, `${label}: alert icon 20px, sentence 14px`);
+      assert.ok(Math.abs(note.items.box.h - idleInput.h) <= 4, `${label}: the text box keeps its height with the failure line (${idleInput.h} -> ${note.items.box.h})`);
       assert.ok((await b.evaluate(`document.querySelector('${notice}').textContent`)).includes('소리가 잘 들리지 않았어요. 다시 말해 볼까요?'), `${label}: the softer line`);
 
       // Disclosure sheet (a first use): fits a 320x480 / 480x480 viewport without scrolling and has one 시작하기 (DES-CGPV-04).

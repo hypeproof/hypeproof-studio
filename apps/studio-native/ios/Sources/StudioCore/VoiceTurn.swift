@@ -28,18 +28,21 @@ public struct VoiceEndpoint: Sendable {
     private let startedAt: Double
     private var lastSpeech: Double?
     private var lastRevision: Double?
-    private var text = ""
+    public private(set) var transcript = ""
     public init(now: Double) { startedAt = now }
     public mutating func audio(rms: Double, now: Double) {
         if rms.isFinite && rms >= 0.012 { lastSpeech = now }
     }
     public mutating func recognized(_ value: String, now: Double) {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value != text { text = value; lastRevision = now }
+        // Empty recognizer updates are not a retraction of words already heard.
+        // In particular, an empty final callback must not erase a useful partial.
+        guard !value.isEmpty else { return }
+        if value != transcript { transcript = value; lastRevision = now }
     }
     public func decision(now: Double) -> Decision {
-        if now - startedAt >= 30 { return text.isEmpty ? .noSpeech : .finish }
-        guard !text.isEmpty, let revision = lastRevision else { return .listen }
+        if now - startedAt >= 30 { return transcript.isEmpty ? .noSpeech : .finish }
+        guard !transcript.isEmpty, let revision = lastRevision else { return .listen }
         return now - max(revision, lastSpeech ?? revision) >= 1.6 ? .finish : .listen
     }
 }
@@ -56,6 +59,7 @@ public struct VoiceTimeline: Sendable {
         case ready, continuationRequested, stalePlaybackCallback
         case stopped, background, interrupted, routeChanged, scopeChanged
         case draftPresent, requestOutstanding, notReady, failed
+        case emptyRecognition, noSpeechRetryScheduled, noSpeechRetry, noSpeechPaused, partialRetained
     }
     public struct Entry: Sendable {
         public let milliseconds: Int
