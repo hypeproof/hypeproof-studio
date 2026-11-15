@@ -18006,6 +18006,9 @@
         },
         {
           "path": "release.json"
+        },
+        {
+          "path": "apps/studio-native/scripts/native-merge-gate.py"
         }
       ]
     },
@@ -18089,6 +18092,12 @@
         },
         {
           "path": "apps/studio-native/tests/test_ios_cleanup.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_merge_gate.py"
+        },
+        {
+          "path": "docs/testing/native-merge-acceptance.md"
         }
       ]
     },
