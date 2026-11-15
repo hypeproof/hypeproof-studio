@@ -168,6 +168,7 @@ reproduces the former file byte for byte.
 - [CGP-VOICE-R-024](CGP-VOICE-R-024.md): CGP-VOICE-R-024 / CGP-VOICE-D-018: served voice block, class-off state (2026-11-09, policy-backed)
 - [CGP-VOICE-R-026](CGP-VOICE-R-026.md): CGP-VOICE-R-026 (minor voice default, #3976)
 - [CGP-VOICE-R-028](CGP-VOICE-R-028.md): CGP-VOICE-R-028 / CGP-VOICE-D-021 (autoplay part): blocked read-aloud recovery (2026-11-14, agent-selected)
+- [CGP-VOICE-R-029](CGP-VOICE-R-029.md): CGP-VOICE-R-029: voice tip at most once (2026-11-16, agent-selected)
 - [CGP-VOICE-R-030](CGP-VOICE-R-030.md): CGP-VOICE-R-030: voice session marker in the task rail (2026-11-14, agent-selected)
 - [DEC-08](DEC-08.md): DEC-08
 - [DEC-09](DEC-09.md): DEC-09

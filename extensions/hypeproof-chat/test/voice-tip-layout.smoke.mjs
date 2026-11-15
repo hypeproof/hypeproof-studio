@@ -63,7 +63,7 @@ try{
  await open({history:[{id:'u1',role:'user',content:'안녕'},{id:'a1',role:'assistant',content:'안녕하세요'}]});
  assert.equal((await posted()).filter(m=>m.type==='voiceTipRequest').length,0,'mid-task: not asked');await answer(true);assert.equal(await tipCount(),0);cases++;
  // Voice not served: the button is not there, the tip is never asked for.
- await open({voice:undefined});assert.equal(await browser.evaluate(`!!document.querySelector('.hps-voice-note .hps-voice-primary')`),false,'control negative: no voice button without voice');
+ await open({voice:null});assert.equal(await browser.evaluate(`!!document.querySelector('.hps-voice-note .hps-voice-primary')`),false,'control negative: no voice button without voice');
  assert.equal((await posted()).filter(m=>m.type==='voiceTipRequest').length,0,'no voice: not asked');cases++;
  // Instructor console: never asked.
  await open({instructor:true});assert.equal((await posted()).filter(m=>m.type==='voiceTipRequest').length,0,'instructor: not asked');cases++;

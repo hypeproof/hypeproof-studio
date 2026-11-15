@@ -136,6 +136,8 @@ Learner-facing copy is proposed Korean; IDs `REQ-CGPV-NN`.
 | REQ-CGPV-42 (V-42) | Voice discoverability tip appears at most once | Shown once after the voice feature becomes available to the learner; dismiss persists; never shown in minors cohorts mid-task | P2 | #4 |
 | REQ-CGPV-43 (V-43) | A conversation with an active voice session is marked in the session list | Marker visible while capture or playback is live; removed on release confirmation; screen-reader text "음성 대화 중" | P2 | VO-40 |
 
+REQ-CGPV-42 status (2026-11-16, CGP-VOICE-R-029): implemented in Studio. One tip under the 음성 대화 button, at most once per seat on a shared PC. It is never shown to a seat with tips off, mid-task (for every seat, not only minors), in the instructor console or where voice is not served. It is placed in the flow with a pointer instead of a floating popover. Requirement: `docs/studio-requirements.md` "Voice tip, at most once per seat"; choices: `decisions/CGP-VOICE-R-029.md`.
+
 REQ-CGPV-43 status (2026-11-14, CGP-VOICE-R-030): implemented in Studio. While the automatic voice conversation has a live session, its task's rail row shows "음성 대화 중" (an icon plus words, and the row name ends with them). The marker is removed when the session stops, after the microphone is released, and it never shows when voice is not served. Requirement: `docs/studio-requirements.md` "Voice session marker in the task rail".
 
 ## 3. Design requirements
