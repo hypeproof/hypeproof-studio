@@ -196,6 +196,58 @@ async function main() {
   await close();
  }
  console.log('PASS expired activity marker and mismatched session never revive a private question');
+
+ // #4179: production serves every account-owned seat as `trial` (super grant, invite, earlier pass).
+ const seatToken = (claims: Record<string, unknown>) => Buffer.from(JSON.stringify({ u: 'u1', c: 'c1', p: 'p1', ...claims })).toString('base64url') + '.synthetic-signature';
+ for (const shape of ['binding', 'seat_owner'] as const) {
+  await setup(); fixture.profile.activity_kind = 'trial';
+  if (shape === 'seat_owner') { fixture.profile.seat_owner = 'account'; fixture.control.passToken = seatToken({ personal_account: 'account-a', account_session: 'session-a', native_trial: true }); }
+  await click('[data-testid="personal-reflection-entry"]'); await login();
+  const seat = fixture.current.connections.current;
+  assert.equal(seat.kind, 'trial', 'the seat is saved with the kind the Service served'); assert.equal(seat.accountPass.sessionId, 'session-a');
+  store = fixture.current.h.currentTaskStore(); assert(store, 'reflection opened on the account-owned trial seat');
+  const opened = store.getView().activeTaskId;
+  assert.deepEqual(Array.from(store.getHistory(), (m: any) => m.id), ['phone-user', 'phone-answer']); assert.equal(reflectionGets(), 1); assert.equal(paidCalls().length, 0);
+  // Second press from another task: the saved `trial` record with this session's pass is reused, no new activation.
+  await act(async () => { await fixture.current.h.handleTaskMessage({ type: 'taskCreate', taskId: opened }); });
+  assert.notEqual(store.getView().activeTaskId, opened);
+  await act(async () => { await fixture.current.page.openPersonalReflectionEntry(); });
+  assert.equal(store.getView().activeTaskId, opened); assert.equal(reflectionGets(), 2);
+  assert.equal(fixture.requests.filter((r: any) => r.route.endsWith('/activate')).length, 1);
+  assert.equal(fixture.current.connections.current.id, seat.id);
+  console.log(`PASS account-owned trial seat (${shape}) opens 나의 질문 and the saved trial record reopens it`); await close();
+ }
+
+ for (const refused of ['otherBinding', 'otherClaims', 'lesson', 'code'] as const) {
+  await setup();
+  const seat = refused === 'otherBinding'
+   ? { token: 'synthetic-old-pass', profile: { ...fixture.profile, activity_id: '8'.repeat(64), activity_kind: 'trial' }, accountPass: { sessionId: 'session-old', passId: 'super' } }
+   : refused === 'otherClaims'
+   ? { token: seatToken({ personal_account: 'account-b', account_session: 'session-b', native_trial: true }), profile: { ...fixture.profile, activity_id: 'd'.repeat(64), activity_kind: 'trial' } }
+   : refused === 'lesson'
+    ? { token: 'synthetic-lesson-seat', profile: { ...fixture.profile, activity_id: 'e'.repeat(64), activity_kind: 'trial', lesson: { content: { title: '합성 수업' } } }, accountPass: { sessionId: 'session-a', passId: 'super' } }
+    : { token: 'synthetic-code-trial', profile: { ...fixture.profile, activity_id: 'f'.repeat(64), activity_kind: 'trial', profile_id: 'studio-native-trial', pass: undefined } };
+  await fixture.current.connections.commit(seat.token, seat.profile, fixture.work, (seat as any).accountPass);
+  const before = fixture.current.connections.current.id;
+  await act(async () => { await fixture.current.page.openPersonalReflectionEntry(); await drain(); });
+  if (refused !== 'lesson') await login();
+  assert.equal(fixture.current.connections.current.id, before); assert.equal(reflectionGets(), 0);
+  assert.equal(fixture.requests.filter((r: any) => r.route.endsWith('/activate')).length, 0, `${refused}: no pass is activated over the current seat`);
+  const said = refused === 'otherBinding' || refused === 'otherClaims' ? '이 개인 활동의 계정이 달라요' : refused === 'lesson' ? '수업은 그대로 유지했어요' : '현재 활동은 그대로 유지했어요';
+  assert(document.body.textContent?.includes(said), `${refused}: ${said}`);
+  await close();
+ }
+ console.log('PASS a seat bound to another session, another account\'s claims, a lesson and a code-issued trial without an account keep their seat and never open reflection');
+
+ await setup();
+ const free = { ...fixture.profile, activity_id: '9'.repeat(64), activity_kind: 'trial', profile_id: 'studio-open-trial', pass: undefined };
+ await fixture.current.connections.commit('synthetic-free-seat', free, fixture.work);
+ assert.equal(fixture.current.connections.current.free, true);
+ await act(async () => { await fixture.current.page.openPersonalReflectionEntry(); await drain(); });
+ assert.equal(fixture.current.accounts.view().status, 'waiting', 'the anonymous free seat still goes to sign-in');
+ await login();
+ assert.equal(fixture.requests.filter((r: any) => r.route.endsWith('/activate')).length, 1, 'then to the existing pass chooser (super grant)');
+ console.log('PASS anonymous free seat is routed through sign-in and the pass chooser as before'); await close();
  dom.window.close();
 }
 main().then(() => process.exit(0), e => { console.error(e); fixture?.close(); dom.window.close(); process.exit(1); });

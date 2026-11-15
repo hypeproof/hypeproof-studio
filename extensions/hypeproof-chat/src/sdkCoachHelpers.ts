@@ -2252,7 +2252,7 @@ export function sdkTerminalFailure(msg: Record<string, unknown>, standingRetrySt
 export const SDK_ERROR_GENERIC_FRIENDLY = "문제가 발생했습니다. 운영 담당자에게 문의해 주세요.";
 /** Shared with the stall watchdog (sdkCoach.ts), so one event reads the same whichever way the turn ended. */
 export const SDK_RATE_LIMIT_FRIENDLY =
-  "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)";
+  "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 사용 한도를 확인해 주세요. (429)";
 /**
  * The request was over a size limit (the Service's per-request input bound for trial, free and pass seats answers
  * 413). The CLI ignores the 413 body and prints its own English line, "Request too large (max 32MB). Accumulated

@@ -2909,7 +2909,7 @@ function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatCon
     </ul>
     {items.some(item => item.on && item.asks === true) && <p className="hp-rail-lesson-note">물어봐요: 확인이 필요한 동작을 하기 전에 허락을 받아요. 이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.</p>}
     {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>알겠어요</button>}
-    <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
+    <p className="hp-rail-lesson-note">{solo ? '지금 연결된 활동에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }
 
