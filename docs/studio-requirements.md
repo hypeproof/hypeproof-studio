@@ -10115,6 +10115,18 @@ the installed retest separately. Missing, skipped or failed required journeys
 cannot pass the native gate. Compilation, simulator, uploaded package, tester
 availability and actual device behavior remain distinct states throughout.
 
+### Continue after an account question — Studio #4236
+
+`ST-REQ-ACCOUNT-QUESTION-ENTRY` / MENT-01–03 keeps the existing iOS, Android and
+desktop question flow open after a confirmed answer. “다음 질문 보기” explicitly
+reads the next card once; answering never starts that read automatically. Starting
+choices appear after a successful empty read, while uncertain answers and failed
+reads retain recovery without replaying a POST. Closing or returning to the existing
+conversation preserves its draft and account/session boundaries. See
+[account question requirements](requirements/mobile-growth-roadmap.md#account-question-entry--4111)
+and [MENT-T01/T02 verification](testing/native-mobile-growth.md#account-question-entry-verification--4111).
+Source, controlled native UI and installed/live-account results remain separate.
+
 ### Correlated iPhone testing delivery — MTF-01
 
 `ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
