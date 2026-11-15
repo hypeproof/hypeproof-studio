@@ -16,6 +16,7 @@ import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOf
 import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, freeSeatRefill, INSTALL_ID_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
+import { mayBeAccountSeatRecord, reflectionProfileAccepted, reflectionRecordAccepted, seatOwnership } from "./reflectionSeat";
 import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
@@ -266,10 +267,13 @@ export class StartPage {
       if (!session || account.status !== 'signedIn' || !account.account?.id) throw new ActivityConnectionError('Google 로그인을 마친 뒤 나의 질문을 다시 선택해 주세요.');
       entry.sessionId = session; entry.accountId = account.account.id;
       const current = activityConnections(this.context)?.current;
-      if (current?.kind === 'personal' && activityConnections(this.context)?.matchesService) {
-        if (current.accountPass && current.accountPass.sessionId !== session) throw new ActivityConnectionError('이 개인 활동의 계정이 달라요. 내 계정의 활동을 선택해 주세요.');
+      // #4179: an account-owned seat is served as `trial` (see reflectionSeat.ts), so a `personal`
+      // record is no longer the only one that may host 나의 질문.
+      const owner = seatOwnership(current, account.account.id, session);
+      if ((current?.kind === 'personal' || mayBeAccountSeatRecord(current)) && owner === 'other') throw new ActivityConnectionError('이 개인 활동의 계정이 달라요. 내 계정의 활동을 선택해 주세요.');
+      if (reflectionRecordAccepted(current, owner) && activityConnections(this.context)?.matchesService) {
         const profile = await this.chat.ensureProfile(true); await this.assertReflectionEntry(entry);
-        if (profile?.activity_kind !== 'personal' || profile.lesson) throw new ActivityConnectionError('개인 활동 연결을 확인하지 못했어요. 내 계정 · 이용권에서 확인해 주세요.');
+        if (!reflectionProfileAccepted(profile, owner)) throw new ActivityConnectionError('개인 활동 연결을 확인하지 못했어요. 내 계정 · 이용권에서 확인해 주세요.');
         entry.opening = true;
         if (this.panel) await this.openChat();
         await this.chat.refreshConfig(); await this.assertReflectionEntry(entry);
@@ -293,7 +297,9 @@ export class StartPage {
         await this.refresh(); return;
       }
       await this.assertReflectionEntry(entry);
-      if (this.candidate?.profile.activity_kind !== 'personal' || this.candidate.profile.lesson) throw new ActivityConnectionError('이 이용권은 개인 질문 활동이 아니에요. 기존 활동은 그대로 유지했어요.');
+      // The pass was just activated with this account session, so its binding is this account's.
+      const chosenSeat = this.candidate ? seatOwnership(this.candidate, account.account.id, session) : 'unknown';
+      if (!reflectionProfileAccepted(this.candidate?.profile, chosenSeat)) throw new ActivityConnectionError('이 이용권은 개인 질문 활동이 아니에요. 기존 활동은 그대로 유지했어요.');
       await this.handle({ type: 'beginCourse' }, () => this.reflectionStillWanted(entry), entry);
     } catch (error) { await this.reflectionEntryFailed(entry, error); }
     finally { this.reflectionEntering = false; }
@@ -302,7 +308,8 @@ export class StartPage {
   async resumePersonalReflection(intent: NonNullable<ActivityResume['personalReflection']>): Promise<void> {
     if (this.reflectionEntry || !this.accounts) return;
     const current = activityConnections(this.context)?.current, revision = this.accountEntryRevision;
-    if (current?.kind !== 'personal') return;
+    // Shape only here; continuePersonalReflection checks the account and session.
+    if (!current || (current.kind !== 'personal' && !mayBeAccountSeatRecord(current))) return;
     const task = this.chat.mobileConversationScope(true)?.task;
     await this.accounts.refreshView();
     if (this.accountEntryRevision !== revision || activityConnections(this.context)?.current !== current

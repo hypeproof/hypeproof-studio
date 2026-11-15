@@ -366,11 +366,20 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   infos.length = 0;
   bind("form", "https://hypeproof-ai.xyz/live/x/gallery/submit"); await settleLong();
   ok(!infos.length && !promptOf(), "a stopped form on the list: no line, no dialog");
-  await new Promise((r) => setTimeout(r, 3100));
+  // verify-r027 on #4182: the cap counts only the lines the learner is shown, so a silent on-list stop does not hide
+  // an off-list one a second later.
+  await new Promise((r) => setTimeout(r, 1000));
   bind("form", "https://forms.example/post"); await settleLong();
-  ok(infos.filter((x) => x === blockedLine).length === 1 && !promptOf(), "a stopped form off the list: the blocked line, no dialog (F4)");
+  ok(infos.filter((x) => x === blockedLine).length === 1 && !promptOf(), "a stopped form off the list 1 s after an on-list one: the blocked line, no dialog (F4)");
   bind("form", "https://forms.example/post"); await settleLong();
   ok(infos.filter((x) => x === blockedLine).length === 1, "a second stop within the window adds no line (rate limit)");
+  // The host caps the lines it shows (verify-r027 on #4187): a page cycling action origins inside 3 s gets one line,
+  // although the guard reports each origin.
+  await new Promise((r) => setTimeout(r, 3100));
+  const before = infos.filter((x) => x === blockedLine).length;
+  for (let i = 0; i < 5; i++) bind("form", `https://forms${i}.example/post`);
+  await settleLong();
+  ok(infos.filter((x) => x === blockedLine).length === before + 1, "five off-list origins inside 3 s: one line");
   formTab.f.emit("Runtime.bindingCalled", { name: "__hpsOpenLink", payload: "https://ads.example/raw" }); await settleLong();
   ok(!promptOf(), "a payload that is not the guard's JSON does nothing");
   // Adults: no replacement is installed (negative control for M4a).

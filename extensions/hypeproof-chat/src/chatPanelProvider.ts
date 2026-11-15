@@ -117,7 +117,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { domainToUnicode } from "node:url";
 import { LINK_CONFIRM_COPY, LinkConfirmRequest, type LinkConfirmPrompt } from "./linkConfirm";
-import { LinkNavigationGuard } from "./linkNavigationGuard";
+import { FORM_NOTICE_MS, LinkNavigationGuard } from "./linkNavigationGuard";
 import { openStudioTab, studioTabs } from "./studioTabs";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
@@ -286,6 +286,7 @@ import {
   profileNotReadyNotice,
 } from "./coachIdentity.ts";
 import { isFreeSeat, profileAudience, seatAudience, type SeatAudience } from "./seatVocabulary.ts";
+import { mayBeAccountSeatRecord } from "./reflectionSeat.ts";
 import { classifyDenial, denialCopy, lessonFeatureOff } from "./denialSource.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
@@ -710,7 +711,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionBinding(): ReflectionBinding | undefined {
     const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
     const task=store?.getView().activeTaskId;
-    if(!store||!task||!activity||activity.kind!=='personal'||this._instructorMode?.isInstructor)return;
+    // #4179: a reflection binding can also live on an account-owned seat served as `trial`.
+    if(!store||!task||!activity||(activity.kind!=='personal'&&!mayBeAccountSeatRecord(activity))||this._instructorMode?.isInstructor)return;
     // Ordinary tasks do not need reflection capability checks or an asynchronous preflight.
     return this.context.globalState.get<ReflectionBinding>(REFLECTION_BINDING_KEY+':'+JSON.stringify([activity.id,store.scope,task]));
   }
@@ -886,7 +888,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   mobileConversationScope(includeReflection = false): MobileScope | undefined {
     const activity=activityConnections(this.context)?.current, store=this.currentTaskStore();
     const view=store?.getView();const task=view?.activeTaskId?store?.getTask(view.activeTaskId):undefined;
-    if(!activity||activity.kind!=='personal'||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
+    // #4179: 나의 질문 (includeReflection) also runs on an account-owned seat served as `trial`. The
+    // start page checks that seat's account and session before opening it; phone sharing keeps `personal`.
+    const personal=activity?.kind==='personal'||(includeReflection&&mayBeAccountSeatRecord(activity));
+    if(!activity||!personal||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
     if(!includeReflection&&this.reflectionBindings().some(b=>b.activity===activity.id&&b.workspace===store.scope&&b.task===task.id))return;
     return {activity:activity.id,workspace:store.scope,task:task.id,title:task.title,
       ready:!this.hasActiveStream()&&!this.taskChanging&&!this.connectionChanging&&!this.turnRestoreBusy&&!this.clearingHistory&&!this.verifySession?.running&&!this.opsHold&&!this.interruptedHistory
@@ -5485,7 +5490,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
         // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
         // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
-        let strict = false, frameClosed = false;
+        let strict = false, formLineAt = -Infinity, frameClosed = false;
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
@@ -5498,8 +5503,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           onFrameUnheld: () => { if (frameClosed) return; frameClosed = true; void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); },
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
           // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
-          // as any refused address (`allowlistOnly` shows it); on the list, the stop stays silent (a known gap).
-          onFormStopped: (url) => { void this.allowlistOnly(url).catch(() => undefined); },
+          // as any refused address (the route `allowlistOnly` refuses); on the list, the stop stays silent (a known gap).
+          onFormStopped: (url) => {
+            // The cap counts only lines the learner is shown (verify-r027): a silent on-list stop spends nothing.
+            void this.learnerLinkRoute(url, "browser").then((route) => {
+              if (route.kind !== "confirm") return;
+              const t = Date.now();
+              if (t - formLineAt < FORM_NOTICE_MS) return;
+              formLineAt = t; void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
+            }, () => undefined);
+          },
           onCommit: (url) => {
             if (!strict || guard.capabilities.fetch || !/^https?:/i.test(url)) return;
             void this.allowlistOnly(url).then((ok) => { if (!ok) { void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); } });
@@ -12462,7 +12475,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
         ...(taskView && taskMove ? { taskMove } : {}),
         ...(activity && carryover ? { carryover } : {}),
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{}),...(mayBeAccountSeatRecord(activity)?{accountSeat:true}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),

@@ -434,7 +434,7 @@ try {
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('.hps-access')).toHaveAttribute('open', '');
     await expect(dialog.locator('.hps-access > summary')).toBeFocused();
-    await expect(dialog.locator('.hps-access')).toContainText('수업·체험의 기본 이용 정책'); // code-issued seat: unchanged copy (control)
+    await expect(dialog.locator('.hps-access')).toContainText('현재 연결은 기본 이용 정책'); // code-issued seat: its own copy, without 체험 (#4179) (control)
     await p.keyboard.press('Escape'); await expect(dialog).toBeHidden();
     // A free seat's usage panel never says 체험 (SPEC iteration 4 ground rule).
     await host(p, { type: 'config', config: config({ ...native, profile_id: 'studio-open-trial' }, { taskWorkspace, activity: { ...trialActivity(fresh), free: true }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } }) });

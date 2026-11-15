@@ -19,7 +19,7 @@ export async function personalEntryFixture({ reload = false, passes, publish = (
   const requests = [], posts = [], commands = [], vault = new Map(), globalState = state((key, value) => {
     if (control.failMarker && value && key.startsWith('hypeproofChat.pendingActivityResume.')) throw Error('Synthetic resume storage failure');
   });
-  const control = { consent: '내 이야기 시작하기', accountId: 'account-a', sessionId: 'session-a', activationDenied: false, beforeActivate: undefined, beforeReflection: undefined, beforeOpen: undefined, beforeStore: undefined, failMarker: false };
+  const control = { consent: '내 이야기 시작하기', accountId: 'account-a', sessionId: 'session-a', activationDenied: false, beforeActivate: undefined, beforeReflection: undefined, beforeOpen: undefined, beforeStore: undefined, failMarker: false, passToken: undefined };
   const grant = { id: 'super', product_name: 'Synthetic existing allowance', status: 'active', requests_remaining: 100, requests_limit: 100, requests_used: 0, amount: 0, duration_seconds: 0 };
   const grants = passes ?? [grant];
   const profile = { activity_id: 'a'.repeat(64), activity_kind: 'personal', profile_id: 'personal', display_name: '내 작업', ux: { coach: { naming_mode: 'fixed', fallback_name: 'Coach' } }, welcome: {}, workspace_root: work, workspace_start: 'empty', pass: { status: 'active', requests_remaining: 100 } };
@@ -33,7 +33,7 @@ export async function personalEntryFixture({ reload = false, passes, publish = (
     if (route.endsWith('/auth/logout')) return response({ ok: true });
     if (route.endsWith('/me')) return response({ account: { id: control.accountId, email: 'synthetic@invalid.example', display_name: 'Synthetic person' } });
     if (route.endsWith('/me/passes')) return response({ passes: grants });
-    if (route.endsWith('/activate')) { await control.beforeActivate?.(); return control.activationDenied ? response({ error: 'access_denied' }, 403) : response({ access_token: 'synthetic-personal-pass', expires_in: 7200 }); }
+    if (route.endsWith('/activate')) { await control.beforeActivate?.(); return control.activationDenied ? response({ error: 'access_denied' }, 403) : response({ access_token: control.passToken ?? 'synthetic-personal-pass', expires_in: 7200 }); }
     if (route.endsWith('/profile')) return response(profile);
     if (route.endsWith('/activity')) return response({ activity_id: profile.activity_id });
     if (route.endsWith('/me/reflection')) { await control.beforeReflection?.(); return response(snapshot); }
