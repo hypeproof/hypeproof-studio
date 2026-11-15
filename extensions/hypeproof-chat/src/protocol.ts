@@ -178,6 +178,8 @@ export interface ChatConfig {
    * label can name a person, so it is never logged, sent to the Service or put in a problem report.
    */
   micInput?: { id: string; label: string };
+  /** CGP-VOICE-R-026: the voice conversation's capture mode on this computer; absent for the default (automatic end of speech). */
+  voiceConversationMode?: "push_to_talk";
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
   /**
@@ -833,6 +835,8 @@ export type WebviewMessage = (
   | { type: "setLessonTips"; on: boolean }
   /** CGP-VOICE-R-019 — the learner picked a microphone (null: 시스템 기본값); the host keeps it for this computer. */
   | { type: "setMicInput"; choice: { id: string; label: string } | null }
+  /** CGP-VOICE-R-026 — the learner chose how the voice conversation captures ("auto" is the default); kept for this computer. */
+  | { type: "setVoiceConversationMode"; mode: "auto" | "push_to_talk" }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }

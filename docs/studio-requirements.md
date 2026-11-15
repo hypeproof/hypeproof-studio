@@ -10021,6 +10021,16 @@ REQ-CGPV-04/17/18/19/24/33).** 기존 Service 프로필이 받아쓰기와 읽�
 
 Not covered: real microphones, and whether webview device ids stay stable across a restart and an upgrade on a Windows class laptop and a Mac. This is part of the real-device check (#3626), NOT RUN. Agent choices: decisions/CGP-VOICE-R-019.md CGP-VOICE-R-019.
 
+### Push-to-talk in the voice conversation (CGP-VOICE-R-026, R-027)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-38 | PI#1 / VO-08: the shipped voice conversation (`VoiceConversationControl`) offers an optional `누르고 말하기` mode.<br>**Choosing it.** A native checkbox on a 44px label. The choice is kept per computer in globalState `hypeproofChat.voiceConversationMode`, the same store as the microphone choice. It reaches the webview config only when push-to-talk was chosen. A running session keeps its mode (`다음 대화부터 바뀌어요`).<br>**The default.** Automatic end of speech stays the default for every seat, minors included (Jay, 2026-11-14).<br>**A session.** It starts with the microphone closed (`ready`). Holding the button, or Space while the button has focus, opens it for one turn; the release ends and sends that turn.<br>**What ends a hold.** A release anywhere (pointer capture and a window listener), Space up, the window losing focus, or a hide (which stops the session). None of these leaves the microphone open.<br>**Rules inside a turn.** Detected silence never ends a held turn. After the answer is read, the microphone stays closed until the next hold.<br>**Retries.** A hold too short (`너무 짧게 들렸어요…`) or too long (`한 번에 1분 안으로…`) is a retry, never the end of the session.<br>**Space and the text box.** Space in the text box is an ordinary space. On the hold button it is consumed, so no space reaches any field.<br>**Not built.** The Chalk class default; nothing serves it. | `voice-ptt.smoke.mjs` (the real VoiceConversation), `voice-conversation-browser.smoke.mjs` (the real App) |
+| REQ-CGPV-39 | PI#5 / VO-08: when the endpoint detector (`observeVoiceEndpoint`) cannot start, the automatic session switches to push-to-talk for that session only and says `자동 말끝 감지를 쓸 수 없어 눌러서 말하기로 바꿨어요` in its status line. It never sits in `듣고 있어요` without endpointing, and the microphone it opened is closed. The stored mode is not written; the next ordinary start is automatic again. | `voice-ptt.smoke.mjs`, `voice-conversation-browser.smoke.mjs` (a failing analyser in the real App; no `setVoiceConversationMode` post) |
+| DES-CGPV-38 | The hold button is at least 64px and reads `누르고 말하기`. Pressed is inset with `듣고 있어요` and `aria-pressed`, never colour alone, and nothing animates. Forced colours use ButtonText, and Highlight when pressed. The group is named `음성 대화` in push-to-talk and `자동 음성 대화` in automatic mode (unchanged). | `voice-conversation-browser.smoke.mjs`, the style smokes |
+
+Not covered: real microphones and a real-device hold on Windows and macOS (#3626): NOT RUN. Agent choices: decisions/CGP-VOICE-R-026.md.
+
 Not covered, by design: real-device behaviour. This row set is synthetic and headless; nothing is on for any seat
 (Service flags default off) and nothing was run in the installed app. The microphone core patch (DEC-03) and
 `getUserMedia` inside the packaged Electron webview, the OS Korean voices on macOS and Windows class laptops, and

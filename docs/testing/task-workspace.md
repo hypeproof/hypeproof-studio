@@ -600,3 +600,27 @@ A real coach shell command and the packaged app are not run here.
 **Red on main 8586657f9.** With only the pure module present, the host smoke fails because no request carries the line, while its controls pass.
 
 **Mutants.** Nine fail a test: tips ignored, no learning gate, every time, no success reset, retries counted each, SDK and proxy channels dropped, no step reset, and error text in the line.
+
+## Push-to-talk in the voice conversation (CGP-VOICE-R-026 / R-027)
+
+`test/voice-ptt.smoke.mjs` drives the real `VoiceConversation` and `DictationRecorder` with scripted browser objects.
+- **A push-to-talk session.** It starts closed. A hold opens one turn and the release sends it. Silence never ends a hold, and there is no reopen after the answer.
+- **Retries.** A release during opening and a hold past the ceiling are retries.
+- **The automatic default.** It is unchanged.
+- **R-027.** A detector failure gives a session-only switch with its line, no open microphone, and an automatic next start.
+- **Storage and writes.** The mode store reads junk as the default. In source, there is one writer (the switch), and the loop never posts.
+
+`test/voice-conversation-browser.smoke.mjs` runs the real App. It adds checks that:
+- the switch writes `push_to_talk`;
+- the hold button is at least 64px;
+- a pointer hold released outside the button sends one turn;
+- after the answer the microphone stays closed;
+- a Space hold on the button sends one turn, ignores repeats and leaves the text box untouched;
+- Space in the text box types a space and opens nothing;
+- a window blur during a hold closes the microphone;
+- a hide during a hold stops the session;
+- a failing analyser switches that session to push-to-talk with its line and posts no mode write.
+
+**Red on the base.** The smoke fails without the mode module, and the App has no switch.
+
+**Mutants.** Five fail a test: a reopen after the answer, a sticky fallback, an uncaught detector failure, silence ending a hold, and no blur release. Release outside the button is guarded twice, by pointer capture and by a window `pointerup` listener. Removing either alone still passes because the other holds; removing both fails the release-outside case.
