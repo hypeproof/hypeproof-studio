@@ -25,8 +25,8 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
  const label=<>이용권 · 사용량 {config.profile?.automations?.enabled ? (a.status==='unknown'?'· 미확인':'') : choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</>;
  const content=<>
   {a.status==='unknown'&&<p role="status">이용권과 사용량을 확인하지 못했습니다. 이전 잔액으로 실행 가능 여부를 판단하지 않습니다.</p>}
-  {view?.configured===false&&<p>{config.activity?.free?'무료 사용의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.':'현재 연결은 수업·체험의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.'}</p>}
-  {view?.configured&&view.choices.length===0&&<p>{view.required?'사용 가능한 이용권이 없습니다. 운영자에게 연결을 확인해 주세요.':'별도 이용권이 배정되지 않았습니다. 현재 수업·체험 정책을 적용합니다.'}</p>}
+  {view?.configured===false&&<p>{config.activity?.free?'무료 사용의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.':'현재 연결은 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.'}</p>}
+  {view?.configured&&view.choices.length===0&&<p>{view.required?'사용 가능한 이용권이 없습니다. 운영자에게 연결을 확인해 주세요.':'별도 이용권이 배정되지 않았습니다. 현재 연결의 기본 이용 정책을 적용합니다.'}</p>}
   {!!view?.choices.length&&<>
    <label>이번 작업의 이용권 <select aria-label="이번 작업의 이용권" value={a.pendingSelection??a.selected??''} disabled={streaming} onChange={e=>post({type:'selectFunding',id:e.target.value,activityId:config.activity?.id})}>
     <option value="" disabled>직접 선택해 주세요</option>{view.choices.map(c=><option key={c.id} value={c.id} disabled={!c.active}>{c.label} · {c.source_kind==='account'?'개인 이용':'수업·기관 지원'}{!c.available?' · '+(stateLabels[c.state]??'미확인'):''}</option>)}

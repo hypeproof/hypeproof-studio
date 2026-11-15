@@ -828,7 +828,8 @@ export function App() {
   });
 
   // Studio voice (voiceServed.ts): `none` unless the served profile carries a `voice` block. Nothing below draws then.
-  const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor);
+  // CGP-VOICE-R-019: the microphone choice is this computer's (config.micInput), read by dictation and the voice conversation.
+  const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor, state.config?.micInput);
 
   return (<VoiceProvider controller={voice}>
     {/* REQ-STUDIO-REPORT-LOGS: the report form and the send confirmation stay reachable while the crash card is up
@@ -849,7 +850,7 @@ export function App() {
       {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} compact={state.config?.profile?.ux?.coach_layout === "compact"} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}} onDiff={(id,index)=>postToHost({type:'writeApprovalDiff',id,index})}/>}
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor} activityTitle={homeTitle(state.config?.activity)} personalReflection={state.config?.activity?.kind === "personal" && !state.config?.isInstructor} personalMaking={state.config?.personalMaking}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor} activityTitle={homeTitle(state.config?.activity)} personalReflection={(state.config?.activity?.kind === "personal" || !!state.config?.activity?.accountSeat) && !state.config?.isInstructor} personalMaking={state.config?.personalMaking}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel

@@ -33,7 +33,7 @@ const BANNED = /스태프|강사|운영 담당자|Jay/;
   assert.equal(v.transportFailureText("classroom"), "문제가 발생했습니다. 다시 시도하거나 운영 담당자에게 문의해 주세요.");
   assert.equal(
     v.rateLimitStallText("classroom"),
-    "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)",
+    "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 사용 한도를 확인해 주세요. (429)",
   );
   assert.equal(v.errorIdTitle("classroom"), "강사에게 이 ID를 알려주세요 — Jay가 바로 추적할 수 있어요");
   assert.equal(v.reportButtonTitle("classroom"), "이 문제를 Jay에게 신고합니다 (request_id 등 메타데이터 자동 첨부) — #64");

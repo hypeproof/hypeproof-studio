@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ResolvedProfile } from "../../src/protocol";
 import { readsMinorDisclosure, voiceAvailability, type VoiceAvailability } from "../../src/voiceServed";
+import { readMicChoice, type MicChoice } from "../../src/micInput";
 import { onHostMessage, postToHost } from "./vscode";
 import { VoiceDisclosureSheet } from "./VoiceDisclosureSheet";
 import { registerAnswerExtras } from "./answerExtras";
@@ -18,6 +19,8 @@ export interface VoiceContextValue {
   gate(go: () => void, automatic?: boolean): void;
   /** A Service refusal said this class has voice off: show the D-018 state from now on. */
   markClassOff(): void;
+  /** CGP-VOICE-R-019: the microphone this computer records from (config.micInput), or null for the system default. */
+  micChoice?: MicChoice | null;
 }
 export interface VoiceController {
   value: VoiceContextValue;
@@ -37,7 +40,7 @@ export const useVoice = (): VoiceContextValue => useContext(VoiceContext);
 /** Seats this window has seen served voice. In memory: it is what tells "turned off mid-session" from "never had it". */
 const servedBefore = new Set<string>();
 
-export function useVoiceController(profile: ResolvedProfile | null | undefined, scopeKey: string, enabled: boolean): VoiceController {
+export function useVoiceController(profile: ResolvedProfile | null | undefined, scopeKey: string, enabled: boolean, micInput?: unknown): VoiceController {
   const [refused, setRefused] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState<string[] | null>(null);
   const [sheet, setSheet] = useState<{ go: () => void; automatic: boolean; scope: string } | null>(null);
@@ -65,7 +68,11 @@ export function useVoiceController(profile: ResolvedProfile | null | undefined, 
     setSheet({ go, automatic, scope: scopeKey });
   }, [version, acknowledged, scopeKey]);
   const markClassOff = useCallback(() => setRefused(scopeKey), [scopeKey]);
-  const value = useMemo<VoiceContextValue>(() => ({ availability, gate, markClassOff }), [availability, gate, markClassOff]);
+  // CGP-VOICE-R-019: one object per actual choice, so a config refresh with the same microphone re-renders nothing.
+  const micRead = readMicChoice(micInput);
+  const micKey = micRead ? `${micRead.id}\n${micRead.label}` : "";
+  const micChoice = useMemo(() => micRead, [micKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const value = useMemo<VoiceContextValue>(() => ({ availability, gate, markClassOff, micChoice }), [availability, gate, markClassOff, micChoice]);
 
   const accept = useCallback(() => {
     if (!sheet || !version) return;

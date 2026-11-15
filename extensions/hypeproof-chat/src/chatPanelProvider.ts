@@ -118,7 +118,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { domainToUnicode } from "node:url";
 import { LINK_CONFIRM_COPY, LinkConfirmRequest, type LinkConfirmPrompt } from "./linkConfirm";
-import { LinkNavigationGuard } from "./linkNavigationGuard";
+import { FORM_NOTICE_MS, LinkNavigationGuard } from "./linkNavigationGuard";
 import { openStudioTab, studioTabs } from "./studioTabs";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
@@ -287,6 +287,7 @@ import {
   profileNotReadyNotice,
 } from "./coachIdentity.ts";
 import { isFreeSeat, profileAudience, seatAudience, type SeatAudience } from "./seatVocabulary.ts";
+import { mayBeAccountSeatRecord } from "./reflectionSeat.ts";
 import { classifyDenial, denialCopy, lessonFeatureOff } from "./denialSource.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
@@ -321,6 +322,7 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
+import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
@@ -711,7 +713,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionBinding(): ReflectionBinding | undefined {
     const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
     const task=store?.getView().activeTaskId;
-    if(!store||!task||!activity||activity.kind!=='personal'||this._instructorMode?.isInstructor)return;
+    // #4179: a reflection binding can also live on an account-owned seat served as `trial`.
+    if(!store||!task||!activity||(activity.kind!=='personal'&&!mayBeAccountSeatRecord(activity))||this._instructorMode?.isInstructor)return;
     // Ordinary tasks do not need reflection capability checks or an asynchronous preflight.
     return this.context.globalState.get<ReflectionBinding>(REFLECTION_BINDING_KEY+':'+JSON.stringify([activity.id,store.scope,task]));
   }
@@ -887,7 +890,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   mobileConversationScope(includeReflection = false): MobileScope | undefined {
     const activity=activityConnections(this.context)?.current, store=this.currentTaskStore();
     const view=store?.getView();const task=view?.activeTaskId?store?.getTask(view.activeTaskId):undefined;
-    if(!activity||activity.kind!=='personal'||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
+    // #4179: 나의 질문 (includeReflection) also runs on an account-owned seat served as `trial`. The
+    // start page checks that seat's account and session before opening it; phone sharing keeps `personal`.
+    const personal=activity?.kind==='personal'||(includeReflection&&mayBeAccountSeatRecord(activity));
+    if(!activity||!personal||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
     if(!includeReflection&&this.reflectionBindings().some(b=>b.activity===activity.id&&b.workspace===store.scope&&b.task===task.id))return;
     return {activity:activity.id,workspace:store.scope,task:task.id,title:task.title,
       ready:!this.hasActiveStream()&&!this.taskChanging&&!this.connectionChanging&&!this.turnRestoreBusy&&!this.clearingHistory&&!this.verifySession?.running&&!this.opsHold&&!this.interruptedHistory
@@ -1245,6 +1251,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * learning events just quietly stop accumulating**.
    */
   private async prepareObservation(proxyUrl: string, token: string | undefined, profile: ResolvedProfile | null) {
+    // #4099 — a subscription rehearsal turn records no observation and reads no observation context from the server.
+    if (mustStayLocal(profile?.rehearsal)) return null;
     await this.observationWrites;
     // A re-test runs outside any turn and writes and persists its recorder for seconds. A new
     // recorder built from the saved batch now would be persisted over by the re-test, or
@@ -5486,14 +5494,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
         // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
         // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
-        let strict = false;
+        let strict = false, formLineAt = -Infinity, frameClosed = false;
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
+          // #4128: on a minor seat a cross-site iframe loads only when the lesson list (or loopback) admits it; no dialog.
+          decideFrame: minor ? (url) => this.frameAllowed(url) : undefined,
+          // Without the network hold a frame off the list is sent back to about:blank; one that cannot be, or that went
+          // out of process unwatched, closes the tab (fail closed, verify-3928 on #4128).
+          onFrameUnheld: () => { if (frameClosed) return; frameClosed = true; void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); },
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
           // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
-          // as any refused address (`allowlistOnly` shows it); on the list, the stop stays silent (a known gap).
-          onFormStopped: (url) => { void this.allowlistOnly(url).catch(() => undefined); },
+          // as any refused address (the route `allowlistOnly` refuses); on the list, the stop stays silent (a known gap).
+          onFormStopped: (url) => {
+            // The cap counts only lines the learner is shown (verify-r027): a silent on-list stop spends nothing.
+            void this.learnerLinkRoute(url, "browser").then((route) => {
+              if (route.kind !== "confirm") return;
+              const t = Date.now();
+              if (t - formLineAt < FORM_NOTICE_MS) return;
+              formLineAt = t; void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
+            }, () => undefined);
+          },
           onCommit: (url) => {
             if (!strict || guard.capabilities.fetch || !/^https?:/i.test(url)) return;
             void this.allowlistOnly(url).then((ok) => { if (!ok) { void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); } });
@@ -5535,6 +5556,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (route.kind === "integrated") return true;
     if (route.kind === "confirm") void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
     return false;
+  }
+  /**
+   * #4128 — a cross-site iframe on a minor seat: the same admission as `allowlistOnly` (loopback or the trusted lesson
+   * allowlist), with no line to the learner, who did not ask for the frame (an embedded ad would bring one per load).
+   */
+  private async frameAllowed(url: string): Promise<boolean> {
+    return (await this.learnerLinkRoute(url, "browser")).kind === "integrated";
   }
   /** CGP-SHELL-R-026 — a minor (safe-session) seat, by the same policy the link route uses. */
   private async minorLinkSeat(): Promise<boolean> {
@@ -9466,6 +9494,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (typeof msg.on !== "boolean") return;
         await this.setLessonTips(msg.on);
         return;
+      case "setMicInput": {
+        // CGP-VOICE-R-019 — kept per computer (the microphone is the PC's), an id and a label only. The label can
+        // name a person, so it stays here: never logged, never sent. A refused value changes nothing.
+        const next = writeMicChoice(msg.choice);
+        if (next === undefined) return;
+        await this.context.globalState.update(MIC_INPUT_KEY, next ?? undefined);
+        await this.postConfig();
+        return;
+      }
       case "setLearnerNickname": {
         // CGP-KNOW-R-032 — the host's check is the authoritative one: the seat must offer the field
         // and the value must pass the same screen the field ran. A refused value changes nothing.
@@ -9917,12 +9954,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // "another window" and its history already holds the partial answer. No previous turn still
     // settling: no await at all, so the send stays synchronous up to its first real await.
     // #4099 — a subscription rehearsal turn runs no server model call and writes no class record.
-    // Allowed server reads for it: the profile (ensureProfile, read here only when not yet held) and the prebuilt world
-    // (openPrebuiltWorldForTurn, GET /worlds, an authenticated static render).
-    // Blocked for it: verifyActivity, loadAccess, prepareObservation, the learning-wiki brainCall, and the Service model routes (messages and chat completions).
+    // Decided from the cached profile only, so the send stays synchronous (no await before the turn lock).
+    // A first turn without a cached profile is decided again once the profile is resolved (see `rehearsalSubscription` below).
+    // Allowed server reads for it: the profile (ensureProfile) and the prebuilt world (openPrebuiltWorldForTurn, GET /worlds, an authenticated static render).
+    // On a first turn without a cached profile, verifyActivity may run once, as a read.
+    // Blocked for it: loadAccess, prepareObservation, the learning-wiki brainCall, and the Service model routes (messages and chat completions).
     // Without a local runtime the turn stops here with the existing no-local-runtime sentence.
-    const rehearsalSubscription = mustStayLocal((this.cachedProfile ?? (await this.ensureProfile().catch(() => null)))?.rehearsal);
-    if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
+    const rehearsalSubscriptionEarly = mustStayLocal(this.cachedProfile?.rehearsal);
+    if (rehearsalSubscriptionEarly && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     const previousTurn = this.turnSettling, settle = turnSettleSignal();
     this.turnSettling = settle.promise;
     const previousSettled = previousTurn ? await waitAtMost(previousTurn) : true;
@@ -9964,7 +10003,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       releaseActivity=connections.acquire();
       const token=await connections.token();
       // #4099 — the activity check is a server call; a subscription rehearsal turn skips it (it never reaches the server).
-      if (!rehearsalSubscription) await verifyActivity({token:token!,proxyUrl:connections.current!.service},connections.current!.serverId);
+      if (!rehearsalSubscriptionEarly) await verifyActivity({token:token!,proxyUrl:connections.current!.service},connections.current!.serverId);
     }
     // #751 U3 — a lesson setting this device holds is switched HERE, before the turn consumes the input. A failure to
     // switch leaves the turn exactly as it would have been; only "switched but the new profile could not be verified"
@@ -10003,7 +10042,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
     // always a real turn. Reads the profile already held (no await before the turn's first one).
     const wikiSwitch = this.cachedProfile?.learning_wiki;
-    const brainCall = mode === 'auto' && !rehearsalSubscription && !plan.planning && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    const brainCall = mode === 'auto' && !plan.planning && wikiSwitch?.enabled === true && !rehearsalSubscriptionEarly && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
       await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted, userId);
       return;
@@ -10094,6 +10133,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // choice and the folder choice below only narrow further.
     if (temporaryTurn && !this.temporaryTaskAllowed(servedProfile)) throw new TurnToolModeError(TEMPORARY_TASK_UNAVAILABLE);
     const resolvedProfile = temporaryTurn && servedProfile ? temporaryTaskProfile(servedProfile) : servedProfile;
+    // #4099 — the late decision, from the resolved server profile (the same source as the cached one). A first turn without a cached profile is caught here.
+    const rehearsalSubscription = rehearsalSubscriptionEarly || mustStayLocal(servedProfile?.rehearsal);
+    if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     // #4099 — the access view chooses funding for server routes only; a subscription rehearsal turn does not read it.
     if (!rehearsalSubscription) await this.loadAccess();
     const fundingSource=this.accessState?.selected;
@@ -10279,8 +10321,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void this.postConfig();
     }
     // CGP-KNOW-R-029 — a temporary turn's profile carries no `observation` (temporaryTaskProfile), so no recorder is built.
-    // #4099 — the observation context is read from the server; a subscription rehearsal turn records none (no recorder).
-    const observation = rehearsalSubscription ? null : await this.prepareObservation(proxyUrl, token, profile);
+    const observation = await this.prepareObservation(proxyUrl, token, profile);
     // cr-verify — the coach's verify calls in this turn write to this turn's recorder.
     this.verifyTurnRecorder = observation?.batch.format === 'hps-observation/2' ? observation : null;
     const recordObservation = (kind: import('./nativeObservationContract').ObservationKind, value: string, extra: Partial<import('./nativeObservationContract').ObservationEvent> = {}) => {
@@ -12447,6 +12488,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
+    const micInput = readMicChoice(this.context.globalState?.get(MIC_INPUT_KEY));
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
     this.lessonTips.forSeat(tipsSeat);
@@ -12481,7 +12523,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
         ...(taskView && taskMove ? { taskMove } : {}),
         ...(activity && carryover ? { carryover } : {}),
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{}),...(mayBeAccountSeatRecord(activity)?{accountSeat:true}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
@@ -12496,6 +12538,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
         lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
+        // CGP-VOICE-R-019 — only when a microphone was chosen: the default config is unchanged.
+        ...(micInput ? { micInput } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).

@@ -134,6 +134,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { DataDeletionRequest } from "./DataDeletionRequest";
 import { TaskMemorySwitches } from "./TaskMemorySwitches";
 import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
+import { MicInputSetting } from "./MicInputSetting";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { CHECKLIST_EMPTY, CHECKLIST_TITLE, INSERT_BUTTON, NOTE_HINT, ROUTE_TITLE, VERDICT_FITS, VERDICT_FIX, checklistVersion, getChecklistEntry, routeLines, setChecklistNote, setChecklistVerdict, subscribeChecklist } from "./rehearsalChecklist";
@@ -2817,6 +2818,8 @@ export function ChatPanel(props: Props) {
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {/* CGP-SHELL-R-019 — the lasting way back after 팁 그만 보기: only where a lesson can show tips, never the instructor console. */}
         {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
+        {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served. */}
+        <MicInputSetting />
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -2844,6 +2847,8 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served, while open. */}
+        <MicInputSetting open={preferencesOpen} />
         {/* CGP-KNOW-D-022 — the same read-only state line, with the folder, in the settings dialog. */}
         {config.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="settings" />}
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
@@ -2916,7 +2921,7 @@ function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatCon
     </ul>
     {items.some(item => item.on && item.asks === true) && <p className="hp-rail-lesson-note">물어봐요: 확인이 필요한 동작을 하기 전에 허락을 받아요. 이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.</p>}
     {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>알겠어요</button>}
-    <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
+    <p className="hp-rail-lesson-note">{solo ? '지금 연결된 활동에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }
 

@@ -192,7 +192,7 @@ const failedResult = { type: "result", subtype: "success", is_error: true, resul
 }
 {
   // The App's own Korean errors pass through untouched.
-  for (const m of ["요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)", "선택한 모델의 실행 환경을 사용할 수 없습니다."]) {
+  for (const m of ["요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 사용 한도를 확인해 주세요. (429)", "선택한 모델의 실행 환경을 사용할 수 없습니다."]) {
     assert.equal(sdkErrorDisplayText(new Error(m)), m);
   }
   assert.equal(sdkErrorDisplayText("not an error"), SDK_ERROR_GENERIC_FRIENDLY);

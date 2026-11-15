@@ -91,8 +91,35 @@
 }
 .hps-voice-disclosure-start:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
 
+/* ---- CGP-VOICE-R-019 / D-015 (DES-CGPV-23): the 마이크 row in the chat's settings dialog ----
+   A native select (full width up to the dialog, 44px, the caption step), the state in words below it, and
+   마이크 시험 with the same decorative level bar as dictation (aria-hidden; not drawn under reduced motion). */
+.hps-mic-setting { flex-direction: column; align-items: stretch; }
+.hps-mic-setting .hps-mic-select {
+  box-sizing: border-box; inline-size: 100%; max-inline-size: 100%; min-block-size: var(--hp-control-min);
+  font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+}
+.hps-mic-setting .hps-mic-select:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-mic-hint, .hps-mic-test-result { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; word-break: keep-all; }
+.hps-mic-test-result:empty { display: none; }
+.hps-mic-setting .hps-mic-select[data-state="missing"] + .hps-mic-hint, .hps-mic-test-result { color: var(--hp-text-primary-default); }
+.hps-mic-test-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2) var(--hp-space-3); }
+.hps-mic-test {
+  min-block-size: var(--hp-control-min); min-inline-size: var(--hp-control-min); padding-block: 0; padding-inline: var(--hp-space-3);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
+  background: transparent; color: var(--hp-text-primary-default); font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer;
+  transition: background-color var(--hp-dur-press) var(--hp-ease);
+}
+.hps-mic-test:hover { background-color: var(--hp-bg-control-hover); }
+.hps-mic-test:active { background-color: var(--hp-bg-control-pressed); }
+.hps-mic-test[aria-pressed="true"] { background-color: var(--hp-bg-control-pressed); }
+.hps-mic-test:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-mic-explain { display: flex; flex-direction: column; align-items: flex-start; gap: var(--hp-space-2); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; word-break: keep-all; }
+
 @media (forced-colors: active) {
   .hps-input .hps-voice-mic, .hps-voice-note { border-color: ButtonText; }
+  .hps-mic-test, .hps-mic-setting .hps-mic-select { border: var(--ds-c-studio-styles-size-3) solid ButtonText; }
+  .hps-mic-hint, .hps-mic-test-result { color: CanvasText; }
   .hps-voice-level { background: Canvas; border: var(--ds-c-studio-styles-size-3) solid CanvasText; }
   .hps-voice-level > span { background: Highlight; }
   .hps-voice-failure > .hps-icon { color: CanvasText; }

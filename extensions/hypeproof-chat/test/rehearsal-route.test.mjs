@@ -24,55 +24,64 @@ check('RR-2 server, absent, unknown and missing rehearsal all route as server', 
   eq(mustStayLocal(undefined), false);
 });
 
-// Why not a fake host: see the header. The checks below read the source order of handleSend.
+// Why not a fake host: handleSend depends on the whole panel. The checks below read the source order of handleSend.
 const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
 const sendStart = src.indexOf('  private async handleSend(');
-const GUARD = 'if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration(\'hypeproofChat\')';
-const guardAt = src.indexOf(GUARD, sendStart);
-const pre = src.slice(sendStart, guardAt);
+const EARLY = "if (rehearsalSubscriptionEarly && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat')";
+const LATE = "if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat')";
+const earlyAt = src.indexOf(EARLY, sendStart);
+const lateAt = src.indexOf(LATE, sendStart);
+const pre = src.slice(sendStart, earlyAt);
 const at = (needle) => src.indexOf(needle, sendStart);
 
-check('RR-3 the guard sits before the turn lock, the learning-wiki call and the local branch, and before the server branches', () => {
+check('RR-3 the early decision sits before the turn lock and the learning-wiki call; the late decision follows the resolved profile and precedes loadAccess', () => {
   if (sendStart < 0) throw new Error('handleSend missing');
-  if (guardAt < 0) throw new Error('guard line missing');
-  if (src.indexOf(GUARD, guardAt + 1) >= 0) throw new Error('guard appears twice');
+  if (earlyAt < 0) throw new Error('early guard line missing');
+  if (lateAt < 0) throw new Error('late guard line missing');
+  if (src.indexOf(EARLY, earlyAt + 1) >= 0) throw new Error('early guard appears twice');
   const lock = at('const previousTurn = this.turnSettling');
   const wiki = at('const brainCall = mode');
-  const localBranch = src.indexOf('      if (local) {\n        if (this._instructorMode.isInstructor === true) {', guardAt);
-  const serverBranch = src.indexOf('} else if (runtime === "agent-sdk") {', guardAt);
-  if (!(guardAt < lock)) throw new Error('guard is not before the turn lock');
-  if (!(guardAt < wiki)) throw new Error('guard is not before the learning-wiki call');
-  if (!(guardAt < localBranch)) throw new Error('guard is not before the local branch');
-  if (!(guardAt < serverBranch)) throw new Error('guard is not before the server branch');
+  const resolved = at('const resolvedProfile = temporaryTurn');
+  const access = at('await this.loadAccess();');
+  const localBranch = src.indexOf('      if (local) {\n        if (this._instructorMode.isInstructor === true) {', earlyAt);
+  const serverBranch = src.indexOf('} else if (runtime === "agent-sdk") {', earlyAt);
+  if (!(earlyAt < lock)) throw new Error('early decision is not before the turn lock');
+  if (!(earlyAt < wiki)) throw new Error('early decision is not before the learning-wiki call');
+  if (!(resolved < lateAt && lateAt < access)) throw new Error('late decision is not between the resolved profile and loadAccess');
+  if (!(earlyAt < localBranch && earlyAt < serverBranch)) throw new Error('early decision is not before the branches');
 });
 
-check('RR-4 nothing before the guard calls a conversation route or a runner (static)', () => {
-  for (const token of ['fetch(', 'proxyChat(', 'runProxy()', 'runSdkCoach(', 'runLocalCoach(', 'runBrowserLoop(', 'runProxyRuntime(', '/v1/messages', '/v1/chat/completions', 'answerBrainCall(', 'prepareObservation(', 'openPrebuiltWorldForTurn(', 'verifyActivity(', 'loadAccess(']) {
-    if (pre.includes(token)) throw new Error(`found ${token} before the guard`);
+check('RR-4 nothing before the early decision calls a conversation route, a runner, the wiki, observation, the world or the activity check (static)', () => {
+  for (const token of ['fetch(', 'proxyChat(', 'runProxy()', 'runSdkCoach(', 'runLocalCoach(', 'runBrowserLoop(', 'runProxyRuntime(', '/v1/messages', '/v1/chat/completions', 'answerBrainCall(', 'prepareObservation(', 'openPrebuiltWorldForTurn(', 'verifyActivity(', 'loadAccess(', 'await this.ensureProfile']) {
+    if (pre.includes(token)) throw new Error(`found ${token} before the early decision`);
   }
 });
 
-check('RR-5 without a local runtime the guard throws the existing no-local-runtime sentence, and the sentence is unchanged', () => {
-  const line = src.slice(guardAt, src.indexOf('\n', guardAt));
-  if (!line.includes('throw new Error(NO_LOCAL_RUNTIME_MESSAGE);')) throw new Error('guard does not throw NO_LOCAL_RUNTIME_MESSAGE');
+check('RR-5 without a local runtime both decisions throw the existing no-local-runtime sentence, and the sentence is unchanged', () => {
+  for (const g of [earlyAt, lateAt]) {
+    const line = src.slice(g, src.indexOf('\n', g));
+    if (!line.includes('throw new Error(NO_LOCAL_RUNTIME_MESSAGE);')) throw new Error('a guard does not throw NO_LOCAL_RUNTIME_MESSAGE');
+  }
   const chalkContract = readFileSync(new URL('../src/chalkContract.ts', import.meta.url), 'utf8');
   if (!chalkContract.includes('export const NO_LOCAL_RUNTIME_MESSAGE = "강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.";')) throw new Error('sentence changed');
 });
 
-check('RR-6 the learning-wiki call is skipped for a subscription rehearsal turn (the guard already decided the local runtime)', () => {
+check('RR-6 the learning-wiki call is skipped for a subscription rehearsal turn, decided from the cached profile (plan-first string kept)', () => {
   const line = src.slice(at('const brainCall = mode'), src.indexOf('\n', at('const brainCall = mode')));
-  if (!line.includes('!rehearsalSubscription')) throw new Error('brainCall does not exclude subscription rehearsal');
+  if (!line.includes("mode === 'auto' && !plan.planning && wikiSwitch?.enabled === true && !rehearsalSubscriptionEarly")) throw new Error('brainCall shape changed');
 });
 
-check('RR-7 the server reads and writes that a subscription rehearsal turn must not make are skipped: activity check, access view, observation context', () => {
+check('RR-7 server reads a subscription rehearsal turn must not make are skipped: activity check (early), access view (resolved), observation (inside prepareObservation)', () => {
   const pairs = [
-    'if (!rehearsalSubscription) await verifyActivity',
+    'if (!rehearsalSubscriptionEarly) await verifyActivity',
     'if (!rehearsalSubscription) await this.loadAccess();',
-    'rehearsalSubscription ? null : await this.prepareObservation(proxyUrl, token, profile);',
+    'const observation = await this.prepareObservation(proxyUrl, token, profile);',
   ];
   for (const guarded of pairs) {
-    if (!src.includes(guarded)) throw new Error(`missing guard: ${guarded.slice(0, 70)}`);
+    if (!src.includes(guarded)) throw new Error(`missing: ${guarded.slice(0, 70)}`);
   }
+  const prep = src.slice(src.indexOf('  private async prepareObservation('), src.indexOf('await this.observationWrites;', src.indexOf('  private async prepareObservation(')));
+  if (!prep.includes('if (mustStayLocal(profile?.rehearsal)) return null;')) throw new Error('prepareObservation does not return null for a subscription rehearsal');
 });
 
 check('RR-8 the prebuilt world is opened for a subscription rehearsal turn too (GET /worlds is an authenticated static render, allowed)', () => {

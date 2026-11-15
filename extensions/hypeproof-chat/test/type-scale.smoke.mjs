@@ -824,7 +824,7 @@ const EXTRA_PROBES = [
   { label: "citation chip in an answer (cp-citation, inherits)", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.cp-rack", "span", "button.cp-citation"] },
   { label: "tools menu item in the expanded composer", ctx: shellCtx, chain: ['div.hps-input[data-expanded="true"]', "div.hps-composer-tools", "div.hps-tools-menu", "button"] },
   { label: "text-size picker label in 대화 설정", ctx: shellCtx, chain: ["dialog.hps-preferences", "div.hps-preferences-body", "fieldset.hps-text-size", "label", "span"] },
-  { label: "AI-can-do card note (지금 쓰는 체험·이용권에서 정해진 범위예요.)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "p.hp-rail-lesson-note"] },
+  { label: "AI-can-do card note (지금 연결된 활동에서 정해진 범위예요.)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "p.hp-rail-lesson-note"] },
   { label: "AI-can-do summary count (4가지 · 자세히)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "summary", "span.hp-ai-can-do-count"] },
   { label: "AI-can-do row label", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "ul", "li", "span.hp-ai-can-do-label"] },
   { label: "AI-can-do row state word (해요 / 안 해요)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "ul", "li", "span.hp-ai-can-do-state"] },
