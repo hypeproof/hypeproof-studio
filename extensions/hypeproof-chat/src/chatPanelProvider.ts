@@ -9913,6 +9913,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // previous turn released the lock (at most 15 s), so a send right after a stop is not refused as
     // "another window" and its history already holds the partial answer. No previous turn still
     // settling: no await at all, so the send stays synchronous up to its first real await.
+    // #4099 — a subscription rehearsal turn runs only on the local runtime, and no step of it may reach the server.
+    // The profile is the only server read allowed before this guard (read here only when not yet held; no await otherwise).
+    // Without a local runtime the turn stops here with the existing no-local-runtime sentence.
+    const rehearsalSubscription = mustStayLocal((this.cachedProfile ?? (await this.ensureProfile().catch(() => null)))?.rehearsal);
+    if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     const previousTurn = this.turnSettling, settle = turnSettleSignal();
     this.turnSettling = settle.promise;
     const previousSettled = previousTurn ? await waitAtMost(previousTurn) : true;
@@ -9953,7 +9958,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (!previousSettled) throw new ActivityConnectionError(TURN_SETTLING_REFUSAL);
       releaseActivity=connections.acquire();
       const token=await connections.token();
-      await verifyActivity({token:token!,proxyUrl:connections.current!.service},connections.current!.serverId);
+      // #4099 — the activity check is a server call; a subscription rehearsal turn skips it (it never reaches the server).
+      if (!rehearsalSubscription) await verifyActivity({token:token!,proxyUrl:connections.current!.service},connections.current!.serverId);
     }
     // #751 U3 — a lesson setting this device holds is switched HERE, before the turn consumes the input. A failure to
     // switch leaves the turn exactly as it would have been; only "switched but the new profile could not be verified"
@@ -9992,7 +9998,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
     // always a real turn. Reads the profile already held (no await before the turn's first one).
     const wikiSwitch = this.cachedProfile?.learning_wiki;
-    const brainCall = mode === 'auto' && !plan.planning && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    const brainCall = mode === 'auto' && !rehearsalSubscription && !plan.planning && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
       await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted, userId);
       return;
@@ -10083,7 +10089,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // choice and the folder choice below only narrow further.
     if (temporaryTurn && !this.temporaryTaskAllowed(servedProfile)) throw new TurnToolModeError(TEMPORARY_TASK_UNAVAILABLE);
     const resolvedProfile = temporaryTurn && servedProfile ? temporaryTaskProfile(servedProfile) : servedProfile;
-    await this.loadAccess();
+    // #4099 — the access view chooses funding for server routes only; a subscription rehearsal turn does not read it.
+    if (!rehearsalSubscription) await this.loadAccess();
     const fundingSource=this.accessState?.selected;
     const chosenAccess=this.accessState?.view?.choices.find(c=>c.id===fundingSource);
     // A stale/remounted view can submit before its funding choice reaches the
@@ -10098,8 +10105,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // REQ-STUDIO-FOLDER-CONSENT — a personal activity in a folder that is not its own asks once; the choice only narrows.
     const profile=resolvedProfile?await folderConsentProfile(this.context,accessProfile(resolvedProfile,chosenAccess),{servedRoot:this.servedWorkspaceRoot,instructor:this._instructorMode.isInstructor===true}):null;
-    // #4099 — a subscription rehearsal turn runs only on the local runtime. Without one it stops here, before any step below that can reach the server.
-    if (mustStayLocal(profile?.rehearsal) && !(localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     // CGP-AGENT-R-002 — the approval preset this turn runs under (the label and the SDK verdict use the same value).
     this.turnApprovalPreset = servedApprovalPreset(profile)?.id ?? null;
     // DEC-11 amended — `auto` needs both the turn's seat and the live one to be adult; no profile counts as minor.
@@ -10193,7 +10198,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // "it is already up — just the opening line".
     let openedWorldThisTurn = false;
     {
-      const opened = await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning: plan.planning });
+      // #4099 — a prebuilt world is fetched from the server; a subscription rehearsal turn does not open one.
+      const opened = rehearsalSubscription ? null : await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning: plan.planning });
       const world = opened?.world;
       {
         if (world && opened?.shown) {
@@ -10269,7 +10275,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void this.postConfig();
     }
     // CGP-KNOW-R-029 — a temporary turn's profile carries no `observation` (temporaryTaskProfile), so no recorder is built.
-    const observation = await this.prepareObservation(proxyUrl, token, profile);
+    // #4099 — the observation context is read from the server; a subscription rehearsal turn records none (no recorder).
+    const observation = rehearsalSubscription ? null : await this.prepareObservation(proxyUrl, token, profile);
     // cr-verify — the coach's verify calls in this turn write to this turn's recorder.
     this.verifyTurnRecorder = observation?.batch.format === 'hps-observation/2' ? observation : null;
     const recordObservation = (kind: import('./nativeObservationContract').ObservationKind, value: string, extra: Partial<import('./nativeObservationContract').ObservationEvent> = {}) => {
