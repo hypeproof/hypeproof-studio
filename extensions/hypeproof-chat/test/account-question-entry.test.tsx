@@ -28,6 +28,17 @@ async function main(){
   assert.equal(button('목표부터').getAttribute('aria-pressed'),'true','same-card refresh preserves selection');
   await act(async()=>button('선택하고 이어가기').click());
   assert.deepEqual(posts.at(-1),{type:'questionCardAct',binding:'account-a-bound-view',key:'growth:one',action:'answer',answer:{choice:'goal',action:'continue',text:''}});
+  const beforeNext=posts.length;
+  await update({...state,questionCard:{status:'answered',card:null,busy:false,message:'답변을 남겼어요'}});
+  assert.equal(posts.length,beforeNext,'confirmed receipt does not request a follow-up automatically');
+  assert(button('다음 질문 보기'));await act(async()=>button('다음 질문 보기').click());
+  assert.deepEqual(posts.at(-1),{type:'questionCardRefresh'});assert.equal(posts.length,beforeNext+1);
+  await update({...state,questionCard:{status:'ready',card:null,busy:false},teamProduct:{available:true,busy:false,binding:'focus-binding',granted:false,notice:'선택 사항'}});
+  assert.equal(button('다음 질문 보기'),undefined);assert(button('이루고 싶은 일'));assert(button('다르게 해 볼 방법'));assert(button('결정이 필요한 일'));
+  assert(document.querySelector('[data-testid="personal-reflection-entry"]'),'existing conversation entry remains available');
+  assert.equal(posts.length,beforeNext+1,'empty follow-up does not choose a new focus');
+  await update({...state,questionCard:{status:'error',card:null,busy:false,message:'처리 결과를 확인하지 못했어요'}});
+  assert.equal(button('다음 질문 보기'),undefined);assert(button('다시 조회'));
   await update({...state,account:{status:'signedOut'}});
   assert.equal(document.querySelector('[data-testid="account-question-card"]'),null);assert.equal(document.querySelector('[data-testid="account-greeting"]'),null);assert.equal(document.querySelector('[data-testid="member-approval-entry"]'),null);
   await update({...state,account:{...state.account,account:{...state.account.account,id:'account-b',display_name:'새 사용자'}},questionCard:{...state.questionCard,binding:'account-b-bound-view'}});

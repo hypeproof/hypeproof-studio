@@ -25,7 +25,7 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 @RunWith(AndroidJUnit4.class)
 public class TeamEntryJourneyTest {
     private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
-    private final AtomicInteger triggers=new AtomicInteger(),answers=new AtomicInteger(),decisions=new AtomicInteger(),turns=new AtomicInteger(),shown=new AtomicInteger();
+    private final AtomicInteger reads=new AtomicInteger(),triggers=new AtomicInteger(),answers=new AtomicInteger(),decisions=new AtomicInteger(),turns=new AtomicInteger(),shown=new AtomicInteger();
     private final AtomicInteger consentWrites=new AtomicInteger();
     private final AtomicBoolean metricsGranted=new AtomicBoolean();
     private final AtomicBoolean capabilityUnavailable=new AtomicBoolean();
@@ -50,13 +50,13 @@ public class TeamEntryJourneyTest {
             if(path.equals("/me"))return new NativeDeviceSignIn.Reply(200,Map.of("account_id","team-account","account_status","active","session_id","team-session","display_name","지윤"));
             if(path.equals("/me/reflection"))return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",0).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
             if(path.equals("/me/approval-inbox"))return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-member-approval-inbox/1","availability","ready","cards",new JSONArray().put(approval())));
-            if(path.equals("/me/cards?surface=mobile"))return new NativeDeviceSignIn.Reply(200,Map.of("card",!triggerCommitted.get()?JSONObject.NULL:question()));
+            if(path.equals("/me/cards?surface=mobile")){reads.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("card",!triggerCommitted.get()?JSONObject.NULL:question().put("key","growth:fixture-"+triggers.get())));}
             if(path.equals("/me/question-triggers")){
                 assertEquals("method",body.get("choice"));assertEquals(body.get("id"),body.get("source_id"));assertEquals("1",body.get("source_revision"));triggers.incrementAndGet();triggerIDs.add(body.get("id"));if(loseTrigger.get())return new NativeDeviceSignIn.Reply(503,Map.of("error","unavailable"));triggerCommitted.set(true);
                 return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-question-trigger/1","key","growth:fixture","source",new JSONObject().put("kind","choice").put("id",body.get("id")).put("revision",1),"reentry",new JSONObject().put("method","GET").put("path","/v1/me/cards"),"model_calls",0,"policy","team-question/1","created",true));
             }
             if(path.endsWith("/shown")){shown.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("ok",true));}
-            if(path.endsWith("/answer")){assertEquals("next",body.get("choice"));assertEquals("mobile",body.get("surface"));answers.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("ok",true,"thanks","다음 생각을 남겼어요"));}
+            if(path.endsWith("/answer")){assertTrue(triggerCommitted.getAndSet(false));assertEquals("next",body.get("choice"));assertEquals("mobile",body.get("surface"));answers.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("ok",true,"thanks","다음 생각을 남겼어요"));}
             if(path.endsWith("/decisions"))decisions.incrementAndGet();if(path.equals("/me/reflection/turns"))turns.incrementAndGet();
             throw new IOException("No other Service effects in this fixture");
         };
@@ -80,6 +80,11 @@ public class TeamEntryJourneyTest {
         onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);
         onView(withText("지금 바꿔 볼 작은 방법은 무엇인가요?")).inRoot(isDialog()).check(matches(isDisplayed()));assertEquals(1,triggers.get());assertEquals(0,answers.get());screenshot("android-team-question");
         onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(1,answers.get());
+        onView(withText("다음 질문 보기")).inRoot(isDialog()).check(matches(isDisplayed())).check(matches(isEnabled()));
+        assertEquals(2,reads.get());assertEquals(1,triggers.get());assertEquals(1,answers.get());screenshot("android-team-answer-next-action");
+        onView(withText("다음 질문 보기")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.canStart);
+        onView(withText("방법이 막혔어요")).inRoot(isDialog()).check(matches(isDisplayed()));
+        assertEquals(3,reads.get());assertEquals(1,triggers.get());assertEquals(1,answers.get());screenshot("android-team-next-question-empty-choices");
         onView(withText("닫기")).inRoot(isDialog()).perform(click());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("아직 보내지 않은 내 생각")));
         assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
@@ -110,7 +115,7 @@ public class TeamEntryJourneyTest {
         // Explicitly reopening settings flushes the already-persisted answer, without a product replay.
         selectMenu("사용 경험 공유 설정");experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
         onView(withText("공유하지 않기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->!e.busy&&!e.granted);int before=metricTypes.size();onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private void selectMenu(String title)throws Exception {
         boolean observe=Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("observeTeamMenu","false"));

@@ -69,12 +69,33 @@ final class AccountQuestionTests: XCTestCase {
         XCTAssertNil(controller.view.card); XCTAssertEqual(controller.view.message, "선택한 생각을 남겼어요")
         XCTAssertFalse(posts.contains { $0.0.contains("reflection") || $0.0.contains("approval") })
     }
+    @MainActor func testConfirmedAnswerWaitsForExplicitNextReadAndEmptyInboxKeepsStartingChoices() async throws {
+        let card = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: Self.card))
+        let account = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
+        var reads = 0, answers = 0, failRead = false
+        let controller = AccountQuestionController(identity: { account }, load: { _ in
+            reads += 1; if failRead { throw URLError(.networkConnectionLost) }; return answers == 0 ? card : nil
+        }, act: { _, _, action, _ in XCTAssertEqual(action, "answer"); answers += 1; return "남겼어요" }, startingAvailable: { _ in true }, changed: { _ in })
+        await controller.refresh(); controller.pick("method"); await controller.submit(action: "continue")
+        XCTAssertTrue(controller.view.answerConfirmed); XCTAssertEqual(reads, 1); XCTAssertEqual(answers, 1)
+        failRead = true; await controller.refresh()
+        XCTAssertFalse(controller.view.answerConfirmed); XCTAssertEqual(reads, 2); XCTAssertEqual(answers, 1)
+        failRead = false; await controller.refresh()
+        XCTAssertTrue(controller.view.canStart); XCTAssertNil(controller.view.card); XCTAssertEqual(reads, 3); XCTAssertEqual(answers, 1)
+        controller.invalidate(); XCTAssertFalse(controller.view.answerConfirmed)
+    }
+    @MainActor func testSkipDoesNotBecomeConfirmedAnswer() async throws {
+        let card = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: Self.card))
+        let controller = AccountQuestionController(identity: { .init(accountID: "A", sessionID: "session-A") }, load: { _ in card }, act: { _, _, action, _ in XCTAssertEqual(action, "skip"); return "나중에 이어가요" }, changed: { _ in })
+        await controller.refresh(); await controller.submit(skip: true)
+        XCTAssertFalse(controller.view.answerConfirmed); XCTAssertNil(controller.view.card)
+    }
     @MainActor func testUncertainAnswerPreservesWordsAndNeverAutomaticallyReplays() async throws {
         let card = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: Self.card))
         var identity: MemberApprovalIdentity? = .init(accountID: "A", sessionID: "session-A"), posts = 0
         let controller = AccountQuestionController(identity: { identity }, load: { _ in card }, act: { _, _, action, _ in if action == "answer" { posts += 1 }; throw URLError(.networkConnectionLost) }, startingAvailable: { _ in true }, changed: { _ in })
         await controller.refresh(); controller.edit("사라지면 안 되는 답"); controller.pick("method"); await controller.submit(action: "continue")
-        XCTAssertEqual(posts, 1); XCTAssertEqual(controller.view.words, "사라지면 안 되는 답"); XCTAssertNil(controller.view.card)
+        XCTAssertEqual(posts, 1); XCTAssertFalse(controller.view.answerConfirmed); XCTAssertEqual(controller.view.words, "사라지면 안 되는 답"); XCTAssertNil(controller.view.card)
         await controller.refresh(); XCTAssertEqual(posts, 1); XCTAssertEqual(controller.view.words, "사라지면 안 되는 답")
         identity = .init(accountID: "B", sessionID: "session-B"); await controller.refresh()
         XCTAssertEqual(controller.view.words, ""); XCTAssertNil(controller.view.choice); XCTAssertEqual(posts, 1)

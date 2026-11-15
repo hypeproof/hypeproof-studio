@@ -500,6 +500,17 @@ Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
 `NativePushTest.java`. A fixture name or compiled APK alone is not
 an executed native journey. Report the actual run and any missing physical/provider evidence.
 
+For #4236, extend the existing MENT-T01/T02 question-answer journeys through the
+confirmed receipt: observe the visible next-question action, record unchanged GET,
+answer and trigger counts before the tap, tap once, then observe one new card GET
+and either a different card or the empty-inbox choices. Retain before/after screenshots
+and verify the original conversation draft after Close. The bounded fixtures consume
+the answered card rather than returning it forever. Controller controls cover read
+failure, uncertain answer, duplicate in-flight reads and identity invalidation; none
+may retransmit the answer. A successful skip remains distinct from a confirmed answer.
+Desktop render/host controls and native simulator/emulator execution are separate;
+unexecuted native journeys and physical/live-account acceptance remain NOT RUN.
+
 Capability controls must exercise unavailable/error/account-switch metadata as
 well as available-but-declined consent. Both the visible choice and controller
 submission boundary must agree; no trigger is sent for an unavailable capability,
