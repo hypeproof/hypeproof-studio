@@ -1,4 +1,5 @@
-// CGP-LEARN-R-006 (box_spacing) / CGP-LEARN-R-005 (stage_stepper) — the learner side of the parametric step blocks.
+// CGP-LEARN-R-006 (box_spacing) / CGP-LEARN-R-005 (stage_stepper) / CGP-LEARN-R-009 (narrated_diagram) — the learner side of
+// the parametric step blocks.
 //
 // The Service validates and pins a block's `ui_params` at confirm (hypeproof-service step-ui-catalog). This App still treats
 // the served params as untrusted data: it re-validates them against its own copy of the published v1 specs, and a value that
@@ -10,11 +11,13 @@ export type ParamSpec =
   | { kind: "integer" | "number"; min: number; max: number; default: number }
   | { kind: "enum"; values: readonly string[]; default: string }
   | { kind: "boolean"; default: boolean }
-  | { kind: "text_list"; minItems: number; maxItems: number; fields: Readonly<Record<string, { maxLength: number }>>; required: true };
+  | { kind: "text_list"; minItems: number; maxItems: number; fields: Readonly<Record<string, TextField>>; required: true };
+/** A text_list field; CGP-LEARN-R-009 text layers also carry a width budget (maxWidth px at fontPx over maxLines). */
+export interface TextField { maxLength: number; maxWidth?: number; fontPx?: number; maxLines?: number }
 export interface BlockVersionSpec { params: Readonly<Record<string, ParamSpec>>; presets: Readonly<Record<string, { label: string; params: Readonly<Record<string, unknown>> }>> }
 
 /** The v1 specs this App draws. Equal to the Service's published snapshot (checked by test, never hand-tuned here). */
-export const BLOCK_SPECS: Readonly<Record<"box_spacing" | "stage_stepper", Readonly<Record<string, BlockVersionSpec>>>> = {
+export const BLOCK_SPECS: Readonly<Record<"box_spacing" | "stage_stepper" | "narrated_diagram", Readonly<Record<string, BlockVersionSpec>>>> = {
   box_spacing: { "1": {
     params: {
       padding: { kind: "integer", min: 0, max: 48, default: 16 },
@@ -31,6 +34,17 @@ export const BLOCK_SPECS: Readonly<Record<"box_spacing" | "stage_stepper", Reado
   stage_stepper: { "1": {
     params: { stages: { kind: "text_list", minItems: 2, maxItems: 8, fields: { title: { maxLength: 40 }, sentence: { maxLength: 60 } }, required: true } },
     presets: { default: { label: "기본", params: {} } },
+  } },
+  narrated_diagram: { "1": {
+    params: {
+      diagram: { kind: "enum", values: ["page_request", "html_to_page"], default: "page_request" },
+      beats: {
+        kind: "text_list", minItems: 3, maxItems: 3,
+        fields: { title: { maxLength: 20, maxWidth: 168, fontPx: 14, maxLines: 1 }, sentence: { maxLength: 60, maxWidth: 488, fontPx: 14, maxLines: 2 } },
+        required: true,
+      },
+    },
+    presets: { default: { label: "기본", params: { diagram: "page_request" } } },
   } },
 };
 
@@ -108,6 +122,55 @@ export function stageParams(uiVersion: unknown, raw: unknown): Stage[] | null {
     out.push(stage as unknown as Stage);
   }
   return out;
+}
+
+/**
+ * CGP-LEARN-R-009 — the Service's font-independent width estimate for one line at `fontPx` (service-contracts
+ * step-ui-catalog `textLayerWidthPx`, same classes): Hangul, CJK, kana, full-width forms, anything outside the BMP and
+ * any Extended_Pictographic code point count 1 em; everything else 0.6 em. block-params.smoke checks the two agree on a
+ * shared case list.
+ */
+const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
+function wideCodePoint(cp: number): boolean {
+  return (cp >= 0x1100 && cp <= 0x11ff) || (cp >= 0x2e80 && cp <= 0x303f) || (cp >= 0x3040 && cp <= 0x33ff)
+    || (cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0xa960 && cp <= 0xa97f) || (cp >= 0xac00 && cp <= 0xd7ff)
+    || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xff60)
+    || (cp >= 0xffe0 && cp <= 0xffe6) || cp > 0xffff;
+}
+export function textLayerWidthPx(text: string, fontPx: number): number {
+  let em = 0;
+  for (const ch of text) em += wideCodePoint(ch.codePointAt(0)!) || PICTOGRAPHIC.test(ch) ? 1 : 0.6;
+  return em * fontPx;
+}
+
+export interface Beat { title: string; sentence: string }
+export interface DiagramValues { diagram: "page_request" | "html_to_page"; beats: [Beat, Beat, Beat] }
+
+/**
+ * narrated_diagram params as served, or null unless `diagram` is one of the v1 drawings and `beats` is exactly three
+ * {title, sentence}, each a safe single line within its length and its text layer's width (the Service's rules).
+ */
+export function diagramParams(uiVersion: unknown, raw: unknown): DiagramValues | null {
+  const spec = own(BLOCK_SPECS.narrated_diagram, String(uiVersion === undefined ? 1 : uiVersion));
+  const d = spec ? own(spec.params, "diagram") : undefined, p = spec ? own(spec.params, "beats") : undefined;
+  if (!d || d.kind !== "enum" || !p || p.kind !== "text_list" || !isObj(raw) || Object.keys(raw).some((k) => k !== "diagram" && k !== "beats")) return null;
+  const diagram = Object.prototype.hasOwnProperty.call(raw, "diagram") ? raw.diagram : d.default;
+  if (typeof diagram !== "string" || !d.values.includes(diagram)) return null;
+  const list = raw.beats;
+  if (!Array.isArray(list) || list.length < p.minItems || list.length > p.maxItems || list.length !== 3) return null;
+  const out: Beat[] = [];
+  for (const item of list) {
+    if (!isObj(item) || Object.keys(item).length !== 2) return null;
+    const beat: Record<string, string> = {};
+    for (const [field, f] of Object.entries(p.fields)) {
+      const v = item[field];
+      if (typeof v !== "string" || v.length > f.maxLength || !safeLine(v, true)) return null;
+      if (f.maxWidth !== undefined && textLayerWidthPx(v, f.fontPx ?? 14) > f.maxWidth * (f.maxLines ?? 1)) return null;
+      beat[field] = v;
+    }
+    out.push(beat as unknown as Beat);
+  }
+  return { diagram: diagram as DiagramValues["diagram"], beats: out as DiagramValues["beats"] };
 }
 
 /**

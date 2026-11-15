@@ -12,3 +12,10 @@
     - Everything else counts at 0.6 em, which is an average for Latin and not a bound.
     - A beat title is one line of 168 px at 14 px (12 Hangul syllables); a sentence is two lines of 488 px at 14 px.
   - The beat title maxLength is 20, where stage_stepper allows 40. Three marker labels share the 640 px artboard beside the 120 px control area, so a label is a short name, and 168 px holds 20 Latin characters.
+- **Studio rendering (agent choice; the coordinator approved it 2026-11-16).** DES-CGP-LEARN-09 asks for a 640×400 artboard scaled to the container and for Korean at 14 px minimum, and DES-CGP-LEARN-01 sizes the rail at 280–480 px. In a 280 px rail the artboard scales to about 0.44, so SVG text set at 14 px would draw at about 6 px, while its computed font-size still reads 14 px.
+  - So only the shapes scale. The SVG holds the boxes, arrows, box letters (40 artboard units, which is 14 px or more down to a 280 px rail) and a ring-and-dot marker with no numeral, because a lone digit reads as a score (the SX audit's bare-number rule).
+  - Every word is HTML at 14 px or more: the node labels as a legend keyed by the same letters (also in the SVG's accessible name), and "N / 3 장면 · 역할" with the title and sentence in their 168 px and 488 px boxes.
+  - 이전 / 다음 sit in the reserved control area beside the caption.
+  - The browser smoke measures rendered sizes, not computed ones.
+  - The Service width rule is unchanged. It is stricter than the HTML layer needs.
+  - Confirmed by Jay: no.

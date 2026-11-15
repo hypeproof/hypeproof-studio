@@ -166,6 +166,48 @@
           }
         }
       }
+    },
+    "narrated_diagram": {
+      "1": {
+        "params": {
+          "diagram": {
+            "kind": "enum",
+            "values": [
+              "page_request",
+              "html_to_page"
+            ],
+            "default": "page_request"
+          },
+          "beats": {
+            "kind": "text_list",
+            "minItems": 3,
+            "maxItems": 3,
+            "fields": {
+              "title": {
+                "maxLength": 20,
+                "maxWidth": 168,
+                "fontPx": 14,
+                "maxLines": 1
+              },
+              "sentence": {
+                "maxLength": 60,
+                "maxWidth": 488,
+                "fontPx": 14,
+                "maxLines": 2
+              }
+            },
+            "required": true
+          }
+        },
+        "presets": {
+          "default": {
+            "label": "기본",
+            "params": {
+              "diagram": "page_request"
+            }
+          }
+        }
+      }
     }
   }
 }

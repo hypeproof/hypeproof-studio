@@ -147,3 +147,39 @@
   .hp-param-option { border-color: ButtonText; }
   .hp-param-option:has(input:checked) { border-color: Highlight; }
 }
+
+/* CGP-LEARN-D-009 (DES-CGP-LEARN-09) — narrated_diagram. Only the shapes scale: the SVG keeps its 640x400 viewBox and fills
+   the rail's width. Every word is HTML at the 14px caption floor or the 16px body step (decisions/CGP-LEARN-R-009.md): the
+   letter legend, "2 / 3 장면 · 변화", the beat title and its sentence. The box letters inside the art are
+   drawn at 40 user units (SVG attributes), so they stay at least 14px down to a 280px rail. Colours are role tokens, never served values. */
+.hp-diagram { display: flex; flex-direction: column; gap: var(--hp-space-2); min-width: 0; border-radius: var(--hp-radius-8); }
+.hp-diagram-art { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 640 / 400; }
+.hp-diagram-node { fill: var(--hp-bg-app-default); stroke: var(--hp-text-muted-default); }
+.hp-diagram [data-role="accent"] .hp-diagram-node { stroke: var(--hp-text-accent-default); }
+.hp-diagram-letter { fill: var(--hp-text-primary-default); font-weight: var(--hp-weight-strong); }
+.hp-diagram-arrow { stroke: var(--hp-border-control-default); }
+.hp-diagram-arrow[data-role="accent"] { stroke: var(--hp-text-accent-default); }
+.hp-diagram-head { fill: var(--hp-border-control-default); }
+.hp-diagram-marker circle { fill: var(--hp-text-accent-default); }
+.hp-diagram-marker-core { fill: var(--hp-bg-app-default); }
+.hp-diagram-legend { display: flex; flex-wrap: wrap; gap: var(--hp-space-1) var(--hp-space-3); margin: 0; padding: 0; list-style: none; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hp-diagram-legend-letter { font-weight: var(--hp-weight-strong); }
+.hp-diagram-beat { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--hp-space-2); min-width: 0; }
+.hp-diagram-caption { flex: 1 1 calc(var(--hp-space) * 48); min-width: 0; }
+.hp-diagram-count { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-primary-default); }
+/* The title and sentence are the validator's text layers: 168 px and 488 px at 14 px (service-contracts textLayerWidthPx). */
+.hp-diagram-title { margin: 0; max-inline-size: calc(var(--hp-space) * 42); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hp-diagram-sentence { margin: 0; max-inline-size: calc(var(--hp-space) * 122); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+/* The reserved 120x120 control area: 이전 / 다음 as 44px quiet buttons beside the caption, never inside the scaled art. */
+.hp-diagram-controls { display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--hp-space-2); flex: 0 0 auto; max-inline-size: calc(var(--hp-space) * 30); }
+.hp-diagram-controls > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-diagram-controls > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
+@media (forced-colors: active) {
+  .hp-diagram-node { fill: Canvas; stroke: CanvasText; }
+  .hp-diagram [data-role="accent"] .hp-diagram-node, .hp-diagram-arrow[data-role="accent"] { stroke: Highlight; }
+  .hp-diagram-letter { fill: CanvasText; }
+  .hp-diagram-arrow { stroke: CanvasText; }
+  .hp-diagram-head { fill: CanvasText; }
+  .hp-diagram-marker circle { fill: Highlight; }
+  .hp-diagram-marker-core { fill: Canvas; }
+}

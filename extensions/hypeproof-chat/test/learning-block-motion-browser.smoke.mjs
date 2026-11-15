@@ -34,7 +34,8 @@ let remounts=0;window.mountFixture=()=>root.render(<Fixture key={++remounts}/>);
 // Week 3 with every kind on its own step; the parametric ones with valid params.
 const content = weekFixture(3);
 const base = content.steps.at(-1);
-const PARAMS = { box_spacing: { padding: 16, border: 1, margin: 8, layout: 'block' }, stage_stepper: { stages: [{ title: '첫 장면', sentence: '무엇이 바뀌는지 봐요.' }, { title: '둘째 장면', sentence: '다시 살펴봐요.' }] } };
+const PARAMS = { box_spacing: { padding: 16, border: 1, margin: 8, layout: 'block' }, stage_stepper: { stages: [{ title: '첫 장면', sentence: '무엇이 바뀌는지 봐요.' }, { title: '둘째 장면', sentence: '다시 살펴봐요.' }] },
+  narrated_diagram: { diagram: 'html_to_page', beats: [{ title: '코드 쓰기', sentence: 'HTML 코드를 적어요.' }, { title: '브라우저가 읽기', sentence: '브라우저가 코드를 읽어요.' }, { title: '화면에 그리기', sentence: '읽은 것을 화면에 그려요.' }] } };
 content.steps = MATERIAL_KINDS.map((kind, i) => ({ ...(content.steps[i] ?? base), id: 'm' + i, title: '단계 ' + (i + 1), ui: kind, ui_version: 1, ...(PARAMS[kind] ? { ui_params: PARAMS[kind] } : {}) }));
 const config = (() => { const b = chatConfig(3); return { ...b, profile: { ...b.profile, lesson: { ...b.profile.lesson, content } } }; })();
 
