@@ -6196,6 +6196,12 @@
         },
         {
           "path": "scripts/check-unified-release.mjs"
+        },
+        {
+          "path": "scripts/ci/desktop-smoke-scope.py"
+        },
+        {
+          "path": "config/desktop-smoke-scope.json"
         }
       ]
     },
@@ -6226,6 +6232,12 @@
         },
         {
           "path": "scripts/release/test/macos-signing-receipt.test.mjs"
+        },
+        {
+          "path": "scripts/ci/test_desktop_smoke_scope.py"
+        },
+        {
+          "path": "docs/testing/desktop-smoke-scope.md"
         }
       ]
     },
