@@ -101,9 +101,11 @@ try {
     const played = await ev(`({f:frame(),pause:!!btn('pause'),gaps:window.__changes.map((t,i,a)=>i?t-a[i-1]:null).slice(1)})`);
     assert.ok(['장면 3', '장면 4'].includes(played.f) && played.pause, `${tag}: 재생 plays at ~334 ms a frame (asked 50 ms): ${JSON.stringify(played)}`);
     assert.ok(played.gaps.every((g) => g >= 320), `${tag}: never faster than 3 Hz ${JSON.stringify(played.gaps)}`);
-    await ev(`btn('pause').click()`); await settle(40);
-    const kept = await ev('frame()'); await settle(1000);
-    assert.equal(await ev('frame()'), kept, `${tag}: 멈춤 keeps the frame`);
+    const kept = await ev(`(()=>{const f=frame();btn('pause').click();return f})()`); await settle(40);
+    assert.notEqual(kept, '장면 1', `${tag}: play had moved before 멈춤`);
+    assert.equal(await ev('frame()'), kept, `${tag}: 멈춤 keeps the frame it was on`);
+    await settle(1000);
+    assert.equal(await ev('frame()'), kept, `${tag}: and stays there`);
     await ev(`btn('step').click()`); await settle(40);
     assert.equal(await ev('frame()'), '장면 ' + (Number(kept.split(' ')[1]) + 1), `${tag}: 한 단계 moves one frame`);
     await ev(`btn('play').click()`); await settle(1500);
