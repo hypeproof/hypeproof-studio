@@ -45,13 +45,19 @@ private struct ConversationTimelinePreference: PreferenceKey {
 
 struct SharedConversationView: View {
     private enum SettingsDestination {
-        case approvals, context, exportCache, clearCache, notebook, privacy
+        case push, experience, approvals, context, exportCache, clearCache, notebook, privacy
 #if DEBUG
-        case finishPlayback, advanceHistory, holdHistory, releaseHistory
+        case finishPlayback, advanceHistory, holdHistory, releaseHistory, finishSecondSpeech
 #endif
     }
     @StateObject private var model = SharedConversationModel()
     @StateObject private var voice = VoiceController()
+    @State private var showQuestions = false
+    @State private var showExperience = false
+    @State private var showPush = false
+    @ObservedObject private var pushCenter = NativePushCenter.shared
+    @State private var observedVoiceEvent = ""
+    @State private var awaitingObservedVoiceResume = false
     @Environment(\.scenePhase) private var phase
     @Environment(\.openURL) private var openURL
     @FocusState private var focused: Bool
@@ -84,6 +90,25 @@ struct SharedConversationView: View {
                 else { timeline }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if model.signedIn && model.isReflection && !focused && !voice.isActive {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.displayName.map { "안녕하세요, \($0)님." } ?? "안녕하세요.")
+                            .font(.subheadline).accessibilityIdentifier("accountGreeting")
+                        HStack {
+                            Button { voice.stop(); focused = false; showQuestions = true } label: {
+                                Label("도착한 질문", systemImage: "text.bubble").frame(minHeight: 44)
+                            }.accessibilityIdentifier("accountQuestionsEntry")
+                            if model.approvalEntryVisible {
+                                Button { voice.stop(); focused = false; showApprovals = true } label: {
+                                    Label("확인 요청", systemImage: "checkmark.bubble").frame(minHeight: 44)
+                                }.accessibilityIdentifier("accountApprovalsEntry")
+                            }
+                        }.buttonStyle(.bordered).disabled(model.loggingOut)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 4)
+                        .background(ConversationStyle.canvas)
+                }
+            }
             .background(ConversationStyle.canvas)
             .navigationTitle(!model.signedIn || model.isReflection ? "나의 질문" : model.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -117,11 +142,48 @@ struct SharedConversationView: View {
             if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop(reason: .routeChanged) }
         }
+        .onReceive(voice.$timeline) { timeline in
+            guard let entry = timeline.entries.last else { return }
+            let key = "\(entry.milliseconds):\(entry.event.rawValue):\(entry.phase.rawValue)"
+            guard key != observedVoiceEvent else { return }; observedVoiceEvent = key
+            switch entry.event {
+            case .playbackFinished: awaitingObservedVoiceResume = true; model.experience.controller?.record(.voiceFinished)
+            case .captureStarted:
+                if awaitingObservedVoiceResume { model.experience.controller?.record(.voiceResumed) }; awaitingObservedVoiceResume = false
+            case .captureFailed, .failed, .noSpeechPaused: awaitingObservedVoiceResume = false; model.experience.controller?.record(.voiceFailed)
+            case .stopped, .background, .interrupted, .scopeChanged, .routeChanged: awaitingObservedVoiceResume = false
+            default: break
+            }
+        }
+        .onReceive(pushCenter.$token) { token in if let token { Task { if await pushCenter.permits(token) { await model.push.controller?.register(token) } } } }
+        .onChange(of: pushCenter.registrationFailed) { _, failed in if failed { model.push.controller?.unavailable("시스템 알림 등록을 확인하지 못했어요. 다시 시도해 주세요.") } }
+        .onChange(of: pushCenter.reference) { _, reference in
+            openPendingNotification()
+#if DEBUG
+            if reference != nil { NativeJourneyFixture.pendingPushObserved(busy: model.push.state.busy) }
+#endif
+        }
+        .onReceive(model.push.$state) { state in
+            guard !state.busy else { return }
+            // @Published emits in willSet. Read the committed presentation state
+            // on the next MainActor turn, retaining all current-session guards.
+            Task { @MainActor in openPendingNotification() }
+        }
+        .task { openPendingNotification() }
+        .sheet(isPresented: $showPush) { AccountPushView(model: model.push) }
+        .sheet(isPresented: $showExperience) { ProductExperienceView(model: model.experience) }
         .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
-        .onChange(of: model.signedIn) { _, _ in voice.stop(reason: .scopeChanged) }
+        .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false; showPush = false } else { openPendingNotification() } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
-        .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
+        .onChange(of: model.syncing) { _, syncing in
+            if !syncing {
+                reconcileVoiceReply()
+#if DEBUG
+                if model.signedIn && !model.loggingOut { NativeJourneyFixture.startPendingPushRegistration(model.push.controller) }
+#endif
+            }
+        }
         .onChange(of: model.cache.messages.last) { _, _ in reconcileVoiceReply() }
         .onChange(of: speakAnswers) { _, enabled in
             if !enabled && voice.turn.phase == .speaking { voice.stop(); voiceRequestID = nil }
@@ -133,6 +195,7 @@ struct SharedConversationView: View {
         lifecycleContent
         .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
         .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals) }
+        .sheet(isPresented: $showQuestions) { AccountQuestionView(model: model.questions) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
@@ -189,6 +252,9 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.heldPlayback {
                     settingsButton("Deliver playback completion") { leaveSettings(for: .finishPlayback) }.accessibilityIdentifier("nativePlaybackFinish")
                 }
+                if NativeJourneyFixture.periodicVoice {
+                    settingsButton("Deliver second speech result") { leaveSettings(for: .finishSecondSpeech) }.accessibilityIdentifier("nativeSecondSpeechFinish")
+                }
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
@@ -200,6 +266,11 @@ struct SharedConversationView: View {
                 Section("음성") {
                     Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
                     Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
+                    if model.signedIn {
+                        Button { leaveSettings(for: .push) } label: { Label("질문 알림 설정", systemImage: "bell").frame(minHeight: 44) }.accessibilityIdentifier("openAccountPush")
+                        Button { leaveSettings(for: .experience) } label: { Label("사용 경험 공유 설정", systemImage: "hand.raised").frame(minHeight: 44) }
+                            .accessibilityIdentifier("productExperienceSettings")
+                    }
                     if !voice.timeline.entries.isEmpty {
                         ShareLink(item: voice.timeline.export) { Label("음성 문제 확인 기록 공유", systemImage: "square.and.arrow.up") }
                     }
@@ -209,7 +280,7 @@ struct SharedConversationView: View {
             .navigationTitle("대화 설정").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if model.syncing {
+                    if model.showsSyncProgress {
                         ProgressView().accessibilityLabel("대화 확인 중").accessibilityIdentifier("settingsSyncing")
                     }
                 }
@@ -226,12 +297,21 @@ struct SharedConversationView: View {
     }
     private func leaveSettings(for destination: SettingsDestination) {
         switch destination {
-        case .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
+        case .push, .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
 #if DEBUG
-        case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory: break
+        case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory, .finishSecondSpeech: break
 #endif
         }
         settingsDestination = destination; showSettings = false
+    }
+    private func openPendingNotification() {
+        guard model.signedIn, !model.loggingOut, model.push.controller?.enabled == true,
+              !model.push.state.busy, let reference = pushCenter.reference else { return }
+        pushCenter.consume()
+        Task { if let destination = await model.push.controller?.open(reference), model.signedIn && !model.loggingOut {
+            voice.stop(); focused = false
+            if destination == "approval" { showApprovals = true } else { showQuestions = true }
+        } }
     }
     private func finishSettingsDismissal() {
         // Dismiss the first presentation before opening another one. Consume
@@ -239,6 +319,10 @@ struct SharedConversationView: View {
         guard let destination = settingsDestination else { return }
         settingsDestination = nil
         switch destination {
+        case .push:
+            if model.signedIn && !model.loggingOut { showPush = true }
+        case .experience:
+            if model.signedIn && !model.loggingOut { showExperience = true }
         case .approvals:
             if model.signedIn && model.approvalEntryVisible && !model.loggingOut { showApprovals = true }
         case .context:
@@ -254,6 +338,7 @@ struct SharedConversationView: View {
         case .advanceHistory: NativeJourneyFixture.advanceHistory()
         case .holdHistory: NativeJourneyFixture.holdNextHistory(); model.refresh()
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
+        case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
         }
     }
@@ -550,7 +635,7 @@ struct SharedConversationView: View {
             .accessibilityIdentifier("retryConversationSync")
         }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
-        if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
+        if model.showsSyncProgress { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
     }
 #if DEBUG
     // Overlay diagnostics never participate in transcript/composer measurement.
@@ -559,7 +644,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.pendingPush {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in
@@ -614,6 +699,7 @@ struct SharedConversationView: View {
         }, final: { _, mode in
             guard model.selected == selection, model.signedIn == signedIn else { return false }
             if mode == .dictation { return true }
+            model.experience.controller?.record(.voiceFinal)
             guard model.canSend else { return false }
             model.send(); voiceRequestID = model.cache.request?.id; return model.cache.request?.outstanding == true
         })

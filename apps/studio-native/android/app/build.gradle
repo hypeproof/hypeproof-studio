@@ -16,10 +16,17 @@ android {
 }
 dependencies {
     implementation 'androidx.core:core:1.15.0'
+    implementation 'com.google.firebase:firebase-messaging:26.0.2'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     androidTestImplementation 'androidx.test.espresso:espresso-intents:3.6.1'
+}
+
+// The release operator supplies variant-specific google-services resources after
+// configuring the real Firebase project. No sample token/project is generated.
+if (project.hasProperty('hpsFirebaseResources')) {
+    android.sourceSets.main.res.srcDir(file(project.property('hpsFirebaseResources')))
 }

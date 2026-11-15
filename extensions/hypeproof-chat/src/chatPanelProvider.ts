@@ -5491,6 +5491,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
+          // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
+          // as any refused address (`allowlistOnly` shows it); on the list, the stop stays silent (a known gap).
+          onFormStopped: (url) => { void this.allowlistOnly(url).catch(() => undefined); },
           onCommit: (url) => {
             if (!strict || guard.capabilities.fetch || !/^https?:/i.test(url)) return;
             void this.allowlistOnly(url).then((ok) => { if (!ok) { void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); } });

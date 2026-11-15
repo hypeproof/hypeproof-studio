@@ -979,10 +979,18 @@
         "MVOICE-02",
         "MVOICE-03",
         "MVOICE-04",
-        "MVOICE-05"
+        "MVOICE-05",
+        "MENT-01",
+        "MENT-02",
+        "MENT-03",
+        "MENT-04",
+        "MENT-05",
+        "MENT-06"
       ],
-      "inline_prefixes": [],
-      "sha256": "bf82d5ca25b4f1a4bc8704aa1a1c65e4859378216d9e7c2f87dbf4bbfc32a67b",
+      "inline_prefixes": [
+        "MENT"
+      ],
+      "sha256": "6b7de4be35af596a7a3bdd9142a2135cee5622c088c230b1cfae5f048dde153e",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5150,6 +5158,91 @@
         "docs/testing/member-approval-inbox.md",
         "apps/studio-native/ios/App/NativeJourneyFixture.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "account-question-entry-v1",
+      "title": "Own-account greeting, questions and authorized inbox in existing clients",
+      "issue": 4111,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MENT-01",
+            "MENT-02",
+            "MENT-03",
+            "MENT-04",
+            "MENT-05",
+            "MENT-06"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Complete independent review and exact-source native/runtime/provider checks, then use existing signed release paths. Source and controlled tests do not prove installed delivery.",
+      "design_delta": "Reuse current account/card/approval contracts, durable explicit intents and optional content-free observation; generic notifications fetch current authority on open.",
+      "positive_control": "Current account sees its own greeting/question and deliberately chooses an answer without losing a draft. Opted-in observations preserve immutable IDs.",
+      "negative_control": "Late account responses, stale or malformed receipts, disk failure, consent revocation, duplicate provider callbacks and unknown delivery cannot replay or approve work.",
+      "evidence_required": "Pinned source and controlled HTTP/UI/persistence, actual platform packages, member/provider deployment and observed device receipt separately.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/accountCards.ts",
+        "extensions/hypeproof-chat/src/accountGreeting.ts",
+        "extensions/hypeproof-chat/src/teamProductLoop.ts",
+        "extensions/hypeproof-chat/src/accountSession.ts",
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/src/startPageProtocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/AccountQuestionCard.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/start.css",
+        "apps/studio-native/ios/Sources/StudioCore/AccountQuestion.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/AccountQuestionView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeTeamModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeAccountCard.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeApprovalCard.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java",
+        "apps/studio-native/ios/Sources/StudioCore/ProductExperience.swift",
+        "apps/studio-native/ios/App/ProductExperienceView.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeProductExperience.java",
+        "apps/studio-native/PUSH.md",
+        "apps/studio-native/android/app/build.gradle",
+        "apps/studio-native/android/app/src/main/AndroidManifest.xml",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativePush.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioMessagingService.java",
+        "apps/studio-native/ios/App/AccountPushView.swift",
+        "apps/studio-native/ios/App/HPStudio-Push.entitlements.example",
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/Sources/StudioCore/AccountPush.swift",
+        "apps/studio-native/scripts/apple-push-config.py",
+        "apps/studio-native/scripts/apple-upload.sh",
+        ".github/workflows/studio-apple-testflight.yml"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/account-cards.smoke.mjs",
+        "extensions/hypeproof-chat/test/team-product-loop.smoke.mjs",
+        "extensions/hypeproof-chat/test/account-question-entry.test.tsx",
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountQuestionTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeTeamModelTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/TeamEntryJourneyTest.java",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/ProductExperienceTests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeProductExperienceTest.java",
+        "apps/studio-native/scripts/collect-native-journeys.py",
+        "apps/studio-native/tests/test_native_journey_evidence.py",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativePushTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java",
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift",
+        "apps/studio-native/tests/test_apple_push_config.py",
+        "apps/studio-native/tests/test_native_deployment_contract.py"
       ]
     }
   ]

@@ -85,6 +85,8 @@ private struct SharedCacheFile: Codable {
     @Published private(set) var signIn: DeviceSignIn?
     @Published private(set) var busy = false
     @Published private(set) var syncing = false
+    @Published private(set) var showsSyncProgress = false
+    @Published private(set) var displayName: String?
     @Published private(set) var loggingOut = false
     @Published private(set) var stoppingReflection = false
     private var reflectionCredential: Task<String, Error>?
@@ -101,6 +103,94 @@ private struct SharedCacheFile: Codable {
     @Published private var editing: [String: [String: [String: String]]] = [:]
     private var account: StoredAccount?
     private let tokenFlight = AccountTokenRefreshFlight()
+    private lazy var teamService: ConversationService = {
+#if DEBUG
+        return TeamEntryFixture.service ?? service
+#else
+        return service
+#endif
+    }()
+    lazy var experience: ProductExperiencePresentation = {
+        let presentation = ProductExperiencePresentation()
+        presentation.controller = ProductExperienceController(identity: { [weak self] in
+            guard let self, self.signedIn, !self.loggingOut, let account = self.account else { return nil }
+            return .init(accountID: account.accountID, sessionID: account.tokens.session_id)
+        }, version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", consent: { [weak self] binding, granted in
+            guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
+            return try await self.teamService.productExperienceConsent(granted, token: token)
+        }, send: { [weak self] binding, events in
+            guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
+            return try await self.teamService.productExperienceEvents(events, token: token)
+        }, load: { [weak self] account in
+            guard let self else { throw CancellationError() }; let file = try self.experienceFile(account)
+            guard FileManager.default.fileExists(atPath: file.path) else { return .init() }
+            let data = try Data(contentsOf: file); guard data.count <= 32768 else { throw SyncFailure.invalidResponse }
+            let queue = try JSONDecoder().decode(ProductExperienceQueue.self, from: data); try queue.validate(); return queue
+        }, save: { [weak self] account, queue in
+            guard let self else { throw CancellationError() }; try queue.validate(); let file = try self.experienceFile(account)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+            try JSONEncoder().encode(queue).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }, changed: { [weak self, weak presentation] in presentation?.state = $0; self?.questions.controller?.startAvailabilityChanged() })
+        return presentation
+    }()
+    lazy var push: AccountPushPresentation = {
+        let presentation = AccountPushPresentation()
+        presentation.controller = AccountPushController(identity: { [weak self] in
+            guard let self, self.signedIn, !self.loggingOut, let account = self.account else { return nil }
+            return .init(accountID: account.accountID, sessionID: account.tokens.session_id)
+        }, load: { [weak self] in guard let self else { throw CancellationError() }; return try self.loadPushPreference() }, save: { [weak self] in
+            guard let self else { throw CancellationError() }; try self.savePushPreference($0)
+        }, call: { [weak self] binding, method, id, body in
+            guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
+            try await self.service.accountPush(id, method: method, body: body, token: token)
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
+    private func loadPushPreference() throws -> AccountPushPreference {
+        let file = directory.appendingPathComponent("push-device-v1.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { let value = AccountPushPreference(); try savePushPreference(value); return value }
+        let data = try Data(contentsOf: file); guard data.count <= 4096 else { throw SyncFailure.invalidResponse }
+        let value = try JSONDecoder().decode(AccountPushPreference.self, from: data); try value.validate(); return value
+    }
+    private func savePushPreference(_ value: AccountPushPreference) throws {
+        try value.validate(); try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        var folder = directory; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+        try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("push-device-v1.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    private var observedReflectionID: String?
+    lazy var questions: AccountQuestionPresentation = {
+        let presentation = AccountQuestionPresentation()
+        presentation.controller = AccountQuestionController(identity: { [weak self] in try await self?.approvalIdentity() }, load: { [weak self] binding in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            return try await self.teamService.accountQuestion(token)
+        }, act: { [weak self] binding, key, action, body in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            return try await self.teamService.accountQuestionAction(key, action: action, body: body, token: token)
+        }, start: { [weak self] binding, id, choice in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            try await self.teamService.startAccountQuestion(id: id, choice: choice, token: token)
+        }, loadIntent: { [weak self] account in
+            guard let self else { throw CancellationError() }
+            let file = try self.questionIntentFile(account)
+            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+            let data = try Data(contentsOf: file); guard data.count < 4096 else { throw SyncFailure.invalidResponse }
+            let intent = try JSONDecoder().decode(AccountQuestionIntent.self, from: data); try intent.validate(account: account); return intent
+        }, saveIntent: { [weak self] account, intent in
+            guard let self else { throw CancellationError() }
+            let file = try self.questionIntentFile(account)
+            if let intent {
+                try intent.validate(account: account)
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+                var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+                try JSONEncoder().encode(intent).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            } else if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+        }, observed: { [weak self] event in self?.experience.controller?.record(event) }, startingAvailable: { [weak self] account in self?.experience.controller?.available(for: account) == true }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
     lazy var approvals: MemberApprovalPresentation = {
         let presentation = MemberApprovalPresentation()
         presentation.controller = MemberApprovalController(identity: { [weak self] in try await self?.approvalIdentity() }, list: { [weak self] binding in
@@ -143,22 +233,43 @@ private struct SharedCacheFile: Codable {
             guard let self, self.epoch == attempt, self.signedIn else { return }
             await self.approvals.controller?.discover()
         }
+        Task { [weak self] in await self?.refreshDisplayName(attempt: attempt) }
+        Task { [weak self] in await self?.experience.controller?.refresh() }
+        Task { [weak self] in if self?.push.controller?.enabled == true { await NativePushCenter.shared.register() } }
+    }
+    private func refreshDisplayName(attempt: UUID) async {
+        guard let before = account else { return }
+        do {
+            let credential = try await token()
+            let profile = try await service.accountProfile(credential, sessionID: before.tokens.session_id)
+            guard epoch == attempt, signedIn, account?.accountID == before.accountID,
+                  account?.tokens.session_id == before.tokens.session_id, profile.id == before.accountID else { return }
+            displayName = profile.displayName
+        } catch { /* Greeting availability never blocks conversation or grants membership. */ }
     }
     private func approvalDirectory(_ account: String) throws -> URL {
         guard StoredAccount.validID(account) else { throw SyncFailure.invalidResponse }
         let key = Data(account.utf8).base64EncodedString().replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "=", with: "")
         return directory.appendingPathComponent("approval-decisions", isDirectory: true).appendingPathComponent(key, isDirectory: true)
     }
+    private func experienceFile(_ account: String) throws -> URL {
+        let key = try approvalDirectory(account).lastPathComponent
+        return directory.appendingPathComponent("product-experience", isDirectory: true).appendingPathComponent(key + ".json")
+    }
+    private func questionIntentFile(_ account: String) throws -> URL {
+        let key = try approvalDirectory(account).lastPathComponent
+        return directory.appendingPathComponent("question-intents", isDirectory: true).appendingPathComponent(key + ".json")
+    }
     private func approvalIdentity() async throws -> MemberApprovalIdentity? {
-        guard signedIn, let before = account else { return nil }
+        guard signedIn, !loggingOut, let before = account else { return nil }
         let attempt = epoch, credential = try await token()
         let returned = try await service.accountID(credential, sessionID: before.tokens.session_id)
-        guard epoch == attempt, signedIn, let current = account, current.accountID == returned, current.accountID == before.accountID, current.tokens.session_id == before.tokens.session_id else { throw CancellationError() }
+        guard epoch == attempt, signedIn, !loggingOut, let current = account, current.accountID == returned, current.accountID == before.accountID, current.tokens.session_id == before.tokens.session_id else { throw CancellationError() }
         return MemberApprovalIdentity(accountID: returned, sessionID: current.tokens.session_id)
     }
     private func approvalToken(_ binding: MemberApprovalIdentity) async throws -> String {
         let attempt = epoch, credential = try await token()
-        guard epoch == attempt, signedIn, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { throw CancellationError() }
+        guard epoch == attempt, signedIn, !loggingOut, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { throw CancellationError() }
         return credential
     }
     private var operation: Task<Void, Never>?
@@ -378,7 +489,8 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); account = value; signedIn = true; acquired = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
                 // guest writing. This changes a local draft, never the outbox.
@@ -428,6 +540,8 @@ private struct SharedCacheFile: Codable {
         }
     }
     private func clearAccount() {
+        displayName = nil
+        questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -437,9 +551,16 @@ private struct SharedCacheFile: Codable {
     private func synchronize(automatic: Bool = false) async {
         guard signedIn, cacheReadable, visible, !busy, !syncing, !stoppingReflection else { return }
         guard !automatic || !isReflection || !personalHistoryNeedsRetry else { return }
+        // Periodic reads keep reconciliation active without repeatedly moving
+        // an already usable personal transcript. Explicit recovery stays visible.
+        showsSyncProgress = !automatic || !isReflection || !conversations.contains(where: { $0.id == Self.personalID })
         syncing = true; let attempt = epoch; let current = selected
+#if DEBUG
+        NativeJourneyFixture.synchronizationStarted(automatic: automatic)
+#endif
         defer {
             syncing = false
+            showsSyncProgress = false
             // Preserve one-use credential rotation. Explicit logout wins over
             // queued Send after the existing refresh/read has fully unwound.
             if let intent = queuedLogout, intent.epoch == attempt {
@@ -538,6 +659,9 @@ private struct SharedCacheFile: Codable {
     }
     private func applyReflection(_ value: PersonalReflection) throws {
         try edit(Self.personalID) { try $0.applyReflection(value) }
+        if let request = entries[Self.personalID]?.request, request.status == "completed", request.id == observedReflectionID {
+            observedReflectionID = nil; experience.controller?.record(.reflectionAnswered)
+        }
         opening = value.opening; openingHint = value.hint; hasEarlierReflection = value.state.has_earlier
     }
     private func failure(_ error: Error) {
@@ -566,6 +690,7 @@ private struct SharedCacheFile: Codable {
                 let credential = try await credentialTask.value
                 guard epoch == attempt, responseGeneration == generation else { return }
                 if id == Self.personalID {
+                    observedReflectionID = request.id; experience.controller?.record(.reflectionStarted)
                     let result = try await service.reflect(request, token: credential)
                     guard epoch == attempt, responseGeneration == generation else { return }
                     try applyReflection(result)
@@ -698,7 +823,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate()
+        approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -728,9 +853,15 @@ private struct SharedCacheFile: Codable {
                 }
             }
             do {
+                if var pref = try? loadPushPreference(), pref.matches(.init(accountID: current.accountID, sessionID: current.tokens.session_id)) {
+                    pref.enabled = false; try savePushPreference(pref)
+                    try? await service.accountPush(pref.installation, method: "DELETE", body: nil, token: current.tokens.access_token)
+                    guard matches(execution) else { return }
+                }
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
+                questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

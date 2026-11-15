@@ -2537,7 +2537,7 @@ Requirement: REQ-SHELL-26, DES-SHELL-25 (`domains/settings-account-shell.md`); `
     - A request to another origin than the page, or than the hop before it, goes through the route and dialog (allowed: `continueRequest`; refused: `failRequest`) when it is (a) page-requested (`Page.frameRequestedNavigation`: a link, a script, a meta refresh, a form POST) or (b) a server redirect hop (`redirectedRequestId`), whoever started the chain.
     - Navigations Studio, the learner's address bar or the coach's approved browser actions start are not held. Same-origin moves and hops continue.
   - *Popups*, two layers:
-    1. On minor seats the page's `window.open`, every link or form aimed at another window, and the script paths to them (`HTMLAnchorElement.prototype.click`, a dispatched click or auxclick on an anchor, `form.submit`/`requestSubmit`) are replaced before the page's scripts run (`Page.addScriptToEvaluateOnNewDocument` plus a `Runtime` binding). No popup is created; the address is decided like a link and, if allowed, opens as a Studio tab. A form aimed at another window is stopped.
+    1. On minor seats the page's `window.open`, every link or form aimed at another window, and the script paths to them (`HTMLAnchorElement.prototype.click`, a dispatched click or auxclick on an anchor, `form.submit`/`requestSubmit`) are replaced before the page's scripts run (`Page.addScriptToEvaluateOnNewDocument` plus a `Runtime` binding). No popup is created; the address is decided like a link and, if allowed, opens as a Studio tab. A form aimed at another window is stopped. Since verify-r026 F4 (2026-11-15, agent choice) the stop is reported to the host with the form's action address, read through the prototype getter because a field named `action` shadows `form.action`. Reports are capped at one per 3 s per tab. Off the lesson list the learner gets the same `blocked` line as any refused address ("이 창에서는 수업 허용 목록 밖의 사이트를 열 수 없어요. 선생님께 알려 주세요."). On the list the stop stays silent, because that line would not be true there; this is a known gap. A form is still never replayed through the dialog: a POST cannot be resent safely.
     2. `Target.setAutoAttach` with `waitForDebuggerOnStart` on the tab's root session (and its page session) makes a popup that gets round layer 1 (for example `window.open` from a script-made frame) start paused. Its `Page.enable` and Fetch hold go in before it runs (sent in order with the resume; awaiting each reply first deadlocks a `noopener` popup), and from then on it has the page's main-frame rules for its whole life, with no one-shot shortcut: its first document is decided against its opener, and every later page-requested move or redirect hop to another origin is decided. A refusal of the first document fails it and closes the popup; a later refusal fails the request and the popup stays where it was. On minor seats the popup also gets the layer-1 replacement (without the binding), so it cannot open a further popup unseen. Other targets are let go at once. Tested against a two-origin recorder with both layers and with layer 2 alone: `window.open`, `target=_blank`, a detached anchor click, `form.submit` to `_blank`, and a popup that opens on this site and then 302s or sets `location` away.
     3. The ledger close (below) is the last resort if neither layer is available on a build.
   - *Fail closed at runtime (coordinator, 2026-11-14).* If a minor tab's session rejects `Target.setAutoAttach`, `Fetch.enable` or `Page.enable` (a VS Code build whose tab session does not behave like Chromium's), that tab falls back to the old allowlist block. A cross-site navigation or popup the list does not admit is refused, never confirmed, with the line "이 창에서는 수업 허용 목록 밖의 사이트를 열 수 없어요. 선생님께 알려 주세요.".
@@ -2618,3 +2618,23 @@ Audit of main (c2be35060): distinct names, a single microphone owner, per-cause 
 - **Order.** This merges after Studio #4166, which draws the two blocks.
 - Not covered: the deployed Service, and a real screen reader.
 - Confirmed by Jay: no.
+
+## CGP-LEARN-R-006 / R-005 (D-006 / D-005): the parametric blocks in Studio (2026-11-15, agent-selected)
+
+Confirmed by Jay: no. The coordinator chose box_spacing v1 as the first parametric type. Jay approved `text_list` for stage_stepper only.
+
+- **One spec, checked (coordinator).** Studio's v1 specs (`blockParams.ts`) are tested against the Service's published snapshot, vendored byte-for-byte with a sha256 pin, not hand-copied. A Service checkout gives a live comparison too.
+- **Fail closed (agent choice).** Served params are re-validated, and anything off draws the unsupported notice.
+- **Styles (coordinator).** The preview is a React style object from clamped numbers only. A served "8px;background:url(x)" reaches no DOM even with re-validation bypassed, which a test shows.
+- **Caption (coordinator).** It is computed from the same clamped values under content-box sizing, with the 0 and maximum cases tested.
+- **Controls (agent choice).**
+  - Native ranges, with keys handled in code so that PageUp/PageDown are 10 % everywhere. A segmented radio group for 4 options, and the overflow list for more.
+  - Reset and undo follow R-010: one drag or one run of keys is one change. Everything is local only.
+- **Stepper (agent choice).**
+  - The whole block takes focus for ←/→. There is no timer.
+  - Stage text is drawn as text nodes only. The caption repeats the stage title, which is text too.
+- **After verify (#4166, agent choice).**
+  - The box preview scrolls, so it is a registered focus scroll scope (inset ring), like the other scrolling containers.
+  - Stage text uses the Service's single-line safe-text rule, checked against the shared case list.
+  - The SX audit's `stage_position` allowance covers only a stepper position: single digits within 2–8 stages, no score word before it and no judgment word after 단계. "3 / 4 단계 통과" and "90 / 100 단계" are flagged.
+- **Not covered:** a real installed App and a real screen reader. Chalk authoring is the next PR.

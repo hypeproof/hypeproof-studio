@@ -275,6 +275,81 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   ok(c.t.closed === 0, "adult seats keep today's behaviour (negative control)");
 }
 
+// 11. verify-r026 F3/F4: the minor flag reaches the guard (M4a), the page-opened-tab close needs no CDP (M4b), the
+//     no-Page and no-CDP closes, and a stopped form says why.
+{
+  const fake = (current, reject = []) => {
+    const listeners = new Set(); const sent = [];
+    const raw = { onDidReceiveMessage: (l) => { listeners.add(l); return { dispose: () => listeners.delete(l) }; }, onDidClose: () => ({ dispose() {} }), close: async () => {},
+      sendMessage: async (m) => { sent.push(m.method); const reply = (msg) => queueMicrotask(() => { for (const l of [...listeners]) l({ id: m.id, ...msg }); });
+        if (reject.includes(m.method)) reply({ error: { message: `'${m.method}' wasn't found` } });
+        else if (m.method === "Target.getTargets") reply({ result: { targetInfos: [{ type: "page", targetId: "t1" }] } });
+        else if (m.method === "Target.attachToTarget") reply({ result: { sessionId: "s1" } });
+        else if (m.method === "Page.getFrameTree") reply({ result: { frameTree: { frame: { id: "main", url: current } } } });
+        else reply({ result: {} }); } };
+    const emit = (method, params) => { for (const l of [...listeners]) l({ method, params, sessionId: "s1" }); };
+    return { raw, emit, sent };
+  };
+  const mk = (url, reject, noCdp = false) => {
+    const f = fake(url, reject);
+    const t = { url, closed: 0, attaches: 0, close: async () => { t.closed++; }, startCDPSession: async () => { t.attaches++; if (noCdp) throw new Error("no CDP"); return f.raw; } };
+    return { t, f };
+  };
+  const settleLong = () => new Promise((r) => setTimeout(r, 40));
+  const LIST = "https://hypeproof-ai.xyz/live/x/gallery/start";
+  const blockedLine = "이 창에서는 수업 허용 목록 밖의 사이트를 열 수 없어요. 선생님께 알려 주세요.";
+  // Studio opens an address on a minor seat: through the dialog when it is off the list.
+  const studioOpen = async (h, url) => { const p = h.openLearnerLink(url); await tick(); if (promptOf()) h.linkConfirmRequest.respond(promptOf().id, "open"); await p; };
+
+  // M4a: on a minor seat the guard replaces the page's popup paths (the binding and the script before the page runs).
+  reset(); const h = host(kid); h.registerBrowserLinkGuards({ subscriptions: [] });
+  await studioOpen(h, LIST);
+  const m = mk(LIST); tabOpened(m.t); await settleLong();
+  ok(m.f.sent.includes("Runtime.addBinding") && m.f.sent.includes("Page.addScriptToEvaluateOnNewDocument"), "minor seat: the guard installs the popup replacement (layer 1)");
+  // M4b: a tab a page opened is closed before any CDP session is made (the backstop does not lean on the guard).
+  // (A host no earlier case opened: the ledger also admits other pages of a site Studio opened in the last 30 s.)
+  reset();
+  const pageOpened = mk("https://popups.example/pop"); tabOpened(pageOpened.t); await settleLong();
+  ok(pageOpened.t.closed === 1 && pageOpened.t.attaches === 0, "minor seat: a page-opened tab is closed without attaching");
+  ok(promptOf()?.url === "https://popups.example/pop", "and its address goes through the dialog");
+  h.linkConfirmRequest.respond(promptOf().id, "cancel"); await tick();
+  // No Page domain: a Studio tab off the list cannot be watched, so it is closed and says why; one on the list stays.
+  reset();
+  await studioOpen(h, "https://news.example.com/s");
+  const noPage = mk("https://news.example.com/s", ["Page.enable"]); tabOpened(noPage.t); await settleLong();
+  ok(noPage.t.closed === 1 && infos.includes(blockedLine), "no Page domain: an off-list tab is closed with the blocked line");
+  reset();
+  const noPageOk = mk(LIST, ["Page.enable"]); tabOpened(noPageOk.t); await settleLong();
+  ok(noPageOk.t.closed === 0, "no Page domain: a tab on the list stays open (positive control)");
+  // No CDP session at all: an off-list tab is closed; a tab on the list stays.
+  reset();
+  await studioOpen(h, "https://news.example.com/t");
+  const noCdp = mk("https://news.example.com/t", [], true); tabOpened(noCdp.t); await settleLong();
+  ok(noCdp.t.closed === 1, "no CDP session: an off-list tab is closed");
+  reset();
+  const noCdpOk = mk(LIST, [], true); tabOpened(noCdpOk.t); await settleLong();
+  ok(noCdpOk.t.closed === 0, "no CDP session: a tab on the list stays open (positive control)");
+  // F4: a form aimed at another window was stopped in the page. Off the list it says so; on the list it is silent.
+  reset();
+  const formTab = mk(LIST); tabOpened(formTab.t); await settleLong();
+  const bind = (k, u) => formTab.f.emit("Runtime.bindingCalled", { name: "__hpsOpenLink", payload: JSON.stringify({ k, u }) });
+  infos.length = 0;
+  bind("form", "https://hypeproof-ai.xyz/live/x/gallery/submit"); await settleLong();
+  ok(!infos.length && !promptOf(), "a stopped form on the list: no line, no dialog");
+  await new Promise((r) => setTimeout(r, 3100));
+  bind("form", "https://forms.example/post"); await settleLong();
+  ok(infos.filter((x) => x === blockedLine).length === 1 && !promptOf(), "a stopped form off the list: the blocked line, no dialog (F4)");
+  bind("form", "https://forms.example/post"); await settleLong();
+  ok(infos.filter((x) => x === blockedLine).length === 1, "a second stop within the window adds no line (rate limit)");
+  formTab.f.emit("Runtime.bindingCalled", { name: "__hpsOpenLink", payload: "https://ads.example/raw" }); await settleLong();
+  ok(!promptOf(), "a payload that is not the guard's JSON does nothing");
+  // Adults: no replacement is installed (negative control for M4a).
+  reset(); const ad = host(grown); ad.registerBrowserLinkGuards({ subscriptions: [] });
+  await ad.openLearnerLink("https://news.example.com/start");
+  const adult = mk("https://news.example.com/start"); tabOpened(adult.t); await settleLong();
+  ok(!adult.f.sent.includes("Runtime.addBinding"), "adult seat: no popup replacement (negative control)");
+}
+
 // Wiring: the preview forwards only a bounded http(s) string, and extension.ts routes it as a preview link.
 const preview = readFileSync(new URL("../src/previewProvider.ts", import.meta.url), "utf8");
 ok(/msg\?\.type === "preview_open_link"\) \{\s*if \(typeof msg\.href === "string" && msg\.href\.length <= 4096 && \/\^https\?:/.test(preview), "the panel forwards only bounded http(s) strings");

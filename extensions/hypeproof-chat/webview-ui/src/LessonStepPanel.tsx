@@ -5,6 +5,8 @@ import { ChatIcon, type IconKind } from "./ChatDetails";
 import { CopyFeedback } from "./CopyFeedback";
 import { imeComposing } from "./imeGuard";
 import { onHostMessage, patchWebviewState, readWebviewState } from "./vscode";
+import { BoxSpacingBlock, StageStepperBlock } from "./ParamBlocks";
+import { boxCaption, boxEdit, boxReset, boxUndo, stageLabel, type BoxHistory, type BoxValues } from "../../src/blockParams";
 import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
@@ -23,6 +25,7 @@ const REPORT_FAILED: Partial<Record<string, string>> = {
 const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
   criterion_form: "flag", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
   evidence_note: "book", coach_request: "message", metric_board: "ruler",
+  box_spacing: "square", stage_stepper: "menu",
 };
 
 /**
@@ -172,6 +175,32 @@ export function LessonStepPanel(props: {
   const endBurst = () => setHist((x) => (x.key === key ? { key, h: historyBoundary(x.h) } : x));
   const reset = () => { const r = historyReset(history, { text, reason }); if (!r) return; clearTimeout(pause.current); setHist({ key, h: r.history }); apply(r.fields); };
   const undo = () => { const r = historyUndo(history); if (!r) return; clearTimeout(pause.current); setHist({ key, h: r.history }); apply(r.fields); };
+  // CGP-LEARN-R-006 — box_spacing's values start at the pinned params (re-validated in stepMaterial) and stay local: nothing
+  // is posted, so there is no save and no observation event. One drag or one run of key presses is one change for 되돌리기
+  // (it ends after a 1 s pause), and 처음으로 goes back to the pinned params.
+  const pinnedBox = material?.box ?? null;
+  const [boxState, setBoxState] = useState<{ key: string; values: BoxValues; history: BoxHistory }>({ key: "", values: { padding: 0, border: 0, margin: 0, layout: "block" }, history: { past: [] } });
+  const boxNow = pinnedBox ? (boxState.key === key ? boxState.values : pinnedBox) : null;
+  const boxHistory = boxState.key === key ? boxState.history : { past: [] };
+  const boxBurst = useRef<{ key: string; timer?: ReturnType<typeof setTimeout> }>({ key: "" });
+  useEffect(() => () => clearTimeout(boxBurst.current.timer), []);
+  const boxChange = (next: BoxValues) => {
+    if (!boxNow) return;
+    const inBurst = boxBurst.current.key === key;
+    clearTimeout(boxBurst.current.timer);
+    boxBurst.current = { key, timer: setTimeout(() => { boxBurst.current = { key: "" }; }, 1000) };
+    setBoxState({ key, values: next, history: inBurst ? boxHistory : boxEdit(boxHistory, boxNow, next) });
+  };
+  const boxDo = (r: { history: BoxHistory; values: BoxValues } | null) => { if (!r) return; clearTimeout(boxBurst.current.timer); boxBurst.current = { key: "" }; setBoxState({ key, values: r.values, history: r.history }); };
+  const boxResetUndo = pinnedBox && boxNow && (
+    <div className="hp-block-history" role="group" aria-label="바꾼 것 되돌리기">
+      <button type="button" className="hp-cta-quiet" data-block-reset="" disabled={!boxReset(boxHistory, boxNow, pinnedBox)} onClick={() => boxDo(boxReset(boxHistory, boxNow, pinnedBox))}>처음으로</button>
+      <button type="button" className="hp-cta-quiet" data-block-undo="" disabled={!boxHistory.past.length} onClick={() => boxDo(boxUndo(boxHistory))}>되돌리기</button>
+    </div>
+  );
+  // CGP-LEARN-R-005 — the stage the learner is on, per lesson version and step; it moves only on the learner's action.
+  const [stageState, setStageState] = useState<{ key: string; index: number }>({ key: "", index: 0 });
+  const stageIndex = stageState.key === key ? stageState.index : 0;
   const resetUndo = (
     <div className="hp-block-history" role="group" aria-label="고친 것 되돌리기">
       <button type="button" className="hp-cta-quiet" data-block-reset="" disabled={!text && !reason} onClick={reset}>처음으로</button>
@@ -186,7 +215,12 @@ export function LessonStepPanel(props: {
   const materialText = material ? MATERIAL_TEXT[material.kind] : null;
   // Until the fields are reset for this step, the sentence describes this step's own save, never the previous step's draft.
   const fresh = draftOf === key;
-  const state = materialText?.state({ text: fresh ? text : saved?.text ?? "", reason: fresh ? reason : saved?.reason ?? "", saved: saved ? { text: saved.text, reason: saved.reason } : undefined });
+  // CGP-LEARN-R-005/006 — a parametric block's caption is computed from its own values: the box from the same clamped numbers
+  // the preview uses, the stepper from the stage shown (its title is the instructor's text, drawn as text).
+  const stagesNow = material?.stages ?? null;
+  const state = material?.kind === "box_spacing" && boxNow ? { key: "box", sentence: boxCaption(boxNow) }
+    : material?.kind === "stage_stepper" && stagesNow ? { key: `stage-${stageIndex}`, sentence: `${stageLabel(stageIndex, stagesNow.length)}: ${stagesNow[stageIndex].title}` }
+    : materialText?.state({ text: fresh ? text : saved?.text ?? "", reason: fresh ? reason : saved?.reason ?? "", saved: saved ? { text: saved.text, reason: saved.reason } : undefined });
   // CGP-LEARN-D-001 — the block is a collapsible 자료 card under the current step: closed, one row with a 48px thumbnail, the
   // block's title, its live state line and 열어 보기; opening expands it in place. The help and the work surface sit in the body,
   // which stays mounted while closed (`hidden`), so the rehearsal read-back keeps its nodes.
@@ -319,6 +353,13 @@ export function LessonStepPanel(props: {
           {resetUndo}
           {saved && <p className="hp-rail-lesson-note" data-saved-work="decision">저장한 결정: {saved.text} · 이유: {saved.reason} · 다음 질문에 함께 보냅니다</p>}
         </form>
+      ) : surface === "box_spacing" && boxNow ? (
+        <div className="hp-surface">
+          <BoxSpacingBlock values={boxNow} onChange={boxChange} />
+          {boxResetUndo}
+        </div>
+      ) : surface === "stage_stepper" && stagesNow ? (
+        <StageStepperBlock stages={stagesNow} index={stageIndex} onMove={(index) => setStageState({ key, index })} />
       ) : surface.startsWith("unsupported:") ? (
         <p className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
       ) : (

@@ -47,17 +47,27 @@ export interface GuardOptions {
   openPopup?: (url: string) => void;
   /** A main-frame navigation committed (the fallback when the network hold is unavailable). */
   onCommit?: (url: string) => void;
+  /**
+   * Layer 1 stopped a form aimed at another window (its submission cannot be replayed safely). Gets the form's
+   * resolved action address, at most once per `FORM_NOTICE_MS`, so a page looping `submit()` cannot flood the host.
+   */
+  onFormStopped?: (url: string) => void;
 }
 const BINDING = "__hpsOpenLink";
 /**
  * Runs in the page before its scripts (minor seats): every way a page script can open another window goes to the
  * binding instead — `window.open`, a click (real or scripted, `HTMLAnchorElement.prototype.click`, a dispatched click
  * event) on a link aimed at another window or with a modifier, and `form.submit()` / `requestSubmit()` or a submit
- * aimed at another window (a form is stopped: its POST cannot be replayed safely). The prototypes are wrapped and
- * locked, so a detached anchor or form behaves the same. Without the binding (inside a popup) the paths are stopped.
+ * aimed at another window (a form is stopped: its POST cannot be replayed safely, and the host is told, so the learner
+ * is not left with a button that does nothing). The prototypes are wrapped and locked, so a detached anchor or form
+ * behaves the same. Without the binding (inside a popup) the paths are stopped. The binding carries
+ * `{"k":"open"|"form","u":<absolute url>}`; only this script holds it (it is taken off `window` before the page runs).
+ * A form's address is read with the prototype's getter: `form.action` is shadowed by a field named "action".
  */
 const intercept = (withBinding: boolean) => `(()=>{if(window.__hpsPopupGuard)return;window.__hpsPopupGuard=1;var b=${withBinding ? `window.${BINDING};delete window.${BINDING}` : "null"};
-var send=function(u){try{if(b)b(String(new URL(u,location.href)))}catch(_){}};
+var send=function(u,k){try{if(b)b(JSON.stringify({k:k||"open",u:String(new URL(u,location.href))}))}catch(_){}};
+var actionOf=(function(){var d=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,"action");return function(f,s){var a=s&&s.getAttribute&&s.getAttribute("formaction");try{return a?String(new URL(a,location.href)):d&&d.get?d.get.call(f):location.href}catch(_){return location.href}}})();
+var stopForm=function(f,s){send(actionOf(f,s),"form")};
 var other=function(t){return !!t&&t!=="_self"&&t!=="_top"&&t!=="_parent"};
 var lock=function(o,k,v){try{Object.defineProperty(o,k,{value:v,writable:false,configurable:false})}catch(_){try{o[k]=v}catch(__){}}};
 var A=HTMLAnchorElement.prototype,F=HTMLFormElement.prototype,E=EventTarget.prototype;
@@ -66,11 +76,11 @@ var away=function(a,e){return /^https?:/i.test(a.href)&&(other(a.target)||(e&&(e
 lock(window,"open",function(u){if(u)send(u);return null});
 lock(A,"click",function(){if(away(this))return send(this.href);return aClick.call(this)});
 lock(E,"dispatchEvent",function(e){var a=this instanceof Element&&e&&(e.type==="click"||e.type==="auxclick")?this.closest("a[href]"):null;if(a&&away(a,e))return send(a.href),false;return dispatch.call(this,e)});
-lock(F,"submit",function(){if(other(this.target))return;return fSubmit.call(this)});
-if(fRequest)lock(F,"requestSubmit",function(s){if(other(this.target)||(s&&other(s.getAttribute&&s.getAttribute("formtarget"))))return;return fRequest.apply(this,arguments)});
+lock(F,"submit",function(){if(other(this.target))return stopForm(this);return fSubmit.call(this)});
+if(fRequest)lock(F,"requestSubmit",function(s){if(other(this.target)||(s&&other(s.getAttribute&&s.getAttribute("formtarget"))))return stopForm(this,s);return fRequest.apply(this,arguments)});
 document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||!away(a,e))return;e.preventDefault();e.stopImmediatePropagation();send(a.href)},true);
 document.addEventListener("auxclick",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(a&&/^https?:/i.test(a.href)){e.preventDefault();e.stopImmediatePropagation();send(a.href)}},true);
-document.addEventListener("submit",function(e){var f=e.target,s=e.submitter;if(f&&(other(f.target)||(s&&other(s.getAttribute("formtarget"))))){e.preventDefault();e.stopImmediatePropagation()}},true)})();`;
+document.addEventListener("submit",function(e){var f=e.target,s=e.submitter;if(f&&(other(f.target)||(s&&other(s.getAttribute("formtarget"))))){e.preventDefault();e.stopImmediatePropagation();stopForm(f,s)}},true)})();`;
 export const POPUP_INTERCEPT = intercept(true);
 const POPUP_INTERCEPT_NO_BINDING = intercept(false);
 
@@ -82,6 +92,8 @@ export function sameOrigin(a: string, b: string): boolean {
 
 /** How long a page-requested navigation stays matchable to its paused request. */
 const REQUEST_WINDOW_MS = 10_000;
+/** At most one stopped-form report per this many ms per tab. */
+export const FORM_NOTICE_MS = 3_000;
 const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", requestStage: "Request" }] };
 
 /** The main-frame rules' state for one page session: the tab's page, or a popup it opened (for its whole life). */
@@ -110,6 +122,7 @@ export class LinkNavigationGuard {
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
   readonly stats = { held: 0, continued: 0, refused: 0, popups: 0 };
+  private lastFormNotice = -Infinity;
   /**
    * What the tab's session supports, known after `start`. The host fails closed on a minor seat when any is false:
    * `fetch` (the network hold), `autoAttach` (paused popups) or `page` (navigation events).
@@ -174,8 +187,17 @@ export class LinkNavigationGuard {
     const p = event.params ?? {};
     if (event.method === "Runtime.bindingCalled" && !event.sessionId && !event.root && p.name === BINDING && typeof p.payload === "string") {
       // Layer 1: the page asked for a popup; none was created. Decide, and open it as a Studio tab if allowed.
-      const url = p.payload;
+      let msg: { k?: unknown; u?: unknown } = {};
+      try { msg = JSON.parse(p.payload); } catch { return; }
+      const url = typeof msg.u === "string" ? msg.u : "";
       if (!/^https?:\/\//i.test(url)) return;
+      if (msg.k === "form") {
+        // A form aimed at another window was stopped: report it (rate-limited), never replay it.
+        const t = this.now();
+        if (t - this.lastFormNotice >= FORM_NOTICE_MS) { this.lastFormNotice = t; this.options.onFormStopped?.(url); }
+        return;
+      }
+      if (msg.k !== "open") return;
       const allowed = await this.hold(url, async () => { this.options.openPopup?.(url); }, async () => undefined);
       this.onPopup(url, allowed);
       return;

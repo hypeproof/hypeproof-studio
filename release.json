@@ -13,6 +13,9 @@
     },
     "reflection-api": {
       "line": "1"
+    },
+    "team-product-api": {
+      "line": "1"
     }
   }
 }

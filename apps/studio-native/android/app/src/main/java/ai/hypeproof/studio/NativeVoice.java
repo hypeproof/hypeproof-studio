@@ -21,6 +21,7 @@ final class NativeVoice {
         void changed();
         void transcript(String id,String text,boolean complete,boolean automatic);
         void failed(String message);
+        default void observed(NativeProductExperience.Kind kind){}
     }
     interface Capture { void start(); void close(); }
     interface CaptureFactory { Capture create(RecognitionListener listener); }
@@ -98,6 +99,7 @@ final class NativeVoice {
             .setOnAudioFocusChangeListener(change->{if(change<0&&current(ticket,id))fail("다른 오디오가 시작되어 음성을 멈췄어요. 작성한 글은 남아 있어요.");},handler).build();
         return audio.requestAudioFocus(focus)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
     }
+    private boolean observingResume;
     private void next(long ticket,String id){
         if(!current(ticket,id)||!host.nextTurn()){stop();host.changed();return;}
         if(session.next(id)>=0)listen();
@@ -148,6 +150,7 @@ final class NativeVoice {
                 public void onError(int code){if(current(ticket,id)&&session.listening(ticket,id))fail(code==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS?"마이크 권한이 없어 음성을 멈췄어요. 글로 계속 적을 수 있어요.":"기기 내 한국어 음성 인식을 마치지 못했어요. 기기의 한국어 음성 지원을 확인하거나 글로 계속 적어 주세요.");}
             });
             recognizer.start();
+            if(observingResume&&current(ticket,id)&&session.listening(ticket,id)){observingResume=false;host.observed(NativeProductExperience.Kind.VOICE_RESUMED);}
             armTimeout(60000,()->{if(current(ticket,id)&&session.listening(ticket,id))fail("음성 입력 시간이 끝났어요. 작성한 글을 확인하고 다시 시작해 주세요.");});
             host.changed();
         }catch(RuntimeException e){fail("기기 내 음성 인식을 시작하지 못했어요. 글로 계속 적을 수 있어요.");}
@@ -198,7 +201,7 @@ final class NativeVoice {
                 playbackStarted=true;armTimeout(180000,()->{if(current(ticket,id))fail("읽어주기를 멈췄어요. 화면에서 계속 읽을 수 있어요.");});}});}
             public void onDone(String value){handler.post(()->{
                 if(current(ticket,id)&&utterance.equals(value)&&session.ready(ticket,id)){
-                    clearTimeout();releaseFocus();next(ticket,id);
+                    host.observed(NativeProductExperience.Kind.VOICE_FINISHED);observingResume=true;clearTimeout();releaseFocus();next(ticket,id);
                 }
             });}
             public void onError(String value){handler.post(()->{if(current(ticket,id)&&playing.contains(value))fail("읽어주기를 마치지 못했어요. 화면의 답변을 읽어 주세요.");});}
@@ -208,7 +211,7 @@ final class NativeVoice {
     private void clearTimeout(){if(timeout!=null)handler.removeCallbacks(timeout);timeout=null;}
     private void releaseRecognizer(){clearTimeout();if(recognizer!=null){Capture old=recognizer;recognizer=null;old.close();}}
     private void releaseFocus(){if(focus!=null){audio.abandonAudioFocusRequest(focus);focus=null;}}
-    private void fail(String message){stop();host.failed(message);}
-    void stop(){session.stop();playing.clear();permissionReady=false;handler.removeCallbacks(guard);if(playback!=null)playback.stop();releaseRecognizer();releaseFocus();if(tts!=null){tts.stop();tts.shutdown();tts=null;}ttsReady=false;}
+    private void fail(String message){host.observed(NativeProductExperience.Kind.VOICE_FAILED);stop();host.failed(message);}
+    void stop(){observingResume=false;session.stop();playing.clear();permissionReady=false;handler.removeCallbacks(guard);if(playback!=null)playback.stop();releaseRecognizer();releaseFocus();if(tts!=null){tts.stop();tts.shutdown();tts=null;}ttsReady=false;}
     void close(){stop();audio.unregisterAudioDeviceCallback(routeListener);}
 }
