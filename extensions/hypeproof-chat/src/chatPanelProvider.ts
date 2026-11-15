@@ -117,7 +117,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { domainToUnicode } from "node:url";
 import { LINK_CONFIRM_COPY, LinkConfirmRequest, type LinkConfirmPrompt } from "./linkConfirm";
-import { LinkNavigationGuard } from "./linkNavigationGuard";
+import { FORM_NOTICE_MS, LinkNavigationGuard } from "./linkNavigationGuard";
 import { openStudioTab, studioTabs } from "./studioTabs";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
@@ -5485,14 +5485,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fail closed (coordinator, 2026-11-14): on a minor seat whose tab session cannot hold requests or start popups
         // paused, the tab falls back to the allowlist block: a cross-site navigation or popup the list does not admit
         // is refused, never confirmed; without even the network hold, a committed move off the list closes the tab.
-        let strict = false;
+        let strict = false, formLineAt = -Infinity;
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
           openPopup: (url) => { void openStudioTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }).then(undefined, () => undefined); },
           // A form aimed at another window was stopped (verify-r026 F4): off the lesson list, say so with the same line
-          // as any refused address (`allowlistOnly` shows it); on the list, the stop stays silent (a known gap).
-          onFormStopped: (url) => { void this.allowlistOnly(url).catch(() => undefined); },
+          // as any refused address (the route `allowlistOnly` refuses); on the list, the stop stays silent (a known gap).
+          onFormStopped: (url) => {
+            // The cap counts only lines the learner is shown (verify-r027): a silent on-list stop spends nothing.
+            void this.learnerLinkRoute(url, "browser").then((route) => {
+              if (route.kind !== "confirm") return;
+              const t = Date.now();
+              if (t - formLineAt < FORM_NOTICE_MS) return;
+              formLineAt = t; void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked);
+            }, () => undefined);
+          },
           onCommit: (url) => {
             if (!strict || guard.capabilities.fetch || !/^https?:/i.test(url)) return;
             void this.allowlistOnly(url).then((ok) => { if (!ok) { void Promise.resolve(tab.close()).catch(() => undefined); void vscode.window.showInformationMessage(LINK_CONFIRM_COPY.blocked); } });
