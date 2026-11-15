@@ -397,6 +397,18 @@ installed desktop and real Service/Google acceptance below.
   Preserve existing draft/active stream refusal. Concurrent config reads must wait
   for the real durable store initialization rather than reading an empty half-ready
   store; a negative control that removes the shared wait must fail.
+- Account-owned seat (#4179). Serve the profile as production does, `activity_kind:
+  "trial"` with no `seat_owner`, then again with `seat_owner: "account"` and a seat
+  credential carrying this account's `personal_account` / `account_session`. First
+  entry opens the question on the activated seat, and a second press from another task
+  reuses the saved `trial` record without a new activation. Refused without activation
+  or a question read: a `trial` record bound to another session or naming another
+  account (“이 개인 활동의 계정이 달라요…”), a lesson (“수업은 그대로 유지했어요…”) and
+  a code-issued trial without an account (“현재 활동은 그대로 유지했어요…”). The
+  anonymous free seat still goes to sign-in and then the pass chooser. The decision
+  table, including credential claims and `seat_owner`, is in
+  `test/reflection-seat.smoke.mjs`. A run of the new cases against the old gate must
+  fail.
 
 Focused command: `node scripts/run-tsx-tests.mjs personal-reflection-entry` from
 `extensions/hypeproof-chat`. Relevant existing controls are initial-surface,

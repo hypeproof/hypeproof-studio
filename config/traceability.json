@@ -18444,6 +18444,9 @@
           "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/reflectionSeat.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/studioNavigation.ts"
         },
         {
@@ -18501,6 +18504,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/personal-entry-harness.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reflection-seat.smoke.mjs"
         }
       ]
     },

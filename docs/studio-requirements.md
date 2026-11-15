@@ -69,6 +69,22 @@ account/session binding through a required folder reload. Cancel, logout, a chan
 account/task/activity, active work or failed persistence preserves the original work
 and cannot trigger a late question redirect. Classroom entry remains explicit.
 
+Account-owned seats (#4179). The Service serves every seat a signed-in account owns
+(the `super` grant, an invite seat, an earlier bought pass) as `activity_kind: "trial"`,
+and keeps doing so. “나의 질문” therefore also opens on a non-free, non-lesson `trial`
+seat that this account owns. Ownership is read from the saved activity's account pass
+binding (same account session) or the seat credential's `personal_account` /
+`account_session` claims (unverified, comparison only), and the profile's
+`seat_owner: "account"` (Service #536) is accepted when present. Activities saved
+earlier with `kind: "trial"` and an account pass qualify. A seat bound to another
+account or session is refused with “이 개인 활동의 계정이 달라요. 내 계정의 활동을
+선택해 주세요.” Classroom seats, lessons and instructor mode are refused as before. The
+anonymous free seat has no account path, so it still goes through sign-in and the pass
+chooser, and a code-issued seat without an account keeps “현재 활동은 그대로
+유지했어요. …”. The `trial` kind on the wire, folder ownership, carry-over, SDK/busy
+handling and metering do not change. iPhone sharing of an ordinary task still needs a
+`personal` activity.
+
 See [MPER design](requirements/mobile-growth-roadmap.md#desktop-visible-question-entry-studio-3798)
 and [entry acceptance](testing/native-mobile-growth.md#desktop-visible-question-entry-3798).
 
@@ -2069,8 +2085,9 @@ DEC-KNOW-R009 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
   name, as plain text. Nothing else is listed.
 - **Class task.** There is nothing to pick. The one item "다른 활동으로 옮기기" stays focusable
   (`aria-disabled="true"`, not `disabled`) and its description is the reason, shown and announced on
-  focus: "수업 작업은 이 수업 활동 안에만 둘 수 있어요. 다른 활동으로 옮길 수 없어요." A trial shows
-  "체험 활동의 작업은 다른 활동으로 옮길 수 없어요." and a personal activity with no other personal
+  focus: "수업 작업은 이 수업 활동 안에만 둘 수 있어요. 다른 활동으로 옮길 수 없어요." A trial seat
+  (the free seat or a code-issued seat) shows "이 활동의 작업은 다른 활동으로 옮길 수 없어요." (no 체험
+  wording since #4179) and a personal activity with no other personal
   activity shows "옮길 수 있는 다른 개인 활동이 없어요." Pressing it sends nothing. A classroom seat
   has no task rail, so there is no task menu at all.
 - **Moving.** The host re-derives the destination from a fresh activity list (the webview's ref is

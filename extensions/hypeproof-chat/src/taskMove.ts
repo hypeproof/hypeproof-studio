@@ -28,7 +28,7 @@ export type TaskMoveView =
   | { allowed: false; reason: string };
 
 export const TASK_MOVE_CLASS_REASON = '수업 작업은 이 수업 활동 안에만 둘 수 있어요. 다른 활동으로 옮길 수 없어요.';
-export const TASK_MOVE_TRIAL_REASON = '체험 활동의 작업은 다른 활동으로 옮길 수 없어요.';
+export const TASK_MOVE_TRIAL_REASON = '이 활동의 작업은 다른 활동으로 옮길 수 없어요.';
 export const TASK_MOVE_NONE_REASON = '옮길 수 있는 다른 개인 활동이 없어요.';
 export const TASK_MOVE_UNKNOWN_REASON = '활동 정보를 아직 확인하지 못해 옮길 수 없어요. 잠시 뒤 다시 열어 주세요.';
 
