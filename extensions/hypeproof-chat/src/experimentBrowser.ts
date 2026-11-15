@@ -1,3 +1,4 @@
+import { studioNavigate } from "./linkNavigationGuard.ts";
 import { referenceCaptureMetadata, referenceCaptureText, type ReferenceCapture } from "./referenceDesign.ts";
 // Experiment Browser core (cr-browser, #1391; CR-04, CR-05, CR-06, CR-08, CR-11, CR-68).
 //
@@ -943,7 +944,7 @@ export class ScopeGuard {
     // The take-back is automation too: it runs with the page outline drawn (CR-68).
     await this.indicator?.show().catch(() => {});
     try {
-      await this.cdp.send("Page.navigate", { url: to });
+      await studioNavigate(this.cdp, to);
       await waitForDocument(this.cdp, this.log, before, this.sleep);
       return `탭을 ${to} (으)로 되돌렸어요`;
     } catch {
@@ -1193,7 +1194,7 @@ export class CrExecutor {
     else if (startUrl && checkAgentOrigin(startUrl, allowed).ok) {
       const before = log.documentGeneration;
       try {
-        await cdp.send("Page.navigate", { url: startUrl });
+        await studioNavigate(cdp, startUrl);
         await waitForDocument(cdp, log, before, this.hooks.sleep);
         where = `탭을 ${startUrl} (으)로 되돌렸어요.`;
       } catch {

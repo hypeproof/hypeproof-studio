@@ -5495,6 +5495,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const guard = new LinkNavigationGuard(port, (url) => (strict ? this.allowlistOnly(url) : this.confirmBrowserNavigation(url)), {
           onPopup: (url, allowed) => { if (allowed) studioTabs.note(url); else studioTabs.refuse(url); },
           interceptPopups: minor,
+          // Existing-window fix: a tab Studio just opened may load its own first page undecided, once (verify-r027).
+          studioFirstDocument: isNew && studioTabs.takeFirstLoad(tab.url) ? tab.url : undefined,
           // #4128: on a minor seat a cross-site iframe loads only when the lesson list (or loopback) admits it; no dialog.
           decideFrame: minor ? (url) => this.frameAllowed(url) : undefined,
           // Without the network hold a frame off the list is sent back to about:blank; one that cannot be, or that went
