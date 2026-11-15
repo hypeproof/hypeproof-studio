@@ -11,7 +11,7 @@ import { webcrypto } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const { LinkConfirmRequest } = await import("../src/linkConfirm.ts");
-const { LinkNavigationGuard, studioNavigations, studioNavigate } = await import("../src/linkNavigationGuard.ts");
+const { LinkNavigationGuard, studioNavigations, studioNavigate, isLoopbackUrl } = await import("../src/linkNavigationGuard.ts");
 const tick = () => new Promise((r) => setTimeout(r, 0));
 let checks = 0;
 const ok = (c, m) => { assert.ok(c, m); checks++; };
@@ -541,6 +541,17 @@ const reset = () => { posted.length = 0; opened.length = 0; copied.length = 0; i
   ok(went(s2, "o5") && !infos.includes(line), "a page on a lesson site (not loopback) is not affected");
   const a = await run(grown, "http://127.0.0.1:5500/index.html");
   ok(!patterned(a), "adult seat: no outbound patterns (negative control)");
+}
+
+// 15. One meaning of "loopback" for the top-page check and the target check (verify-3928 on #4214; core agrees, #4216).
+{
+  const yes = ["http://localhost/", "http://localhost./", "http://LOCALHOST../x", "http://a.localhost:5173/", "http://b.a.localhost./", "http://127.0.0.1:5500/",
+    "http://127.255.1.2/", "http://2130706433/", "http://0x7f.1/", "http://[::1]:8080/", "http://[::ffff:127.0.0.1]/", "http://[::ffff:7f00:1]/",
+    "http://[::ffff:7f12:3456]/", "http://0.0.0.0:3000/", "http://[::]/", "ws://localhost:35729/livereload", "wss://a.localhost/hmr"];
+  const no = ["http://localhost.evil.com/", "http://localhostx/", "http://127.0.0.1.nip.io/", "http://128.0.0.1/", "http://[::ffff:8.8.8.8]/", "http://[::2]/",
+    "http://10.0.0.1/", "http://0.0.0.1/", "https://example.org/", "file:///tmp/a.html", "ftp://localhost/", "not a url"];
+  for (const u of yes) ok(isLoopbackUrl(u) === true, `loopback: ${u}`);
+  for (const u of no) ok(isLoopbackUrl(u) === false, `not loopback: ${u}`);
 }
 
 // Wiring: the preview forwards only a bounded http(s) string, and extension.ts routes it as a preview link.

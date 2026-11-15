@@ -164,6 +164,8 @@ export function sameOrigin(a: string, b: string): boolean {
 const REQUEST_WINDOW_MS = 10_000;
 /** At most one stopped-form report per this many ms per tab. */
 export const FORM_NOTICE_MS = 3_000;
+/** How long after leaving a loopback page its own last requests (pagehide) are still judged as its. */
+const LEFT_LOOPBACK_MS = 3_000;
 /** At most one outbound-refusal line per tab per this many ms (Jay, 2026-11-15). */
 export const OUTBOUND_NOTICE_MS = 10_000;
 const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", requestStage: "Request" }] };
@@ -174,8 +176,31 @@ const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", 
  */
 const OUTBOUND_TYPES = new Set(["Fetch", "XHR", "Ping", "EventSource"]);
 const WITH_OUTBOUND = { patterns: [...DOCUMENTS.patterns, ...[...OUTBOUND_TYPES].map((resourceType) => ({ urlPattern: "*", resourceType, requestStage: "Request" }))] };
-const LOOPBACK_HOST = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
-const isLoopbackUrl = (u: string): boolean => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) && LOOPBACK_HOST.test(x.hostname); } catch { return false; } };
+/**
+ * Is this host the learner's own machine? One answer for the top-page check and the target check (verify-3928 on
+ * #4214), the same as core's (#4216):
+ * - `localhost` and every `*.localhost` (RFC 6761), with or without a trailing dot;
+ * - IPv4 127.0.0.0/8, in any spelling the URL parser normalises (`2130706433`, `0x7f.1`);
+ * - IPv6 `::1`, and the IPv4-mapped `::ffff:127.x.y.z` (`[::ffff:7f00:1]` after parsing);
+ * - `0.0.0.0` and `::`, decided as loopback: Chromium sends a request to them to this machine.
+ * Anything else is not loopback.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  let h = hostname.toLowerCase();
+  while (h.endsWith(".")) h = h.slice(0, -1);
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(h) || h === "0.0.0.0") return true;
+  if (h.startsWith("[") && h.endsWith("]")) {
+    const v6 = h.slice(1, -1);
+    if (v6 === "::1" || v6 === "::") return true;
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(v6);
+    if (mapped) return parseInt(mapped[1], 16) >> 8 === 127;
+    const dotted = /^::ffff:(\d{1,3})(?:\.\d{1,3}){3}$/.exec(v6);
+    if (dotted) return dotted[1] === "127";
+  }
+  return false;
+}
+export const isLoopbackUrl = (u: string): boolean => { try { const x = new URL(u); return /^(https?|wss?):$/.test(x.protocol) && isLoopbackHost(x.hostname); } catch { return false; } };
 
 /**
  * One session the guard holds requests in: the tab's page, a popup it opened (main-frame rules for its whole life), or
@@ -199,6 +224,8 @@ interface FrameState {
   hops: Map<string, string>;
   /** A popup's first document request is decided against its opener's address; a page's is not held. */
   popupFirst: boolean;
+  /** The loopback page this top just left, and when: requests the old page fires as it goes away are its own. */
+  leftLoopback?: { url: string; at: number };
 }
 const frameState = (kind: FrameState["kind"], current: string, sessionId?: string, targetId?: string, owner?: FrameState): FrameState =>
   ({ kind, owner, framesAttached: false, fetchHeld: false, sessionId, targetId, mainFrame: kind === "page" ? undefined : targetId, current, requested: new Map(), hops: new Map(), popupFirst: kind === "popup" });
@@ -381,7 +408,9 @@ export class LinkNavigationGuard {
       return;
     }
     if (event.method === "Page.frameNavigated" && p.frame && !p.frame.parentId) {
-      state.mainFrame = p.frame.id; state.current = p.frame.url ?? state.current;
+      const before = state.current, next = p.frame.url ?? state.current;
+      state.leftLoopback = isLoopbackUrl(before) && !isLoopbackUrl(next) ? { url: before, at: this.now() } : undefined;
+      state.mainFrame = p.frame.id; state.current = next;
       if (state === this.page) this.options.onCommit?.(state.current);
       return;
     }
@@ -402,7 +431,7 @@ export class LinkNavigationGuard {
       // A popup refused before it showed anything is closed.
       if (state !== this.page && state.popupFirst && state.targetId) await this.cdp.send("Target.closeTarget", { targetId: state.targetId }).catch(() => undefined);
     };
-    if (this.options.outbound && OUTBOUND_TYPES.has(p.resourceType)) { await this.outboundRequest(state, requestId, url); return; }
+    if (this.options.outbound && OUTBOUND_TYPES.has(p.resourceType)) { await this.outboundRequest(state, requestId, url, p.request?.headers ?? {}); return; }
     if (p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
     // #4128: a subframe document (an iframe in this page or popup, or any document of an out-of-process iframe).
     if (state.kind === "frame" || (state.mainFrame && p.frameId !== state.mainFrame)) { await this.subframeRequest(state, requestId, url, p.frameId); return; }
@@ -445,9 +474,18 @@ export class LinkNavigationGuard {
    * is loopback (an AI-made page) to another site is refused unless the lesson list (or loopback) admits it; no
    * dialog, the host shows one quiet line. Same origin, loopback-to-loopback and any non-loopback top go on.
    */
-  private async outboundRequest(state: FrameState, requestId: string, url: string): Promise<void> {
+  private async outboundRequest(state: FrameState, requestId: string, url: string, headers: Record<string, unknown> = {}): Promise<void> {
     const go = () => this.sendTo(state, "Fetch.continueRequest", { requestId });
-    const top = topOf(state).current;
+    const topState = topOf(state);
+    let top = topState.current;
+    // A request the old loopback page fires as it goes away (keepalive fetch, sendBeacon on pagehide) arrives after the
+    // next page committed. Within LEFT_LOOPBACK_MS of leaving a loopback page, a request that names no other initiator
+    // (Origin or Referer of the old page, or neither) is judged as the old page's (verify-3928 on #4214).
+    const left = topState.leftLoopback;
+    if (!isLoopbackUrl(top) && left && this.now() - left.at <= LEFT_LOOPBACK_MS) {
+      const named = [headers["Origin"], headers["origin"], headers["Referer"], headers["referer"]].find((v) => typeof v === "string" && v && v !== "null") as string | undefined;
+      if (!named || isLoopbackUrl(named) || sameOrigin(named, left.url)) top = left.url;
+    }
     if (!this.options.outbound || !isLoopbackUrl(top) || isLoopbackUrl(url) || sameOrigin(url, top)) { this.stats.continued++; await go(); return; }
     let allowed = false;
     try { allowed = await this.options.outbound.allowed(url); } catch { allowed = false; }

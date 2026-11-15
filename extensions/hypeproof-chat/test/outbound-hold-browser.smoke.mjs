@@ -45,6 +45,15 @@ const server = createServer((req, res) => {
   if (u === '/ai-popup') return page(`<button id="po" style="display:block;width:200px;height:40px" onclick="window.open('/popup-send')">open</button>`);
   if (u === '/popup-send') return page(send('b.test', 'pop'));
   if (u === '/site') return page(send('b.test', 'site'));
+  // verify-3928 on #4214: a redirect hop to the off-list site, requests fired as the page goes away, and workers.
+  if (u === '/hop-local') { res.statusCode = 302; res.setHeader('location', `${at('b.test')}/hop-from-local`); return res.end(); }
+  if (u === '/hop-list') { res.statusCode = 302; res.setHeader('location', `${at('b.test')}/hop-from-list`); return res.end(); }
+  if (u === '/ai-hops') return page(`<script>fetch('/hop-local',{mode:'no-cors'}).catch(function(){});fetch('${at('c.test')}/hop-list',{mode:'no-cors'}).catch(function(){})</script>`);
+  if (u === '/ai-leave') return page(`<script>addEventListener('pagehide',function(){fetch('${at('b.test')}/leave-keepalive',{method:'POST',body:'typed',keepalive:true,mode:'no-cors'});navigator.sendBeacon('${at('b.test')}/leave-beacon','typed')})</script>`);
+  if (u === '/worker-d') { res.setHeader('content-type', 'text/javascript'); return res.end(`fetch('${at('b.test')}/from-worker',{mode:'no-cors'}).catch(function(){})`); }
+  if (u === '/worker-s') { res.setHeader('content-type', 'text/javascript'); return res.end(`onconnect=function(){};fetch('${at('b.test')}/from-shared',{mode:'no-cors'}).catch(function(){})`); }
+  if (u === '/worker-sw') { res.setHeader('content-type', 'text/javascript'); return res.end(`fetch('${at('b.test')}/from-service',{mode:'no-cors'}).catch(function(){})`); }
+  if (u === '/ai-workers') return page(`<script>new Worker('/worker-d');try{new SharedWorker('/worker-s')}catch(e){}try{navigator.serviceWorker.register('/worker-sw')}catch(e){}</script>`);
   if (u === '/ai-ws') return page(`<script>try{new WebSocket('ws://b.test:${port}/ws-b')}catch(e){}</script>`);
   return page('ok');
 });
@@ -115,6 +124,24 @@ try {
   await nav(`http://a.test:${port}/site`);
   ok(all('site'), `a page on another (non-loopback) site is not affected (${JSON.stringify(hits)})`);
   ok(guard.stats.outboundRefused >= 16, `refusals are counted (${JSON.stringify(guard.stats)})`);
+  // A redirect hop to the off-list site, from a loopback URL and from one on the list: the hop is refused.
+  await nav(LOOP('/ai-hops'));
+  ok(hits.includes('127.0.0.1/hop-local') && hits.includes('c.test/hop-list') && !hits.includes('b.test/hop-from-local') && !hits.includes('b.test/hop-from-list'),
+    `a 302 from a loopback or listed address to the off-list site is refused at the hop (${JSON.stringify(hits)})`);
+  // Requests fired as the page goes away (fetch keepalive and sendBeacon on pagehide), leaving for another loopback page
+  // and for a page on another site: refused.
+  for (const next of [LOOP('/blank'), `http://a.test:${port}/blank`]) {
+    await nav(LOOP('/ai-leave'), 600); hits.length = 0; await nav(next, 1200);
+    ok(!hits.includes('b.test/leave-keepalive') && !hits.includes('b.test/leave-beacon'), `keepalive fetch and sendBeacon on pagehide (to ${next}) send nothing (${JSON.stringify(hits)})`);
+  }
+  // Workers. A dedicated worker's requests are paused in its page's session, so they are held like the page's own.
+  // EXPECTED RESIDUAL (in Jay's scope, NOT covered by the CDP guard): shared and service workers are separate targets
+  // the guard does not attach, so their requests are not held. Core's webRequest sees them; the planned fix is the
+  // #4209 core patch (its optional second commit). These checks pin today's behaviour; flip them when that lands.
+  await nav(LOOP('/ai-workers'), 2500);
+  ok(hits.includes('127.0.0.1/worker-d') && !hits.includes('b.test/from-worker'), `a dedicated worker's fetch to an off-list site is refused (${JSON.stringify(hits)})`);
+  ok(hits.includes('b.test/from-shared'), `EXPECTED RESIDUAL: a shared worker's fetch to an off-list site still goes (${JSON.stringify(hits)})`);
+  ok(hits.includes('b.test/from-service'), `EXPECTED RESIDUAL: a service worker's fetch to an off-list site still goes (${JSON.stringify(hits)})`);
   // EXPECTED RESIDUAL (Jay's 2026-11-15 scope includes WebSocket; not yet covered). The Fetch domain cannot pause a
   // WebSocket handshake and Network.setBlockedURLs does not stop it, so a loopback page on a minor seat still opens a
   // WebSocket to a site off the list. This check pins today's behaviour; the planned fix is a safe-session core patch
@@ -128,7 +155,10 @@ try {
   await guard.start();
   await nav(LOOP('/ai'));
   ok(all('b'), `adult seat: a loopback page's requests go on (${JSON.stringify(hits)})`);
+  await nav(LOOP('/ai-workers'), 2500);
+  ok(hits.includes('b.test/from-worker') && hits.includes('b.test/from-shared'), `adult seat: workers' requests go on (control for the worker cases) (${JSON.stringify(hits)})`);
   guard.dispose();
+
   root.close();
 } finally { server.close(); await b.close?.(); }
 console.log(`PASS outbound hold: ${checks} checks (minor seats, loopback pages: fetch/XHR/beacon/EventSource off the list refused; assets unchanged)`);
