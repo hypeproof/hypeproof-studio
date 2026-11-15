@@ -210,7 +210,8 @@ public class ConversationHistoryTest {
     @Test public void latestActionAndDraftStayUsableAboveKeyboard()throws Exception{
         if(InstrumentationRegistry.getArguments().getString("largeDark", "false").equals("true")){assertTrue(context.getResources().getConfiguration().fontScale>=1.9f);assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_YES,context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK);}
         launch();onView(withContentDescription("대화 기록")).perform(swipeDown(),swipeDown());
-        String draft="키보드에서 쓰던 글\n둘째 줄";observeIme("before_replace_and_click");onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft),click());observeIme("after_replace_and_click");awaitIme();
+        String draft="키보드에서 쓰던 글\n둘째 줄";observeIme("before_click");onView(withContentDescription("질문 대화 입력")).perform(click());observeIme("after_click");awaitIme();
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft));observeIme("after_replace");
         onView(withText("최신 메시지")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;float d=v.getResources().getDisplayMetrics().density;assertTrue(v.getHeight()>=48*d);assertTrue(v.getWidth()>=48*d);assertTrue(v.createAccessibilityNodeInfo().isClickable());assertEquals("최신 메시지",v.createAccessibilityNodeInfo().getText().toString());});
         app.onActivity(a->{View decor=a.getWindow().getDecorView();WindowInsets insets=decor.getRootWindowInsets();assertNotNull(insets);assertTrue("actual IME is visible",insets.isVisible(WindowInsets.Type.ime()));});
         onView(withContentDescription("질문 대화 입력")).check(matches(isCompletelyDisplayed())).check(matches(withText(draft)));screenshot("android-history-keyboard");
