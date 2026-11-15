@@ -8821,6 +8821,49 @@ and 1420px, criterion and decision blocks: preset exactly, undo of a reset, then
 no host message, saved work kept, quiet 44px/14px buttons, disabled colour and dashed boundary) and
 `test/lesson-focus.smoke.mjs` (the pure history: one change per burst or reset, empty history disables undo, bounded).
 
+REQ-STUDIO-LEARNING-BLOCK-PARAMS / REQ-CGP-LEARN-06 and DES-CGP-LEARN-06 (box_spacing), REQ-CGP-LEARN-05 and
+DES-CGP-LEARN-05 (stage_stepper) (traces to REQ-STUDIO-LEARNING-BLOCK-PIN, CGP-LEARN-R-006 / R-005) / PI#3, PI#4: the first
+two parametric blocks, drawn in the existing 자료 card. Studio part only; Chalk authoring follows.
+
+- **Specs and re-validation.** The Service pins `ui_params` at confirm (hypeproof-service #509 box_spacing v1, #510
+  stage_stepper v1). Studio re-validates the served params against its own copy of the v1 specs (`src/blockParams.ts`).
+  That copy is checked against the Service's published snapshot, vendored byte-for-byte as
+  `test/fixtures/step-ui-catalog-published.json` with a sha256 pin. Params that do not fit draw the unsupported notice,
+  never a guessed value.
+- **box_spacing.**
+  - Three ranges: 안쪽 여백 0–48, 테두리 0–8 and 바깥 여백 0–48, each in whole px with its value as text beside it.
+    Keys: ←/→ ±1, PageUp/PageDown ±10 % of the range, Home/End. No key acts while an IME composition is open.
+  - 배치 is a segmented radio group with 4 options. A choice with more than 4 options is a list behind one
+    "{값}. {라벨} 전체 보기" button; no shipped type has one.
+  - The preview is a static box with fixed sample content. It is a React style object built from clamped numbers
+    (`boxStyle`): no style text, no `<style>` block, no learner or authored markup, no script.
+  - It uses `box-sizing: content-box`, so the box is 2 × (padding + border) wider than its content, and the margin is
+    space outside the box.
+  - The caption is the card's polite line, computed from the same clamped values. Example: "안쪽 여백 16px · 테두리 1px ·
+    바깥 여백 8px · 블록 배치 → 상자가 내용보다 34px 넓어요. 바깥 여백 8px는 상자 밖의 빈 공간이에요.". At 0/0 it reads
+    "상자가 내용과 같은 너비예요".
+  - 처음으로 returns to the pinned preset. 되돌리기 undoes one change; a drag or a run of keys is one change, ending after
+    a 1 s pause.
+  - The values are local and never posted, so there is no save and no observation event.
+- **stage_stepper.**
+  - Shows "N / M 단계" as text, the stage title at 16px semibold and its one sentence.
+  - 이전 and 다음 are 44px quiet buttons, disabled at the ends. ←/→ move while the stepper has focus, never during an
+    IME composition.
+  - Nothing advances on its own.
+  - The stages are instructor text and untrusted: they are rendered only as text nodes, never as markup, links or
+    markdown. The caption is "N / M 단계: <title>". The position is local and per lesson version and step.
+- **Style.** 44px targets and 14px text throughout. Hover and pressed use the shared state layers, the focus ring is
+  tokens.css's, and forced colours use system colours.
+- **Evidence.**
+  - `test/block-params.smoke.mjs`: spec parity with the vendored, sha-pinned snapshot, plus a live comparison with a
+    Service checkout when `HYPEPROOF_SERVICE_DIR` is set. Re-validation, the style object with served CSS text, the
+    caption at the default, 0 and maximum, the key steps, the stage shapes, fail-closed rendering and the box history.
+  - `test/param-blocks-browser.smoke.mjs` (headless Chromium, real keys, light/dark at 320/800/1420 px, forced colours):
+    bounds by keys, PageUp/Down at 10 %, the caption following every change, a measured preview equal to the caption,
+    reset and undo, no host message, a bypassed "8px;background:url(x)" reaching no DOM, the >4 overflow list, stepper
+    moves, keys and the IME guard, no autoplay, `<img onerror>` and `<script>` stage text drawn literally with no element
+    made, and 44px / 14px / 16px with focus rings.
+
 REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
 REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
 it back. **Partial:** this covers only (c) "접기". The report half, (a) and (b), is not built: the "자료가 틀린 것 같아요" item,

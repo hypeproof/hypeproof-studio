@@ -277,6 +277,11 @@ The Studio side is the next paragraph. No real type has params yet, so (a) is pr
 
 REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 Studio side (2026-11-14): REQ-STUDIO-LEARNING-BLOCK-PIN in `docs/studio-requirements.md`. Studio draws a block only at a pinned version it renders (v1 today, with an unpinned lesson meaning v1). Any other version gets the unsupported notice, and the learner's text never shows a type id or a version.
 
+REQ-CGP-LEARN-05 / 06 and DES-CGP-LEARN-05 / 06 status (2026-11-15): Service and Studio are done; Chalk authoring is next.
+- Service: hypeproof-service #509 adds box_spacing v1 and #510 adds stage_stepper v1 with `text_list`, which Jay approved for this scope.
+- Studio draws both as REQ-STUDIO-LEARNING-BLOCK-PARAMS (`docs/studio-requirements.md`).
+- Chalk authoring follows: the box_spacing preset select and the stages editor.
+
 REQ-CGP-LEARN-11 / DES-CGP-LEARN-11 status (2026-11-14, CGP-LEARN-R-011 / D-011): **partial**. Only (c), "접기", is implemented, in Studio, as REQ-STUDIO-LEARNING-BLOCK-COLLAPSE (`docs/studio-requirements.md`).
 - The open card's 자료 메뉴, after 닫기, has "접기". Collapsed, the card is one row, "접은 자료: <title>" with "다시 보기", which restores it open.
 - The state is per lesson version and step, local to the webview, and kept across a re-mount. It is never posted to the host and is not an evidence event.

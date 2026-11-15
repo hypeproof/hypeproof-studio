@@ -69,3 +69,46 @@
   .hp-block-menu { border-color: CanvasText; }
   .hp-block-menu > [role="menuitem"] { color: ButtonText; }
 }
+
+/* CGP-LEARN-D-006 (DES-CGP-LEARN-06) — box_spacing's controls and preview. Every control is a 44px target at the 14px floor;
+   the value is text beside its range; hover and pressed fills are the shared state layers; the focus ring is tokens.css's.
+   The preview's box takes its padding, border width, margin and display from a style object of clamped numbers
+   (blockParams.boxStyle); here only its colours and the dashed margin outline are set. */
+.hp-box-spacing { display: flex; flex-direction: column; gap: var(--hp-space-2); min-width: 0; }
+.hp-box-preview { overflow: auto; max-width: 100%; padding: var(--hp-space-1); border-radius: var(--hp-radius-8); background: var(--hp-bg-app-default); }
+/* The margin area is drawn by a dashed border on the wrapper (not an outline: outlines are the focus ring's). */
+.hp-box-margin { display: inline-block; max-width: 100%; border: var(--ds-c-focus-width) dashed var(--hp-border-divider-default); }
+/* The three sizes come from the block's custom properties (clamped numbers); the layout from four fixed rules. */
+.hp-box-outer { box-sizing: content-box; display: block; padding: var(--param-padding); margin: var(--param-margin); border: var(--param-border) solid var(--hp-text-accent-default); background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default); }
+.hp-box-outer[data-box-layout="inline-block"] { display: inline-block; }
+.hp-box-outer[data-box-layout="flex"] { display: flex; }
+.hp-box-outer[data-box-layout="grid"] { display: grid; }
+.hp-box-content { display: inline-block; padding: 0 var(--hp-space-1); background: var(--hp-bg-control-hover); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hp-box-controls { display: flex; flex-direction: column; gap: var(--hp-space-1); min-width: 0; }
+.hp-param { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--hp-space-2); margin: 0; padding: 0; border: 0; min-width: 0; }
+.hp-param > .hp-param-label { grid-column: 1 / -1; padding: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hp-param > input[type="range"] { min-height: var(--hp-control-min); width: 100%; margin: 0; accent-color: var(--hp-text-accent-default); }
+.hp-param-value { min-width: var(--hp-control-min); text-align: end; font-size: var(--hp-font-caption); font-variant-numeric: tabular-nums; }
+.hp-param-segments, .hp-param-list { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--hp-space-1); min-width: 0; }
+.hp-param-list { flex-direction: column; }
+.hp-param-option { display: inline-flex; align-items: center; gap: var(--hp-space-1); min-height: var(--hp-control-min); padding: 0 var(--hp-space-2); border: var(--ds-c-focus-width) solid var(--hp-border-divider-default); border-radius: var(--hp-radius-8); font-size: var(--hp-font-caption); cursor: pointer; }
+.hp-param-option:hover { background-color: var(--hp-bg-control-hover); }
+.hp-param-option:active { background-color: var(--hp-bg-control-pressed); }
+.hp-param-option:has(input:checked) { border-color: var(--hp-text-accent-default); font-weight: var(--hp-weight-strong); }
+.hp-param-overflow { grid-column: 1 / -1; justify-self: start; min-height: var(--hp-control-min); font-size: var(--hp-font-caption); }
+
+/* CGP-LEARN-D-005 (DES-CGP-LEARN-05) — stage_stepper: "2 / 4 단계" as text, the stage title at 16px semibold and one sentence,
+   이전 / 다음 as 44px quiet buttons. The stepper itself takes focus for ←/→ and shows the tokens.css ring. */
+.hp-stage-stepper { display: flex; flex-direction: column; gap: var(--hp-space-1); min-width: 0; border-radius: var(--hp-radius-8); }
+.hp-stage-count { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-primary-default); }
+.hp-stage-title { margin: 0; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hp-stage-sentence { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hp-stage-nav { display: flex; gap: var(--hp-space-2); }
+.hp-stage-nav > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-stage-nav > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
+@media (forced-colors: active) {
+  .hp-box-outer { border-color: CanvasText; }
+  .hp-box-margin { border-color: CanvasText; }
+  .hp-param-option { border-color: ButtonText; }
+  .hp-param-option:has(input:checked) { border-color: Highlight; }
+}
