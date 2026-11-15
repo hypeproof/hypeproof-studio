@@ -34,7 +34,8 @@ const server = createServer((req, res) => {
     if (u === '/subres') return page(`<img src="${at('b.test')}/img.png"><script>fetch('${at('b.test')}/fetch',{mode:'no-cors'}).catch(function(){});navigator.sendBeacon('${at('b.test')}/beacon','x')</script><iframe src="${at('c.test')}/with-img"></iframe>`);
     if (u === '/redir') return page(`<iframe src="/go-b"></iframe>`);
     if (u === '/go-b') { res.statusCode = 302; res.setHeader('location', `${at('b.test')}/redirected`); return res.end(); }
-    if (u === '/popup') return page(`<script>window.open('/popup-page')</script>`);
+    // Opened by a real click: a popup opened at load with no user activation is blocked by some Chromium builds (CI).
+    if (u === '/popup') return page(`<button id="po" style="display:block;width:200px;height:40px" onclick="window.open('/popup-page')">open</button>`);
     if (u === '/popup-page') return page(`<iframe src="${at('b.test')}/in-popup"></iframe><iframe src="${at('c.test')}/moves"></iframe>`);
     if (u === '/list-frame') return page(`<iframe src="${at('c.test')}/frame"></iframe><iframe src="/same-frame"></iframe>`);
     return page('a');
@@ -108,7 +109,18 @@ try {
   ok(reached('c.test/nested-ok'), `and an admitted one inside it loads (${JSON.stringify(hits)})`);
   await visit('/redir');
   ok(reached('a.test/go-b') && !reached('b.test/redirected'), `a same-site iframe that 302s off the list stops at the hop (${JSON.stringify(hits)})`);
-  await visit('/popup', 2000);
+  // Wait for real signals, not a timeout: the popup page and its admitted frame were requested, and the guard refused
+  // both the off-list frame and the admitted frame's move (two refusals), or 10 s passed.
+  await visit('/popup', 300);
+  {
+    const before = guard.stats.framesRefused;
+    const r = await b.evaluate(`(()=>{const x=document.getElementById('po').getBoundingClientRect();return {x:x.left+10,y:x.top+10}})()`);
+    for (const type of ['mousePressed', 'mouseReleased']) await b.send('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', clickCount: 1 });
+    const until = Date.now() + 10_000;
+    while (Date.now() < until && !(reached('a.test/popup-page') && reached('c.test/moves') && guard.stats.framesRefused - before >= 2)) await settle(50);
+    await settle(200);
+    refusedIn['/popup'] = guard.stats.framesRefused - before;
+  }
   ok(reached('a.test/popup-page') && !reached('b.test/in-popup'), `an off-list iframe in a popup sends nothing (${JSON.stringify(hits)})`);
   ok(reached('c.test/moves') && !reached('b.test/own-move'), `an admitted iframe in a popup loads, and moving itself off the list sends nothing (${JSON.stringify(hits)})`);
   await closePopups();
