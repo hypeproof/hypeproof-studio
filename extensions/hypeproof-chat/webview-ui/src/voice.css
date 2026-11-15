@@ -111,6 +111,7 @@
   transition: background-color var(--hp-dur-press) var(--hp-ease);
 }
 .hps-mic-test:hover { background-color: var(--hp-bg-control-hover); }
+.hps-mic-test:active { background-color: var(--hp-bg-control-pressed); }
 .hps-mic-test[aria-pressed="true"] { background-color: var(--hp-bg-control-pressed); }
 .hps-mic-test:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
 .hps-mic-explain { display: flex; flex-direction: column; align-items: flex-start; gap: var(--hp-space-2); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; word-break: keep-all; }
