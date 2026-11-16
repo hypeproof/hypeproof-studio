@@ -28,6 +28,7 @@ import {CASEBOOK, decide, p0CaseIds} from './publish-gate.mjs';
 import {parseYaml} from './casebook.mjs';
 import {pickRelease} from './release-draft.mjs';
 import {MAC_RECEIPT} from './macos-signing-receipt.mjs';
+import {checkBlockers} from './release-blockers.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
 const VERSION = /^v\d+\.\d+\.\d+$/;
@@ -211,6 +212,14 @@ function run({pr: number, out}) {
   if (!verdict.allow) {
     say('Nothing promoted.');
     verdict.reasons.forEach(say);
+    finish(1);
+  }
+  // An open release-blocker issue stops promotion before the v tag, even after an approval (fail closed).
+  const blockers = checkBlockers();
+  if (!blockers.allow) {
+    say('Nothing promoted: the release is blocked.');
+    blockers.reasons.forEach(say);
+    say(`Fix and close each release-blocker issue, then rerun: gh workflow run release-promote.yml -f pr=${number}`);
     finish(1);
   }
   const {version, rcTag, candidate} = verdict;
