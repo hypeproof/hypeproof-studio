@@ -83,7 +83,8 @@ class NativeFailureEvidence(unittest.TestCase):
                     {"python": sys.executable, "server": "owned-server", "server_sha256": expected["server_sha"]},
                     root, "energy_interrupt")
             self.assertEqual(issued, [1060.0])
-            self.assertEqual(phases[:3], ["terminate", "get_app_container", "evaluator_start"])
+            self.assertLess(phases.index("terminate"), phases.index("get_app_container"))
+            self.assertLess(phases.index("get_app_container"), phases.index("evaluator_start"))
             self.assertEqual(result, helper.validate(native, events, server, **expected))
             self.assertNotIn("PRIVATE_SENTINEL", json.dumps(result))
             print(json.dumps({"preflight_seconds": 60, "issued_after_preflight": True,
@@ -140,7 +141,12 @@ raise SystemExit(7)
                         output.mkdir()
                         (output / "host.json").write_text(json.dumps({"python": sys.executable,
                             "server": "PRIVATE_SENTINEL", "server_sha256": "c" * 64, "status": "PASS"}))
-                    else:
+                    elif argv[1:3] == ["-m", "unittest"]:
+                        self.assertEqual(argv, [sys.executable, "-m", "unittest", "discover", "-s",
+                            str(SOURCE.resolve().parents[1] / "voice-evaluation"),
+                            "-p", "test_publication.py", "-v"])
+                        order.append("publication_complete")
+                    elif argv[:2] == ["xcrun", "simctl"]:
                         commands.append(argv[2])
                         order.append(argv[2])
                         if argv[2] == "get_app_container":
@@ -171,7 +177,11 @@ raise SystemExit(7)
                     self.assertGreaterEqual(failure["elapsed_seconds"], 0)
                     self.assertTrue(all(p["duration_seconds"] >= 0 for p in failure["phases"]))
                     self.assertEqual(len(processes), 1, "failed evaluator must never be replayed")
-                    self.assertEqual(order[:3], ["terminate", "get_app_container", "evaluator_start"])
+                    self.assertEqual(order.count("publication_complete"), 1)
+                    for prerequisite in ("publication_complete", "terminate", "get_app_container"):
+                        self.assertLess(order.index(prerequisite), order.index("evaluator_start"),
+                                        "credentials must not be issued before preflight completes")
+                    self.assertLess(order.index("terminate"), order.index("get_app_container"))
                     if mode == "config":
                         self.assertEqual(commands, ["terminate", "get_app_container", "terminate"])
                         self.assertEqual(failure["config_lifetime"], {})
@@ -194,6 +204,46 @@ raise SystemExit(7)
                     for process in processes:
                         if process.poll() is None: process.terminate()
                         process.wait(timeout=5)
+
+    def test_publication_failure_cannot_start_evaluator_or_issue_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "app"
+            app.mkdir()
+            (app / "HPStudio").write_bytes(b"synthetic identity; no native execution")
+            prepared_python = str(root / "prepared-python")
+            publication_calls = []
+            def command(argv, **kwargs):
+                if "--output" in argv:
+                    output = Path(argv[argv.index("--output") + 1])
+                    output.mkdir()
+                    (output / "host.json").write_text(json.dumps({"python": prepared_python,
+                        "server": "PRIVATE_SENTINEL", "server_sha256": "c" * 64, "status": "PASS"}))
+                    return subprocess.CompletedProcess(argv, 0, b"", b"")
+                self.assertEqual(argv, [prepared_python, "-m", "unittest", "discover", "-s",
+                    str(SOURCE.resolve().parents[1] / "voice-evaluation"),
+                    "-p", "test_publication.py", "-v"])
+                publication_calls.append(argv)
+                raise helper.CheckFailure("owned_command_failed")
+            with patch.object(helper.sys, "platform", "darwin"), \
+                 patch.object(helper.signal, "signal"), \
+                 patch.object(helper, "command", side_effect=command), \
+                 patch.object(helper.subprocess, "Popen") as start:
+                self.assertEqual(helper.main(SimpleNamespace(source_sha="a" * 40,
+                    device="11111111-1111-4111-8111-111111111111", app=str(app),
+                    evidence=str(root / "evidence"))), 1)
+            start.assert_not_called()
+            self.assertEqual(len(publication_calls), 1, "failed preflight must not be retried")
+            receipt = json.loads((root / "evidence/native-livekit.json").read_text())
+            self.assertEqual(receipt["status"], "FAIL")
+            self.assertEqual(receipt["failure"], "owned_command_failed")
+            self.assertEqual(receipt["publication_control"]["status"], "FAIL")
+            self.assertEqual(receipt["scenarios"], [])
+            self.assertNotIn("scenario_failure", receipt, "no scenario may start after failed preflight")
+            self.assertFalse(list(root.rglob("connection.private.json")))
+            self.assertFalse(list(root.rglob("hps-livekit-ci-config.json")))
+            self.assertNotIn("PRIVATE_SENTINEL", json.dumps(receipt))
+            self.assertNotIn(str(root), json.dumps(receipt))
 
     def test_malformed_or_unlisted_partial_fields_cannot_escape(self):
         with tempfile.TemporaryDirectory() as directory:
