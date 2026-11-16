@@ -138,8 +138,10 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func field(_ app: XCUIApplication) -> XCUIElement {
         let field = app.textFields["sharedInput"]
-        if field.waitForExistence(timeout: 2) { return field }
         let text = app.textViews["sharedInput"]
+        if field.exists { return field }
+        if text.exists { return text }
+        if field.waitForExistence(timeout: 2) { return field }
         XCTAssertTrue(text.waitForExistence(timeout: 5), "The personal conversation must be usable without a desktop.")
         return text
     }
@@ -175,7 +177,7 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func diagnostic(_ id: String, in app: XCUIApplication) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
-        XCTAssertTrue(element.waitForExistence(timeout: 5))
+        XCTAssertTrue(element.exists || element.waitForExistence(timeout: 5))
         XCTAssertLessThanOrEqual(element.frame.width, 2, "Diagnostics must not occupy transcript layout.")
         XCTAssertLessThanOrEqual(element.frame.height, 2)
         return element
