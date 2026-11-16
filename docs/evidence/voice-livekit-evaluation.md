@@ -50,9 +50,10 @@ A first v6 driver setup failed before remote execution; that log is also retaine
 Cleanup now attempts every owned receiver/source/evaluator/room/private-file release
 independently, preserving the body failure or first cleanup failure.
 
-Native iOS SDK resolution/build, the native client connected to the server,
+The first hosted run resolved the iOS SDK and passed the Release device build,
+but the Debug test build failed; the native client connected to the server,
 physical iPhone speaker/Bluetooth, Korean naturalness, AEC/false interruptions
-and installed-app acceptance are NOT RUN. The launcher has now run on Darwin
+and installed-app acceptance remain NOT RUN. The correction awaits a new run. The launcher has now run on Darwin
 loopback too; an iPhone's loopback still does not connect to a Mac. The development screen
 cannot yet be presented as an end-to-end native acceptance result. Production
 account/coach integration and continuous audio cost controls remain separate.
@@ -131,3 +132,27 @@ Its actual main path failed the old-source control and passed after the change.
 These are process lifetime controls; they do not prove native audio behavior.
 
 - `native-cancellation-handoff-v6.json`: `f20253b96a115e5d2d0649c8af54d01f8ad0db60df4e7f6fae733708849654ea`
+
+## First hosted native execution and corrections
+
+Run `43849037836/1` tested source `944ea3f1641d7d16d7ddcedf39b94e8ec4536fe9`
+at PR merge `25bea5b4fb14d575beef1ee0d07f7982a4a713d4`. It failed and is
+preserved as a failed run. Android passed 44 emulator cases, and the ordinary
+iOS job passed 87 core controls and the Release device build. Its Debug build
+requested x86_64 while the resolved LiveKit module was built for arm64, so the
+37 UI cases did not execute. The correction sets `ONLY_ACTIVE_ARCH=YES` for
+Debug only; parsed-project comparison confirms Release, package pins, target
+dependencies and source membership are unchanged.
+
+The separate voice job timed out at its first CoreSimulator runtime query
+(15 seconds), before app compilation or RTC setup. The exact service cause was
+not observed. The correction gives that one readiness query 60 seconds within
+the unchanged 1,050-second total bound, without retry. Steps now retain elapsed
+time/effective timeout and fixed precredential diagnostic markers rather than
+raw logs or paths. An injected-clock old-source control failed; eleven corrected
+controls passed, including a 20-second enumeration, timeout before app setup and
+clipping to the remaining global budget. This is control-logic evidence, not an
+actual cold simulator or native transport pass.
+
+- `hosted-pr4306/terminal-review.json`: `8569ddc0ae1808fd52d10dd95648bfaafc895448e07a716917424f0555ea6c5b`
+- `native-ci-corrections-handoff-v1.json`: `2f5d067e511d0c486e14244b11c99da6d977421b6f076192af3b3f9940cb387b`
