@@ -9135,11 +9135,53 @@ two parametric blocks, drawn in the existing 자료 card. Studio part only; Chal
     moves, keys and the IME guard, no autoplay, `<img onerror>` and `<script>` stage text drawn literally with no element
     made, and 44px / 14px / 16px with focus rings.
 
+REQ-STUDIO-NARRATED-DIAGRAM / REQ-CGP-LEARN-09 and DES-CGP-LEARN-09 (narrated_diagram) (traces to
+REQ-STUDIO-LEARNING-BLOCK-PIN, CGP-LEARN-R-009 / D-009) / PI#3: one of Studio's own drawings, narrated in exactly three
+instructor beats. Studio part; the Service catalog is hypeproof-service#541 (merged, not yet deployed). Until the Service
+serves the kind, no confirmed lesson can attach it, so nothing changes for learners.
+
+- **Contract.** `ui: "narrated_diagram"`, `ui_version: 1`, `ui_params: {diagram, beats}`.
+  - `diagram` is `page_request` (웹 페이지가 열리는 과정) or `html_to_page` (HTML이 화면이 되기까지).
+  - `beats` is exactly three `{title ≤ 20, sentence ≤ 60}` for 시작 / 변화 / 결과, in that order.
+  - Studio re-validates against its copy of the v1 spec, the vendored snapshot pinned by sha256 in block-params.smoke. That
+    covers the shape, the safe single-line rule and the width rule: `textLayerWidthPx` is the Service's estimate, case for
+    case. A title is 168 px at 14 px on one line; a sentence is two lines of 488 px.
+  - Anything else draws the unsupported notice, never a guess.
+- **Drawings are built in.** `src/narratedDiagram.ts` holds the boxes, arrows, marker positions and the per-beat emphasis
+  on a 640×400 artboard. The reserved 120×120 control area is kept empty. Colours are role names (text, muted, accent,
+  line, surface) resolved by tokens, with system colours under forced colours. Lesson data never carries SVG, HTML, paths
+  or colours.
+- **Only the shapes scale; every word is HTML at 14 px or more** (agent choice: in a 280 px rail a 640 px artboard would
+  draw SVG text at about 6 px).
+  - The SVG (role="img", named with every box's letter and label) scales to the rail and holds only shapes and the box
+    letters. The letters are drawn at 40 units, so they render at 14 px or more down to a 280 px rail. The beat marker
+    is a ring with a dot, with no numeral.
+  - The node labels are a localisable text table, drawn as an HTML legend keyed by the same letters.
+  - The beat is HTML: "2 / 3 장면 · 변화", the "N / M 장면" position shape the SX audit allows; the title at 14 px semibold in its 168 px box, and the sentence in its 488 px box.
+  - 이전 / 다음 are 44 px quiet buttons in the control area beside the caption, not inside the scaled art.
+- **Beats** move only on the learner's action: the buttons, or ←/→ while the block has focus (never during an IME
+  composition). Nothing autoplays, and nothing is posted.
+  - The card's polite caption is "N / 3 장면 · 역할: <title>. <sentence>".
+  - The beats are instructor text and untrusted: they are rendered as text nodes only.
+- **Evidence.**
+  - `test/block-params.smoke.mjs`: snapshot parity, the width estimate case for case with the Service, and
+    `diagramParams` refusing bad counts, unknown drawings, authored colour keys, unsafe text and over-wide titles
+    (13 syllables, 13 stars), with surfaceOf failing closed.
+  - `test/narrated-diagram.smoke.mjs`: the geometry stays on the board with the control area clear, three beats, role
+    names only, labels fitting 168 px, the SVG name mapping every letter, and a negative control.
+  - `test/narrated-diagram-browser.smoke.mjs` (headless Chromium), in the ChatPanel in light/dark at 320 and 800 px and
+    under forced colours:
+    - moves by button and keys, the IME guard, no autoplay, the caption, literal `<img onerror>`/`<script>`, no posts,
+      44 px targets and the ring;
+    - and the block alone in 280/360/480 px rails at 100 % and 200 %, measuring rendered sizes: HTML text ≥ 14 px inside
+      the rail, SVG letters ≥ 14 px rendered (font units × on-screen scale), no horizontal overflow, and 12 syllables on
+      one line in the 168 px title.
+
 REQ-STUDIO-LEARNING-BLOCK-MOTION / REQ-CGP-LEARN-07 and DES-CGP-LEARN-07 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH,
 CGP-LEARN-R-007) / PI#3: animated blocks start paused, play is the learner's explicit action, and step-by-step is always there.
 **No shipped block kind animates yet**, so this row delivers a guard and a ready controller, not an animated block:
 
-- **Guard.** `MATERIAL_MOTION` (`src/lessonFocus.ts`) marks every kind `static` or `animated`. All nine are `static` today. A static
+- **Guard.** `MATERIAL_MOTION` (`src/lessonFocus.ts`) marks every kind `static` or `animated`. All ten are `static` today. A static
   kind must not change on its own: opened and left alone for 3 s, its text, field values, markup and computed styles stay the
   same and no animation runs. This catches a future autoplay or timer in any block.
 - **Controller.** An `animated` kind must draw its frames through `webview-ui/src/BlockPlayback.tsx`, with its rules in
