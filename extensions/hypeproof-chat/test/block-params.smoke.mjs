@@ -15,24 +15,25 @@ import * as F from '../src/lessonFocus.ts';
 let n = 0;
 const ok = (label) => { n++; console.log(`  ok   ${label}`); };
 const FIXTURE_URL = new URL('./fixtures/step-ui-catalog-published.json', import.meta.url);
-// The vendored snapshot as of hypeproof-service#510 (3c3267342): box_spacing v1 (#509) + stage_stepper v1 (#510).
-const FIXTURE_SHA256 = 'a0049f2106883df62f59b283529f8ce60e8b5aeae057d0f63d7b056b1c685f52';
+// The vendored snapshot as of hypeproof-service#541 (0f1797945): box_spacing v1 (#509), stage_stepper v1 (#510) and
+// narrated_diagram v1 (#541).
+const FIXTURE_SHA256 = '8aff3c48192544eae00ed1fbc8154246bcba55b649ef789bcb0b693887a40b7a';
 const bytes = readFileSync(FIXTURE_URL);
 assert.equal(createHash('sha256').update(bytes).digest('hex'), FIXTURE_SHA256, 'the vendored Service snapshot changed: re-vendor it byte-for-byte and update the pin');
 const snapshot = JSON.parse(bytes.toString('utf8'));
-for (const type of ['box_spacing', 'stage_stepper']) {
+for (const type of ['box_spacing', 'stage_stepper', 'narrated_diagram']) {
   assert.deepEqual(B.BLOCK_SPECS[type]['1'].params, snapshot.types[type]['1'].params, `${type} v1 params equal the Service's`);
   assert.deepEqual(B.BLOCK_SPECS[type]['1'].presets, snapshot.types[type]['1'].presets, `${type} v1 presets equal the Service's`);
   assert.deepEqual(Object.keys(B.BLOCK_SPECS[type]), Object.keys(snapshot.types[type]).filter((v) => v === '1'), `${type}: only v1 is drawn`);
 }
 // The App draws exactly v1 of both, and RENDERED_UI_VERSIONS says so.
-assert.deepEqual([F.RENDERED_UI_VERSIONS.box_spacing, F.RENDERED_UI_VERSIONS.stage_stepper], [[1], [1]]);
+assert.deepEqual([F.RENDERED_UI_VERSIONS.box_spacing, F.RENDERED_UI_VERSIONS.stage_stepper, F.RENDERED_UI_VERSIONS.narrated_diagram], [[1], [1], [1]]);
 ok('spec parity: BLOCK_SPECS equals the vendored Service snapshot (sha256 pinned)');
 const svc = process.env.HYPEPROOF_SERVICE_DIR;
 const svcFile = svc && join(svc, 'worker/test/fixtures/step-ui-catalog-published.json');
 if (svcFile && existsSync(svcFile)) {
   const live = JSON.parse(readFileSync(svcFile, 'utf8'));
-  for (const type of ['box_spacing', 'stage_stepper']) assert.deepEqual(live.types[type]?.['1'], snapshot.types[type]['1'], `${type} v1: the Service checkout agrees`);
+  for (const type of ['box_spacing', 'stage_stepper', 'narrated_diagram']) assert.deepEqual(live.types[type]?.['1'], snapshot.types[type]['1'], `${type} v1: the Service checkout agrees`);
   ok(`live parity with ${svc}`);
 } else console.log('  NOT RUN live parity with a hypeproof-service checkout (set HYPEPROOF_SERVICE_DIR)');
 
@@ -111,5 +112,35 @@ if (svcFile && existsSync(svcFile)) {
   const r = B.boxReset(h, p1, p0); assert.deepEqual(r.values, p0); assert.equal(B.boxReset(h, p0, p0), null);
   assert.deepEqual(B.boxUndo(r.history).values, p1); assert.equal(B.boxUndo({ past: [] }), null);
   ok('box history: one step per change or reset; reset to the pinned values; undo');
+}
+{
+  // CGP-LEARN-R-009 — the width estimate equals the Service's (service-contracts textLayerWidthPx; same cases as its test).
+  assert.equal(B.textLayerWidthPx('', 14), 0);
+  assert.equal(B.textLayerWidthPx('가나다', 14), 42);
+  assert.equal(B.textLayerWidthPx('ㄱ\u1100漢カ😀Ａ', 10), 60, 'compatibility jamo, jamo, CJK, kana, emoji, full-width');
+  assert.ok(Math.abs(B.textLayerWidthPx('abc ', 10) - 24) < 1e-9, 'Latin and space at 0.6 em');
+  assert.equal(B.textLayerWidthPx('⭐✅☀♥', 10), 40, 'BMP pictographic at 1 em');
+  assert.ok(Math.abs(B.textLayerWidthPx('→·', 10) - 12) < 1e-9);
+  ok('textLayerWidthPx: the Service width estimate, case for case');
+}
+{
+  const BEATS = [{ title: '요청 보내기', sentence: '주소를 누르면 브라우저가 서버에 페이지를 달라고 해요.' }, { title: '서버가 찾기', sentence: '서버는 요청한 파일을 찾아서 돌려줄 준비를 해요.' }, { title: '화면에 보이기', sentence: '받은 HTML 을 브라우저가 읽어 화면에 그려요.' }];
+  assert.deepEqual(B.diagramParams(1, { diagram: 'html_to_page', beats: BEATS }), { diagram: 'html_to_page', beats: BEATS });
+  assert.deepEqual(B.diagramParams(undefined, { beats: BEATS }), { diagram: 'page_request', beats: BEATS }, 'an unpinned diagram takes the default');
+  const with3 = (i, over) => BEATS.map((b, k) => (k === i ? { ...b, ...over } : b));
+  const bad = [
+    {}, { beats: BEATS.slice(0, 2) }, { beats: [...BEATS, BEATS[0]] }, { diagram: 'flowchart', beats: BEATS }, { diagram: '<svg/>', beats: BEATS },
+    { beats: BEATS, color: 'red' }, { beats: with3(0, { color: 'accent' }) }, { beats: with3(1, { title: '' }) }, { beats: with3(1, { sentence: '한\n줄' }) },
+    { beats: with3(2, { title: '가'.repeat(13) }) }, { beats: with3(2, { title: '⭐'.repeat(13) }) }, { beats: with3(2, { title: 'a'.repeat(21) }) },
+    { beats: with3(0, { sentence: '😀'.repeat(31) }) }, 'x', [],
+  ];
+  for (const b of bad) assert.equal(B.diagramParams(1, b), null, JSON.stringify(b));
+  assert.ok(B.diagramParams(1, { beats: with3(2, { title: '가'.repeat(12) }) }), '12 syllables fit 168 px');
+  assert.equal(B.diagramParams(2, { beats: BEATS }), null, 'v2 is not drawn');
+  const step = (ui_params) => ({ id: 's', ui: 'narrated_diagram', ui_version: 1, ui_params });
+  assert.equal(F.surfaceOf(step({ beats: BEATS })), 'narrated_diagram');
+  assert.equal(F.surfaceOf(step({ beats: with3(2, { title: '가'.repeat(13) }) })), 'unsupported:narrated_diagram', 'fail closed');
+  assert.equal(F.surfaceOf({ ...step({ beats: BEATS }), ui_version: 2 }), 'unsupported:narrated_diagram');
+  ok('diagramParams: exactly 3 safe beats within length and width, a v1 drawing, no other key; surfaceOf fails closed');
 }
 console.log(`${n} block params checks passed`);
