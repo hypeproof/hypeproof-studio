@@ -6,7 +6,8 @@
   ],
   "machinery": [
     "hypeproof-org-lab-bot[bot]",
-    "github-actions[bot]"
+    "github-actions[bot]",
+    "hypeproof-agent[bot]"
   ],
   "evidenceReporters": [
     "hypeproof-agent[bot]"
