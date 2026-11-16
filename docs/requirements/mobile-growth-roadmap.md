@@ -187,6 +187,26 @@ acceptance remains open under #3687; source and synthetic controls do not establ
 | MVOICE-04 | Stop, background, project change, audio interruption and late permission callbacks release/fence microphone, playback and pending client work. Partial words remain recoverable. | Native lifecycle/permission tests plus physical interruption check.  MVOICE-T04. |
 | MVOICE-05 | Require platform on-device recognition; no network recognizer fallback or paid voice API. Missing engine, permission, voice or network keeps text usable. | Capability/error paths and source review; offline physical Korean recognition is not inferred from a simulator.  MVOICE-T05. |
 
+### Installed Korean reply voice — Studio #4307
+
+MVOICE-03/05 refine the existing iPhone playback path: choose among installed
+exact `ko-KR` standard-purpose voices by known quality, premium before enhanced before default,
+preserving catalog order for equal-quality choices. Unknown quality values are
+conservative fallbacks. Exclude novelty/character and personal voices from this
+automatic assistant default; do not request personal-voice authorization. Do not
+assume that enhanced or premium assets are present,
+force a download, change speech rate, or introduce hosted synthesis.
+
+Use the platform option that lets active assistive-technology settings take
+precedence. The app's requested voice and the effective accessibility voice are
+different observations; arbitrary Siri or system voice preferences are not inferred.
+Missing Korean voices retain the existing usable text/error path. Utterance/turn
+identity, Stop, lifecycle/account eligibility and next capture remain governed by
+MVOICE-03/04. This supports minimum necessary intervention while the person
+expresses their thoughts; a higher voice quality enum does not establish easier
+reflection, natural speech or a human growth outcome. Barge-in remains separate
+under #4300 and the parent #898.
+
 Interaction: '말로 적기' keeps text for review and explicit Send. A deliberate
 conversation-microphone action starts automatic listening, finalization and
 read-aloud; the interface makes the active microphone and stop action clear.

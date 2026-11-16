@@ -18,6 +18,29 @@ inferred from UI use or passing these tests.
 | MVOICE-T04 | MVOICE-04 | Deny actual OS microphone permission, background capture, change project, stop while waiting/read-aloud, and inject late callback; partial words survive and no capture/transfer resumes. Physical route changes remain a separate hardware check. |
 | MVOICE-T05 | MVOICE-05 | Unsupported recognition/voice returns to text. Observe recognition with network disabled on a supported physical Korean device; reconnection never replays automatically. Fixtures cannot prove offline ASR. |
 
+For #4307, exercise MVOICE-T03/T05 against an adversarial installed-voice catalog:
+basic Korean precedes enhanced Korean, and premium English must not beat Korean.
+Installed premium Korean wins; equal-quality ties remain stable. Default-only,
+unknown-quality and empty catalogs preserve conservative output or text fallback.
+An installed premium novelty or personal voice cannot displace a standard-purpose
+Korean voice; no eligible Korean voice keeps the existing text fallback.
+The original first-match policy is a negative control for basic-before-enhanced.
+
+Extend the existing `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary`
+journey to observe the requested voice quality against the actual available
+inventory, the accessibility-preference option, real OS synthesis start/finish
+and the next capture boundary. Do not skip this journey because premium assets
+are absent, replace synthesis callbacks with a timer, or report requested voice as
+the effective accessibility output. Native execution is required; portable policy
+checks alone do not prove App integration.
+
+Physical listening remains a separate acceptance step: compare the same Korean
+sentences, numbers and proper names before/after on the exact installed build,
+record available voice quality and active accessibility settings locally, then
+exercise five turns using speaker and headset. Report the person's preference,
+unwanted cutoffs, Stop and resumed listening. Source quality selection and simulator
+callbacks do not prove perceived naturalness, acoustic echo cancellation or barge-in.
+
 For #4259, the existing iPhone dictation and empty-recognition journeys first
 require an enabled, hittable, fully onscreen target of at least 44×44pt. They
 record its frame and touch coordinate, then tap once at 15% of each dimension,

@@ -10161,6 +10161,15 @@ recoverable; no reply playback, resumed capture or automatic replay follows (#39
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
 
+On iPhone, reply playback selects the highest known quality among installed
+exact `ko-KR` standard-purpose voices, with stable equal-quality ties (#4307).
+Automatic selection excludes novelty/character and personal voices. Premium precedes
+enhanced, then default; unsupported future quality values use the conservative
+fallback. Active assistive-technology settings take precedence through Apple's
+utterance option. The requested voice is not proof of the effective accessibility
+voice or perceived naturalness. Missing Korean assets keep the existing text
+fallback; this does not add a cloud voice provider or change Stop/continuation.
+
 On iPhone, both dictation and voice-conversation controls expose the full 44×44pt
 label as a touch target, including the padding outside the icon (#4259). A single
 touch in that padding must start the same guarded action. Existing draft-only
