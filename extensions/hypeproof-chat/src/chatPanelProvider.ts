@@ -12429,11 +12429,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * cannot reopen it (the seat is already recorded). An empty seat stores nothing (it never shows).
    */
   private async noteVoiceTip(open: boolean): Promise<void> {
+    // Any dismiss closes it, even one that arrives after a seat switch (the open seat may be the previous one).
+    if (!open) this.voiceTipOpenSeat = undefined;
     const seat = this.lessonTips.currentSeat;
     if (!seat) return;
     const seen = voiceTipStore(this.context.globalState?.get(VOICE_TIP_KEY)).seen.includes(seat);
     if (open && !seen) this.voiceTipOpenSeat = seat;
-    else if (!open && this.voiceTipOpenSeat === seat) this.voiceTipOpenSeat = undefined;
     if (seen) return;
     try { await this.context.globalState.update(VOICE_TIP_KEY, withVoiceTipSeen(this.context.globalState.get(VOICE_TIP_KEY), seat)); } catch { /* the tip stays closed here */ }
   }

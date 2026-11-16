@@ -52,6 +52,11 @@ await w.shown();await w.dismiss();assert.equal(await w.ask(),false,'seat B: neve
 {const r=host(state);r.seat(B);assert.equal(await r.ask(),false,'seat B after a reload: not due');}
 w.seat(A);assert.equal(await w.ask(),false,'A coming back: not due');
 assert.equal(JSON.stringify(state.data.get(VOICE_TIP_KEY)),JSON.stringify({seen:[A,B]}));
+// Open for A, the seat switches to B, the tip goes away (dismiss arrives under B), back to A: not due (verify-r027).
+{const st=memento();const v=host(st);v.seat(A);assert.equal(await v.ask(),true);await v.shown();
+ v.seat(B);await v.dismiss();v.seat(A);assert.equal(await v.ask(),false,'a dismiss after a seat switch still closes A for good');}
+{const st=memento();const v=host(st);v.seat(A);assert.equal(await v.ask(),true);await v.shown();
+ v.seat('');await v.dismiss();v.seat(A);assert.equal(await v.ask(),false,'a dismiss under an empty seat still closes A');}
 // A seat with tips off never sees it, and nothing is recorded for it.
 const off=memento({[LESSON_TIPS_KEY]:withLessonTips({},C,false)});
 w=host(off);w.seat(C);assert.equal(await w.ask(),false,'tips off for seat C: never due');
