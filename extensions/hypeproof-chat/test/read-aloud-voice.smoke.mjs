@@ -27,6 +27,19 @@ assert.equal(oldRule(JAYS_MAC).name, 'Eddy (Korean (South Korea))', 'red: the fi
 const jay = chooseKoreanVoice(JAYS_MAC);
 assert.deepEqual([jay.voice.voiceURI, jay.tier, jay.candidates], ['com.apple.voice.compact.ko-KR.Yuna', 'compact', 9], 'now: the compact Yuna, never an Eloquence voice');
 
+// ---- the shared cases (config/korean-voice-cases.json): the same file the iOS and Android tests read ----
+const CASES = JSON.parse(readFileSync(new URL('../../../config/korean-voice-cases.json', import.meta.url), 'utf8'));
+assert.equal(CASES.schema, 'hps-korean-voice-cases/1');
+assert.ok(CASES.apple.length >= 5, 'control: the Apple cases are there');
+for (const c of CASES.apple) {
+  const voices = c.voices.map((v) => ({ name: v.name, lang: v.lang, localService: true, voiceURI: v.identifier }));
+  const pick = chooseKoreanVoice(voices);
+  assert.equal(pick.voice?.voiceURI ?? null, c.expect, `${c.case}: the pick`);
+  assert.equal(pick.tier, c.expect_tier, `${c.case}: the tier`);
+  if (c.first_match_was) assert.equal(oldRule(voices).voiceURI, c.first_match_was, `${c.case}: the old first-match rule`);
+}
+for (const name of CASES.novelty_names) assert.equal(koreanVoiceTier(ko(`${name} (Korean (South Korea))`, 'unknown')), 'novelty', `novelty name ${name}`);
+
 // ---- tiers ----
 assert.equal(koreanVoiceTier(ko('Yuna', 'com.apple.voice.premium.ko-KR.Yuna')), 'premium');
 assert.equal(koreanVoiceTier(ko('Yuna', 'com.apple.voice.enhanced.ko-KR.Yuna')), 'enhanced');

@@ -1,0 +1,81 @@
+{
+  "schema": "hps-korean-voice-cases/1",
+  "rule": "One Korean read-aloud voice ranking for desktop (Chromium speechSynthesis), iOS (AVSpeechSynthesisVoice) and Android (TextToSpeech.Voice). Local and installed voices only. Order: premium, enhanced, the default (compact) Yuna, any other Korean voice, then Eloquence or novelty voices only as a last resort. Eloquence and novelty voices are recognised by identifier (com.apple.eloquence.*, com.apple.speech.synthesis.voice.*) or by name. Ties: the system default, then the voice used last time, then list order. Android ranks by getQuality() among local, installed ko voices.",
+  "novelty_names": ["Eddy", "Flo", "Grandma", "Grandpa", "Reed", "Rocko", "Sandy", "Shelley", "Albert", "Bad News", "Bahh", "Bells", "Boing", "Bubbles", "Cellos", "Good News", "Jester", "Organ", "Superstar", "Trinoids", "Whisper", "Wobble", "Zarvox"],
+  "apple": [
+    {
+      "case": "Jay's Mac, measured 2026-11-16 (say -v '?', ko_KR): eight Eloquence voices and the compact Yuna, in Chromium's by-name order",
+      "voices": [
+        { "name": "Eddy (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Eddy", "quality": "default" },
+        { "name": "Flo (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Flo", "quality": "default" },
+        { "name": "Grandma (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Grandma", "quality": "default" },
+        { "name": "Grandpa (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Grandpa", "quality": "default" },
+        { "name": "Reed (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Reed", "quality": "default" },
+        { "name": "Rocko (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Rocko", "quality": "default" },
+        { "name": "Sandy (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Sandy", "quality": "default" },
+        { "name": "Shelley (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Shelley", "quality": "default" },
+        { "name": "Yuna", "lang": "ko-KR", "identifier": "com.apple.voice.compact.ko-KR.Yuna", "quality": "default" }
+      ],
+      "first_match_was": "com.apple.eloquence.ko-KR.Eddy",
+      "expect": "com.apple.voice.compact.ko-KR.Yuna",
+      "expect_tier": "compact"
+    },
+    {
+      "case": "Premium, enhanced and compact Yuna all named Yuna",
+      "voices": [
+        { "name": "Yuna", "lang": "ko-KR", "identifier": "com.apple.voice.compact.ko-KR.Yuna", "quality": "default" },
+        { "name": "Yuna", "lang": "ko-KR", "identifier": "com.apple.voice.premium.ko-KR.Yuna", "quality": "premium" },
+        { "name": "Yuna", "lang": "ko-KR", "identifier": "com.apple.voice.enhanced.ko-KR.Yuna", "quality": "enhanced" }
+      ],
+      "expect": "com.apple.voice.premium.ko-KR.Yuna",
+      "expect_tier": "premium"
+    },
+    {
+      "case": "Enhanced beats compact and Eloquence",
+      "voices": [
+        { "name": "Eddy (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Eddy", "quality": "default" },
+        { "name": "Yuna", "lang": "ko-KR", "identifier": "com.apple.voice.compact.ko-KR.Yuna", "quality": "default" },
+        { "name": "Yuna", "lang": "ko-KR", "identifier": "com.apple.voice.enhanced.ko-KR.Yuna", "quality": "enhanced" }
+      ],
+      "expect": "com.apple.voice.enhanced.ko-KR.Yuna",
+      "expect_tier": "enhanced"
+    },
+    {
+      "case": "Only Eloquence voices: still read, as a last resort (the first of them)",
+      "voices": [
+        { "name": "Eddy (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Eddy", "quality": "default" },
+        { "name": "Flo (Korean (South Korea))", "lang": "ko-KR", "identifier": "com.apple.eloquence.ko-KR.Flo", "quality": "default" }
+      ],
+      "expect": "com.apple.eloquence.ko-KR.Eddy",
+      "expect_tier": "novelty"
+    },
+    {
+      "case": "No Korean voice",
+      "voices": [
+        { "name": "Samantha", "lang": "en-US", "identifier": "com.apple.voice.compact.en-US.Samantha", "quality": "default" }
+      ],
+      "expect": null,
+      "expect_tier": null
+    }
+  ],
+  "android": [
+    {
+      "case": "Highest quality local installed ko voice; a network voice and a not-installed voice are skipped",
+      "voices": [
+        { "name": "ko-kr-x-ism-network", "language": "ko", "quality": 500, "network": true, "installed": true },
+        { "name": "ko-kr-x-kob-local", "language": "ko", "quality": 300, "network": false, "installed": true },
+        { "name": "ko-kr-x-kod-local", "language": "ko", "quality": 400, "network": false, "installed": true },
+        { "name": "ko-kr-x-koc-local", "language": "ko", "quality": 500, "network": false, "installed": false },
+        { "name": "en-us-x-sfg-local", "language": "en", "quality": 500, "network": false, "installed": true }
+      ],
+      "expect": "ko-kr-x-kod-local"
+    },
+    {
+      "case": "No local installed ko voice",
+      "voices": [
+        { "name": "ko-kr-x-ism-network", "language": "ko", "quality": 400, "network": true, "installed": true }
+      ],
+      "expect": null
+    }
+  ]
+}
