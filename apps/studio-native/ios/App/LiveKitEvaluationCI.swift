@@ -78,11 +78,14 @@ private struct LiveKitEvaluationCIReceipt: Encodable {
     let failure: String?
     let beforeFence: LiveKitEvaluationCIState?
     let afterFence: LiveKitEvaluationCIState?
+    let afterDrain: LiveKitEvaluationCIState?
     let final: LiveKitEvaluationCIState
     let physicalMicrophone = "NOT_RUN"
     let physicalPlayout = "UNKNOWN"
     let unobservedTransportTail = "UNKNOWN"
     let humanSpeechAndAEC = "NOT_RUN"
+    let postCleanupGraceMilliseconds = 700
+    let stabilityWindowMilliseconds = 700
 }
 
 @MainActor
@@ -111,6 +114,7 @@ private final class LiveKitEvaluationCIRun: ObservableObject {
         let receipt = directory.appendingPathComponent("hps-livekit-ci-result.json")
         var config: LiveKitEvaluationCIConfig?
         var before: LiveKitEvaluationCIState?, fenced: LiveKitEvaluationCIState?
+        var drained: LiveKitEvaluationCIState?
         var failure: String?
         do {
             let data = try Data(contentsOf: configuration)
@@ -141,16 +145,20 @@ private final class LiveKitEvaluationCIRun: ObservableObject {
             }
             fenced = controller.ciState
             guard fenced?.captureOpen == false, fenced?.outputOpen == false else { throw Failure.fence }
-            try await Task.sleep(nanoseconds: 700_000_000)
-            guard controller.ciState.decodedBuffers == fenced?.decodedBuffers else { throw Failure.fence }
             controller.stop(reason: "user_stop")
             try await wait(10) { !controller.busy }
             let stopped = controller.ciState
             guard stopped.phase == "stopped", !stopped.roomAttached,
                   !stopped.captureOpen, !stopped.outputOpen, !stopped.manualRendering,
+                  stopped.events.contains("renderer_detached"),
                   stopped.events.contains("cleanup_complete") else { throw Failure.cleanup }
+            // Immediate fence may have an in-flight renderer tail. Measure it;
+            // only require stability after detach/cleanup and a bounded grace.
             try await Task.sleep(nanoseconds: 700_000_000)
-            guard controller.ciState.decodedBuffers == stopped.decodedBuffers,
+            drained = controller.ciState
+            try await Task.sleep(nanoseconds: 700_000_000)
+            guard controller.ciState.decodedBuffers == drained?.decodedBuffers,
+                  controller.ciState.decodedSamples == drained?.decodedSamples,
                   !controller.busy else { throw Failure.fence }
         } catch {
             failure = (error as? Failure)?.rawValue ?? "bounded_execution"
@@ -161,7 +169,7 @@ private final class LiveKitEvaluationCIRun: ObservableObject {
         let result = LiveKitEvaluationCIReceipt(runID: config?.run_id,
             scenario: config?.scenario ?? "unknown", room: config?.room,
             candidateSourceSHA: config?.candidate_source_sha, status: failure == nil ? "PASS" : "FAIL",
-            failure: failure, beforeFence: before, afterFence: fenced, final: controller.ciState)
+            failure: failure, beforeFence: before, afterFence: fenced, afterDrain: drained, final: controller.ciState)
         do {
             let data = try JSONEncoder().encode(result)
             try data.write(to: receipt, options: .atomic)

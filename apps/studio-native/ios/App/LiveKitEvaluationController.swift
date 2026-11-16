@@ -29,15 +29,17 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
     private var priorManualRendering: Bool?
     private var ciEnabled = false
     private var ciEvents: [String] = []
-    private var ciDecodedBuffers = 0
-    private var ciDecodedSamples = 0
+    // One observer per authorized generation. Keep it after detach; counting is
+    // inside the actual callback and never gated by session/connection state.
+    private var ciRawObserver: LiveKitEvaluationAudioReceipt?
 
     var ciState: LiveKitEvaluationCIState {
-        LiveKitEvaluationCIState(sessionID: session.sessionID, turnID: session.turnID,
+        let counts = ciRawObserver?.rawCounts ?? (buffers: 0, samples: 0)
+        return LiveKitEvaluationCIState(sessionID: session.sessionID, turnID: session.turnID,
             generation: session.generation, phase: session.phase.rawValue, busy: busy,
             captureOpen: captureGate?.isOpen ?? false, outputOpen: outputGate?.isOpen ?? false,
             roomAttached: room != nil, manualRendering: AudioManager.shared.isManualRenderingMode,
-            decodedBuffers: ciDecodedBuffers, decodedSamples: ciDecodedSamples, events: ciEvents)
+            decodedBuffers: counts.buffers, decodedSamples: counts.samples, events: ciEvents)
     }
 
     private func ciRecord(_ event: String) {
@@ -58,7 +60,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         }
         self.syntheticInput = syntheticInput
         ciEnabled = syntheticInput != nil
-        ciEvents = []; ciDecodedBuffers = 0; ciDecodedSamples = 0
+        ciEvents = []; ciRawObserver = nil
         busy = true; canInterrupt = false
         status = "마이크 권한 확인 중"
         observation = "수신 전 · 실제 재생/청취 범위 알 수 없음"
@@ -269,6 +271,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         if let remoteReceipt {
             remoteReceipt.observer.disable()
             remoteReceipt.track.remove(audioRenderer: remoteReceipt.observer)
+            ciRecord("renderer_detached")
             self.remoteReceipt = nil
         }
         // The SDK's engine fence outranks late capture/play requests. Keep it
@@ -420,18 +423,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
             self.ciRecord("remote_track_subscribed")
             self.activity?.setArmed(true)
             if self.remoteReceipt == nil {
-                let observeBuffer: (@Sendable (Int) -> Void)?
-                if self.ciEnabled {
-                    observeBuffer = { [weak self] samples in
-                        Task { @MainActor [weak self] in
-                            guard let self, self.room === room, self.connectionID != nil,
-                                  self.session.shouldSubscribe(trackName: publication.name,
-                                    participantIdentity: participant.identity?.stringValue ?? "") else { return }
-                            self.ciDecodedBuffers += 1; self.ciDecodedSamples += samples
-                        }
-                    }
-                } else { observeBuffer = nil }
-                let observer = LiveKitEvaluationAudioReceipt(observedBuffer: observeBuffer) { [weak self] in
+                let observer = LiveKitEvaluationAudioReceipt(recordsRawBuffers: self.ciEnabled) { [weak self] in
                     Task { @MainActor [weak self] in
                         guard let self, self.room === room, self.connectionID != nil,
                               self.session.shouldSubscribe(trackName: publication.name,
@@ -439,6 +431,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
                         self.observation = "오디오 프레임 수신 · 실제 재생/큐 비움/청취 범위 알 수 없음"
                     }
                 }
+                if self.ciEnabled { self.ciRawObserver = observer }
                 self.remoteReceipt = (audioTrack, observer)
                 audioTrack.add(audioRenderer: observer)
             }

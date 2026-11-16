@@ -23,7 +23,7 @@ SCENARIOS = ("energy_interrupt", "stop")
 EVENTS = {"manual_rendering_enabled", "connected", "admitted", "microphone_track_published",
           "start_sent", "started_received", "remote_track_subscribed", "audio_fenced",
           "local_energy_onset", "interrupt_user_speech", "interrupt_sent",
-          "interrupted_received", "stop_requested", "cleanup_complete"}
+          "interrupted_received", "stop_requested", "renderer_detached", "cleanup_complete"}
 
 
 class CheckFailure(Exception):
@@ -69,10 +69,12 @@ def validate(native, events, server, *, run_id, scenario, source, room):
     for key, expected in {"physicalMicrophone": "NOT_RUN", "physicalPlayout": "UNKNOWN",
                           "unobservedTransportTail": "UNKNOWN", "humanSpeechAndAEC": "NOT_RUN"}.items():
         require(native.get(key) == expected, "claim_scope")
-    before, fenced, final = (state(native.get(k)) for k in ("beforeFence", "afterFence", "final"))
+    require(native.get("postCleanupGraceMilliseconds") == 700
+            and native.get("stabilityWindowMilliseconds") == 700, "observation_window")
+    before, fenced, drained, final = (state(native.get(k)) for k in ("beforeFence", "afterFence", "afterDrain", "final"))
     identity = (before["sessionID"].lower(), before["turnID"].lower(), before["generation"])
     require(all((s["sessionID"].lower(), s["turnID"].lower(), s["generation"]) == identity
-                for s in (fenced, final)), "tuple_changed")
+                for s in (fenced, drained, final)), "tuple_changed")
     require(before["phase"] == "playing" and before["busy"] and before["roomAttached"]
             and before["captureOpen"] and before["outputOpen"] and before["manualRendering"]
             and before["decodedBuffers"] >= 10, "no_actual_audio")
@@ -80,11 +82,12 @@ def validate(native, events, server, *, run_id, scenario, source, room):
              "remote_track_subscribed"}.issubset(before["events"]), "transport_sequence")
     require(fenced["phase"] == ("interrupted" if scenario == "energy_interrupt" else "stopped")
             and not fenced["captureOpen"] and not fenced["outputOpen"], "missing_fence")
-    require(final["phase"] == "stopped" and not any(final[k] for k in
-            ("busy", "roomAttached", "captureOpen", "outputOpen", "manualRendering"))
-            and "cleanup_complete" in final["events"], "incomplete_cleanup")
-    require(final["decodedBuffers"] == fenced["decodedBuffers"] >= before["decodedBuffers"]
-            and final["decodedSamples"] == fenced["decodedSamples"], "receipt_resurrected")
+    for stopped in (drained, final):
+        require(stopped["phase"] == "stopped" and not any(stopped[k] for k in
+                ("busy", "roomAttached", "captureOpen", "outputOpen", "manualRendering"))
+                and {"renderer_detached", "cleanup_complete"}.issubset(stopped["events"]), "incomplete_cleanup")
+    for metric in ("decodedBuffers", "decodedSamples"):
+        require(final[metric] == drained[metric] >= fenced[metric] >= before[metric], "receipt_resurrected")
     require(server.get("status") == "PASS" and server.get("owned_server_reaped") is True
             and server.get("candidate_source_sha") == source and server.get("room") == room, "server_identity_or_cleanup")
     require(not any(e.get("observation") in {"worker_failed", "cleanup_failed"} for e in events), "server_failure")
@@ -103,7 +106,10 @@ def validate(native, events, server, *, run_id, scenario, source, room):
                 "actual_published_pcm_missing")
     # Explicitly allowlist output. Raw SDK/server strings and credentials never escape.
     return {"scenario": scenario, "run_id": run_id, "room": room, "source_sha": source,
-            "status": "PASS", "before_fence": before, "after_fence": fenced, "final": final,
+            "status": "PASS", "before_fence": before, "after_fence": fenced, "after_drain": drained, "final": final,
+            "raw_callback_tail_buffers": drained["decodedBuffers"] - fenced["decodedBuffers"],
+            "raw_callback_tail_samples": drained["decodedSamples"] - fenced["decodedSamples"],
+            "post_cleanup_grace_ms": 700, "stability_window_ms": 700,
             "server_cancel": expected_reason, "server_queue_after_seconds": 0,
             "server_publication_removed": True, "server_stop_received": True,
             "server_disconnected": True, "server_reaped": True,
@@ -181,7 +187,7 @@ def scenario_run(args, host, private, scenario):
         raise
     finally:
         # Attempt both sides independently; never publish a token-bearing private file.
-        actions = [lambda: command(["xcrun", "simctl", "terminate", args.device, BUNDLE], check=False),
+        actions = [lambda: command(["xcrun", "simctl", "terminate", args.device, BUNDLE], timeout=10, check=False),
                    lambda: reap(process)]
         actions.extend(lambda path=path: path.unlink(missing_ok=True)
                        for path in (config_path, receipt_path) if path is not None)
@@ -205,6 +211,10 @@ def main(args):
     output.mkdir(parents=True, exist_ok=True)
     result = {"schema": "hps-native-livekit-host/1", "source_sha": args.source_sha,
               "status": "FAIL", "scenarios": [], "physical_audio": "NOT_RUN"}
+    def interrupted(_signum, _frame):
+        raise InterruptedError("owned_execution_interrupted")
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
     try:
         result["app_executable_sha256"] = hashlib.sha256((Path(args.app) / "HPStudio").read_bytes()).hexdigest()
         with tempfile.TemporaryDirectory(prefix="hps-native-livekit-") as directory:

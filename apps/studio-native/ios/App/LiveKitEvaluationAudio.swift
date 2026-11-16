@@ -79,10 +79,19 @@ final class LiveKitEvaluationAudioReceipt: NSObject, AudioRenderer, @unchecked S
     private let lock = NSLock()
     private var enabled = true
     private let firstBuffer: @Sendable () -> Void
-    private let observedBuffer: (@Sendable (Int) -> Void)?
+    private let recordsRawBuffers: Bool
+    private var rawBuffers = 0
+    private var rawSamples = 0
 
-    init(observedBuffer: (@Sendable (Int) -> Void)? = nil, firstBuffer: @escaping @Sendable () -> Void) {
-        self.observedBuffer = observedBuffer; self.firstBuffer = firstBuffer
+    init(recordsRawBuffers: Bool = false, firstBuffer: @escaping @Sendable () -> Void) {
+        self.recordsRawBuffers = recordsRawBuffers; self.firstBuffer = firstBuffer
+    }
+
+    /// Independent of UI/session authority and disable(). Retain this observer
+    /// after SDK removal to detect any already-in-flight callback tail.
+    var rawCounts: (buffers: Int, samples: Int) {
+        lock.lock(); defer { lock.unlock() }
+        return (rawBuffers, rawSamples)
     }
 
     func disable() {
@@ -90,8 +99,10 @@ final class LiveKitEvaluationAudioReceipt: NSObject, AudioRenderer, @unchecked S
     }
 
     func render(pcmBuffer: AVAudioPCMBuffer) {
-        if pcmBuffer.frameLength > 0 { observedBuffer?(Int(pcmBuffer.frameLength)) }
         lock.lock()
+        if recordsRawBuffers && pcmBuffer.frameLength > 0 {
+            rawBuffers += 1; rawSamples += Int(pcmBuffer.frameLength)
+        }
         let notify = enabled && pcmBuffer.frameLength > 0
         if notify { enabled = false }
         lock.unlock()
