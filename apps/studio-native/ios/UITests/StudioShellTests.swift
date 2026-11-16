@@ -296,10 +296,12 @@ final class StudioJourneyTests: XCTestCase {
         signIn(app)
         XCTAssertEqual(field(app).value as? String, "I want to make time for learning")
         XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0, "Account adoption must not send the preserved draft.")
-        let send = app.buttons["sharedSend"]; enabled(send); send.tap(); answer(app)
+        // The padded Send label must deliver the same single request as its center.
+        tapComposerTargetOnce("sharedSend", app: app); answer(app)
         let result = try trace(app)
         let paths = try XCTUnwrap(result["paths"] as? [String])
         for route in ["POST /v1/auth/native/start", "POST /v1/auth/native/exchange", "GET /v1/me", "POST /v1/me/reflection/turns"] { XCTAssertTrue(paths.contains(route), route) }
+        XCTAssertEqual(paths.filter { $0 == "POST /v1/me/reflection/turns" }.count, 1, "One real Send tap must dispatch exactly one request.")
         XCTAssertFalse(paths.contains(where: { $0.contains("/auth/device/") }), "The same phone must not poll a pairing-code flow.")
         XCTAssertEqual(result["browser_callbacks"] as? Int, 1)
         XCTAssertEqual(result["accepted_turns"] as? Int, 1)
