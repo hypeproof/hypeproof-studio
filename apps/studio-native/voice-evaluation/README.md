@@ -92,6 +92,9 @@ Use an existing Python >=3.12; the helper installs only exact binary-wheel versi
 from `host-requirements.txt` into its own venv. It never installs Homebrew packages
 or changes the system. Its total preparation deadline defaults to 600 seconds;
 missing dependencies or expiry fail without a fallback or retry.
+SIGTERM/SIGINT unwind through the active stage and reap its owned process group
+before writing a failed receipt. A caller must allow more than the helper's
+10-second TERM/KILL cleanup bound before force-killing the helper itself.
 
 ```sh
 python3 prepare-host.py --output /private/tmp/hps-eval-host-UNIQUE --python /absolute/python3.13

@@ -27,6 +27,14 @@ def sha(path):
 
 
 def main(args):
+    def interrupted(_signum, _frame):
+        # Give the owned stage's exception handler time to reap its separate group.
+        # Repeated outer signals must not interrupt that bounded cleanup again.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        raise InterruptedError('owned_host_preparation_interrupted')
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
     os.umask(0o077)
     if platform.system() != 'Darwin':
         raise ValueError('This source-build helper is for Darwin; Linux uses the pinned release archive.')
@@ -59,15 +67,20 @@ def main(args):
                                        stderr=subprocess.STDOUT, start_new_session=True)
             try:
                 process.wait(timeout=min(timeout, remaining()))
-            except BaseException:
-                with contextlib.suppress(ProcessLookupError):
-                    os.killpg(process.pid, signal.SIGTERM)
+            except BaseException as primary:
                 try:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(process.pid, signal.SIGTERM)
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    with contextlib.suppress(ProcessLookupError):
-                        os.killpg(process.pid, signal.SIGKILL)
-                    process.wait(timeout=5)
+                    try:
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=5)
+                    except BaseException as cleanup_error:
+                        primary.add_note('owned_stage_cleanup_failed:' + type(cleanup_error).__name__)
+                except BaseException as cleanup_error:
+                    primary.add_note('owned_stage_cleanup_failed:' + type(cleanup_error).__name__)
                 raise
         result['steps'].append({'stage': stage, 'exit': process.returncode,
                                 'seconds': round(time.monotonic()-begin, 3)})
