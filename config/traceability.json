@@ -20587,6 +20587,9 @@
         },
         {
           "path": "apps/studio-native/voice-evaluation/test_prepare_host.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_livekit_cancellation.py"
         }
       ]
     }

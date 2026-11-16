@@ -110,7 +110,11 @@ constitute iOS semantic compilation or native RTC acceptance.
 The nested host-preparation cancellation path was subsequently corrected: an
 actual old-source SIGTERM run left its child alive, while corrected SIGTERM and
 SIGINT controls reaped the child and retained a failed receipt. The outer native
-helper must allow that bounded cleanup before killing its process group.
+helper now allows that bounded cleanup before killing its process group. Its
+original `InterruptedError` was swallowed by Python selectors during pipe reads;
+an actual nested cancellation exposed that failure. A dedicated interruption
+exception and bounded child cleanup passed TERM, INT and timeout controls while
+preserving the original failure and a sanitized host preparation receipt.
 
 The actual workflow shell ran against synthetic Git/receipt fixtures: eleven
 controls passed, including refusal to produce acceptance when the new parallel
@@ -121,3 +125,9 @@ The original iOS/Android join and test suite were preserved.
 - `native-ci-handoff-v3.json`: `cb6600a75e6254f5397bb44976fcf9cf7f133beea04b1804ce16181722138420`
 
 - `lab-handoff-v10.json`: `cbdc0402a6f297b4023c5318cc73391f834e29dcf6d1ef4dee208d4e74a2696e`
+
+The outer runner also preserves cleanup across consecutive INT/TERM signals.
+Its actual main path failed the old-source control and passed after the change.
+These are process lifetime controls; they do not prove native audio behavior.
+
+- `native-cancellation-handoff-v6.json`: `f20253b96a115e5d2d0649c8af54d01f8ad0db60df4e7f6fae733708849654ea`
