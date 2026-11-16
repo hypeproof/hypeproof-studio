@@ -19,8 +19,8 @@ is not physical voice, learner-growth or full requirement acceptance.
   foreign/duplicate sender, Stop, stale/late events, disconnect, acknowledgement
   failure and queue overflow were exercised. Owned listeners remained loopback-only;
   the child server was reaped. No STT/LLM/TTS provider was called.
-- Four cleanup controls passed on the candidate. Applied to the actual old base,
-  the same controls exposed one failure and two errors: cleanup could skip room
+- Four cleanup controls passed on the candidate. Three serve/scenario controls
+  applied to the actual old base exposed one failure and two errors: cleanup could skip room
   disconnect and mask the primary exception. The old failures remain evidence.
 - The old generation's receiver now closes at interruption/unpublication. Its
   final 87-frame receipt stays unchanged through the next generation (21 frames)
