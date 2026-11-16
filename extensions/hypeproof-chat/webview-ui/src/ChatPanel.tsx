@@ -684,6 +684,15 @@ export function ChatPanel(props: Props) {
   const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
   // REQ-QUEST-* (#4283) — intent → key questions → 퀘스트 생성하기 → quest card.
   const questIntake = useQuestIntake(JSON.stringify([activityId, taskId]), props.instructor === true);
+  // REQ-QUEST-LIST — the host made the quest: continue on step 1 as the learner's own message, once per quest.
+  // Declared with the other hooks (before any early return); sendWhenOnline is read when the effect runs.
+  const questStartSent = useRef<string | null>(null);
+  useEffect(() => {
+    const start = questIntake.start;
+    if (!start || questStartSent.current === start.id) return;
+    questStartSent.current = start.id;
+    sendWhenOnline(() => props.onSend(start.text), 'press');
+  }, [questIntake.start?.id]);
   const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
@@ -1709,15 +1718,6 @@ export function ChatPanel(props: Props) {
     if (!reserveRecovery(text, [], 'auto')) return;
     sendWhenOnline(() => props.onSend(text), 'press');
   };
-
-  // REQ-QUEST-LIST — the host made the quest: continue on step 1 as the learner's own message, once per quest.
-  const questStartSent = useRef<string | null>(null);
-  useEffect(() => {
-    const start = questIntake.start;
-    if (!start || questStartSent.current === start.id) return;
-    questStartSent.current = start.id;
-    sendWhenOnline(() => props.onSend(start.text), 'press');
-  }, [questIntake.start?.id]);
 
   const handleRollClick = () => {
     // Capture the current draft as the "first thought" and prompt expansion.
