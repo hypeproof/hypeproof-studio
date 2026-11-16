@@ -3,7 +3,19 @@ import AVFoundation
 
 @main struct HPStudioApp: App {
     @UIApplicationDelegateAdaptor(NativePushDelegate.self) private var pushDelegate
-    var body: some Scene { WindowGroup { StudioRoot() } }
+    var body: some Scene {
+        WindowGroup {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--hps-livekit-evaluation") {
+                LiveKitEvaluationView()
+            } else {
+                StudioRoot()
+            }
+            #else
+            StudioRoot()
+            #endif
+        }
+    }
 }
 struct StudioHome: View {
     let onReturnToConversation: () -> Void
