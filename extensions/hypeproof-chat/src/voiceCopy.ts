@@ -152,3 +152,5 @@ export const PTT_START_LABEL = "음성 대화 시작";
 export const PTT_GROUP_LABEL = "음성 대화";
 /** R-027: the endpoint detector could not start; this session switches to push-to-talk (the stored mode is unchanged). */
 export const VAD_FALLBACK = "자동 말끝 감지를 쓸 수 없어 눌러서 말하기로 바꿨어요";
+/** verify-4288: the status of a keyboard / assistive-technology toggle (Enter or a click): the second press sends. */
+export const PTT_TOGGLE_LISTENING = "듣고 있어요. 다시 누르면 보내요.";

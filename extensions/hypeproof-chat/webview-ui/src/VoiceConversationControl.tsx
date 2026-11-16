@@ -13,7 +13,7 @@ import { windowOutputMute } from '../../src/voiceOutputMute';
 import { readServedVoice } from '../../src/voiceServed';
 import { windowVoiceLiveTask } from '../../src/voiceLiveTask';
 import { imeComposing, nativeComposing } from './imeGuard';
-import { PTT_GROUP_LABEL, PTT_HOLD, PTT_HOLDING, PTT_MODE_HOLD, PTT_MODE_NEXT, PTT_START_LABEL, RECOVER_USE_DEFAULT } from '../../src/voiceCopy';
+import { PTT_GROUP_LABEL, PTT_HOLD, PTT_HOLDING, PTT_MODE_HOLD, PTT_MODE_NEXT, PTT_START_LABEL, PTT_TOGGLE_LISTENING, RECOVER_USE_DEFAULT } from '../../src/voiceCopy';
 
 export function voiceConversationScope(config: ChatConfig | undefined): string {
   return JSON.stringify([config?.activity?.id, config?.taskWorkspace?.activeTaskId, config?.profile?.profile_id, config?.profile?.access_identity?.scope]);
@@ -136,6 +136,12 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
       window.removeEventListener('keydown', keydown, true); window.removeEventListener('keyup', keyup, true);
     };
   }, []);
+  // verify-4288: a take that ended without a release (the 58 s ceiling, an error, a stop) leaves no stale hold behind:
+  // the button never says pressed with nothing listening, and the next Enter starts a new take.
+  useEffect(() => {
+    if (view.phase === 'starting' || view.phase === 'listening' || !holding.current) return;
+    holding.current = null; setToggled(false);
+  }, [view.phase]);
   useLayoutEffect(() => { loop.current?.stop(); }, [scope]);
   useLayoutEffect(() => { if (!served || turn.interrupted) loop.current?.stop(); }, [served, turn.interrupted]);
 
@@ -182,7 +188,7 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
         onChange={(event) => postToHost({ type: 'setVoiceConversationMode', mode: event.target.checked ? 'push_to_talk' : 'auto' })} />
       <span>{PTT_MODE_HOLD}</span>
     </label>
-    <span role="status">{view.note || (ptt ? '버튼을 누르고 있는 동안 듣고, 손을 떼면 보내요. 중지하면 마이크가 꺼져요.' : '말이 끝나면 자동으로 보내고, 답을 읽은 뒤 다시 들어요. 중지하면 마이크가 꺼져요.')}</span>
+    <span role="status">{toggled && view.phase === 'listening' ? PTT_TOGGLE_LISTENING : view.note || (ptt ? '버튼을 누르고 있는 동안 듣고, 손을 떼면 보내요. 중지하면 마이크가 꺼져요.' : '말이 끝나면 자동으로 보내고, 답을 읽은 뒤 다시 들어요. 중지하면 마이크가 꺼져요.')}</span>
     {/* R-019: the chosen microphone is not connected. One press restarts this conversation with the default; the choice stays. */}
     {!active && view.recovery === 'use_default' && <button type="button" className="hps-voice-link" disabled={!ready() || !speech.available} onClick={() => start(true)}>{RECOVER_USE_DEFAULT}</button>}
   </div>;
