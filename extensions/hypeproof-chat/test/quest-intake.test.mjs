@@ -212,3 +212,14 @@ test('a bare scheme without slashes is cleaned instead of failing the quest', ()
   const quest = questFromModel(JSON.stringify({ steps: [{ title: '자료 모으기 https:example', description: 'mailto:x 참고' }, { title: '초안' }] }), 'x');
   assert.deepEqual(quest.nodes.map(node => node.label), ['자료 모으기', '초안']);
 });
+
+test('a retry of a stopped answer turn gives back nothing: the cap holds', () => {
+  const s = session();
+  s.beginTurn('t', '메일 자동화', seat({ firstTurn: true }));
+  s.afterReply('t', QUESTION); // question 1 counted
+  s.beginTurn('t', '서류 제출 요청', seat()); // its answer; the reply is stopped, so afterReply never runs
+  assert.match(s.beginTurn('t', '서류 제출 요청', seat({ fresh: false })), /지금 1개 남음/);
+  s.afterReply('t', QUESTION); // question 2
+  assert.match(s.beginTurn('t', '정중하게', seat()), /질문은 여기까지/);
+  assert.equal(s.afterReply('t', QUESTION), true, 'a third question still ends in the offer');
+});

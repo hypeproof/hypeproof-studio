@@ -216,8 +216,10 @@ export class QuestIntakeSession {
       return clarifyGuidance(state.remaining, state.max, true);
     }
     if (state.phase === 'clarifying') {
-      // A retry or edit replaces the latest reply: the question it counted is given back.
-      if (!ctx.fresh && state.counted) { state.questions = Math.max(0, state.questions - 1); state.counted = false; }
+      // A retry or edit replaces the latest reply: the question it counted is given back. A fresh answer commits that
+      // question, so a later retry (of a turn that was stopped and never counted) gives nothing back.
+      if (!ctx.fresh && state.counted) state.questions = Math.max(0, state.questions - 1);
+      state.counted = false;
       if (ctx.edited) this.replaceLatest(state, text);
       else if (ctx.fresh && state.questions > 0) state.answers.push(clip(text.trim(), ANSWER_MAX));
       state.remaining = Math.max(0, state.max - state.questions);
