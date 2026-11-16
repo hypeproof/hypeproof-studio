@@ -173,6 +173,8 @@ export interface ChatConfig {
   textSize?: import('./textSize').TextSize;
   /** CGP-SHELL-R-019: lesson tips are shown on this device (false only after 팁 그만 보기). */
   lessonTips?: boolean;
+  /** CGP-VOICE-R-018 — this seat's 시작·끝 소리 switch (start and end sounds of dictation and the voice conversation). Off when absent. */
+  voiceSounds?: boolean;
   /**
    * CGP-VOICE-R-019: the microphone this computer records from; absent for the system default. Local only: the
    * label can name a person, so it is never logged, sent to the Service or put in a problem report.
@@ -839,6 +841,8 @@ export type WebviewMessage = (
   | { type: "setTextSize"; size: string }
   /** CGP-SHELL-R-019: the learner turned lesson tips off (팁 그만 보기) or back on. */
   | { type: "setLessonTips"; on: boolean }
+  /** CGP-VOICE-R-018 — turn this seat's start and end sounds on or off. */
+  | { type: "setVoiceSounds"; on: boolean }
   /** CGP-VOICE-R-019 — the learner picked a microphone (null: 시스템 기본값); the host keeps it for this computer. */
   | { type: "setMicInput"; choice: { id: string; label: string } | null }
   /** CGP-VOICE-R-026 — the learner chose how the voice conversation captures ("auto" is the default); kept for this computer. */

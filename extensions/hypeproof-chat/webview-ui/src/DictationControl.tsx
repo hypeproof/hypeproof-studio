@@ -5,6 +5,7 @@
 // Audio exists only inside this file's refs as in-memory bytes: no file, no Blob URL, no storage, no
 // log. The finished clip goes to the host (the webview's CSP allows no network). After a failure the
 // clip is kept in memory for ten minutes for one retry, then dropped; dismissing drops it at once.
+import { windowDictationRecording } from "../../src/voiceEarcons";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useVoice } from "./VoiceProvider";
@@ -194,6 +195,8 @@ function useDictation(api: ComposerAddonApi): DictationController {
   const [recorder] = useState(() => new DictationRecorder(env, {
     onState: (state: DictationState) => {
       stopTick();
+      // CGP-VOICE-R-018 — the start and end sounds follow the recording itself (voiceEarcons.ts).
+      windowDictationRecording.set(state === "recording");
       apiRef.current.onDictationBusy?.(state !== "idle");
       if (state === "starting") handlers.current.set({ kind: "starting" });
       if (state === "recording") {

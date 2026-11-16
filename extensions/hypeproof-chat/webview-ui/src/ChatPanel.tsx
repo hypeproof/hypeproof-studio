@@ -136,6 +136,7 @@ import { DataDeletionRequest } from "./DataDeletionRequest";
 import { TaskMemorySwitches } from "./TaskMemorySwitches";
 import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
 import { MicInputSetting } from "./MicInputSetting";
+import { VoiceEarcons, VoiceSoundsSetting } from "./VoiceEarcons";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
@@ -2423,6 +2424,8 @@ export function ChatPanel(props: Props) {
       <footer className="hps-input-area">
       {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice, get blockedReason() { return dictationBusy || dictationBusyRef.current ? CONVERSATION_BLOCKED_BY_DICTATION : null; } }} onActive={reportVoiceActive} />}
       {!props.instructor && <VoiceTip config={config} taskEmpty={messages.length === 0} />}
+      {/* CGP-VOICE-R-018 — the optional start and end sounds of dictation and the conversation; draws nothing. */}
+      {!props.instructor && <VoiceEarcons on={config?.voiceSounds === true} />}
 
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -2815,6 +2818,8 @@ export function ChatPanel(props: Props) {
         {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
         {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served. */}
         <MicInputSetting />
+        {/* CGP-VOICE-R-018 — this seat's start and end sounds; drawn only where dictation is served. */}
+        {!props.instructor && <VoiceSoundsSetting on={config.voiceSounds === true} onChange={(on) => postToHost({ type: "setVoiceSounds", on })} />}
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -2844,6 +2849,8 @@ export function ChatPanel(props: Props) {
         </fieldset>
         {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served, while open. */}
         <MicInputSetting open={preferencesOpen} />
+        {/* CGP-VOICE-R-018 — this seat's start and end sounds; drawn only where dictation is served, while open. */}
+        {!props.instructor && <VoiceSoundsSetting open={preferencesOpen} on={config.voiceSounds === true} onChange={(on) => postToHost({ type: "setVoiceSounds", on })} />}
         {/* CGP-KNOW-D-022 — the same read-only state line, with the folder, in the settings dialog. */}
         {config.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="settings" />}
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
