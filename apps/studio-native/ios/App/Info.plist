@@ -4,5 +4,9 @@
 <dict>
     <key>HPSPushConfigured</key>
     <string>$(INFOPLIST_KEY_HPSPushConfigured)</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
 </dict>
 </plist>

@@ -13,6 +13,8 @@ public struct MemberApprovalCard: Codable, Identifiable, Sendable {
         public struct User: Codable, Sendable { public let login: String }
         public let id: Int; public let state, commit_id, html_url: String; public let user: User
     }
+    /// Another approver (or GitHub directly) settled the shared request (#522 / #4169). Absent from older Service builds.
+    public struct Resolution: Codable, Sendable { public let reason, by: String; public let at: Double }
     public let id, request_digest: String
     public let source: Source
     public let reviewer: String
@@ -23,6 +25,8 @@ public struct MemberApprovalCard: Codable, Identifiable, Sendable {
     public let unavailable_reason: String?
     public let decision: Decision?
     public let review: Review?
+    public let resolution: Resolution?
+    public let co_recipients: [String]?
     public static func validID(_ value: String) -> Bool {
         let bytes = value.utf8
         return (1...128).contains(bytes.count) && value != "." && value != ".." && bytes.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45, 46, 58, 95].contains($0) }
@@ -35,12 +39,17 @@ public struct MemberApprovalCard: Codable, Identifiable, Sendable {
               source.pr > 0, Self.hex(source.head, count: 40), Self.hex(source.base, count: 40),
               [source.policy_digest, source.evidence_digest, source.context_digest].allSatisfy({ Self.hex($0) }),
               Self.safeText(reviewer, max: 100), [brief.authored, brief.verified].allSatisfy({ !$0.isEmpty && $0.count <= 30 && $0.allSatisfy { Self.safeText($0, max: 2000) } }),
-              ["pending", "delivered", "questioned", "declined", "superseded", "expired", "submitting", "submitted", "unknown"].contains(state),
+              ["pending", "delivered", "questioned", "declined", "superseded", "expired", "submitting", "submitted", "unknown", "resolved"].contains(state),
               [created_at, expires_at, lease_expires_at].allSatisfy(\.isFinite), unavailable_reason == nil || Self.safeText(unavailable_reason!, max: 500) else { throw SyncFailure.invalidResponse }
         if let decision {
             guard Self.validID(decision.id), decision.created_at.isFinite,
-                  ["awaiting_processing", "needs_fresh_confirmation", "submitted", "declined", "questioned", "superseded", "expired", "unknown"].contains(decision.status) else { throw SyncFailure.invalidResponse }
+                  ["awaiting_processing", "needs_fresh_confirmation", "submitted", "declined", "questioned", "superseded", "expired", "unknown", "resolved"].contains(decision.status) else { throw SyncFailure.invalidResponse }
         }
+        let login: (String) -> Bool = { (1...39).contains($0.utf8.count) && $0.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 } }
+        if let resolution {
+            guard state == "resolved", ["other_approver", "elsewhere"].contains(resolution.reason), login(resolution.by), resolution.at.isFinite, resolution.at > 0 else { throw SyncFailure.invalidResponse }
+        } else if state == "resolved" { throw SyncFailure.invalidResponse }
+        if let co_recipients { guard co_recipients.count <= 10, co_recipients.allSatisfy(login) else { throw SyncFailure.invalidResponse } }
         if let review {
             guard review.id > 0, review.state == "APPROVED", review.commit_id == source.head, review.user.login == reviewer,
                   review.html_url == "https://github.com/\(source.repo)/pull/\(source.pr)#pullrequestreview-\(review.id)" else { throw SyncFailure.invalidResponse }
@@ -50,9 +59,18 @@ public struct MemberApprovalCard: Codable, Identifiable, Sendable {
         can_decide && ["pending", "delivered"].contains(state) && decision == nil && review == nil && expires_at > now && lease_expires_at > now && lease_expires_at <= now + 60
     }
     public var terminal: Bool {
-        !can_decide && !["awaiting_processing", "unknown"].contains(decision?.status ?? "") && (["declined", "questioned", "superseded", "expired"].contains(state) || (state == "submitted" && review != nil))
+        !can_decide && !["awaiting_processing", "unknown"].contains(decision?.status ?? "") && (["declined", "questioned", "superseded", "expired", "resolved"].contains(state) || (state == "submitted" && review != nil))
+    }
+    /// Still waiting for this person's answer. Anything else may drop its phone alert.
+    public func awaitingAnswer(now: Double) -> Bool { ["pending", "delivered"].contains(state) && decision == nil && review == nil && expires_at > now }
+    public func resolutionLabel(timeZone: TimeZone = .current) -> String? {
+        guard state == "resolved", let resolution else { return nil }
+        if resolution.reason == "elsewhere" { return "다른 곳에서 이미 처리됐어요" }
+        let format = DateFormatter(); format.locale = Locale(identifier: "ko_KR"); format.timeZone = timeZone; format.dateFormat = "HH:mm"
+        return "\(resolution.by)님이 \(format.string(from: Date(timeIntervalSince1970: resolution.at)))에 처리했어요"
     }
     public var statusLabel: String {
+        if let resolved = resolutionLabel() { return resolved }
         if review != nil && state == "submitted" { return "GitHub 승인 반영됨" }
         if decision?.status == "needs_fresh_confirmation" { return "확인 시간이 지났어요. 새 요청이 있는지 확인해 주세요." }
         if decision?.status == "awaiting_processing" { return "선택을 전달했어요 · 처리 대기" }

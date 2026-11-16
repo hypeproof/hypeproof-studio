@@ -16,6 +16,20 @@ final class MemberApprovalTests: XCTestCase {
         XCTAssertThrowsError(try wrong.validate())
         XCTAssertNotEqual(try Self.value(["state":"submitted"]).statusLabel, "GitHub 승인 반영됨")
     }
+    func testResolvedByAnotherApproverShowsWhoAndWhenAndIsTerminal() throws {
+        let resolved = try Self.value(["state": "resolved", "can_decide": false, "lease_expires_at": 0, "unavailable_reason": "resolved_by_other",
+                                       "resolution": ["reason": "other_approver", "by": "jehyung", "at": 1_763_000_000], "co_recipients": ["jehyung"]])
+        try resolved.validate()
+        XCTAssertEqual(resolved.resolutionLabel(timeZone: TimeZone(identifier: "Asia/Seoul")!), "jehyung님이 11:13에 처리했어요")
+        XCTAssertTrue(resolved.terminal); XCTAssertFalse(resolved.canDecide(now: 1000)); XCTAssertFalse(resolved.awaitingAnswer(now: 1000))
+        XCTAssertEqual(try Self.value(["state": "resolved", "can_decide": false, "resolution": ["reason": "elsewhere", "by": "jehyung", "at": 1000]]).statusLabel, "다른 곳에서 이미 처리됐어요")
+        XCTAssertThrowsError(try Self.value(["state": "resolved", "can_decide": false]).validate(), "resolved needs who and when")
+        XCTAssertThrowsError(try Self.value(["resolution": ["reason": "other_approver", "by": "jehyung", "at": 1000]]).validate(), "an open card cannot carry a resolution")
+        XCTAssertThrowsError(try Self.value(["state": "resolved", "resolution": ["reason": "guess", "by": "jehyung", "at": 1000]]).validate())
+        XCTAssertThrowsError(try Self.value(["state": "resolved", "resolution": ["reason": "elsewhere", "by": "bad name", "at": 1000]]).validate())
+        XCTAssertThrowsError(try Self.value(["co_recipients": ["ok", "not ok"]]).validate())
+        let open = try Self.value(); try open.validate(); XCTAssertNil(open.resolution); XCTAssertTrue(open.awaitingAnswer(now: 1000)); XCTAssertFalse(open.awaitingAnswer(now: 2000))
+    }
     func testServiceUnicodeAndThirtyFactBoundary() throws {
         let emoji = String(repeating: "🧭", count: 1001)
         let facts = Array(repeating: "A fact", count: 29) + [emoji]

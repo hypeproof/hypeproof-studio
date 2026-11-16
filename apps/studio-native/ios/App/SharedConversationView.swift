@@ -194,7 +194,7 @@ struct SharedConversationView: View {
     var body: some View {
         lifecycleContent
         .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
-        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals) }
+        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals, push: model.push) }
         .sheet(isPresented: $showQuestions) { AccountQuestionView(model: model.questions) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
@@ -312,7 +312,7 @@ struct SharedConversationView: View {
         pushCenter.consume()
         Task { if let destination = await model.push.controller?.open(reference), model.signedIn && !model.loggingOut {
             voice.stop(); focused = false
-            if destination == "approval" { showApprovals = true } else { showQuestions = true }
+            if destination == "approval" { model.approvals.focusID = reference.id; showApprovals = true } else { showQuestions = true }
         } }
     }
     private func finishSettingsDismissal() {
