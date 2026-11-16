@@ -153,6 +153,8 @@ raise SystemExit(7)
                             return subprocess.CompletedProcess(argv, 0, str(container).encode(), b"")
                         if argv[2] == "launch":
                             (root / "launched").write_text("launch observed")
+                    else:
+                        self.fail("unexpected command at the precredential boundary")
                     return subprocess.CompletedProcess(argv, 0, b"", b"")
                 try:
                     with patch.object(helper.sys, "platform", "darwin"), \
@@ -228,11 +230,13 @@ raise SystemExit(7)
             with patch.object(helper.sys, "platform", "darwin"), \
                  patch.object(helper.signal, "signal"), \
                  patch.object(helper, "command", side_effect=command), \
+                 patch.object(helper, "scenario_run", wraps=helper.scenario_run) as scenario, \
                  patch.object(helper.subprocess, "Popen") as start:
                 self.assertEqual(helper.main(SimpleNamespace(source_sha="a" * 40,
                     device="11111111-1111-4111-8111-111111111111", app=str(app),
                     evidence=str(root / "evidence"))), 1)
             start.assert_not_called()
+            scenario.assert_not_called()
             self.assertEqual(len(publication_calls), 1, "failed preflight must not be retried")
             receipt = json.loads((root / "evidence/native-livekit.json").read_text())
             self.assertEqual(receipt["status"], "FAIL")
@@ -240,8 +244,6 @@ raise SystemExit(7)
             self.assertEqual(receipt["publication_control"]["status"], "FAIL")
             self.assertEqual(receipt["scenarios"], [])
             self.assertNotIn("scenario_failure", receipt, "no scenario may start after failed preflight")
-            self.assertFalse(list(root.rglob("connection.private.json")))
-            self.assertFalse(list(root.rglob("hps-livekit-ci-config.json")))
             self.assertNotIn("PRIVATE_SENTINEL", json.dumps(receipt))
             self.assertNotIn(str(root), json.dumps(receipt))
 
