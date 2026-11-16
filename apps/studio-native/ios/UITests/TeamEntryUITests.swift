@@ -87,11 +87,16 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(opening.isHittable)
         let window = app.windows.firstMatch, windowFrame = window.frame
         let start = opening.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+        // Interactive dismissal follows the drag. Ending at 90% left the
+        // prediction bar and keys onscreen in the recorded failed journey.
+        // Complete the same single drag at the last in-window point.
+        let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
+            .withOffset(CGVector(dx: 0, dy: -1))
         let startPoint = start.screenPoint, endPoint = end.screenPoint
         guard windowFrame.contains(startPoint), windowFrame.contains(endPoint),
               startPoint.y >= app.navigationBars.firstMatch.frame.maxY,
-              startPoint.y < input.frame.minY, endPoint.y > keyboard.frame.midY,
+              startPoint.y < input.frame.minY, endPoint.y > keyboard.frame.maxY,
+              endPoint.y >= windowFrame.maxY - 2,
               endPoint.y - startPoint.y > keyboard.frame.height else {
             XCTFail("The single keyboard dismissal drag must start in visible conversation content and travel down through the keyboard."); return
         }
