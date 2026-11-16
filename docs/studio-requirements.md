@@ -4739,9 +4739,29 @@ percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same se
   that changed during the read. The webview renders only a `data:image/(png|jpeg|gif|webp)`
   answer; anything else (a URL, SVG, HTML) keeps the glyph. Nothing is loaded from the network
   or from outside the work folder.
+- **Open a listed file (CGP-KNOW-R-011 / REQ-KNOW-20).** Each row is one 44px button (name:
+  the path, then the provenance label). Pressing it asks the host to open that file
+  (`myWorksOpen`). The host opens only a path the last list it sent showed, for the same seat
+  (activity scope and profile) and work folder; any sign-in change (the token, the issuer token,
+  the account, a rehearsal seat) drops that list. It runs the thumbnail's canonical check again
+  at open time (`resolveMyWorksFile`). That check refuses any absolute path, `..`, empty or dot
+  segment, control character or backslash, a colon anywhere in a segment, a trailing dot or
+  space (Windows names), any link on the way, a folder, and a hard-linked file, and it catches a
+  file replaced by a link after the list was built.
+  - An `.html`/`.htm` page opens in Studio's preview.
+  - An allowlisted image (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`) opens in VS Code's
+    built-in image preview, where an SVG's scripts do not run.
+  - Anything else opens in the default text editor with `vscode.openWith(uri, "default")`, so no
+    custom editor or notebook renderer is chosen. `.ipynb` and `.code-workspace` open as text, and
+    a `.vsix` gets the binary notice.
+  - Never `vscode.open`, the OS default app or an external browser.
+  - An open the host carried out closes the drawer. A refusal keeps it open and shows one line,
+    "이 파일은 지금 열 수 없어요. 내 작품을 닫았다가 다시 열어 주세요.", with focus left on the row.
+  - Evidence: `my-works-open.smoke.mjs` (real temp folders, the provider with a scripted
+    `vscode`) and `my-works-drawer.smoke.mjs` (row buttons, Enter, a forged answer ignored, the
+    refusal line, close on success).
 - Not built: HTML page thumbnails (rendering the page would run it and could load network
-  resources; the page glyph is shown instead); opening a file from a row (REQ-KNOW-20's
-  "opening an item reveals it"); trash actions in the drawer (they stay in the 작업 자료
+  resources; the page glyph is shown instead); trash actions in the drawer (they stay in the 작업 자료
   panel, CGP-KNOW-D-013); remembering the grid choice across openings.
 - **기억 filter (CGP-KNOW-D-030 / DES-KNOW-48).** A `파일`/`기억` group (aria-pressed, 44px) sits in
   the header; `기억` shows the activity's memory view (state line, 작업별 기억 and files;
@@ -6329,6 +6349,13 @@ separate from installed Studio and native OS IME acceptance.
 | REQ-CGPV-08 | PI#2 (the learner sees what the AI actually did, not what it says it did) / PI#5 / CGP-VOICE-008 / VO-18 / VO-20: while the agent works, the voice panel's status line shows, announces and reads aloud only events the host actually sent on the chat channel: a real tool call (`toolLog` marked `kind: "tool"`, set by the host only on SDK tool_use / tool_result lines and browser-loop calls, keyed by the call id) starting, finishing or failing, the approval wait (`approvalWait`), and the turn's start, stop (`streamStopped`), end (`streamEnd`) and error (`streamError` or a failed end). The coach's prose (`streamChunk`) is never read, so a reply claiming `파일을 저장했어요` with no tool result makes no status. The other `toolLog` lines the host posts carry no `kind` and are ignored: the adult thinking text (`💭`, model prose), busy and orchestrator notices (`⏳`), the compaction note and the pending placeholder (`다음 단계를 준비하는 중…` and its `생각했어요` / `고쳤어요` close). The `kind` marker is live-channel only; persisted timeline lines keep their shape. Words are the chat header's coach run state (`COACH_RUN_STATES`: `생각 중`, `찾는 중`, `만드는 중`, `확인이 필요해요`, `멈춤`, `문제가 생겼어요`, `준비됨`) plus the host's own tool label, e.g. `만드는 중 · 파일 고치기 index.html`; `끝났어요` is written only after that call's own result event, for a call whose start was seen (`파일 고치기 index.html 끝났어요`). A summary-mode seat (one work line instead of per-call lines) gets no per-call status; only its shell rows and failures do. A call with no result when the turn ends or stops is dropped, never called finished. An open approval keeps its line until answered; a result or refusal that arrives meanwhile is held and said when it closes. Every failure ends the running line it belongs to: a tool error, a refused or timed-out approval (the denial card), an SDK policy or runtime denial and a browser-loop error all keep the call's `kind` through the host's denial rewrite (`denialToolLine`), and a failed end clears every running call. Lines of another stream are ignored. Nothing estimates time or predicts the next step. A start or finish is announced once (one polite `role="status"` region) and read aloud through the window's read-aloud hub only where the Service serves read-aloud, never while `소리 끄기` is on (muting stops a status reading in the same press), and never over an answer the learner is listening to, nor over an answer whose reading the engine refused (`blocked`, CGP-VOICE-R-028), so that answer's `소리 켜기` still reads its unheard part. A step update of a running call changes the words but is neither announced nor read. A failed reading, including one the engine refused to start (`blocked`), is said on its own line, `작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.`, apart from any tool failure. Memory only: nothing is stored, logged or sent to the host. Not claimed: voice works or the panel is mounted. VoicePanel is still unmounted and read-aloud draws nothing unless served, so every seat renders as before | `voice-agent-status.test.tsx` (real VoicePanel through the real popup and session reducers, served-voice profile, scripted synthesizer, real read-aloud button, host messages on the real window channel: start shown, announced and read once; step update not re-announced; `끝났어요` only after the result; negative control on prose; negative controls for each non-tool host line (thinking, `⏳` notices, compaction, pending placeholder and close) and for a result with no start; a source check that only tool_use / tool_result / browser-loop posts carry `kind: "tool"`; unanswered call never done; tool failure vs failed reading; `소리 끄기` holds and stops readings; an answer reading is not cut off; approval, other stream, stop and error; pacing; collapse and expand; not served touches no synthesizer; red on main: 15 of 15 behavioural cases fail) |
 | DES-CGPV-08 | One line under the voice panel's state label: a static 16px run-state icon and the words at the 14px caption step, clamped to two lines (`line-clamp: 2`) with the whole text in the DOM and in the tooltip (`data-hp-tooltip`). The visible line changes at most once per second; the newest event wins. The line has no live role; the one `role="status"` region is filled only for starts and finishes, so updates are not announced. The icon never animates or transitions in any motion mode (no spinner to turn off under reduced motion). Approval and error lines take primary ink and their icon colours as the header's run state does. Logical properties and tokens only. The compact control carries the announcer, not the line | `voice-agent-status.smoke.mjs` (headless Chromium, dark/light at 1420 and 320, with and without reduced motion, and forced colours: the line below the state label at 14px or more, 16px icon with no animation or transition, a long label held to two computed line heights with the whole text in the DOM and the tooltip, no live role on the line and one status announcer for starts and finishes only, inside the viewport with no sideways scroll; reads computed styles and line heights, not text widths) |
 
+## Voice tip, at most once per seat (CGP-VOICE-R-029)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-42 | PI#4 (the learner discovers what the prepared environment offers without being pushed) / CGP-VOICE-042: one short tip, "음성 대화를 누르면 말로 코치와 이야기할 수 있어요.", tells the learner that the automatic voice conversation exists. It is shown at most once per seat. The seat is the 팁 보기 seat (CGP-SHELL-R-019, `collapseSeat`), so each learner on a shared classroom PC counts separately. The host keeps the seats that have seen it in globalState (`hypeproofChat.voiceTip`, `{seen: string[]}`, bounded at 200, oldest first out, never synced). A seat counts as having seen it as soon as the tip is drawn, so a reload or a closed window never brings it back. A panel remount in the same window keeps a tip that is still open, until it is closed. It is never shown: to a seat that chose 팁 그만 보기; when no seat is known yet (nothing is stored then); mid-task, for every seat (only while the current task has no messages, judged only after that task's history has arrived); in the instructor console; or where voice is not served (the same condition as the 음성 대화 button: dictation and read-aloud served, a verified activity, a token). Once drawn, any hide closes it for good: its close button, the first message of the task, or voice becoming unavailable. Nothing is sent to the Service or logged. | `test/voice-tip-host.smoke.mjs` (real ChatPanelProvider over a shared globalState: seat A once, remount keeps it, reload does not; seat B on the same PC once; a tips-off seat never, with a tips-on control; an empty seat never and stores nothing; mid-task and instructor never; a late shown after a close cannot reopen it; junk records, bound, de-duplication) |
+| DES-CGPV-42 | Tip (CGP-VOICE-D-022, tip part): a note (`role="note"`), not a dialog and not an overlay. It takes its own row in the flow right under the voice control, so it covers nothing. A border pointer above it aims at the 음성 대화 button. The text is at the caption step (14px or more), at most two lines at 320px in base and xlarge text. The close button is at least 44px, with the label and tooltip "음성 대화 팁 닫기". It never takes focus and has no animation or transition. In forced colours the box, the pointer and the text use CanvasText on Canvas. Tokens only. | `test/voice-tip-layout.smoke.mjs` (real App in headless Chromium, every default theme at 320 and 800px, base and xlarge, plus forced colours: below the control, pointer within the button, two computed lines at most, 14px text, 44px close, inside the column with no sideways scroll, no focus move, no animation; asked only after the empty history arrived, never mid-task, never without voice, never for the instructor; closing and the first message both report the close); CSS `.hps-voice-tip` in `webview-ui/src/voice.css` |
+
 ## Voice session marker in the task rail (CGP-VOICE-R-030)
 
 | ID | Requirement and acceptance | Evidence |
@@ -6744,32 +6771,73 @@ headless synthetic approval tests do not prove real SDK execution or native focu
 
 ## Request more allowance (CGP-SHELL-D-029)
 
-`REQ-STUDIO-BUDGET-REQUEST` (CGP-SHELL-D-029 / DES-SHELL-29, parent REQ-SHELL-30, P1): when the
-selected funding choice can be requested (`can_request`) and the usage details are authoritative
-(`access.status === 'ready'`), the usage panel shows a "선생님께 더 요청하기" form. At 10% or less
-of the request meter, or when the choice is exhausted, the form sits under the notice "남은 사용량이
-부족해요."
+`REQ-STUDIO-BUDGET-REQUEST` (CGP-SHELL-D-029 / DES-SHELL-29, parent REQ-SHELL-30 / CGP-SHELL-R-030, P1):
+when the selected funding choice can be requested (`can_request`) and the usage details are
+authoritative (`access.status === 'ready'`), the usage panel offers "선생님께 더 요청하기". What the
+form may send comes from the Service's `request_policy` on that choice.
 
-- **Reason is required, up to 200 characters.** The pinned Service rejects a blank reason, so the
-  field is labelled "(필수)" and the button stays disabled until it holds text. The input caps at 200
-  UTF-16 units and a live counter ("N / 200자") sits in a block under it.
-- **Korean IME.** Enter during composition (`compositionstart`, `isComposing` or keyCode 229) neither
-  submits nor reaches the form handler; the draft is kept until the host answers.
-- **Receipt.** The Service record decides: "요청함 · 강사 검토 대기" while pending, or the resolution
-  text once handled. The panel never claims approval it did not receive. The form is keyed by the
-  funding choice, so another choice starts with an empty draft.
-- **Layout (computed, headless Chromium).** The input stays inside the usage panel at 1420, 800 and
-  320 px in the personal and classroom seats, dark and light. The reason input and the button are at
-  least 44px high, the counter and input text are at least 14px, and both controls carry the shared
-  2px focus ring.
-- **Blocked on the Service contract, not built.** The parent REQ-SHELL-30 reason choices (an optional
-  reason, approval/refusal wording picked by the learner) and the 10-minute cooldown between requests
-  need a Service change; the pinned Service has no cooldown and requires a non-blank reason. Studio
-  does not invent either. See `docs/research/chatgpt-desktop-2026-10/decisions/README.md`.
+**With a request policy (CGP-SHELL-R-030).**
 
-Evidence: `budget-request-form.test.tsx` (counter, length boundary, IME guards, retained draft,
-receipt, scope) and `budget-request-layout.test.tsx` (computed layout in headless Chromium; fails
-under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+- **Only inside the low-allowance notice.** The form shows at 10% or less of any metered allowance
+  (`limit > 0`), or when the choice is exhausted, under "남은 사용량이 부족해요. 선생님께 추가 사용을
+  요청할 수 있어요." It does not show above 10%.
+- **Fixed reasons.** The Service names them (하던 작업을 마무리하고 싶어요 / 문제를 고치는 중이에요 /
+  결과를 한 번 더 확인하고 싶어요). Each is a radio row of at least 44px with text of at least 14px, in a
+  fieldset titled "요청 이유".
+- **Minor seat (`note: false`).** There is no text field at all, and the button stays disabled until a
+  reason is picked. Only the reason id is sent. A note from a minor seat (a released app still sends
+  one) is dropped by the Service: never stored, returned or logged; the request succeeds with the
+  reason's label, or "추가 사용을 요청했어요" when no reason came. A profile it cannot resolve counts as a
+  minor seat. No minor-written text reaches the instructor. This narrows REQ-SHELL-30's optional
+  reason for minor seats (agent choice, privacy; decisions/CGP-SHELL-R-030.md).
+- **Adult seat (`note: true`).**
+  - The reason is optional ("요청 이유 (선택)"), and so is the note ("하고 싶은 말 (선택)", up to
+    `note_max`, 200, with a live "N / 200자" counter). Either, both or neither may be sent.
+  - Whitespace alone is not a note.
+  - The IME guard is the same as the older form.
+- **Repeat block.**
+  - A new request within 10 minutes of the previous one is refused (429 `budget_request_cooldown`, its
+    own code); the form reads it as "방금 요청했어요. 10분이 지나면 다시 요청할 수 있어요." Released apps
+    show their generic "추가 사용 요청을 보내지 못했습니다." for it (known limitation).
+  - The form disables the button and says "방금 요청했어요. HH:MM 이후에 다시 요청할 수 있어요." from
+    `cooldown_until`, as a status line the button is described by. It re-enables at that time.
+  - A retry while a request is pending returns the pending request.
+- **Malformed policy.** It parses to `null`, and the form is not offered. It never falls back to the
+  free-text form.
+- **Outbound list (REQ-KNOW-09).** A picked reason is listed as "고른 이유: <label>". A note is listed as
+  "추가 사용이 필요한 이유 (내가 쓴 글)" with its byte size. Nothing is sent on Cancel.
+- **Request side only.** Resolving a request changes no cap, budget or charge.
+
+**Without a request policy (an older Service).** The form is the earlier one:
+- a reason of up to 200 characters, labelled "(필수)";
+- the "N / 200자" counter and the IME guard;
+- shown whenever a request is possible, with the low notice at 10% of the request meter.
+
+**Receipt.** The Service record decides: "요청함 · 강사 검토 대기" while pending, or the resolution text
+once handled. The panel never claims approval it did not receive. The form is keyed by the funding
+choice.
+
+**Not built.** The resolution is free text without a 승인/거절 outcome. Adding one needs a Service
+column, and the approval side is out of scope here.
+
+**Layout (computed, headless Chromium).** In both forms, the controls stay inside the usage panel:
+- at 1420, 800 and 320 px;
+- in the personal and classroom seats;
+- in dark and light.
+
+The older form's input and button are at least 44px high, and its counter and input text are at least
+14px. The minor form has three reason rows of at least 44px, 14px text and no text field. Every control
+carries the shared 2px focus ring.
+
+Evidence:
+- `budget-request-policy.test.tsx`: minor and adult forms, cooldown, low-allowance gate, malformed
+  policy, pending.
+- `access-client.smoke.mjs`: policy parsing, a refused minor note sending zero requests, the bodies,
+  the outbound items, and the 429 copy.
+- `budget-request-form.test.tsx`: the older form.
+- `budget-request-layout.test.tsx`: both forms, computed. It fails under `FOCUS_REQUIRE_BROWSER=1`
+  without a browser.
+- Service: `worker/test/budget-request.test.mjs`.
 
 ## Source-kind labels (CGP-CHAT-R-014)
 
@@ -9082,6 +9150,13 @@ CGP-LEARN-R-007) / PI#3: animated blocks start paused, play is the learner's exp
   - 멈춤 keeps the current frame. 한 단계 moves one frame, playing or not. Play stops on the last frame.
   - When motion is reduced, by the host's `workbench.reduceMotion` or the OS `prefers-reduced-motion` (`motion.ts`), 재생 is not
     offered, a running play stops on its frame, 한 단계 stays, and the tokens.css override zeroes transitions.
+  - A hidden page (another tab, a minimised window) stops play on its frame, and play does not resume by itself.
+  - Focus never drops to the page. 재생 and 멈춤 are one button whose label changes. An unavailable button stays focusable
+    (`aria-disabled`, not `disabled`) and does nothing. When reduced motion removes 재생 / 멈춤 while it has focus, focus
+    moves to 한 단계.
+  - There are no key shortcuts. This differs from stage_stepper's ←/→ on purpose: a stepper stage is a page of instructor
+    text the learner turns, while a frame is a step of motion. The three buttons are one Tab stop each, and Enter or Space
+    on a focused button already does each action.
 - **Not in this row:** an animated block type. The catalog is unchanged; the first one needs a Service catalog version and an
   owner decision on its content.
 - **Evidence.**
@@ -9955,10 +10030,20 @@ REQ-CGPV-04/17/18/19/24/33).** 기존 Service 프로필이 받아쓰기와 읽�
 
 | ID | Requirement and acceptance | Evidence |
 |---|---|---|
-| REQ-CGPV-23 | PI#1 / VO-29: where dictation is served, the chat's settings dialog has a `마이크` row: the personal dialog, and the lesson-seat dialog reached from the access chip.<br>**Listing.** It lists `enumerateDevices` audio inputs with `시스템 기본값` first. The browser's `default`/`communications` pseudo-entries are dropped. Opening it never calls `getUserMedia`.<br>**Storage.** A pick posts one `setMicInput` with the device id and label. The host keeps it per computer in globalState (`hypeproofChat.micInput`, no record for the default). It reaches the webview config only when set, and is never logged, synced, sent to the Service or put in a problem report.<br>**Recording from it.** Dictation and the voice conversation record with `{ deviceId: { exact } }`. The device is found by its id; if the browser changed the id, by the one device with the same label.<br>**Unplugged.** Nothing records and there is no silent fallback. Dictation shows `선택한 마이크가 연결되어 있지 않아요` with one action, `기본 마이크로 녹음`, which records once with the default. The choice is kept, and the next press asks again. An `OverconstrainedError` or `NotFoundError` on the exact constraint reads the same. The conversation stops with its own line.<br>**Mid-session change.** A change applies to the next recording, and to the conversation's next listening turn in the same session, with the previous tracks stopped. | `mic-input.smoke.mjs` (record, list, resolution, the real recorder and conversation, host source), `mic-input.test.tsx` (adult and minor seats), `mic-input-browser.smoke.mjs` |
-| DES-CGPV-23 | **The row.** A native select named by its legend `마이크`, 44px with 14px text, inside the dialog at 320 / 480 / 800px. The state is in words below it: `받아쓰기와 음성 대화에 쓸 마이크예요.`, `마이크를 한 번 허용하면 이름을 보고 고를 수 있어요.` (before permission, when the browser hides the list), `마이크를 찾을 수 없어요` (none) or `고른 마이크가 연결되어 있지 않아요. ...` (the select shows `연결되지 않은 마이크`). A plug-in event refreshes it.<br>**마이크 시험** (44px). It runs only on an explicit press, behind the voice disclosure and the microphone explainer. It listens to the chosen microphone for at most 5 s and shows the real input level as a decorative bar (`aria-hidden`, none under reduced motion). It then says `소리가 들려요.` or `소리가 들리지 않았어요. ...`.<br>**Nothing kept.** Nothing is recorded, sent or kept: the tracks are stopped and the context closed on the end, on `시험 멈추기`, on the dialog closing and on a hide. HC themes and forced colours keep edges and ink. | `mic-input.test.tsx`, `mic-input-browser.smoke.mjs` (geometry, the real AudioContext stream, HC and forced colours), the style smokes |
+| REQ-CGPV-23 | PI#1 / VO-29: where dictation is served, the chat's settings dialog has a `마이크` row: the personal dialog, and the lesson-seat dialog reached from the access chip.<br>**Listing.** It lists `enumerateDevices` audio inputs with `시스템 기본값` first. The browser's `default`/`communications` pseudo-entries are dropped. Opening it never calls `getUserMedia`.<br>**Storage.** A pick posts one `setMicInput` with the device id and label. The host keeps it per computer in globalState (`hypeproofChat.micInput`, no record for the default). It reaches the webview config only when set, and is never logged, synced, sent to the Service or put in a problem report.<br>**Recording from it.** Dictation and the voice conversation record with `{ deviceId: { exact } }`. The device is found by its id; if the browser changed the id, by the one device with the same label.<br>**Unplugged.** Nothing records and there is no silent fallback. Dictation shows `선택한 마이크가 연결되어 있지 않아요` with one action, `기본 마이크로 녹음`, which records once with the default. The choice is kept, and the next press asks again. An `OverconstrainedError` or `NotFoundError` on the exact constraint reads the same. The conversation stops with its own line and the same one action, which restarts that session with the default.<br>**Mid-session change.** A change applies to the next recording, and to the conversation's next listening turn in the same session, with the previous tracks stopped. | `mic-input.smoke.mjs` (record, list, resolution, the real recorder and conversation, host source), `mic-input.test.tsx` (adult and minor seats), `mic-input-browser.smoke.mjs` |
+| DES-CGPV-23 | **The row.** A native select named by its legend `마이크`, 44px with 14px text, inside the dialog at 320 / 480 / 800px. The state is in words below it: `받아쓰기와 음성 대화에 쓸 마이크예요.`, `마이크를 한 번 허용하면 이름을 보고 고를 수 있어요.` (before permission, when the browser hides the list), `마이크를 찾을 수 없어요` (none) or `고른 마이크가 연결되어 있지 않아요. ...` (the select shows `연결되지 않은 마이크`). A plug-in event refreshes it.<br>**마이크 시험** (44px). It runs only on an explicit press, behind the voice disclosure and the microphone explainer. It listens to the chosen microphone for at most 5 s (a 5000 ms timer) and shows the real input level as a decorative bar (`aria-hidden`, none under reduced motion). It then says `소리가 들려요.` or `소리가 들리지 않았어요. ...`.<br>**Nothing kept.** Nothing is recorded, sent or kept: the tracks are stopped and the context closed on the end, on `시험 멈추기`, on the dialog closing and on a hide. HC themes and forced colours keep edges and ink. | `mic-input.test.tsx`, `mic-input-browser.smoke.mjs` (geometry, the real AudioContext stream, HC and forced colours), the style smokes |
 
 Not covered: real microphones, and whether webview device ids stay stable across a restart and an upgrade on a Windows class laptop and a Mac. This is part of the real-device check (#3626), NOT RUN. Agent choices: decisions/CGP-VOICE-R-019.md CGP-VOICE-R-019.
+
+### Push-to-talk in the voice conversation (CGP-VOICE-R-026, R-027)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-38 | PI#1 / VO-08: the shipped voice conversation (`VoiceConversationControl`) offers an optional `누르고 말하기` mode.<br>**Choosing it.** A native checkbox on a 44px label. The choice is kept per computer in globalState `hypeproofChat.voiceConversationMode`, the same store as the microphone choice. It reaches the webview config only when push-to-talk was chosen. A running session keeps its mode (`다음 대화부터 바뀌어요`).<br>**The default.** Automatic end of speech stays the default for every seat, minors included (Jay, 2026-11-14).<br>**A session.** It starts with the microphone closed (`ready`). Holding the button, or Space while the button has focus, opens it for one turn; the release ends and sends that turn.<br>**What ends a hold.** A release anywhere (pointer capture and a window listener), Space up, the window losing focus, or a hide (which stops the session). None of these leaves the microphone open.<br>**Rules inside a turn.** Detected silence never ends a held turn. After the answer is read, the microphone stays closed until the next hold.<br>**Retries.** A hold too short (`너무 짧게 들렸어요…`) or too long (`한 번에 1분 안으로…`) is a retry, never the end of the session.<br>**Space and the text box.** Space in the text box is an ordinary space. On the hold button it is consumed, so no space reaches any field.<br>**Not built.** The Chalk class default; nothing serves it. | `voice-ptt.smoke.mjs` (the real VoiceConversation), `voice-conversation-browser.smoke.mjs` (the real App) |
+| REQ-CGPV-39 | PI#5 / VO-08: when the endpoint detector (`observeVoiceEndpoint`) cannot start, the automatic session switches to push-to-talk for that session only and says `자동 말끝 감지를 쓸 수 없어 눌러서 말하기로 바꿨어요` in its status line. It never sits in `듣고 있어요` without endpointing, and the microphone it opened is closed. The stored mode is not written; the next ordinary start is automatic again. | `voice-ptt.smoke.mjs`, `voice-conversation-browser.smoke.mjs` (a failing analyser in the real App; no `setVoiceConversationMode` post) |
+| DES-CGPV-38 | The hold button is at least 64px and reads `누르고 말하기`. Pressed is inset with `듣고 있어요` and `aria-pressed`, never colour alone, and nothing animates. Forced colours use ButtonText, and Highlight when pressed. The group is named `음성 대화` in push-to-talk and `자동 음성 대화` in automatic mode (unchanged). | `voice-conversation-browser.smoke.mjs`, the style smokes |
+
+Not covered: real microphones and a real-device hold on Windows and macOS (#3626): NOT RUN. Agent choices: decisions/CGP-VOICE-R-026.md.
 
 Not covered, by design: real-device behaviour. This row set is synthetic and headless; nothing is on for any seat
 (Service flags default off) and nothing was run in the installed app. The microphone core patch (DEC-03) and

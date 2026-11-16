@@ -13,6 +13,7 @@ import { windowOutputMute } from '../../src/voiceOutputMute';
 import { readServedVoice } from '../../src/voiceServed';
 import { windowVoiceLiveTask } from '../../src/voiceLiveTask';
 import { nativeComposing } from './imeGuard';
+import { PTT_GROUP_LABEL, PTT_HOLD, PTT_HOLDING, PTT_MODE_HOLD, PTT_MODE_NEXT, PTT_START_LABEL, RECOVER_USE_DEFAULT } from '../../src/voiceCopy';
 
 export function voiceConversationScope(config: ChatConfig | undefined): string {
   return JSON.stringify([config?.activity?.id, config?.taskWorkspace?.activeTaskId, config?.profile?.profile_id, config?.profile?.access_identity?.scope]);
@@ -105,22 +106,57 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
     return () => { off(); offSpeech(); offMute(); controller.stop(); windowVoiceLiveTask.set(null); loop.current = null; document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', hide); window.removeEventListener('keydown', escape); };
   }, [speech, makeRecorder]);
   const active = !['idle', 'stopped'].includes(view.phase);
+  // CGP-VOICE-R-026 — the hold. Released by the button, Space, a release anywhere (pointer capture plus a window listener)
+  // and the window losing focus, so a hold can never leave the microphone open.
+  const holding = useRef(false);
+  const endHold = () => { if (!holding.current) return; holding.current = false; loop.current?.release(); };
+  const beginHold = () => { if (holding.current) return; holding.current = true; loop.current?.hold(); };
+  useEffect(() => {
+    const up = () => endHold();
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up); window.addEventListener('blur', up);
+    return () => { window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('blur', up); };
+  }, []);
   useLayoutEffect(() => { loop.current?.stop(); }, [scope]);
   useLayoutEffect(() => { if (!served || turn.interrupted) loop.current?.stop(); }, [served, turn.interrupted]);
 
   if (!served || !speech) return null;
-  const start = () => {
+  // R-026: the stored choice (this computer); automatic end of speech unless push-to-talk was chosen. A running session keeps
+  // its own mode, which R-027 may have switched for that session only.
+  const stored = config?.voiceConversationMode === 'push_to_talk' ? 'push_to_talk' : 'auto';
+  const mode = active ? view.mode ?? 'auto' : stored;
+  const ptt = mode === 'push_to_talk';
+  const start = (useDefault = false) => {
     const requestedScope = scope;
     voice.gate(() => {
-      if (requestedScope === voiceConversationScope(latest.current.config) && ready()) loop.current?.start();
+      if (requestedScope === voiceConversationScope(latest.current.config) && ready()) loop.current?.start({ useDefault, mode: stored });
     }, true);
   };
-  return <div className="hps-voice-note" role="group" aria-label="자동 음성 대화">
-    <button type="button" className="hps-voice-primary" aria-label={active ? '음성 대화 중지' : turn.blockedReason ? `자동 음성 대화 시작, ${turn.blockedReason}` : '자동 음성 대화 시작'} aria-pressed={active}
+  const startLabel = ptt ? PTT_START_LABEL : '자동 음성 대화 시작';
+  const capturing = view.phase === 'starting' || view.phase === 'listening';
+  const space = (event: { key: string; code?: string }) => event.key === ' ' || event.code === 'Space';
+  return <div className="hps-voice-note" role="group" aria-label={ptt ? PTT_GROUP_LABEL : '자동 음성 대화'}>
+    <button type="button" className="hps-voice-primary" aria-label={active ? '음성 대화 중지' : turn.blockedReason ? `${startLabel}, ${turn.blockedReason}` : startLabel} aria-pressed={active}
       data-hp-tooltip={!active && turn.blockedReason ? turn.blockedReason : undefined}
       disabled={!active && (!ready() || !speech.available)} onClick={() => active ? loop.current?.stop() : start()}>
       <ChatIcon kind={active ? 'stop' : 'level'} /> {active ? '중지' : '음성 대화'}
     </button>
-    <span role="status">{view.note || '말이 끝나면 자동으로 보내고, 답을 읽은 뒤 다시 들어요. 중지하면 마이크가 꺼져요.'}</span>
+    {active && ptt && <button type="button" className="hps-voice-hold" aria-pressed={capturing} disabled={view.phase !== 'ready' && !capturing}
+      onPointerDown={(event) => { event.preventDefault(); try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* not capturable */ } beginHold(); }}
+      onPointerUp={endHold} onPointerCancel={endHold} onLostPointerCapture={endHold}
+      // Space holds only while this button has focus; it is consumed here, so no space reaches any text field.
+      onKeyDown={(event) => { if (!space(event)) return; event.preventDefault(); event.stopPropagation(); if (!event.repeat) beginHold(); }}
+      onKeyUp={(event) => { if (!space(event)) return; event.preventDefault(); event.stopPropagation(); endHold(); }}
+      onClick={(event) => event.preventDefault()}>
+      {capturing ? PTT_HOLDING : PTT_HOLD}
+    </button>}
+    {/* R-026: the choice, per computer. A running session keeps its mode; the change applies to the next one. */}
+    <label className="hps-voice-mode" data-hp-tooltip={active ? PTT_MODE_NEXT : undefined}>
+      <input type="checkbox" checked={stored === 'push_to_talk'} disabled={active}
+        onChange={(event) => postToHost({ type: 'setVoiceConversationMode', mode: event.target.checked ? 'push_to_talk' : 'auto' })} />
+      <span>{PTT_MODE_HOLD}</span>
+    </label>
+    <span role="status">{view.note || (ptt ? '버튼을 누르고 있는 동안 듣고, 손을 떼면 보내요. 중지하면 마이크가 꺼져요.' : '말이 끝나면 자동으로 보내고, 답을 읽은 뒤 다시 들어요. 중지하면 마이크가 꺼져요.')}</span>
+    {/* R-019: the chosen microphone is not connected. One press restarts this conversation with the default; the choice stays. */}
+    {!active && view.recovery === 'use_default' && <button type="button" className="hps-voice-link" disabled={!ready() || !speech.available} onClick={() => start(true)}>{RECOVER_USE_DEFAULT}</button>}
   </div>;
 }

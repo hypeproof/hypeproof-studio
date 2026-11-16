@@ -31,6 +31,10 @@ Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-0
 - **Minors.** The behaviour is the same and no new data leaves the computer (a count). On the proxy runtime the only run tool is the preview start in browser control; without browser control nothing is counted.
 - **Prompt safety.** The line changes no grant, tool or policy. It says so itself, asks for one pointer and no answer, and lets the coach ignore it. It needs a prompt review in the verify.
 
+**After verify-4219 (agent choices, coordinator).**
+- The pinned line gains one restriction, `실패 횟수는 학생에게 말하지 마세요.`, so the coach never tells a learner how often they failed. It adds no permission.
+- The host smoke pins that the hint turn runs as an ephemeral SDK session, so the line never persists in the CLI session file.
+
 **Not covered.** A real coach's response to the line, and the SDK's real `is_error` on a failing Bash. Both are NOT RUN.
 
 Confirmed by Jay: no (the decision to let the coach judge is Jay's; the choices above are not).

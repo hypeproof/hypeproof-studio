@@ -102,6 +102,7 @@ reproduces the former file byte for byte.
 - [CGP-KNOW-R-001](CGP-KNOW-R-001.md): CGP-KNOW-R-001: task rail search (2026-10-25, agent choice)
 - [CGP-KNOW-R-005](CGP-KNOW-R-005.md): CGP-KNOW-R-005: memory scoped to one personal activity (2026-10-29, agent-selected conservative implementation)
 - [CGP-KNOW-R-008](CGP-KNOW-R-008.md): CGP-KNOW-R-008: task emoji and colour (2026-10-25, agent choice)
+- [CGP-KNOW-R-011](CGP-KNOW-R-011.md): CGP-KNOW-R-011: open a file from 내 작품 (2026-11-16, agent choices within the coordinator's constraints)
 - [CGP-KNOW-R-020](CGP-KNOW-R-020.md): Attachment recovery (CGP-KNOW-R-020)
 - [CGP-KNOW-R-021](CGP-KNOW-R-021.md): CGP-KNOW-R-021: Studio-browser downloads (2026-10-25, agent-selected conservative implementation)
 - [CGP-KNOW-R-022](CGP-KNOW-R-022.md): CGP-KNOW-R-022: memory state line (2026-10-29, agent-selected conservative implementation)
@@ -150,6 +151,7 @@ reproduces the former file byte for byte.
 - [CGP-SHELL-R-024](CGP-SHELL-R-024.md): CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line (2026-11-11)
 - [CGP-SHELL-R-026](CGP-SHELL-R-026.md): CGP-SHELL-R-026 (minor external links)
 - [CGP-SHELL-R-027](CGP-SHELL-R-027.md): CGP-SHELL-R-027 / CGP-SHELL-D-026: account and data deletion request (2026-11-13, agent-selected)
+- [CGP-SHELL-R-030](CGP-SHELL-R-030.md): CGP-SHELL-R-030: allowance request reasons, minor seats and the repeat block (2026-11-15, agent-selected)
 - [CGP-SHELL-R-034](CGP-SHELL-R-034.md): CGP-SHELL-R-034 / CGP-SHELL-D-033: Chalk seat version column (2026-11-12, DEC-24 floor confirmed by Jay; other choices agent-selected)
 - [CGP-SHELL-R-035](CGP-SHELL-R-035.md): CGP-SHELL-R-035: "새로운 기능" after an update (2026-10-26, agent choice)
 - [CGP-VOICE-D-007](CGP-VOICE-D-007.md): CGP-VOICE-D-007: compact control corner snapping (2026-10-27, agent-selected)
@@ -166,6 +168,7 @@ reproduces the former file byte for byte.
 - [CGP-VOICE-R-024](CGP-VOICE-R-024.md): CGP-VOICE-R-024 / CGP-VOICE-D-018: served voice block, class-off state (2026-11-09, policy-backed)
 - [CGP-VOICE-R-026](CGP-VOICE-R-026.md): CGP-VOICE-R-026 (minor voice default, #3976)
 - [CGP-VOICE-R-028](CGP-VOICE-R-028.md): CGP-VOICE-R-028 / CGP-VOICE-D-021 (autoplay part): blocked read-aloud recovery (2026-11-14, agent-selected)
+- [CGP-VOICE-R-029](CGP-VOICE-R-029.md): CGP-VOICE-R-029: voice tip at most once (2026-11-16, agent-selected)
 - [CGP-VOICE-R-030](CGP-VOICE-R-030.md): CGP-VOICE-R-030: voice session marker in the task rail (2026-11-14, agent-selected)
 - [DEC-08](DEC-08.md): DEC-08
 - [DEC-09](DEC-09.md): DEC-09

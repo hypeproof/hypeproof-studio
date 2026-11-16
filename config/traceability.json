@@ -16229,6 +16229,9 @@
           "path": "extensions/hypeproof-chat/test/my-works-drawer.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/my-works-open.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs"
         }
       ]
@@ -17778,6 +17781,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/MicInputSetting.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceConversationMode.ts"
         }
       ]
     },
@@ -17833,6 +17839,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/mic-input-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-ptt.smoke.mjs"
         }
       ]
     },
@@ -19024,6 +19033,9 @@
         },
         {
           "path": "apps/studio-native/tests/test_apple_push_config.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/check-ios-push-metadata.py"
         }
       ]
     },
@@ -20232,6 +20244,9 @@
         },
         {
           "path": "apps/studio-native/scripts/apple-push-config.py"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Info.plist"
         }
       ]
     },
@@ -20294,6 +20309,65 @@
         },
         {
           "path": "apps/studio-native/tests/test_apple_push_config.py"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-VOICE-TIP",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Voice tip, at most once per seat (CGP-VOICE-R-029)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-TIP",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-TIP"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-tip-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-tip-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-TIP",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-TIP",
+        "ST-TEST-VOICE-TIP"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voiceTip.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoiceTip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     }

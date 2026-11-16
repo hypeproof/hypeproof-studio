@@ -178,6 +178,8 @@ export interface ChatConfig {
    * label can name a person, so it is never logged, sent to the Service or put in a problem report.
    */
   micInput?: { id: string; label: string };
+  /** CGP-VOICE-R-026: the voice conversation's capture mode on this computer; absent for the default (automatic end of speech). */
+  voiceConversationMode?: "push_to_talk";
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
   /**
@@ -682,7 +684,7 @@ export type WebviewMessage = (
   | {type:'selectFunding';id:string}
   /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
   | {type:'carryoverDecision';decision:'confirm'|'decline'}
-  | {type:'requestBudget';note:string}
+  | {type:'requestBudget';note?:string;reason?:string}
   | { type: 'observationOpen' }
   /**
    * SX-45 rule 2 — a learning event is made **only by a webview form submission**.
@@ -815,6 +817,12 @@ export type WebviewMessage = (
   | { type: "planFirstRedo"; planId: string; text: string }
   | { type: "planFirstDecline"; planId: string }
   | { type: "whatsNewRequest"; requestId: string }
+  /** CGP-VOICE-R-029 — is the voice tip due for this seat? `taskEmpty`: the current task has no messages yet. */
+  | { type: "voiceTipRequest"; requestId: string; taskEmpty: boolean }
+  /** CGP-VOICE-R-029 — the tip was drawn: this seat has now seen it (it stays open in this window until closed). */
+  | { type: "voiceTipShown" }
+  /** CGP-VOICE-R-029 — the drawn tip went away (closed, the task started, or voice became unavailable): never again. */
+  | { type: "voiceTipDismiss" }
   | { type: "whatsNewShown"; notesId: string }
   | { type: "whatsNewDismiss"; notesId: string }
   /**
@@ -833,6 +841,8 @@ export type WebviewMessage = (
   | { type: "setLessonTips"; on: boolean }
   /** CGP-VOICE-R-019 — the learner picked a microphone (null: 시스템 기본값); the host keeps it for this computer. */
   | { type: "setMicInput"; choice: { id: string; label: string } | null }
+  /** CGP-VOICE-R-026 — the learner chose how the voice conversation captures ("auto" is the default); kept for this computer. */
+  | { type: "setVoiceConversationMode"; mode: "auto" | "push_to_talk" }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
@@ -937,6 +947,8 @@ export type WebviewMessage = (
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
+  /** CGP-KNOW-R-011 — open one listed 내 작품 file: HTML in the preview, anything else in an editor tab. */
+  | { type: "myWorksOpen"; requestId: string; path: string }
   /** CGP-KNOW-D-016 — the info popover of one listed work-folder file; answered once per request id. */
   | { type: "artifactInfoRequest"; requestId: string; path: string }
   // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
@@ -1088,6 +1100,8 @@ export type HostMessage = (
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
   | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
+  /** CGP-KNOW-R-011 — the open's outcome; a refusal carries the one line the drawer shows. */
+  | { type: "myWorksOpened"; requestId: string; ok: boolean; error?: string }
   | { type: "artifactInfo"; requestId: string; info: import("./artifactProvenanceView").ArtifactInfo | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
@@ -1191,6 +1205,8 @@ export type HostMessage = (
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
   | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null; available?: false; switchedOff?: true }
   | { type: "whatsNewChanged" }
+  /** CGP-VOICE-R-029 — the host's answer to `voiceTipRequest`. */
+  | { type: "voiceTip"; requestId: string; show: boolean }
   | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
   // the editor and opens them). The host reads the bytes and hands the webview

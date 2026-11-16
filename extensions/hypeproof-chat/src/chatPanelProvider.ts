@@ -296,6 +296,7 @@ import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, scanForPoint, takeRestorePoint, turnRestoreStoreDir, folderFitsRestoreLimits, TurnWriteTracker, TRACKED_SHELL_NOTICE, trackedTooLargeLine, type RestoreManifest, type TrackedCapture } from "./turnRestore";
 import { readWorkspaceThumbnail } from "./artifactThumbnail";
+import { MY_WORKS_EDITOR, MY_WORKS_OPEN_REFUSED, resolveMyWorksFile } from "./myWorksOpen";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
@@ -321,7 +322,9 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
+import { VOICE_TIP_KEY, voiceTipDue, voiceTipStore, withVoiceTipSeen } from "./voiceTip";
 import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
+import { VOICE_CONVERSATION_MODE_KEY, readConversationMode, writeConversationMode } from "./voiceConversationMode";
 import { RunFailureTracker, hintSeatFor, joinTurnContext } from "./runFailureHint";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
@@ -3785,6 +3788,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
+      this.noteWorksIdentityChange(e.key);
       if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); this._annotationLeaveRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); void this.reconcileSavedLinkSafety(); }
       // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
@@ -7798,7 +7802,43 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         view = await recorder.view(root, scan && idle() ? scan : undefined, generation);
       }
     } catch { view = null; }
+    // CGP-KNOW-R-011: the paths this list showed are the only ones a 내 작품 row may open.
+    this.worksListed = { seat: this.worksSeat(), cwd: cwd ?? "", paths: new Set((view?.entries ?? []).map((entry) => entry.path)) };
     await this.post({ type: "artifactProvenance", view });
+  }
+  private worksListed: { seat: string; cwd: string; paths: Set<string> } | undefined;
+  /**
+   * CGP-KNOW-R-011 (verify-r027): any change of who is signed in (a token, an issuer token, an account, a rehearsal
+   * seat) drops the 내 작품 list; nothing opens until a list is shown for the new identity. The keys are read here,
+   * not at module load: TOKEN_KEY comes from extension.ts, which imports this module.
+   */
+  private noteWorksIdentityChange(key: string): void {
+    if ([TOKEN_KEY, ISSUER_TOKEN_KEY, ACCOUNT_SECRET_KEY, REHEARSAL_SEAT_KEY].includes(key)) this.worksListed = undefined;
+  }
+  /** The seat a 내 작품 list belongs to (activity scope and profile); a list from another seat opens nothing. */
+  private worksSeat(): string { try { return this.voiceSeatKey(); } catch { return ""; } }
+  /**
+   * CGP-KNOW-R-011 (REQ-KNOW-20) — open one 내 작품 row, on the same seats as the list. Only a path the last list
+   * showed, for the same seat and work folder, checked again now (`resolveMyWorksFile`). An HTML page opens in
+   * Studio's preview, an allowlisted image in VS Code's image preview, anything else in the default text editor
+   * (`vscode.openWith(uri, "default")`: no custom editor or notebook). Never the OS default app. A refusal posts the
+   * one drawer line. Never throws.
+   */
+  private async openMyWorksFile(msg: Extract<WebviewMessage, { type: "myWorksOpen" }>): Promise<void> {
+    if (typeof msg.requestId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId)) return;
+    const refuse = () => this.post({ type: "myWorksOpened", requestId: msg.requestId, ok: false, error: MY_WORKS_OPEN_REFUSED });
+    const cwd = this.currentTaskStore() && this._instructorMode?.isInstructor !== true ? this.resolveCoachCwd() : undefined;
+    const listed = this.worksListed;
+    if (!cwd || !listed || listed.cwd !== cwd || listed.seat !== this.worksSeat()) { await refuse(); return; }
+    const target = resolveMyWorksFile(cwd, msg.path, listed.paths);
+    if (!target.ok) { await refuse(); return; }
+    try {
+      const uri = vscode.Uri.file(target.absPath);
+      if (target.via === "preview") await vscode.commands.executeCommand("hypeproof-chat.previewActiveFile", uri);
+      // Never vscode.open: it would let a custom editor or a notebook renderer take the file (verify-r027).
+      else await vscode.commands.executeCommand("vscode.openWith", uri, MY_WORKS_EDITOR[target.via], { preview: false });
+    } catch { await refuse(); return; }
+    await this.post({ type: "myWorksOpened", requestId: msg.requestId, ok: true });
   }
   /** CGP-KNOW-D-011 (DES-KNOW-20) — one 내 작품 thumbnail, on the same seats as the provenance list. Never throws. */
   private async postArtifactThumbnail(msg: Extract<WebviewMessage, { type: "artifactThumbnailRequest" }>): Promise<void> {
@@ -9175,6 +9215,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "memoryUseRequest": await this.runMemoryUse(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
+      case "myWorksOpen": await this.openMyWorksFile(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "deckPdfReveal": await this.deckPdfReveal(); return;
@@ -9223,6 +9264,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "planFirstRequest": case "planFirstSet": case "planFirstApprove": case "planFirstRedo": case "planFirstDecline": await this.handlePlanFirst(msg); return;
       case "whatsNewRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postWhatsNew(msg.requestId); return;
+      case "voiceTipRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postVoiceTip(msg.requestId, msg.taskEmpty === true); return;
+      case "voiceTipShown": await this.noteVoiceTip(true); return;
+      case "voiceTipDismiss": await this.noteVoiceTip(false); return;
       case "whatsNewShown": {
         if (this._instructorMode.isInstructor) return;
         const notes = learnerNotes(LEARNER_RELEASE_NOTES);
@@ -9335,7 +9379,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case 'requestBudget':{
         const token=await this.context.secrets.get(TOKEN_KEY),selected=this.accessState?.selected;
-        if(token&&selected){try{const sent=await sendBudgetRequest(vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token,selected,msg.note,async(m)=>await confirmOutbound(m)&&await this.context.secrets.get(TOKEN_KEY)===token&&this.accessState?.selected===selected);await this.loadAccess(true);if(this.accessState)this.accessState.notice=sent?'강사에게 추가 사용 요청을 보냈습니다.':'보내지 않았습니다.';}catch(error){if(this.accessState)this.accessState.notice=error instanceof Error?error.message:'요청을 보내지 못했습니다.';}}
+        if(token&&selected){try{const sent=await sendBudgetRequest(vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token,selected,{note:typeof msg.note==='string'?msg.note:undefined,reason:typeof msg.reason==='string'?msg.reason:undefined},async(m)=>await confirmOutbound(m)&&await this.context.secrets.get(TOKEN_KEY)===token&&this.accessState?.selected===selected,fetch,this.accessState?.view?.choices.find(c=>c.id===selected)?.request_policy);await this.loadAccess(true);if(this.accessState)this.accessState.notice=sent?'강사에게 추가 사용 요청을 보냈습니다.':'보내지 않았습니다.';}catch(error){if(this.accessState)this.accessState.notice=error instanceof Error?error.message:'요청을 보내지 못했습니다.';}}
         await this.postConfig();return;
       }
       case "refreshEffort":
@@ -9504,6 +9548,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (typeof msg.on !== "boolean") return;
         await this.setLessonTips(msg.on);
         return;
+      case "setVoiceConversationMode": {
+        // CGP-VOICE-R-026 — kept per computer like the microphone; the default (automatic) is no record. A refused value changes nothing.
+        const next = writeConversationMode(msg.mode);
+        if (next === undefined) return;
+        await this.context.globalState.update(VOICE_CONVERSATION_MODE_KEY, next ?? undefined);
+        await this.postConfig();
+        return;
+      }
       case "setMicInput": {
         // CGP-VOICE-R-019 — kept per computer (the microphone is the PC's), an id and a label only. The label can
         // name a person, so it stays here: never logged, never sent. A refused value changes nothing.
@@ -12364,6 +12416,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * provider made without the constructor (host test harnesses build one with Object.create) never throws in postConfig.
    */
   private lessonTipsPref: LessonTipsPreference | undefined;
+  /**
+   * CGP-VOICE-R-029 — the voice tip is due only for a known seat with 팁 보기 on, not yet shown on this computer,
+   * at the start of a task, never for an instructor. Never throws.
+   */
+  private async postVoiceTip(requestId: string, taskEmpty: boolean): Promise<void> {
+    let show = false;
+    try {
+      const seat = this.lessonTips.currentSeat;
+      // A seat change closes a tip left open for the previous seat, even when no dismiss arrived (hidden panel).
+      if (this.voiceTipOpenSeat !== undefined && this.voiceTipOpenSeat !== seat) this.voiceTipOpenSeat = undefined;
+      show = voiceTipDue(this.context.globalState?.get(VOICE_TIP_KEY), {
+        seat, taskEmpty, instructor: this._instructorMode?.isInstructor === true, openSeat: this.voiceTipOpenSeat,
+        tipsOn: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
+      });
+    } catch { show = false; }
+    await this.post({ type: "voiceTip", requestId, show });
+  }
+  /** CGP-VOICE-R-029 — the seat whose tip is drawn in this window and not closed yet (memory only). */
+  private voiceTipOpenSeat?: string;
+  /**
+   * CGP-VOICE-R-029 — drawn (`open`) or gone: either way this seat has seen the tip. A late "shown" after a close
+   * cannot reopen it (the seat is already recorded). An empty seat stores nothing (it never shows).
+   */
+  private async noteVoiceTip(open: boolean): Promise<void> {
+    // Any dismiss closes it, even one that arrives after a seat switch (the open seat may be the previous one).
+    if (!open) this.voiceTipOpenSeat = undefined;
+    const seat = this.lessonTips.currentSeat;
+    if (!seat) return;
+    const seen = voiceTipStore(this.context.globalState?.get(VOICE_TIP_KEY)).seen.includes(seat);
+    if (open && !seen) this.voiceTipOpenSeat = seat;
+    else if (open && this.voiceTipOpenSeat !== seat) this.voiceTipOpenSeat = undefined;
+    if (seen) return;
+    try { await this.context.globalState.update(VOICE_TIP_KEY, withVoiceTipSeen(this.context.globalState.get(VOICE_TIP_KEY), seat)); } catch { /* the tip stays closed here */ }
+  }
   private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
   /** CGP-SHELL-R-019 — failed runs per lesson step, this window only (memory; nothing stored or sent but the observation). */
   private runFailuresTracker: RunFailureTracker | undefined;
@@ -12480,6 +12566,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
     const micInput = readMicChoice(this.context.globalState?.get(MIC_INPUT_KEY));
+    const voiceConversationMode = readConversationMode(this.context.globalState?.get(VOICE_CONVERSATION_MODE_KEY));
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
     this.lessonTips.forSeat(tipsSeat);
@@ -12531,6 +12618,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
         // CGP-VOICE-R-019 — only when a microphone was chosen: the default config is unchanged.
         ...(micInput ? { micInput } : {}),
+        // CGP-VOICE-R-026 — only when push-to-talk was chosen: the default config is unchanged.
+        ...(voiceConversationMode ? { voiceConversationMode } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).

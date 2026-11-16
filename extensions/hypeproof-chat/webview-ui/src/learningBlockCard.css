@@ -140,7 +140,7 @@
 .hp-playback-scene { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-primary-default); }
 .hp-playback-nav { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
 .hp-playback-nav > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
-.hp-playback-nav > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
+.hp-playback-nav > button[aria-disabled="true"] { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
 @media (forced-colors: active) {
   .hp-box-outer { border-color: CanvasText; }
   .hp-box-margin { border-color: CanvasText; }
