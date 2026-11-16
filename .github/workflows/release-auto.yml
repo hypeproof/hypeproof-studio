@@ -1,0 +1,98 @@
+# Automatic release (Jay 2026-11-16: "출시도 아예 자동으로 됐으면 좋겠어").
+#
+# Promotes the open release PR's rc to stable with no human approval, only when every gate in
+# scripts/release/auto-release.mjs passes on that exact candidate. A failed gate stops the release, comments on
+# the release PR, opens a `release-blocker` issue and posts to #alerts. Something still missing (CI running, the
+# black-box kit not run yet, a live class) waits for the next run.
+#
+# Kill switch: repository variable RELEASE_AUTO. Only "on" enables it:
+#   gh variable set RELEASE_AUTO --body on  --repo hypeproof/hypeproof-studio   # automatic
+#   gh variable set RELEASE_AUTO --body off --repo hypeproof/hypeproof-studio   # manual (approval) only
+# The publish gate reads the same variable, so turning it off also stops a promotion already under way.
+# Decision: hypeprooflab docs/decisions/2026-11-16-studio-auto-release.md.
+name: release-auto
+
+on:
+  workflow_run:
+    workflows: ["Verify and publish Unified Studio"]
+    types: [completed]
+  schedule:
+    - cron: "17 * * * *"   # hourly: picks up evidence comments posted after the rc acceptance
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Release PR number (default: the single open release PR)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: release-auto
+  cancel-in-progress: false
+
+jobs:
+  auto:
+    if: vars.RELEASE_AUTO == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      # The default branch's code decides, not the release branch's.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.1"
+
+      - name: Controls
+        run: node --test scripts/release/test/auto-release.test.mjs scripts/release/test/release-blockers.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
+
+      # A failed or unanswered check leaves the decision empty: the freeze gate then waits (fail closed).
+      - name: Live-class freeze
+        id: live
+        env:
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          HPS_FREEZE_CONTEXT: automatic release (pre-promotion gate)
+        run: node scripts/check-live-sessions.mjs || true
+
+      # The pipeline identity: the only one that may record the automatic authority and merge a release PR.
+      - name: Pipeline token (hypeproof-org-lab-bot)
+        id: bot
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+
+      - name: Release blocker read token (hypeproof-org-lab-bot)
+        id: blockers
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          owner: hypeproof
+          repositories: hypeproof-studio,hypeproof-service,hypeprooflab
+
+      - name: Gates, then promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
+          RELEASE_BLOCKER_TOKEN: ${{ steps.blockers.outputs.token }}
+          RELEASE_AUTO: ${{ vars.RELEASE_AUTO }}
+          LIVE_DECISION: ${{ steps.live.outputs.decision }}
+          DISCORD_WEBHOOK_ALERTS: ${{ secrets.DISCORD_WEBHOOK_ALERTS }}
+          PR: ${{ inputs.pr }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          args=(run --out "$RUNNER_TEMP/auto")
+          if [[ -n "${PR:-}" ]]; then args+=(--pr "$PR"); fi
+          mkdir -p "$RUNNER_TEMP/auto"
+          node scripts/release/auto-release.mjs "${args[@]}"
