@@ -81,15 +81,16 @@ export function depsEvidence({pr, candidate, reporters}) {
 const EVIDENCE = [AUTO_SCHEMA, KIT_SCHEMA, DEPS_SCHEMA, 'hps-blackbox-run/1'];
 const isEvidence = body => EVIDENCE.some(schema => jsonBlock(body, schema));
 
-// Unresolved comments on the release PR. Every comment by someone other than the release machinery, and
-// that is not an evidence record, is a hold until it is hidden on GitHub (any "Hide" reason, e.g.
-// Resolved or Outdated). A review asking for changes is a hold until it is dismissed or superseded by the
-// same reviewer.
+// Unresolved comments on the release PR. Only people hold a release: comments and reviews by the release
+// and agent machinery (config/release-auto.json `machinery`: the pipeline, github-actions and the agent
+// bot, whose diagnosis notes held rc.3 in #4304) never do. Every other comment that is not an evidence
+// record is a hold until it is hidden on GitHub (any "Hide" reason, e.g. Resolved or Outdated). A review
+// asking for changes is a hold until it is dismissed or superseded by the same reviewer.
 //   comments: [{user, body, url, minimized}]; reviews: [{user, state}] in order
 export function holds({comments = [], reviews = []}, exempt) {
   const open = comments.filter(c => !exempt.includes(c.user) && !c.minimized && !isEvidence(c.body));
   const latest = new Map();
-  for (const r of reviews) if (r.state !== 'COMMENTED') latest.set(r.user, r.state);
+  for (const r of reviews) if (r.state !== 'COMMENTED' && !exempt.includes(r.user)) latest.set(r.user, r.state);
   const changes = [...latest].filter(([, s]) => s === 'CHANGES_REQUESTED').map(([u]) => u);
   return {open, changes};
 }

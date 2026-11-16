@@ -61,7 +61,7 @@ test('each failing gate stops the release (FAIL)', () => {
     ['blockers', facts({blockers: {allow: false, blockers: [{url: 'u'}], reasons: ['open release-blocker: u']}})],
     ['blackbox-kit', facts({comments: [kitComment({scenarios: {...Object.fromEntries(SCEN.map(s => [s, 'PASS'])), s3: 'FAIL'}}), depsComment()]})],
     ['release-deps', facts({comments: [kitComment(), depsComment('FAIL')]})],
-    ['holds', facts({comments: [kitComment(), depsComment(), {user: 'hypeproof-agent[bot]', created_at: at(5), body: 'Heads-up before approving: #4204 is missing', url: 'https://x/warn', minimized: false}]})],
+    ['holds', facts({comments: [kitComment(), depsComment(), {user: 'TJ-kr', created_at: at(5), body: 'Heads-up before approving: #4204 is missing', url: 'https://x/warn', minimized: false}]})],
     ['release-pr', facts({structural: {allow: false, reasons: ['#4254: head commit changes a.js, not only releases/v.md']}})],
     ['required-ci', facts({promotion: {mergeState: 'DIRTY'}})],
   ];
@@ -109,6 +109,23 @@ test('holds: a hidden comment, machinery comments and evidence records do not ho
   assert.equal(holds({comments: [kitComment()]}, policy.machinery).open.length, 0);
   assert.deepEqual(holds({reviews: [{user: 'a', state: 'CHANGES_REQUESTED'}]}, policy.machinery).changes, ['a']);
   assert.deepEqual(holds({reviews: [{user: 'a', state: 'CHANGES_REQUESTED'}, {user: 'a', state: 'APPROVED'}]}, policy.machinery).changes, []);
+});
+
+test('holds: only people hold a release; the release and agent machinery never do (#4304)', () => {
+  const note = user => ({user, body: 'Cause of the Windows failure: ... (diagnosis)', url: `https://x/${user}`, minimized: false});
+  // the bug: three hypeproof-agent[bot] diagnosis comments on #4304 held rc.3
+  for (const bot of ['hypeproof-agent[bot]', 'hypeproof-org-lab-bot[bot]', 'github-actions[bot]']) {
+    assert.ok(policy.machinery.includes(bot), bot);
+    assert.equal(holds({comments: [note(bot)]}, policy.machinery).open.length, 0, `${bot} comment`);
+    assert.deepEqual(holds({reviews: [{user: bot, state: 'CHANGES_REQUESTED'}]}, policy.machinery).changes, [], `${bot} review`);
+  }
+  // negative controls: a person still holds, by comment or change request, also next to machinery comments,
+  // and another bot that is not release machinery is not exempt
+  assert.equal(holds({comments: [note('hypeproof-agent[bot]'), note('jayleekr')]}, policy.machinery).open.map(c => c.user).join(), 'jayleekr');
+  assert.deepEqual(holds({reviews: [{user: 'hypeproof-agent[bot]', state: 'CHANGES_REQUESTED'}, {user: 'TJ-kr', state: 'CHANGES_REQUESTED'}]}, policy.machinery).changes, ['TJ-kr']);
+  assert.equal(holds({comments: [note('dependabot[bot]')]}, policy.machinery).open.length, 1);
+  const f = facts({comments: [kitComment(), depsComment(), note('hypeproof-agent[bot]')]});
+  assert.equal(status(autoGates(f, policy), 'holds'), 'PASS');
 });
 
 test('the record the pipeline writes is the authority the publish gate accepts', () => {
