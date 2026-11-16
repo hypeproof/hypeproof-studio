@@ -1,4 +1,4 @@
-// CGP-VOICE-R-018 (REQ-CGPV-22 / DES-CGPV-22, VO-26): the optional start and end sounds, and their switch.
+// CGP-VOICE-R-018 (REQ-CGPV-22, VO-26): the optional start and end sounds, and their switch.
 //
 // VoiceEarcons draws nothing. It listens to the two sources (dictation's recording flag and the conversation's live
 // task) and plays one short WebAudio glide per change that EarconPairs allows: only with this seat's 시작·끝 소리 on

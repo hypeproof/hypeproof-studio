@@ -1,4 +1,4 @@
-// CGP-VOICE-R-018 (REQ-CGPV-22 / DES-CGPV-22, VO-26) — the start and end sounds in the real App on the existing
+// CGP-VOICE-R-018 (REQ-CGPV-22, VO-26) — the start and end sounds in the real App on the existing
 // host/account/disk store (harness from voice-conversation-browser.smoke.mjs: oscillator microphone, fixture Service
 // replies, device TTS callbacks). Earcons are counted by their glide targets (880 Hz start, 587 Hz end) on AudioParam.
 // - 시작·끝 소리 off (the default): a dictation and a whole conversation make no sound;
