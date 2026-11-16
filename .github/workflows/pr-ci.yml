@@ -117,7 +117,7 @@ jobs:
       # without listing it (#3513: promote.test.mjs ran only inside release-promote, and broke unseen).
       - name: Release cut and publish gate controls
         if: ${{ !cancelled() }}
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-manifest.test.mjs scripts/release/test/select-cases.test.mjs scripts/release/test/create.test.mjs scripts/release/test/smoke.test.mjs scripts/release/test/escaped-bug-case.test.mjs scripts/release/test/process-notes.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/release-notes-url.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-manifest.test.mjs scripts/release/test/select-cases.test.mjs scripts/release/test/create.test.mjs scripts/release/test/smoke.test.mjs scripts/release/test/escaped-bug-case.test.mjs scripts/release/test/process-notes.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/release-notes-url.test.mjs scripts/release/test/acceptance-install.test.mjs scripts/release/test/screenshot-review.test.mjs
       - name: Release check gate controls (#3568)
         if: ${{ !cancelled() }}
         run: python3 scripts/release/test/test_release_check_gate.py

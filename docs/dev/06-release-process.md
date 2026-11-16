@@ -363,7 +363,11 @@ node update-check/run.mjs
 
 The last command copies the installed macOS App into a temporary directory. It injects the
 built extension and checks the update command against the public release API. It never
-installs an update. Platform CI runs the macOS swap and rollback fixtures and the Windows
+installs an update. `verify-unified-release.yml` runs it on macOS against each candidate App with
+`HPS_UPDATE_CHECK_SHIPPED=1` (nothing injected, anonymous public API, no token), as a blocking step.
+That proves the shipped updater runs and reads the public release; it is not previous stable -> rc, which
+cannot be offered before publication (the updater reads only the latest published stable release), so
+BB-022 and BB-028 stay manual. Windows is not covered. Platform CI runs the macOS swap and rollback fixtures and the Windows
 PowerShell wrapper with a mocked installer. These do not replace a real upgrade and restart
 of the packaged App on each OS.
 
