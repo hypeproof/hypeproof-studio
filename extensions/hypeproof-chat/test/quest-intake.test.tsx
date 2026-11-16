@@ -36,7 +36,7 @@ t("no offer card without an offer", () => {
 t("the quest card lists ordered steps, highlights the current one and checks only it", () => {
   const html = renderToStaticMarkup(<QuestCard view={{ phase: "quest", quest }} />);
   ok(html.includes("서류 요청 메일 자동화") && html.includes("1 / 3 완료"), "title and count");
-  ok(/data-step-id="step-1"[^>]*>.*✓/.test(html) && /class="hps-quest-step current" data-step-id="step-2" aria-current="step"/.test(html), "done mark and current step");
+  ok(/data-step-id="step-1"[^>]*>.*?data-icon="check"/.test(html) && /class="hps-quest-step current" data-step-id="step-2" aria-current="step"/.test(html), "done mark and current step");
   ok(html.includes("지금 할 단계"), "current label");
   ok(JSON.stringify(buttons(html)) === JSON.stringify(["「Google 연결」 완료", "퀘스트 지도 보기", "목록 접기"]), buttons(html).join("|"));
 });

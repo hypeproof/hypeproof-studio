@@ -2,6 +2,7 @@
 // the state (src/questIntake.ts); this file only draws it and posts the learner's clicks. The questions themselves are
 // ordinary coach replies whose numbered options ReplyChoices already draws.
 import { useEffect, useId, useState } from 'react';
+import { ChatIcon } from './ChatDetails';
 import { onHostMessage, postToHost } from './vscode';
 import { QUEST_CREATE_LABEL, type QuestIntakeView } from '../../src/questIntake';
 import './planFirst.css';
@@ -55,7 +56,7 @@ export function QuestCard({ view }: { view: QuestIntakeView }) {
     </div>
     {open && <ol className="hps-quest-steps">
       {quest.steps.map((step, index) => <li key={step.id} className={`hps-quest-step ${step.status}`} data-step-id={step.id} aria-current={step.status === 'current' ? 'step' : undefined}>
-        <span className="hps-quest-mark" aria-hidden="true">{step.status === 'succeeded' ? '✓' : index + 1}</span>
+        <span className="hps-quest-mark" aria-hidden="true">{step.status === 'succeeded' ? <ChatIcon kind="check" size={16} /> : index + 1}</span>
         <span className="hps-quest-text">
           <span className="hps-quest-label">{step.label}{step.status === 'current' && <span className="hps-quest-now">지금 할 단계</span>}</span>
           {step.description && <span className="hps-quest-desc">{step.description}</span>}
