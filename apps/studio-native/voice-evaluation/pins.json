@@ -1,0 +1,13 @@
+{
+  "rtc_version": "1.2.1",
+  "rtc_source": "https://github.com/livekit/python-sdks/tree/rtc-v1.2.1/livekit-rtc",
+  "server_version": "1.13.11",
+  "server_source": "https://github.com/livekit/livekit/tree/v1.13.11",
+  "assets": [
+    {
+      "name": "livekit_1.13.11_linux_amd64.tar.gz",
+      "browser_download_url": "https://github.com/livekit/livekit/releases/download/v1.13.11/livekit_1.13.11_linux_amd64.tar.gz",
+      "digest": "sha256:1e9ee90ca301e1842b2887fc77cb122759756a9c8aeb4334ee91de3325ec43fb"
+    }
+  ]
+}
