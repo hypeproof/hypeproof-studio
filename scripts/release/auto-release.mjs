@@ -23,6 +23,7 @@
 //   WAIT  something is not there yet (CI running, kit not run, freeze). Nothing is written; the next run retries.
 //   FAIL  a gate observed a failure. One comment on the release PR (updated in place), one open
 //         `release-blocker` issue in Studio (stops every later cut and promotion until closed), #alerts.
+//         The job itself succeeds: the stop is reported, not a machinery error (#4315).
 // Off (RELEASE_AUTO not "on") does nothing at all: releases stay manual (release-promote on approval).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -311,7 +312,10 @@ function run({pr: requested, out}) {
       alert(`Studio auto-release stopped: ${version} ${facts.rcTag} — ${gates.filter(x => x.status === 'FAIL').map(x => x.id).join(', ')}. ${issue} ${runUrl}`);
     }
     say(`Stopped. ${issue}`);
-    finish(1);
+    // The stop is reported (release PR comment, release-blocker issue, #alerts). A red job would only repeat
+    // it as a failed check-run on main's head, which turned the next candidate red (#4315). Machinery errors
+    // (an exception, a failed promotion) still fail the job.
+    finish(0);
   }
 
   // PASS: write the authority record, then promote. promote.mjs and the publish gate both re-check it.
