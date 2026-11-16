@@ -308,8 +308,9 @@ jobs:
           retention-days: 14
   # Visual-breakage review of the acceptance screenshots, once per rc (scripts/release/screenshot-review.mjs).
   # Non-blocking by construction: publish does not need this job, and the job itself may fail. One model call
-  # per OS at most; without the HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY secret the model call is skipped with a
-  # notice and only the free local blank-window check runs. The secret is not created by this workflow.
+  # per OS at most, with the existing acceptance secret HPS_ACCEPTANCE_ANTHROPIC_API_KEY (the unified acceptance
+  # above already spends from it: up to 12 upstream calls per activity per OS). Without it (forks) the model call
+  # is skipped with a notice and only the free local blank-window check runs.
   screenshot-review:
     needs: [candidate, acceptance]
     if: ${{ always() && needs.acceptance.result != 'skipped' }}
@@ -330,7 +331,7 @@ jobs:
           path: receipts
       - name: Review the screenshots
         env:
-          HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY: ${{ secrets.HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
         run: node scripts/release/screenshot-review.mjs --input receipts --out "$RUNNER_TEMP/screenshot-review"
       - uses: actions/upload-artifact@v4
         if: always()

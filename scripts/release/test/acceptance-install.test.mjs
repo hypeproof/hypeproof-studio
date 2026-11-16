@@ -146,6 +146,6 @@ test('verify-unified-release.yml: no self-seeding in acceptance, real install st
   assert.doesNotMatch(publish.slice(0, 400), /screenshot-review/);
   const review = wf.slice(wf.indexOf('\n  screenshot-review:'), wf.indexOf('\n  publish:'));
   assert.match(review, /continue-on-error: true/);
-  assert.match(review, /secrets\.HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY/);
+  assert.match(review, /secrets\.HPS_ACCEPTANCE_ANTHROPIC_API_KEY/);
   assert.equal(jobs.publish === undefined, false);
 });

@@ -8,7 +8,7 @@
 // Two layers, so the free one still works without a key:
 //   1. A deterministic local check per image (blank/black/single-colour window). Always runs.
 //   2. One Claude call per OS, at most, sending that OS's images with a fixed prompt and asking for a JSON
-//      verdict. Skipped with a visible notice when HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY is absent
+//      verdict. Skipped with a visible notice when HPS_ACCEPTANCE_ANTHROPIC_API_KEY is absent
 //      (the secret is named here, not created here).
 // A state is flagged when either layer flags it. The exit code is 0 whatever the verdict (a flag is a
 // warning annotation); only a usage error exits 2.
@@ -21,7 +21,10 @@ import zlib from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 
-export const SECRET_NAME = 'HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY';
+// The existing acceptance secret (also used by unified acceptance, service activities, paid-pass recovery).
+// The workflow maps it to ANTHROPIC_API_KEY for this step; the notice names the secret.
+export const SECRET_NAME = 'HPS_ACCEPTANCE_ANTHROPIC_API_KEY';
+export const KEY_ENV = 'ANTHROPIC_API_KEY';
 export const MODEL = 'claude-sonnet-5-5';
 export const MANIFEST_SCHEMA = 'hps-acceptance-screenshots/1';
 export const REVIEW_SCHEMA = 'hps-screenshot-review/1';
@@ -188,7 +191,7 @@ export function findManifests(dir) {
 async function main() {
   const {values: v} = parseArgs({options: {input: {type: 'string'}, out: {type: 'string'}}, strict: true});
   if (!v.input || !v.out) { console.error('usage: screenshot-review.mjs --input DIR --out DIR'); process.exit(2); }
-  const apiKey = process.env[SECRET_NAME] || '';
+  const apiKey = process.env[KEY_ENV] || '';
   const results = [];
   for (const file of findManifests(v.input)) {
     const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));

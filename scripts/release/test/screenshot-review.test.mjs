@@ -9,7 +9,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {PROMPT, SECRET_NAME, buildRequest, decodePng, localCheck, parseVerdict, reviewOs, summaryTable, findManifests, MAX_IMAGES} from '../screenshot-review.mjs';
+import {PROMPT, SECRET_NAME, KEY_ENV, buildRequest, decodePng, localCheck, parseVerdict, reviewOs, summaryTable, findManifests, MAX_IMAGES} from '../screenshot-review.mjs';
 
 const crcTable = Array.from({length: 256}, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
 const crc = buf => { let c = 0xffffffff; for (const b of buf) c = crcTable[(c ^ b) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
@@ -135,10 +135,10 @@ test('CLI: reads manifests, writes the JSON and the table, exits 0 even when fla
     fs.writeFileSync(path.join(mac, 'screenshots-manifest.json'), JSON.stringify({schema: 'hps-acceptance-screenshots/1', os: 'darwin-arm64', appVersion: '1', viewport: {width: 160, height: 100}, states}));
     assert.equal(findManifests(path.join(dir, 'in')).length, 1);
     const script = fileURLToPath(new URL('../screenshot-review.mjs', import.meta.url));
-    const env = {...process.env, [SECRET_NAME]: '', GITHUB_STEP_SUMMARY: path.join(dir, 'summary.md')};
+    const env = {...process.env, [KEY_ENV]: '', GITHUB_STEP_SUMMARY: path.join(dir, 'summary.md')};
     const r = spawnSync(process.execPath, [script, '--input', path.join(dir, 'in'), '--out', path.join(dir, 'out')], {env, encoding: 'utf8'});
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /::notice::Screenshot review: HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY is not set/);
+    assert.match(r.stdout, /::notice::Screenshot review: HPS_ACCEPTANCE_ANTHROPIC_API_KEY is not set/);
     assert.match(r.stdout, /::warning::Screenshot review flagged darwin-arm64\/settings: blank_or_black_window/);
     const review = JSON.parse(fs.readFileSync(path.join(dir, 'out/screenshot-review.json'), 'utf8'));
     assert.deepEqual([review.schema, review.gates_publish, review.results[0].verdict], ['hps-screenshot-review/1', false, 'flagged']);
