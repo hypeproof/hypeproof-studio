@@ -2295,7 +2295,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private questIntakeEligible(profile: ResolvedProfile | null | undefined): { eligible: boolean; maxQuestions: number } {
     const policy = questIntakePolicy(profile);
-    const eligible = !!profile && policy.enabled && !!this.currentTaskStore?.() && !profile.lesson && !isMinorProfile(profile)
+    const eligible = !!profile && policy.enabled && !!this.currentTaskStore?.() && !profile.lesson && !profile.lesson_binding?.enforced && !isMinorProfile(profile)
       && this._instructorMode.isInstructor !== true && !this.inTemporaryTask() && profile.automations?.enabled !== true;
     return { eligible, maxQuestions: policy.maxQuestions };
   }
@@ -10534,7 +10534,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the line only tells the coach how many questions are left.
     const questTask = this.planTaskKey();
     const questGuide = mode === 'auto' && !plan.planning && !conversationOnly && !carriesAnnotations
-      ? this.questIntake.beginTurn(questTask, text, { ...this.questIntakeEligible(profile), firstTurn: history.length === 0, fresh: retrySourceId === undefined && !editOf })
+      ? this.questIntake.beginTurn(questTask, text, { ...this.questIntakeEligible(profile), firstTurn: history.length === 0, fresh: retrySourceId === undefined && !editOf, edited: !!editOf })
       : null;
     if (questGuide) userTextForModel = `${userTextForModel}\n\n${questGuide}`;
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");

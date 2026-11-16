@@ -142,6 +142,7 @@ import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { QuestCard, QuestOfferCard, useQuestIntake } from "./QuestIntake";
+import { questChoicesAllowed } from "../../src/questIntake";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -2212,7 +2213,7 @@ export function ChatPanel(props: Props) {
               nextStepsMode={compactLayout && m.role === "assistant" ? (streaming && m.id === streamingId ? "streaming" : nextStepChips && m.id === lastSpoken?.id ? "strip" : undefined) : undefined}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
-              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
+              onPickReply={personalWorkspace && questChoicesAllowed(questIntake) && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
               replyTyping={composing || draft.length > 0}
               replySelectionValid={lastReplyChoice.current?.messageId === m.id}

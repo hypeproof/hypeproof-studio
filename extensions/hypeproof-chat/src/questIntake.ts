@@ -45,6 +45,8 @@ interface TaskIntake {
   max: number;
   /** Questions left when the latest coach turn started: 0 means that reply must end in the offer. */
   remaining: number;
+  /** The latest reply was counted as a question: a retry of it gives that question back. */
+  counted?: boolean;
   summary?: string;
   offerId?: string;
   error?: string;
@@ -137,7 +139,7 @@ export function questGenerationPrompt(state: { summary: string; intent: string; 
 function safeText(value: unknown, max: number): string {
   if (typeof value !== 'string') return '';
   const text = oneLine(value
-    .replace(/(?:https?:\/\/|www\.)\S+|mailto:\S+/gi, '')
+    .replace(/(?:https?:|mailto:)\S*|www\.\S+/gi, '')
     .replace(/[\w.+-]+@[\w.-]+/g, '')
     .replace(/\d{7,}/g, '')
     .replace(/[A-Za-z0-9_-]{40,}/g, '')
@@ -164,6 +166,11 @@ export function questFromModel(text: string, fallbackTitle: string): AutomationQ
   } catch {
     return null;
   }
+}
+
+/** While the offer waits (or the quest is being made) the numbered-answer UI is not drawn: no question is left. */
+export function questChoicesAllowed(view: Pick<QuestIntakeView, 'phase'>): boolean {
+  return view.phase !== 'offered' && view.phase !== 'generating';
 }
 
 export interface QuestIntakePorts {
@@ -199,7 +206,7 @@ export class QuestIntakeSession {
    * Called as a coach turn starts. Returns the model-only guidance to append to the learner's text, or null.
    * `fresh` is false for a retry or an edited resend: the text is not a new answer and nothing is recorded.
    */
-  beginTurn(task: string | null, text: string, ctx: { eligible: boolean; firstTurn: boolean; fresh: boolean; maxQuestions: number }): string | null {
+  beginTurn(task: string | null, text: string, ctx: { eligible: boolean; firstTurn: boolean; fresh: boolean; edited?: boolean; maxQuestions: number }): string | null {
     if (!task || !ctx.eligible) return null;
     let state = this.tasks[task];
     if (!state) {
@@ -209,19 +216,29 @@ export class QuestIntakeSession {
       return clarifyGuidance(state.remaining, state.max, true);
     }
     if (state.phase === 'clarifying') {
-      if (ctx.fresh && state.questions > 0) state.answers.push(clip(text.trim(), ANSWER_MAX));
+      // A retry or edit replaces the latest reply: the question it counted is given back.
+      if (!ctx.fresh && state.counted) { state.questions = Math.max(0, state.questions - 1); state.counted = false; }
+      if (ctx.edited) this.replaceLatest(state, text);
+      else if (ctx.fresh && state.questions > 0) state.answers.push(clip(text.trim(), ANSWER_MAX));
       state.remaining = Math.max(0, state.max - state.questions);
       this.save();
       return clarifyGuidance(state.remaining, state.max, state.questions === 0);
     }
     if (state.phase === 'offered') {
       state.remaining = 0;
-      if (ctx.fresh) state.answers.push(clip(text.trim(), ANSWER_MAX));
+      if (ctx.edited) this.replaceLatest(state, text);
+      else if (ctx.fresh) state.answers.push(clip(text.trim(), ANSWER_MAX));
       this.save();
       return OFFERED_GUIDANCE;
     }
     if (state.phase === 'quest' && state.quest) return questGuidance(state.quest);
     return null;
+  }
+
+  /** An edited resend of the learner's latest message: the generation prompt uses the edited words. */
+  private replaceLatest(state: TaskIntake, text: string): void {
+    if (state.answers.length) state.answers[state.answers.length - 1] = clip(text.trim(), ANSWER_MAX);
+    else state.intent = clip(text.trim(), INTENT_MAX);
   }
 
   /** Called with the finished coach answer of a turn that `beginTurn` guided. True when the view changed. */
@@ -239,13 +256,14 @@ export class QuestIntakeSession {
     // The first reply of a task that neither asked nor summarised answered an ordinary request, even with no question allowed.
     const ordinaryFirst = !summary && state.questions === 0 && state.answers.length === 0 && !looksLikeQuestion(answer);
     if (!summary && (state.remaining > 0 || ordinaryFirst)) {
-      if (looksLikeQuestion(answer)) { state.questions++; this.save(); return false; }
+      if (looksLikeQuestion(answer)) { state.questions++; state.counted = true; this.save(); return false; }
       // The coach neither asked nor summarised: an ordinary request, answered. Leave the task alone.
       state.phase = 'off';
       this.save();
       return false;
     }
     // A summary, or a reply on a turn with no question left (whatever it says), ends in the offer.
+    state.counted = false;
     state.phase = 'offered';
     state.offerId = this.ports.newId();
     state.summary = summary ?? clip(oneLine([state.intent, ...state.answers].join(' · ')), SUMMARY_MAX);

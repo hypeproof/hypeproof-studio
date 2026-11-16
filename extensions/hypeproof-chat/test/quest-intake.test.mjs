@@ -3,7 +3,7 @@
 //   node --experimental-strip-types --test test/quest-intake.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { QuestIntakeSession, questIntakePolicy, parseGoalSummary, questFromModel, questGenerationPrompt } from '../src/questIntake.ts';
+import { QuestIntakeSession, questIntakePolicy, parseGoalSummary, questFromModel, questGenerationPrompt, questChoicesAllowed } from '../src/questIntake.ts';
 import { renderQuestHtml, LEARNER_QUEST_COPY } from '../src/automationQuest.ts';
 
 let ids = 0;
@@ -181,4 +181,34 @@ test('the quest canvas uses quest copy, not the automation wording', () => {
   assert.match(html, /data-node-id="step-1"[^>]*aria-current="step"/);
   assert.doesNotMatch(html, /AUTOMATION WORKFLOW/);
   assert.match(renderQuestHtml(quest), /AUTOMATION WORKFLOW/, 'existing callers keep their copy');
+});
+
+test('a retry gives back the question its reply counted; an edit replaces the latest answer', () => {
+  const s = session();
+  s.beginTurn('t', '메일 자동화', seat({ firstTurn: true }));
+  s.afterReply('t', QUESTION);
+  // "다시 받기" of question 1: still two questions in total.
+  assert.match(s.beginTurn('t', '메일 자동화', seat({ fresh: false })), /지금 2개 남음/);
+  s.afterReply('t', QUESTION);
+  assert.match(s.beginTurn('t', '일정 안내', seat()), /지금 1개 남음/);
+  s.afterReply('t', QUESTION);
+  // The learner edits that answer: the question is given back and the edited words replace the old ones.
+  assert.match(s.beginTurn('t', '서류 제출 요청', seat({ fresh: false, edited: true })), /지금 1개 남음/);
+  s.afterReply('t', SUMMARY);
+  const prompt = s.startGeneration('t', s.viewFor('t').offerId);
+  assert.match(prompt, /- 서류 제출 요청/);
+  assert.doesNotMatch(prompt, /일정 안내/);
+});
+
+test('the numbered-answer UI is not drawn while the offer waits or the quest is being made', () => {
+  assert.equal(questChoicesAllowed({ phase: 'offered' }), false);
+  assert.equal(questChoicesAllowed({ phase: 'generating' }), false);
+  assert.equal(questChoicesAllowed({ phase: 'clarifying' }), true);
+  assert.equal(questChoicesAllowed({ phase: 'quest' }), true);
+  assert.equal(questChoicesAllowed({ phase: null }), true);
+});
+
+test('a bare scheme without slashes is cleaned instead of failing the quest', () => {
+  const quest = questFromModel(JSON.stringify({ steps: [{ title: '자료 모으기 https:example', description: 'mailto:x 참고' }, { title: '초안' }] }), 'x');
+  assert.deepEqual(quest.nodes.map(node => node.label), ['자료 모으기', '초안']);
 });
