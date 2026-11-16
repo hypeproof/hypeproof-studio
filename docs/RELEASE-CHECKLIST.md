@@ -13,7 +13,46 @@ The previous checklist for v0.1.0 is archived in
       `hypeprooflab`. release-cut (create) and release-promote list them and stop
       (`scripts/release/release-blockers.mjs`). Raise one with Harness `scripts/release/flag-blocker.sh`; close it when
       fixed. Never remove the label to pass the gate.
-- [ ] Never merge a release PR by hand or by an agent. release-promote merges it after the approval.
+- [ ] Never merge a release PR by hand or by an agent. Only the release pipeline (`hypeproof-org-lab-bot` in
+      release-auto or release-promote) merges it.
+
+## Automatic release
+
+When the repository variable `RELEASE_AUTO` is `on`, `release-auto.yml` promotes the open release PR's rc to stable
+with no approval, but only when every gate in `scripts/release/auto-release.mjs` passes on that exact candidate:
+
+- required CI
+- acceptance on every configured platform
+- notarization
+- no `release-blocker` issue
+- the black-box kit record (`hps-blackbox-kit/1`)
+- the casebook P0 run
+- no unhidden comment
+- the release-deps record (`hps-release-deps/1`)
+- no live class
+
+A failed gate comments on the release PR, opens a `release-blocker` issue and posts to #alerts. Missing evidence
+waits for the next hourly run. Hide a handled comment as Resolved, or it holds the release.
+Off switch: `gh variable set RELEASE_AUTO --body off --repo hypeproof/hypeproof-studio`. The publish gate reads it
+too. With the variable off, the steps below (approval) apply unchanged.
+
+**When the release is not automatic, the whole team is asked.** This happens when a gate failed, when evidence is
+still missing six hours after the head commit, or when the switch is off. The pipeline then:
+- posts an `hps-release-ask/1` comment on the release PR that @mentions all eight members, so GitHub emails each one;
+- requests reviews from the release approvers (`releaseApprovers` in `config/release-auto.json`; canon: Harness
+  `policy/authority.yaml`, area `studio-desktop-release`).
+
+Harness `scripts/notify/stakeholders.py` relays the same ask to #team (one card mentioning everyone), by Discord DM,
+by email when enabled, and to the approval inbox.
+
+Only a release approver's review on the current head counts:
+- Approve releases.
+- Request changes holds.
+- The first such answer wins, and a new head voids older answers.
+
+**After publication** the pipeline checks that `releases/download/<tag>/sdk-seed.json` answers 200 and that every
+tarball it lists is on the release. Then it posts "출시됨 vX" for the whole team (`hps-release-published/1`).
+A failed check opens a `release-blocker` issue and posts to #alerts.
 - [ ] Make sure that the PRs for this release are merged into `main`. Later merges go to
       the next release.
 - [ ] Select the release manager for this week. The release manager is a member with

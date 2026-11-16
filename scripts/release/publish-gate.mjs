@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {appliesToTarget, parseYaml, validateTarget} from './casebook.mjs';
 import {SCHEMA, extractRun, validateRun} from './validate-blackbox-run.mjs';
+import {autoAuthority} from './auto-release-record.mjs';
 
 const APP_STABLE = /^v\d+\.\d+\.\d+$/;
 
@@ -92,12 +93,22 @@ export function casebookEvidence({number, head, headDate, p0 = [], comments = []
     + (notes.length ? ` [${notes.slice(-3).join('; ')}]` : '')]};
 }
 
+// The first APPROVED or CHANGES_REQUESTED review on `head` by someone in `allowed` (all when null).
+// Reviews on an earlier head are void: a new candidate needs a new answer.
+export function firstDecisive(reviews = [], head, allowed) {
+  return reviews.find(r => r.commit === head && (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED')
+    && (!allowed || allowed.has(r.user))) ?? null;
+}
+
 // Pure decision. Every input is already fetched.
 //   releasePrs: [{number, labels, head, headDate, comments, reviews: [{user, state, commit}]}] in review order
 //   p0:         P0 case ids of the tag's casebook (p0CaseIds); undefined refuses the approval route
 //   writers:    Set of logins with write access (only reviewers need to be in it)
 //   rangePrs:   [{sha, prs: [{number, labels, base, mergeCommit}]}]; rangeTooLong: commit count when not read
-export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new Set(), p0, previous, rangePrs = [], rangeTooLong}) {
+//   auto:       {enabled, pipeline: [login]}: with RELEASE_AUTO=on, an hps-auto-release/1 record from the
+//               pipeline identity at the PR head (every gate PASS on this candidate) stands in for the
+//               approval (route `auto`). The casebook rule still applies.
+export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new Set(), p0, previous, rangePrs = [], rangeTooLong, auto}) {
   if (tag.includes('-')) return {allow: true, route: 'prerelease', casebook: 'prerelease',
     notesLine: 'Release casebook: rc prerelease; the casebook gate (P0 run or release manager override) applies when the stable tag is published.',
     reasons: ['prerelease tag; the in-app updater ignores it']};
@@ -109,18 +120,34 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
     const states = latestReviewStates(pr.reviews, pr.head);
     const approvers = [...states].filter(([, s]) => s === 'APPROVED').map(([u]) => u);
     const stale = [...states].filter(([, s]) => s === 'STALE').map(([u]) => u);
-    const writerApprovers = approvers.filter(u => writers.has(u));
-    if (!writerApprovers.length) {
+    // Only the release approvers' answers count (config/release-auto.json releaseApprovers; canon: Harness
+    // policy/authority.yaml area studio-desktop-release). The first decisive answer on the current head wins:
+    // a "Request changes" before any approval holds the release even if someone approves later.
+    const allowed = auto?.approvers?.length ? new Set(auto.approvers) : null;
+    const first = firstDecisive(pr.reviews, pr.head, allowed ?? writers);
+    if (first?.state === 'CHANGES_REQUESTED') {
+      reasons.push(`#${pr.number}: held by ${first.user} (Request changes on the current head; first answer wins)`);
+      continue;
+    }
+    const writerApprovers = approvers.filter(u => writers.has(u) && (!allowed || allowed.has(u)));
+    let route = writerApprovers.length ? 'approval' : null;
+    let authorityReason = writerApprovers.length ? `#${pr.number} approved by ${writerApprovers.join(', ')}` : '';
+    if (!route && auto?.enabled) {
+      const a = autoAuthority({pr, candidate: tagSha, pipeline: auto.pipeline ?? []});
+      if (a.ok) { route = 'auto'; authorityReason = a.reason; } else reasons.push(a.reason);
+    }
+    if (!route) {
       reasons.push(`#${pr.number}: no current approval from a writer${approvers.length ? ` (approved by ${approvers.join(', ')})` : ''}`
-        + (stale.length ? `; ${stale.join(', ')} approved an earlier candidate` : ''));
+        + (stale.length ? `; ${stale.join(', ')} approved an earlier candidate` : '')
+        + (auto?.enabled ? '' : '; automatic release is off (RELEASE_AUTO)'));
       continue;
     }
     if (!rcAtTag.length) { reasons.push(`#${pr.number}: approved, but no ${tag}-rc.N tag points at ${tagSha.slice(0, 8)}`); continue; }
     if (!Array.isArray(p0)) { reasons.push(`#${pr.number}: approved, but the casebook P0 list was not read`); continue; }
     const evidence = casebookEvidence({number: pr.number, head: pr.head, headDate: pr.headDate, p0, comments: pr.comments ?? [], approvers: writerApprovers});
     if (!evidence.ok) { reasons.push(...evidence.reasons); continue; }
-    return {allow: true, route: 'approval', casebook: evidence.path, notesLine: evidence.line,
-      reasons: [`#${pr.number} approved by ${writerApprovers.join(', ')}; ${rcAtTag.join(', ')} at the same commit`, ...evidence.reasons]};
+    return {allow: true, route, casebook: evidence.path, notesLine: evidence.line,
+      reasons: [`${authorityReason}; ${rcAtTag.join(', ')} at the same commit`, ...evidence.reasons]};
   }
   if (!releasePrs.length) reasons.push(`approval: no PR from release/${tag}`);
 
@@ -165,7 +192,17 @@ export function gatherApproval({tag, repo}) {
   }
   // The tag's own casebook: a P0 added on main after the cut is the next release's.
   const p0 = p0CaseIds(parseYaml(git('show', `${tagSha}:${CASEBOOK}`), CASEBOOK)?.cases ?? []);
-  return {tag, tagSha, rcTags, releasePrs, writers, p0};
+  return {tag, tagSha, rcTags, releasePrs, writers, p0, auto: autoSetting()};
+}
+
+// RELEASE_AUTO (repository variable, passed as env by the workflows) is the kill switch: only "on" enables it.
+export function autoSetting(env = process.env) {
+  let pipeline = [], approvers = [];
+  try {
+    const cfg = JSON.parse(fs.readFileSync(new URL('../../config/release-auto.json', import.meta.url), 'utf8'));
+    pipeline = cfg.pipeline ?? []; approvers = cfg.releaseApprovers ?? [];
+  } catch { pipeline = []; approvers = []; }
+  return {enabled: env.RELEASE_AUTO === 'on' && pipeline.length > 0, pipeline, approvers};
 }
 
 // Only read when the approval route fails. A hotfix range is a few commits; a longer one is not a

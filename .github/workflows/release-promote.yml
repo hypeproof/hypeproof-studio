@@ -84,6 +84,7 @@ jobs:
           RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
           RELEASE_BLOCKER_TOKEN: ${{ steps.blockers.outputs.token }}
           PR: ${{ inputs.pr || github.event.pull_request.number }}
+          RELEASE_AUTO: ${{ vars.RELEASE_AUTO }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
