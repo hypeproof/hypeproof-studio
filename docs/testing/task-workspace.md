@@ -624,3 +624,20 @@ A real coach shell command and the packaged app are not run here.
 **Red on the base.** The smoke fails without the mode module, and the App has no switch.
 
 **Mutants.** Five fail a test: a reopen after the answer, a sticky fallback, an uncaught detector failure, silence ending a hold, and no blur release. Release outside the button is guarded twice, by pointer capture and by a window `pointerup` listener. Removing either alone still passes because the other holds; removing both fails the release-outside case.
+
+## Which Korean voice reads (read-aloud)
+
+`test/read-aloud-voice.smoke.mjs` has no DOM.
+- It pins Jay's measured Mac list: the old first-match rule picks Eloquence Eddy, and the new ranking picks the compact Yuna.
+- It checks the tiers by voiceURI, including Eloquence names without a URI.
+- It checks the choice: premium over enhanced and compact, although all are named Yuna; Windows Heami; Eloquence as a last resort; no Korean voice; never a server voice; the default, then the voice used last time, as tie-breakers; a newly downloaded premium voice beats the stored compact one.
+- It drives the real `ReadAloud`: it reads with the pick and reports it once per change.
+- It covers the host's report check, the one diagnostic line and the per-computer store.
+
+`test/read-aloud-voice.test.tsx` renders the real `ReadAloudButton`.
+- A Mac with only the compact Yuna shows the hint on the first reading and records it on the host; a later reading shows none, and 닫기 hides it.
+- There is no hint when the host already recorded it.
+- The hint rule holds by tier and platform.
+- A premium voice reads where one is installed, and Windows reads with Heami.
+
+Six mutants each fail one of the two tests: the first-match rule, no premium tier, the name deciding the tier, no Eloquence names, no host record of the hint, and the hint off a Mac. Not run: a Mac with a downloaded premium voice, and a real Windows machine.

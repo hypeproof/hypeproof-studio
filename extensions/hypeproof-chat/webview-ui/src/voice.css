@@ -199,3 +199,7 @@
 @media (forced-colors: active) {
   .hps-voice-sounds-setting-hint { color: CanvasText; }
 }
+
+/* ---- Read-aloud voice hint (macOS, one time): one sentence and 닫기 in the answer row, wrapping at 320px; the caption
+   step (14px), a 44px 닫기 with the answer-action focus ring; nothing animates. ---- */
+.hps-voice-hint { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; word-break: keep-all; animation: none; transition: none; }

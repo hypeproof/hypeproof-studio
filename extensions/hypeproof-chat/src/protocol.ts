@@ -180,6 +180,10 @@ export interface ChatConfig {
    * label can name a person, so it is never logged, sent to the Service or put in a problem report.
    */
   micInput?: { id: string; label: string };
+  /** Read-aloud: the voiceURI this computer read with last time (a tie-breaker); absent before the first reading. */
+  readAloudVoice?: string;
+  /** Read-aloud: the one-time macOS "better Korean voice" hint was shown on this computer. */
+  readAloudVoiceHintShown?: true;
   /** CGP-VOICE-R-026: the voice conversation's capture mode on this computer; absent for the default (automatic end of speech). */
   voiceConversationMode?: "push_to_talk";
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
@@ -845,6 +849,10 @@ export type WebviewMessage = (
   | { type: "setVoiceSounds"; on: boolean }
   /** CGP-VOICE-R-019 — the learner picked a microphone (null: 시스템 기본값); the host keeps it for this computer. */
   | { type: "setMicInput"; choice: { id: string; label: string } | null }
+  /** Read-aloud picked a voice (once per change): kept for this computer, and one diagnostic line. */
+  | { type: "readAloudVoicePicked"; uri: string | null; name: string; tier: string | null; candidates: number }
+  /** The one-time macOS voice hint was shown; it is not shown again on this computer. */
+  | { type: "readAloudVoiceHintShown" }
   /** CGP-VOICE-R-026 — the learner chose how the voice conversation captures ("auto" is the default); kept for this computer. */
   | { type: "setVoiceConversationMode"; mode: "auto" | "push_to_talk" }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */

@@ -325,6 +325,7 @@ import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
 import { VOICE_TIP_KEY, voiceTipDue, voiceTipStore, withVoiceTipSeen } from "./voiceTip";
 import { VOICE_SOUNDS_KEY, VoiceSoundsPreference } from "./voiceSounds";
 import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
+import { READ_ALOUD_VOICE_HINT_KEY, READ_ALOUD_VOICE_KEY, acceptVoicePick, readStoredVoiceUri, voicePickLine } from "./readAloudVoicePrefs";
 import { VOICE_CONVERSATION_MODE_KEY, readConversationMode, writeConversationMode } from "./voiceConversationMode";
 import { RunFailureTracker, hintSeatFor, joinTurnContext } from "./runFailureHint";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
@@ -9571,6 +9572,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postConfig();
         return;
       }
+      case "readAloudVoicePicked": {
+        // Read-aloud voice choice: the picked voiceURI is kept for this computer; one read-only diagnostic line.
+        const pick = acceptVoicePick(msg);
+        if (!pick) return;
+        this.coachLine(voicePickLine(pick));
+        if (pick.uri) await this.context.globalState.update(READ_ALOUD_VOICE_KEY, pick.uri);
+        return;
+      }
+      case "readAloudVoiceHintShown":
+        await this.context.globalState.update(READ_ALOUD_VOICE_HINT_KEY, true);
+        await this.postConfig();
+        return;
       case "setMicInput": {
         // CGP-VOICE-R-019 — kept per computer (the microphone is the PC's), an id and a label only. The label can
         // name a person, so it stays here: never logged, never sent. A refused value changes nothing.
@@ -12584,6 +12597,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
     const micInput = readMicChoice(this.context.globalState?.get(MIC_INPUT_KEY));
+    const readAloudVoice = readStoredVoiceUri(this.context.globalState?.get(READ_ALOUD_VOICE_KEY));
+    const readAloudVoiceHintShown = this.context.globalState?.get(READ_ALOUD_VOICE_HINT_KEY) === true;
     const voiceConversationMode = readConversationMode(this.context.globalState?.get(VOICE_CONVERSATION_MODE_KEY));
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
@@ -12638,6 +12653,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         voiceSounds: this.voiceSounds.on(this.context.globalState?.get(VOICE_SOUNDS_KEY)),
         // CGP-VOICE-R-019 — only when a microphone was chosen: the default config is unchanged.
         ...(micInput ? { micInput } : {}),
+        // Read-aloud voice: present only once set, so the default config is unchanged.
+        ...(readAloudVoice ? { readAloudVoice } : {}),
+        ...(readAloudVoiceHintShown ? { readAloudVoiceHintShown: true as const } : {}),
         // CGP-VOICE-R-026 — only when push-to-talk was chosen: the default config is unchanged.
         ...(voiceConversationMode ? { voiceConversationMode } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.

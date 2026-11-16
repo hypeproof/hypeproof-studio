@@ -72,6 +72,7 @@ const OVERRIDES = {
   "memory-write-line": { banner: BANNER_POSTED },
   "voice-ui": { banner: BANNER_POSTED_STATE },
   "dictation-recovery": { banner: BANNER_POSTED_STATE },
+  "read-aloud-voice": { banner: BANNER_POSTED_STATE },
   "mic-input": { banner: BANNER_POSTED_STATE },
   "voice-mount": { banner: BANNER_POSTED },
   "voice-mute": { banner: BANNER_POSTED },

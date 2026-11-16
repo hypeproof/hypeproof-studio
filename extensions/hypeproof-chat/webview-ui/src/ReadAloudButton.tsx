@@ -17,9 +17,24 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useVoice } from "./VoiceProvider";
-import { CLASS_OFF, OUTPUT_OFF, READ_ALOUD_BLOCKED, READ_ALOUD_LABEL, READ_ALOUD_RESUME, READ_ALOUD_OUTPUT_OFF, READ_ALOUD_PLAYING, READ_ALOUD_STOP, READ_ALOUD_UNAVAILABLE } from "../../src/voiceCopy";
+import { postToHost } from "./vscode";
+import { CLOSE, READ_ALOUD_VOICE_HINT, CLASS_OFF, OUTPUT_OFF, READ_ALOUD_BLOCKED, READ_ALOUD_LABEL, READ_ALOUD_RESUME, READ_ALOUD_OUTPUT_OFF, READ_ALOUD_PLAYING, READ_ALOUD_STOP, READ_ALOUD_UNAVAILABLE } from "../../src/voiceCopy";
 import { windowOutputMute } from "../../src/voiceOutputMute";
-import { ReadAloud, type SpeechEnv } from "../../src/voiceReadAloud";
+import { ReadAloud, type KoreanVoicePick, type SpeechEnv } from "../../src/voiceReadAloud";
+
+/**
+ * This computer's read-aloud voice preferences, from the host's config (App sets them): the voiceURI read with last time
+ * (a tie-breaker among equally good voices) and whether the one-time macOS hint was already shown.
+ */
+const voicePrefs: { uri: string | null; hintShown: boolean } = { uri: null, hintShown: false };
+export function setReadAloudVoicePrefs(config: { readAloudVoice?: string; readAloudVoiceHintShown?: true } | null | undefined): void {
+  voicePrefs.uri = typeof config?.readAloudVoice === "string" ? config.readAloudVoice : null;
+  voicePrefs.hintShown = config?.readAloudVoiceHintShown === true;
+}
+/** Tell the host which voice reads (it keeps the voiceURI and writes one diagnostic line). OS voice data only. */
+export function reportVoicePick(pick: KoreanVoicePick): void {
+  postToHost({ type: "readAloudVoicePicked", uri: pick.voice?.voiceURI ?? null, name: pick.voice?.name ?? "", tier: pick.tier, candidates: pick.candidates });
+}
 
 /** The browser's synthesizer. Tests replace this with a scripted one. */
 export function browserSpeechEnv(): SpeechEnv {
@@ -27,8 +42,19 @@ export function browserSpeechEnv(): SpeechEnv {
   return {
     synth: synth as unknown as SpeechEnv["synth"],
     makeUtterance: (text) => new SpeechSynthesisUtterance(text) as unknown as ReturnType<SpeechEnv["makeUtterance"]>,
+    preferredVoiceUri: () => voicePrefs.uri,
+    onVoicePicked: reportVoicePick,
   };
 }
+
+const isMac = () => typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent) && !/iPhone|iPad/i.test(navigator.userAgent);
+/** The hint is for a Mac whose best Korean voice is the compact Yuna, a novelty voice or none: a better one can be downloaded. */
+export function needsVoiceHint(pick: KoreanVoicePick | null, mac: boolean): boolean {
+  if (!mac || !pick) return false;
+  return pick.tier === null || pick.tier === "compact" || pick.tier === "novelty";
+}
+/** Shown at most once per window, and never again once the host recorded it for this computer. */
+let hintShownThisWindow = false;
 export const SpeechEnvContext = createContext<() => SpeechEnv>(browserSpeechEnv);
 
 /** One hub for the window, so a second answer stops the first. It obeys the window's speaker switch (CGP-VOICE-R-002). */
@@ -65,6 +91,7 @@ export function ReadAloudButton({ answerId, content }: { answerId: string; conte
   // The speaker switch is read only when read-aloud is served: an unserved seat subscribes to nothing.
   const outputMuted = useSyncExternalStore(hub ? windowOutputMute.subscribe : noSubscribe, hub ? windowOutputMute.getMuted : unmuted, hub ? windowOutputMute.getMuted : unmuted);
   const [note, setNote] = useState("");
+  const [hint, setHint] = useState(false);
   const playing = status.kind === "playing" && status.id === answerId;
   const blocked = status.kind === "blocked" && status.id === answerId;
   // An answer that goes away, or voice that goes off, stops its own reading (a no-op when it is not playing).
@@ -84,7 +111,14 @@ export function ReadAloudButton({ answerId, content }: { answerId: string; conte
   }
   const press = () => {
     if (playing) { hub.stop(); setNote(""); return; }
-    voice.gate(() => { const result = hub.play(answerId, content); setNote(result.note ?? ""); });
+    voice.gate(() => {
+      const result = hub.play(answerId, content); setNote(result.note ?? "");
+      // One-time macOS hint: only the compact or novelty Korean voices exist here. Recorded on the host once shown.
+      if (!voicePrefs.hintShown && !hintShownThisWindow && needsVoiceHint(hub.lastPick, isMac())) {
+        hintShownThisWindow = true; voicePrefs.hintShown = true; setHint(true);
+        postToHost({ type: "readAloudVoiceHintShown" });
+      }
+    });
   };
   return (
     <>
@@ -93,6 +127,12 @@ export function ReadAloudButton({ answerId, content }: { answerId: string; conte
       </button>
       <span className="hps-sr-only" role="status">{playing ? READ_ALOUD_PLAYING : blocked ? READ_ALOUD_BLOCKED : ""}{note ? ` ${note}` : ""}</span>
       {note && <span className="hps-voice-skipped">{note}</span>}
+      {hint && (
+        <span className="hps-voice-hint" role="note">
+          <span>{READ_ALOUD_VOICE_HINT}</span>
+          <button type="button" className="hps-answer-action hps-voice-hint-close" onClick={() => setHint(false)}><span>{CLOSE}</span></button>
+        </span>
+      )}
       {blocked && (
         <span className="hps-voice-blocked">
           <span>{READ_ALOUD_BLOCKED}</span>

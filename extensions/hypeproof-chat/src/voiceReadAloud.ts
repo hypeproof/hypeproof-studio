@@ -10,7 +10,7 @@ export const READ_ALOUD_LANG = "ko-KR";
 /** One utterance per chunk: long utterances are cut off by some engines. */
 const CHUNK_MAX = 180;
 
-export interface VoiceLike { lang: string; localService: boolean; name?: string }
+export interface VoiceLike { lang: string; localService: boolean; name?: string; voiceURI?: string; default?: boolean }
 export interface UtteranceLike {
   lang: string; rate: number; voice: VoiceLike | null;
   onend: (() => void) | null; onerror: ((event: { error?: string }) => void) | null;
@@ -23,6 +23,10 @@ export interface SynthLike {
 export interface SpeechEnv {
   synth: SynthLike | undefined;
   makeUtterance(text: string): UtteranceLike;
+  /** The voice this computer read with last time (its voiceURI), a tie-breaker among equally good voices. */
+  preferredVoiceUri?(): string | null;
+  /** Told once per change of the picked voice: the host keeps its voiceURI and writes one diagnostic line. */
+  onVoicePicked?(pick: KoreanVoicePick): void;
 }
 
 /**
@@ -67,9 +71,52 @@ export function chunkForSpeech(text: string, max = CHUNK_MAX): string[] {
   return out.filter(Boolean);
 }
 
-/** A Korean voice that runs on this device. A voice that streams from a server is never chosen. */
-export function pickKoreanVoice(voices: readonly VoiceLike[]): VoiceLike | null {
-  return voices.find((v) => v.localService && /^ko([-_]|$)/i.test(v.lang)) ?? null;
+/**
+ * Korean voice choice (Jay, 2026-11-16). On macOS Chromium lists every AVSpeechSynthesisVoice sorted by name, and taking the
+ * first Korean one read with "Eddy", an Eloquence voice: Jay's Mac lists Eddy, Flo, Grandma, Grandpa, Reed, Rocko, Sandy,
+ * Shelley and the compact Yuna for ko_KR. So the voices are ranked by their native identifier (voiceURI): premium, then
+ * enhanced, then the plain (compact) Yuna, then any other Korean voice (Windows: Microsoft Heami), and Eloquence or novelty
+ * voices only when nothing else exists. Compact and premium Yuna can share a display name, so the name never decides tier.
+ */
+export type KoreanVoiceTier = "premium" | "enhanced" | "compact" | "other" | "novelty";
+const TIER_RANK: Record<KoreanVoiceTier, number> = { premium: 4, enhanced: 3, compact: 2, other: 1, novelty: 0 };
+/** Apple's Eloquence voices (ko_KR on Jay's Mac) and novelty voices; matched by name when the URI does not say. */
+const NOVELTY_NAMES = new Set(["eddy", "flo", "grandma", "grandpa", "reed", "rocko", "sandy", "shelley", "albert", "bad news", "bahh", "bells", "boing", "bubbles", "cellos", "good news", "jester", "organ", "superstar", "trinoids", "whisper", "wobble", "zarvox"]);
+const baseName = (name: string | undefined) => (name ?? "").replace(/\s*\(.*\)\s*$/, "").trim().toLowerCase();
+
+export function koreanVoiceTier(v: VoiceLike): KoreanVoiceTier {
+  const uri = (v.voiceURI ?? "").toLowerCase();
+  if (uri.includes("com.apple.eloquence") || uri.includes("com.apple.speech.synthesis.voice.") || NOVELTY_NAMES.has(baseName(v.name))) return "novelty";
+  if (uri.includes(".premium.") || uri.includes("premium")) return "premium";
+  if (uri.includes(".enhanced.") || uri.includes("enhanced")) return "enhanced";
+  if (uri.includes(".compact.") || baseName(v.name) === "yuna") return "compact";
+  return "other";
+}
+
+export interface KoreanVoicePick {
+  voice: VoiceLike | null;
+  tier: KoreanVoiceTier | null;
+  /** How many Korean voices run on this device (the diagnostic line's count). */
+  candidates: number;
+}
+
+/**
+ * The best Korean voice that runs on this device: the highest tier; among equals the system default, then the one this
+ * computer used before (`preferredUri`), then list order. A voice that streams from a server is never chosen.
+ */
+export function chooseKoreanVoice(voices: readonly VoiceLike[], preferredUri?: string | null): KoreanVoicePick {
+  const korean = voices.filter((v) => v.localService && /^ko([-_]|$)/i.test(v.lang));
+  const keyOf = (v: VoiceLike, i: number) => [TIER_RANK[koreanVoiceTier(v)], v.default ? 1 : 0, preferredUri && v.voiceURI === preferredUri ? 1 : 0, -i];
+  const better = (a: number[], b: number[]) => { for (let n = 0; n < a.length; n++) if (a[n] !== b[n]) return a[n] > b[n]; return false; };
+  let best: VoiceLike | null = null, bestKey: number[] = [];
+  korean.forEach((v, i) => { const key = keyOf(v, i); if (!best || better(key, bestKey)) { best = v; bestKey = key; } });
+  const chosen = best as VoiceLike | null;
+  return { voice: chosen, tier: chosen ? koreanVoiceTier(chosen) : null, candidates: korean.length };
+}
+
+/** The voice to read with (see chooseKoreanVoice). */
+export function pickKoreanVoice(voices: readonly VoiceLike[], preferredUri?: string | null): VoiceLike | null {
+  return chooseKoreanVoice(voices, preferredUri).voice;
 }
 
 /**
@@ -97,6 +144,11 @@ export class ReadAloud {
   private pending: { id: string; chunks: string[] } | null = null;
   private listeners = new Set<() => void>();
   private finished: ((outcome: PlaybackOutcome) => void) | null = null;
+  /** The last voice reported through env.onVoicePicked (its voiceURI, else its name). */
+  private lastPicked: string | null = null;
+  private pick: KoreanVoicePick | null = null;
+  /** The voice choice of the last reading (null before the first). */
+  get lastPick(): KoreanVoicePick | null { return this.pick; }
 
   private readonly env: SpeechEnv;
   private readonly output: OutputMute | undefined;
@@ -148,7 +200,11 @@ export class ReadAloud {
   private speakChunks(id: string, chunks: string[]): void {
     const synth = this.env.synth!;
     const generation = ++this.generation;
-    const voice = pickKoreanVoice(synth.getVoices());
+    const pick = chooseKoreanVoice(synth.getVoices(), this.env.preferredVoiceUri?.() ?? null);
+    this.pick = pick;
+    const voice = pick.voice;
+    const picked = voice?.voiceURI ?? voice?.name ?? "";
+    if (picked !== this.lastPicked) { this.lastPicked = picked; try { this.env.onVoicePicked?.(pick); } catch { /* reporting never stops a reading */ } }
     const heard = new Set<number>();
     this.set({ kind: "playing", id });
     chunks.forEach((chunk, index) => {

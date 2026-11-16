@@ -17780,6 +17780,9 @@
           "path": "extensions/hypeproof-chat/src/micInput.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/readAloudVoicePrefs.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/MicInputSetting.tsx"
         },
         {
@@ -17835,7 +17838,13 @@
           "path": "extensions/hypeproof-chat/test/mic-input.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/read-aloud-voice.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/mic-input.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/read-aloud-voice.test.tsx"
         },
         {
           "path": "extensions/hypeproof-chat/test/mic-input-browser.smoke.mjs"

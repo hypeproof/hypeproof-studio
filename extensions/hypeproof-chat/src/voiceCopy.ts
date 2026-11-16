@@ -152,3 +152,8 @@ export const PTT_START_LABEL = "음성 대화 시작";
 export const PTT_GROUP_LABEL = "음성 대화";
 /** R-027: the endpoint detector could not start; this session switches to push-to-talk (the stored mode is unchanged). */
 export const VAD_FALLBACK = "자동 말끝 감지를 쓸 수 없어 눌러서 말하기로 바꿨어요";
+
+// Read-aloud voice choice (Jay, 2026-11-16): the one-time macOS hint when only the compact or novelty Korean voices exist.
+// Agent copy. The macOS menu labels follow Apple's guide (Accessibility → Spoken Content → Manage Voices); their Korean
+// wording on a Korean-language macOS is NOT VERIFIED.
+export const READ_ALOUD_VOICE_HINT = "더 자연스러운 한국어 목소리로 읽어 줄 수 있어요. 시스템 설정 → 손쉬운 사용 → 읽기 및 말하기 → 음성 관리에서 한국어 Yuna(프리미엄)를 내려받아 주세요.";

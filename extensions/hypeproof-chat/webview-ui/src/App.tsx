@@ -47,6 +47,7 @@ import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
 import { VoiceProvider, useVoiceController } from "./VoiceProvider";
+import { setReadAloudVoicePrefs } from "./ReadAloudButton";
 import { dictationAddonFor } from "./dictationAddon";
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { PanelBoundary } from "./PanelBoundary";
@@ -829,6 +830,8 @@ export function App() {
 
   // Studio voice (voiceServed.ts): `none` unless the served profile carries a `voice` block. Nothing below draws then.
   // CGP-VOICE-R-019: the microphone choice is this computer's (config.micInput), read by dictation and the voice conversation.
+  // Read-aloud voice preferences of this computer (the voiceURI read with last time, the one-time hint), from the host's config.
+  setReadAloudVoicePrefs(state.config);
   const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor, state.config?.micInput);
 
   return (<VoiceProvider controller={voice}>
