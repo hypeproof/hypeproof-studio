@@ -192,3 +192,10 @@
   .hps-voice-hold { border-color: ButtonText; }
   .hps-voice-hold[aria-pressed="true"] { border-color: Highlight; box-shadow: inset 0 0 0 var(--ds-c-studio-styles-size-3) Highlight; }
 }
+
+/* ---- CGP-VOICE-R-018 / REQ-CGPV-22: the 시작·끝 소리 내기 row in the settings dialog (the 팁 보기 row's shape) ---- */
+.hps-voice-sounds-setting { flex-wrap: wrap; }
+.hps-voice-sounds-setting-hint { flex-basis: 100%; margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; word-break: keep-all; }
+@media (forced-colors: active) {
+  .hps-voice-sounds-setting-hint { color: CanvasText; }
+}

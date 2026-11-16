@@ -165,6 +165,7 @@ reproduces the former file byte for byte.
 - [CGP-VOICE-R-012](CGP-VOICE-R-012.md): CGP-VOICE-R-012 / R-016, REQ-CGPV-17b/17c/18/19: dictation (2026-11-09, policy-backed with agent choices)
 - [CGP-VOICE-R-014](CGP-VOICE-R-014.md): CGP-VOICE-R-014 / R-015 / D-010 / D-012: dictation control and failures by cause (2026-11-15, agent-selected)
 - [CGP-VOICE-R-015](CGP-VOICE-R-015.md): CGP-VOICE-R-015 follow-up: a bad clip is never resent (2026-11-15, after verify-r004 on #4137)
+- [CGP-VOICE-R-018](CGP-VOICE-R-018.md): CGP-VOICE-R-018: optional start and end sounds (2026-11-16, agent-selected)
 - [CGP-VOICE-R-019](CGP-VOICE-R-019.md): CGP-VOICE-R-019 / D-015: choosing the microphone (2026-11-15, agent-selected)
 - [CGP-VOICE-R-021](CGP-VOICE-R-021.md): CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
 - [CGP-VOICE-R-024](CGP-VOICE-R-024.md): CGP-VOICE-R-024 / CGP-VOICE-D-018: served voice block, class-off state (2026-11-09, policy-backed)
