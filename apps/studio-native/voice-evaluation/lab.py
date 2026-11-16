@@ -9,6 +9,7 @@ import contextlib
 import hashlib
 import hmac
 import importlib.metadata
+import inspect
 import json
 import os
 from pathlib import Path
@@ -68,7 +69,8 @@ class Receiver:
     """Records decoded remote PCM, not device/acoustic playout."""
     def __init__(self, room, output, record):
         self.room, self.output, self.record = room, output, record
-        self.events, self.frames, self.unpublished, self.tasks = [], {}, set(), []
+        self.events, self.frames, self.unpublished = [], {}, set()
+        self.readers, self.closed_readers = {}, set()
         self.authorized, self.blocked = set(), set()
         self.received_pcm = {}
         self.publications = {}
@@ -117,29 +119,48 @@ class Receiver:
         def unpublished(publication, participant):
             if participant.identity == EVALUATOR_ID:
                 self.unpublished.add(publication.name)
+                self.close_reader(publication.name, "unpublished")
                 self.record("receiver_unpublished", audio_track=publication.name)
 
         @room.on("track_subscribed")
         def subscribed(track, publication, participant):
-            if participant.identity == EVALUATOR_ID and publication.name in self.authorized:
-                task = asyncio.create_task(self.read(track, publication.name))
-                self.tasks.append(task)
+            if (participant.identity == EVALUATOR_ID and publication.name in self.authorized
+                    and publication.name not in self.closed_readers and publication.name not in self.readers):
+                self.readers[publication.name] = asyncio.create_task(self.read(track, publication.name))
 
     def block(self):
         if self.active:
             self.blocked.add(self.active)
             name = f"hps-eval.{self.active[0]}.{self.active[2]}"
             self.authorized.discard(name)
+            self.close_reader(name, "local_block")
             publication = self.publications.get(name)
             if publication:
                 publication.set_subscribed(False)
 
+    def close_reader(self, name, reason):
+        if name in self.closed_readers:
+            return
+        self.closed_readers.add(name)
+        self.record("receiver_blocked", audio_track=name, reason=reason,
+                    recorded_frames=len(self.frames.get(name, [])),
+                    unobserved_transport_tail="unknown")
+        task = self.readers.get(name)
+        if task is not None:
+            task.cancel()
+
     async def read(self, track, name):
+        if name in self.closed_readers or name not in self.authorized:
+            return
         stream = rtc.AudioStream(track, sample_rate=RATE, num_channels=1)
         self.frames.setdefault(name, [])
         self.received_pcm.setdefault(name, bytearray())
         try:
             async for event in stream:
+                if name in self.closed_readers or name not in self.authorized:
+                    self.record("receiver_discarded", audio_track=name,
+                                samples=event.frame.samples_per_channel)
+                    return
                 self.frames[name].append({"at": time.monotonic(), "rms": rms(event.frame),
                                           "samples": event.frame.samples_per_channel})
                 self.received_pcm[name].extend(event.frame.data.cast("B"))
@@ -147,11 +168,16 @@ class Receiver:
                     raise AssertionError("receiver PCM bound exceeded")
         finally:
             await stream.aclose()
+            self.record("receiver_reader_closed", audio_track=name,
+                        recorded_frames=len(self.frames[name]))
 
     async def close(self):
-        for task in self.tasks:
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        for name in self.readers:
+            self.close_reader(name, "receiver_close")
+        outcomes = await asyncio.gather(*self.readers.values(), return_exceptions=True)
+        for outcome in outcomes:
+            if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
+                raise outcome
         for name, data in self.received_pcm.items():
             path = self.output / f"{name}.wav"
             with wave.open(str(path), "wb") as file:
@@ -161,6 +187,35 @@ class Receiver:
             private_json(self.output / f"{name}.frames.json", {
                 "kind": "decoded_remote_pcm_not_acoustic_playout", "sample_rate": RATE,
                 "frames": self.frames[name], "pcm_sha256": hashlib.sha256(data).hexdigest()})
+
+
+async def cleanup_owned(record, *, evaluator, rooms, primary=None,
+                        receiver=None, source=None, private_path=None, check_worker=False):
+    """Attempt every owned cleanup independently; never replace the first error."""
+    first = primary
+    if first is None and check_worker and evaluator.failure is not None:
+        first = AssertionError(f"evaluator worker failed: {evaluator.failure}")
+    actions = []
+    if receiver is not None:
+        actions.append(("receiver", receiver.close))
+    if source is not None:
+        actions.extend((("source_clear", source.clear_queue), ("source_close", source.aclose)))
+    actions.append(("evaluator", evaluator.close))
+    actions.extend((f"room_{index}", room.disconnect) for index, room in enumerate(rooms))
+    if private_path is not None:
+        actions.append(("private_file", lambda: private_path.unlink(missing_ok=True)))
+    for stage, operation in actions:
+        try:
+            result = operation()
+            if inspect.isawaitable(result):
+                await result
+        except BaseException as error:
+            if first is None:
+                first = error
+            with contextlib.suppress(Exception):
+                record("cleanup_failed", stage=stage, error_type=type(error).__name__)
+    if primary is None and first is not None:
+        raise first
 
 
 async def connect(room, url, token):
@@ -193,6 +248,7 @@ async def scenario(url, key, secret, output, record, disconnect_only=False):
     evaluator.admit = held_admit
     receiver = Receiver(client, output, record)
     source = None
+    primary = None
     try:
         await connect(agent_room, url, jwt(key, secret, room_name, EVALUATOR_ID))
         await connect(client, url, jwt(key, secret, room_name, CLIENT_ID))
@@ -254,8 +310,9 @@ async def scenario(url, key, secret, output, record, disconnect_only=False):
         count = len(receiver.frames[name])
         await asyncio.sleep(.3)
         assert len(receiver.frames[name]) == count, "old generation kept delivering decoded frames"
-        record("control_pass", control="energy_interrupt_queue_discard_pcm_ceased",
-               decoded_frames=count, acoustic_played_range="unknown")
+        assert name in receiver.closed_readers and receiver.readers[name].done()
+        record("control_pass", control="energy_interrupt_queue_discard_receiver_closed",
+               decoded_frames=count, unobserved_transport_tail="unknown", acoustic_played_range="unknown")
 
         source.clear_queue()
         await client.local_participant.unpublish_track(next(iter(client.local_participant.track_publications)))
@@ -265,6 +322,7 @@ async def scenario(url, key, secret, output, record, disconnect_only=False):
         await send("start", generation=2, turn_id=second)
         name2 = f"hps-eval.{session}.2"
         await until(lambda: len(receiver.frames.get(name2, [])) >= 10, label="generation 2 PCM")
+        assert len(receiver.frames[name]) == count, "next generation leaked into closed old PCM receipt"
         await send("interrupt")  # old tuple cannot cancel generation 2
         await asyncio.sleep(.1)
         assert evaluator.active is not None and evaluator.active.generation == 2
@@ -282,15 +340,16 @@ async def scenario(url, key, secret, output, record, disconnect_only=False):
         await asyncio.sleep(.2)
         assert evaluator.active is None and receiver.ended and not receiver.authorized
         assert len(receiver.events) == terminal_count + 1
+        assert len(receiver.frames[name]) == count, "old generation receipt grew after next-generation Stop"
+        record("control_pass", control="old_pcm_receipt_fixed_across_next_generation",
+               old_frames=count, new_frames=len(receiver.frames[name2]))
         record("control_pass", control="stop_duplicate_stale_and_late_started_fenced")
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        await receiver.close()
-        if source:
-            source.clear_queue(); await source.aclose()
-        assert evaluator.failure is None, f"evaluator worker failed: {evaluator.failure}"
-        await evaluator.close()
-        for room in (stranger, client, agent_room):
-            await room.disconnect()
+        await cleanup_owned(record, evaluator=evaluator, rooms=(stranger, client, agent_room),
+                            receiver=receiver, source=source, primary=primary, check_worker=True)
 
 
 
@@ -303,6 +362,7 @@ async def capacity_scenario(url, key, secret, record):
     async def send():
         await client.local_participant.publish_data(payload, reliable=True,
             destination_identities=[EVALUATOR_ID], topic=TOPIC)
+    primary = None
     try:
         await connect(room, url, jwt(key, secret, room_name, EVALUATOR_ID))
         await connect(client, url, jwt(key, secret, room_name, CLIENT_ID))
@@ -318,10 +378,11 @@ async def capacity_scenario(url, key, secret, record):
         await until(lambda: evaluator.active is None, label="queue overflow owned cleanup")
         assert not room.local_participant.track_publications
         record("control_pass", control="bounded_real_channel_overflow_fail_closed")
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        await evaluator.close()
-        await client.disconnect()
-        await room.disconnect()
+        await cleanup_owned(record, evaluator=evaluator, rooms=(client, room), primary=primary)
 
 
 async def failed_ack_scenario(url, key, secret, record):
@@ -332,6 +393,7 @@ async def failed_ack_scenario(url, key, secret, record):
     async def reject_ack(message):
         raise ConnectionError("injected acknowledgement transport failure")
     evaluator.send = reject_ack
+    primary = None
     try:
         await connect(room, url, jwt(key, secret, room_name, EVALUATOR_ID))
         await connect(client, url, jwt(key, secret, room_name, CLIENT_ID))
@@ -344,29 +406,34 @@ async def failed_ack_scenario(url, key, secret, record):
         assert evaluator.ended and evaluator.active is None
         assert not room.local_participant.track_publications
         record("control_pass", control="actual_publication_injected_ack_failure_cleanup")
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        await evaluator.close()
-        await client.disconnect()
-        await room.disconnect()
+        await cleanup_owned(record, evaluator=evaluator, rooms=(client, room), primary=primary)
 
 
 async def serve(url, key, secret, output, record, seconds):
     room_name = "hps-eval-" + str(uuid.uuid4())
     room = rtc.Room()
     evaluator = Evaluator(room, CLIENT_ID, record)
+    primary, private_path = None, None
     try:
         await connect(room, url, jwt(key, secret, room_name, EVALUATOR_ID))
         private_json(output / "connection.private.json", {
             "url": url, "token": jwt(key, secret, room_name, CLIENT_ID),
             "evaluator_identity": EVALUATOR_ID, "client_identity": CLIENT_ID,
             "expires_at": int(time.time()) + min(seconds, 900)})
+        private_path = output / "connection.private.json"
         await asyncio.sleep(seconds)
         if evaluator.failure:
             raise RuntimeError("evaluator worker failed: " + evaluator.failure)
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        await evaluator.close()
-        await room.disconnect()
-        (output / "connection.private.json").unlink(missing_ok=True)
+        await cleanup_owned(record, evaluator=evaluator, rooms=(room,), primary=primary,
+                            private_path=private_path)
 
 
 def socket_evidence(pid):

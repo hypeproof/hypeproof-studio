@@ -68,3 +68,12 @@ The private `connection.private.json` is removed on exit. It does not make a Mac
 simulator or physical iPhone reachable. Those require a separately validated
 same-host server or a tunnel carrying the actual ICE media ports as well as
 signalling; no public/LAN listener is created here.
+
+Receiver PCM receipts are generation-bound. Interruption/Stop/unpublication closes
+the corresponding SDK AudioStream; later generations cannot append to its file.
+The bounded check distinguishes a closed observer from an unobserved RTP or
+hardware tail. It does not claim that unsubscribe measures all in-flight audio.
+Cleanup attempts receiver/source/evaluator release, every owned room disconnect
+and the owned connection-file deletion independently. A body failure remains the
+primary failure; otherwise the first cleanup error fails the run. Secondary
+cleanup errors are recorded by stage/type, without credential values.
