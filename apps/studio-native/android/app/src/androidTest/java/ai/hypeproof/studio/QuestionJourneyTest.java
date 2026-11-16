@@ -118,19 +118,24 @@ public class QuestionJourneyTest {
             ReflectionModel model=questionModel(activity);
             var hostField=NativeVoice.class.getDeclaredField("host");hostField.setAccessible(true);NativeVoice.Host host=(NativeVoice.Host)hostField.get(voice.controller);
             var composerField=QuestionActivity.class.getDeclaredField("composer");composerField.setAccessible(true);android.view.View composer=(android.view.View)composerField.get(activity);
-            int[] xy=new int[2];target.getLocationOnScreen(xy);
+            int[] xy=new int[2];target.getLocationOnScreen(xy);android.graphics.Rect visible=new android.graphics.Rect();boolean hasVisibleRect=target.getGlobalVisibleRect(visible);
             JSONObject row=new JSONObject().put("phase",phase).put("uptime_ms",android.os.SystemClock.uptimeMillis())
                 .put("target_identity",System.identityHashCode(target)).put("attached",target.isAttachedToWindow()).put("enabled",target.isEnabled()).put("pressed",target.isPressed())
                 .put("x",xy[0]).put("y",xy[1]).put("width",target.getWidth()).put("height",target.getHeight()).put("window_focus",target.hasWindowFocus())
+                .put("shown",target.isShown()).put("clickable",target.isClickable()).put("visible_rect",hasVisibleRect).put("visible_width",visible.width()).put("visible_height",visible.height())
                 .put("busy",model.busy).put("read_only",model.readOnly).put("guest_read_only",model.guestReadOnly).put("signed_in",model.account()!=null)
+                .put("model_error_present",model.error!=null&&!model.error.isEmpty())
                 .put("foreground",host.foreground()).put("voice_allowed",host.allowed(false)).put("scope_present",host.projectID()!=null).put("composer_focused",composer.hasFocus()).put("capture_starts",voice.starts).put("voice_phase",voice.controller.session.phase().name()).put("long_press_timeout_ms",android.view.ViewConfiguration.getLongPressTimeout());
             if(event!=null)row.put("action",event.getActionMasked()).put("event_time_ms",event.getEventTime()).put("down_time_ms",event.getDownTime()).put("event_duration_ms",event.getEventTime()-event.getDownTime());
             dictationTouchEvents.add(row);
         }catch(Exception error){throw new AssertionError(error);}
     }
     private void saveDictationTouch(String outcome)throws Exception{
-        File dir=new File(context.getExternalFilesDir(null),"evidence/guest-dictation");assertTrue(dir.isDirectory()||dir.mkdirs());
-        Files.write(new File(dir,"touch.json").toPath(),new JSONObject().put("outcome",outcome).put("events",new JSONArray(dictationTouchEvents)).toString(2).getBytes(StandardCharsets.UTF_8));
+        saveDictationTouch(outcome,"guest-dictation/touch.json");
+    }
+    private void saveDictationTouch(String outcome,String filename)throws Exception{
+        File file=new File(context.getExternalFilesDir(null),"evidence/"+filename);File dir=file.getParentFile();assertTrue(dir.isDirectory()||dir.mkdirs());
+        Files.write(file.toPath(),new JSONObject().put("outcome",outcome).put("events",new JSONArray(dictationTouchEvents)).toString(2).getBytes(StandardCharsets.UTF_8));
     }
     @Test public void guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend()throws Exception{
         java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No guest network");};
@@ -436,11 +441,51 @@ public class QuestionJourneyTest {
     }
     @Test public void dictationEndpointTimeoutKeepsPartialAndNeverSubmits()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
+        java.util.concurrent.atomic.AtomicReference<QuestionActivity> activity=new java.util.concurrent.atomic.AtomicReference<>();app.onActivity(activity::set);
+        var hostField=NativeVoice.class.getDeclaredField("host");hostField.setAccessible(true);NativeVoice.Host host=(NativeVoice.Host)hostField.get(voice.controller);
+        java.util.concurrent.atomic.AtomicReference<android.view.View> target=new java.util.concurrent.atomic.AtomicReference<>();
+        try{
+        onView(withContentDescription("말로 적기")).perform(new androidx.test.espresso.ViewAction(){
+            public org.hamcrest.Matcher<android.view.View> getConstraints(){return isAssignableFrom(android.view.View.class);}
+            public String getDescription(){return "observe foreground, account scope and dictation target readiness before one click";}
+            public void perform(androidx.test.espresso.UiController ui,android.view.View view){
+                target.set(view);view.setOnTouchListener((v,event)->{dictationTouch("touch",activity.get(),v,voice,event);return false;});
+                long deadline=android.os.SystemClock.uptimeMillis()+5000;
+                for(;;){
+                    ReflectionModel model=questionModel(activity.get());android.graphics.Rect visible=new android.graphics.Rect();
+                    assertEquals("test-account",model.account());assertNotNull(model.credentials);assertEquals("test-session",model.credentials.session());
+                    assertEquals("test-account",host.projectID());assertEquals(0,voice.starts);assertNull(voice.capture);
+                    assertEquals(VoiceSession.Phase.IDLE,voice.controller.session.phase());
+                    boolean ready=host.foreground()&&!activity.get().isFinishing()&&!activity.get().isDestroyed()
+                        &&!model.busy&&!model.readOnly&&model.state!=null
+                        &&view.isAttachedToWindow()&&view.hasWindowFocus()&&view.isShown()&&view.isEnabled()&&view.isClickable()
+                        &&view.getGlobalVisibleRect(visible)&&visible.width()==view.getWidth()&&visible.height()==view.getHeight()
+                        &&view.getWidth()>0&&view.getHeight()>0;
+                    if(ready){dictationTouch("ready_before_click",activity.get(),view,voice,null);return;}
+                    if(android.os.SystemClock.uptimeMillis()>=deadline){dictationTouch("readiness_timeout",activity.get(),view,voice,null);fail("dictation target must be ready before the single click");}
+                    ui.loopMainThreadForAtLeast(16);
+                }
+            }
+        });
         onView(withContentDescription("말로 적기")).perform(click());
+        app.onActivity(a->{
+            dictationTouch("after_click",a,target.get(),voice,null);
+            assertEquals("one real click must start capture exactly once",1,voice.starts);assertNotNull("capture must start before injecting recognition",voice.capture);
+            assertEquals(VoiceSession.Phase.LISTENING,voice.controller.session.phase());
+            assertEquals("test-account",voice.controller.session.project());assertTrue(host.foreground());assertTrue(host.allowed(false));
+        });
         app.onActivity(a->{voice.partial("인식이 끝나지 않아도 남길 말");voice.endpoint();voice.expire();voice.result("늦게 온 최종");});drain();
         assertFalse(voice.controller.session.active());assertTrue(submitted.isEmpty());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("인식이 끝나지 않아도 남길 말")));
         app.recreate();onView(withContentDescription("질문 대화 입력")).check(matches(withText("인식이 끝나지 않아도 남길 말")));
+        saveDictationTouch("PASS","guest-dictation/endpoint-timeout.json");
+        }catch(Exception|AssertionError failure){
+            try{if(target.get()!=null)app.onActivity(a->dictationTouch("failure",a,target.get(),voice,null));}
+            catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
+            try{saveDictationTouch("FAIL","failures/dictation-endpoint-timeout.json");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
+            try{screen("failures/android-dictation-endpoint-timeout-failure");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
+            throw failure;
+        }
     }
     @Test public void editingDuringReplyOrBackgroundInvalidatesAutomaticReopen()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
