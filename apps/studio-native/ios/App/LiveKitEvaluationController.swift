@@ -71,6 +71,12 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
                 guard currentRoom.localParticipant.identity?.stringValue == "hps-voice-client" else {
                     self.stop(reason: "transport_error"); return
                 }
+                self.status = "서버 입장 확인 대기 · 마이크 꺼짐"
+                guard try await self.waitForAdmission(in: currentRoom, owner: owner) else {
+                    if self.isCurrent(currentRoom, owner: owner) { self.stop(reason: "admission_timeout") }
+                    return
+                }
+                guard self.isCurrent(currentRoom, owner: owner), !Task.isCancelled else { return }
                 self.captureGate?.setOpen(true)
                 try await currentRoom.localParticipant.setMicrophone(enabled: true,
                     captureOptions: AudioCaptureOptions(echoCancellation: true, autoGainControl: true, noiseSuppression: true))
@@ -240,6 +246,26 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         room === candidate && connectionID == owner && session.phase != .stopped
     }
 
+    /// Read SDK participant state, never retry Start. Room.connect may finish
+    /// before the evaluator has observed the participant_connected event.
+    private func waitForAdmission(in currentRoom: Room, owner: UUID) async throws -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(8))
+        while clock.now < deadline {
+            try Task.checkCancellation()
+            guard isCurrent(currentRoom, owner: owner) else { return false }
+            let localSID = currentRoom.localParticipant.sid?.stringValue
+            if currentRoom.remoteParticipants.values.contains(where: { participant in
+                VoiceEvaluationSession.isAdmitted(
+                    participantIdentity: participant.identity?.stringValue ?? "",
+                    admittedSID: participant.attributes[VoiceEvaluationSession.admissionAttribute],
+                    localSID: localSID)
+            }) { return true }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return false
+    }
+
     private static func publish(_ message: VoiceEvaluationEnvelope, to room: Room) async throws {
         try await room.localParticipant.publish(data: JSONEncoder().encode(message), options: DataPublishOptions(
             destinationIdentities: [Participant.Identity(from: VoiceEvaluationSession.evaluatorIdentity)],
@@ -269,6 +295,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         switch reason {
         case "session_limit": return "90초 평가 종료 · 마이크 꺼짐"
         case "microphone_denied": return "마이크 권한이 없어 종료했어요."
+        case "admission_timeout": return "서버가 입장을 확인하지 않아 종료했어요. 마이크는 열지 않았어요."
         case "transport_error", "control_failed": return "연결이 끊겨 평가를 끝냈어요. 자동으로 다시 연결하지 않아요."
         case "audio_owner_busy": return "다른 음성 작업이 있어 평가를 끝냈어요."
         default: return "평가 종료 · 마이크 꺼짐"
