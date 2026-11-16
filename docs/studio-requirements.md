@@ -2267,6 +2267,31 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
 
 ## Activity home views (CGP-KNOW-R-002)
 
+`REQ-STUDIO-CONTEXT-EXCLUSION` (AE-02 / AE-41, #555, the `context` packet; depends on
+REQ-STUDIO-ACTIVITY-MATERIALS; first slice 2026-11-16): a 자료 **text file** that went with a message can be taken out of the
+conversation and put back. Pages, images, addresses, instructor notes and tool reads are not offered, so the UI never says
+they were left out.
+
+- **Where.** A sent text file in the 자료 list gets "이후 대화에서 빼기", with the note "이 자료를 보낸 뒤의 AI 답도 다음 질문부터
+  다시 보내지 않아요." before the press. Once out, it reads "대화에서 뺌 · 다음 질문부터 AI에게 보내지 않아요. 이미 보낸 내용은
+  지워지지 않아요." with "다시 넣기". An excluded item cannot be selected for a message, and taking one out drops it from the
+  pending selection. The copy passes the SX audit. It never says anything was deleted from the AI service.
+- **What later requests carry.** Host state decides, never text: the folder's material list holds the excluded ids, and a mark
+  beside the transcript records which materials went with each user message (the task file keeps its shape). A material's
+  text was only ever on its own turn. What can still carry it are the AI's answers after it, which the host cannot trace. So,
+  from the first message that carried an excluded material, every assistant answer is replayed as one fixed line, while the
+  learner's own messages go verbatim. The turn then gets a model-only rebuilt context: a fixed head, the learner's confirmed
+  goal, and the kept materials from that span (at most 3), read again from their files. Both the proxy and SDK runtimes, and
+  the local runtimes, read this same history.
+- **Trade-off.** The coach also loses its own later answers in that span, not only the material. Removing only the quoted
+  parts would need answers that can be traced to their sources; that is a follow-up.
+- **Safety and cost.** The fixed texts are descriptive, never instructions, and typing them excludes nothing. The replay is a
+  pure function of the saved history, the marks and the excluded ids, so the prompt cache misses once at a change and is then
+  stable. Every turn already sends its history in the prompt, so an exclusion adds no request or session.
+- **Evidence.** `test/context-exclusion.smoke.mjs` covers the pure rules, the list, the SDK prompt and the SX audit.
+  `test/context-exclusion-host.smoke.mjs` runs on the real provider with a coach that quotes what it read, and covers a reopen,
+  another folder, forged text and the verbatim learner messages and goal.
+
 `REQ-STUDIO-ACTIVITY-HOME` (CGP-KNOW-R-002 / REQ-KNOW-02, CGP-KNOW-002, P2, PI#1; depends on
 REQ-STUDIO-TASK-WORKSPACE and REQ-STUDIO-ACTIVITY-MATERIALS; built 2026-10-25): the activity home
 offers two views, 작업 (tasks) and 자료 (materials), and switching between them never loses the
