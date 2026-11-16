@@ -1,0 +1,91 @@
+name: Verify clean install
+# Proves the app-only install path on a clean GitHub-hosted macOS runner, with no human and nothing on anyone's laptop:
+# the release's own Mac zip (the asset the Lab's "Mac용 Studio 받기" sends the browser to), a scratch hidden copy with no
+# SDK, the Service at the deployed commit on loopback with a stub AI, sign-in, the app's own seed offer and download
+# (REQ-M46), then a saved file and a served preview. The runner script lives in hypeproof-harness
+# (tests/blackbox/studio-continuation/realapp). A release candidate is expected to answer 404 for its seed until promotion.
+on:
+  workflow_dispatch:
+    inputs:
+      stable_tag:
+        description: Stable release whose seed must install
+        default: v2026.1115.0
+      rc_tag:
+        description: Release candidate whose seed is expected to be absent
+        default: v2026.1116.0-rc.1
+      harness_ref:
+        description: hypeproof-harness ref that holds the runner script
+        default: feat/blackbox-realapp
+  pull_request:
+    paths:
+      - .github/workflows/verify-clean-install.yml
+permissions:
+  contents: read
+concurrency:
+  group: verify-clean-install-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  clean-install:
+    # Same-repository runs only: the job reads the private Service source with a read token.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: stable
+            signin: device
+            expect: ok
+          - name: rc
+            signin: handoff
+            expect: seed404
+    name: ${{ matrix.name }} (${{ matrix.signin }}, seed ${{ matrix.expect }})
+    env:
+      STABLE_TAG: ${{ inputs.stable_tag || 'v2026.1115.0' }}
+      RC_TAG: ${{ inputs.rc_tag || 'v2026.1116.0-rc.1' }}
+      HARNESS_REF: ${{ inputs.harness_ref || 'feat/blackbox-realapp' }}
+    steps:
+      - name: Pick the tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ matrix.name }}" = stable ]; then echo "tag=$STABLE_TAG" >> "$GITHUB_OUTPUT"; else echo "tag=$RC_TAG" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - name: Resolve the deployed Service commit
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-harness
+          ref: ${{ env.HARNESS_REF }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .harness
+      - name: Install the Service dependencies
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
+      - name: Clean install, ${{ steps.tag.outputs.tag }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVICE_DIR: ${{ github.workspace }}/.service-source
+          STUDIO_DIR: ${{ github.workspace }}
+        run: bash .harness/tests/blackbox/studio-continuation/realapp/ci.sh "${{ steps.tag.outputs.tag }}" "${{ matrix.signin }}" "${{ matrix.expect }}"
+      - name: Evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-install-${{ matrix.name }}
+          path: ${{ runner.temp }}/realapp/out
+          if-no-files-found: ignore
+          retention-days: 14
