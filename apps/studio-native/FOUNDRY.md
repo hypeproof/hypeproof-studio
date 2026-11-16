@@ -81,6 +81,49 @@ No live config, existing product pins, credentials, worker ownership or deployme
 policy is changed by these files. Onboarding and profile admission remain with
 the existing Foundry owner. Do not restart or replace that worker to run this.
 
+## Measuring native verification latency
+
+Preserve source, runner, test inventory and final receipts when comparing duration.
+Main run `43842465814/1` completed the iOS recipe in 42m09s; run
+`43853610332/1` passed the same 37 UI cases but was cancelled during finalization.
+Its UI suite was faster while build/startup was slower. Neither a cancelled job
+nor `TEST SUCCEEDED` alone qualifies a package, and a longer job allowance is not
+a speed improvement.
+
+Studio #4310 removes redundant existence polling only when a fresh query already
+finds the supported text field/text view or diagnostic node. If absent, the
+original bounded fallback and assertions remain. No element is cached across
+launches; late-event/no-repoll observation windows and all 37 journeys remain.
+Report the actual new helper waits, suite duration and full-recipe result before
+claiming a speedup. The source change and equivalence review do not establish
+native execution or faster CI by themselves.
+
+### Observe readiness before injecting speech or judging a gesture
+
+Main `53ac57f4` run `43866573322/1` retained an Android 43/44 failure:
+the endpoint-timeout case injected partial speech before capture had started.
+With this fixture, listener registration is synchronous. The missing listener
+does not distinguish an undelivered tap from a refused start. Wait for observable
+foreground, account, window and target readiness, perform exactly one real click,
+then require one capture start and listening state before injecting speech.
+Retain the original timeout, late-result, no-submit, draft and relaunch checks.
+On failure, capture allowlisted touch/state data and the screen before teardown
+under the existing `evidence/failures` collection path. A later launcher screenshot
+cannot explain the failed user action. Never directly start the controller or
+retry the click to manufacture acceptance.
+
+Run `43862198817/1` retained a separate iOS 36/37 failure: a keyboard dismissal
+drag stopped at 90% of the window, leaving a visible prediction bar and keyboard
+tail with the draft still focused. The team-entry case now completes the same
+single drag at the last in-window point and verifies that its endpoint passes
+the keyboard's lower edge. The original five-second disappearance assertion and
+draft/card/answer/next-question checks remain. Corrected gesture geometry is a
+source correction, not proof that the new native execution passes.
+
+Keep failures, platform/source identity and full-suite results separate. These
+test preparation changes do not establish a product root cause, physical voice
+quality, a new release, or a completed Foundry runtime.
+
 ## Focused synthetic controls
 
 ```sh
