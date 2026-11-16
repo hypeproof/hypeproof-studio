@@ -20560,6 +20560,9 @@
         },
         {
           "path": "apps/studio-native/voice-evaluation/wire-fixture.json"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_cleanup.py"
         }
       ]
     }
