@@ -332,6 +332,7 @@ import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSe
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
+import { acceptMaterialMarks, CONTEXT_EXCLUSION_COPY, rebuiltContext, rememberMaterialMark, replayHistory, sentMaterialIds, withExclusion } from "./contextExclusion";
 import { addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
 import { chatUpdateOffer, classUpdateHold, freezeHoldsUpdate, updateFreeze } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
@@ -584,6 +585,7 @@ const DIRECTOR_REVIEW_UNAVAILABLE = denialCopy({ source: "unknown", feature: "�
 const ANNOTATION_LEAVE_KEPT = '표시를 그대로 두었어요. 계속 고친 뒤 다시 활동을 바꿔 주세요.';
 /** CGP-CHAT-R-023 — served lesson step per user message id (lessonStepMarks.ts). */
 const STEP_MARKS_KEY = "hps.lessonStepMarks";
+const MATERIAL_MARKS_KEY = "hps.materialTurnMarks";
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
@@ -4533,7 +4535,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let dropped: string[] = [];
     if (own && (own.scope !== scope || own.root !== root)) { dropped = [...own.ids.values()]; this.materialSelection = null; }
     const selected = this.materialSelection?.ids ?? new Map<string, string>();
-    const listed = materialsView({ manifest: loadManifest(file), folderFiles: listMaterialFolder(root), provenance: rel => kinds.get(rel), provenanceAddedAt: rel => addedTimes.get(rel), inbox: cards, selected: new Set(selected.keys()), scope });
+    const listed = materialsView({ manifest: loadManifest(file), folderFiles: listMaterialFolder(root), provenance: rel => kinds.get(rel), provenanceAddedAt: rel => addedTimes.get(rel), inbox: cards, selected: new Set(selected.keys()), scope, sent: sentMaterialIds(this.getHistory(), this.materialMarks()) });
     const view: MaterialsView = { ...listed, unavailable: unavailableSelected(root, listed, selected) };
     return { root, file, view, cards, dropped };
   }
@@ -4592,6 +4594,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Taking out an unavailable item is how the learner agrees to send without it.
     if (!msg.selected && this.materialSelection?.ids.has(msg.id)) { this.materialSelection.ids.delete(msg.id); await this.postMaterials({ requestId: msg.requestId }); return; }
     if (!snap.view.items.some(i => i.id === msg.id)) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.gone }); return; }
+    // AE-02: a material taken out of the conversation is put back first; it is never selected while out.
+    if (msg.selected && snap.view.items.find(i => i.id === msg.id)?.excluded) { await this.postMaterials({ requestId: msg.requestId, error: CONTEXT_EXCLUSION_COPY.excludedSelect }); return; }
     const own = this.materialSelection ??= { scope: snap.view.scope, root: snap.root, ids: new Map() };
     if (msg.selected && !own.ids.has(msg.id) && own.ids.size >= MATERIALS_MAX_SELECTED) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.tooManySelected }); return; }
     if (msg.selected) own.ids.set(msg.id, snap.view.items.find(i => i.id === msg.id)!.title); else own.ids.delete(msg.id);
@@ -4609,13 +4613,43 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postMaterials({ requestId: msg.requestId, notice: next.kind === "file" ? MATERIALS_COPY.removed(next.title) : MATERIALS_COPY.removedUrl(next.title) });
   }
   /**
+   * AE-02 / AE-41 (#555) — take a sent text material out of the conversation (`excluded: true`) or put it back. Only an item the
+   * view offers as excludable, in this folder's list; the choice is stored with the folder's material list, so another
+   * activity's is untouched and it survives a reopen. Taking one out also drops it from the next message's selection.
+   */
+  private async excludeMaterial(msg: { requestId: string; scope: string; id: string; excluded: boolean }): Promise<void> {
+    const snap = await this.materialsSnapshot();
+    if (!snap || snap.view.scope !== msg.scope) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.changed }); return; }
+    const item = snap.view.items.find(i => i.id === msg.id);
+    if (!item) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.gone }); return; }
+    if (!item.excludable) { await this.postMaterials({ requestId: msg.requestId }); return; }
+    const manifest = loadManifest(snap.file);
+    try { saveManifest(snap.file, { ...manifest, excluded: withExclusion(manifest.excluded, msg.id, msg.excluded) }); } catch { await this.postMaterials({ requestId: msg.requestId, error: FILE_REFUSAL_COPY.unreadable }); return; }
+    if (msg.excluded) this.materialSelection?.ids.delete(msg.id);
+    await this.postMaterials({ requestId: msg.requestId, ...(msg.excluded ? { notice: CONTEXT_EXCLUSION_COPY.excludedNote } : {}) });
+  }
+  /** AE-41 — the rebuilt context after a cut: the fixed head, the learner's confirmed goal and the kept materials, read again. */
+  private async rebuiltExclusionContext(profile: ResolvedProfile | null | undefined, kept: string[]): Promise<string> {
+    const goal = learnerGoalText(goalViewOf(profile?.lesson, activityConnections(this.context)?.current?.id ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)));
+    const snap = kept.length && this.materialsAllowed() ? await this.materialsSnapshot().catch(() => null) : null;
+    const text = snap ? selectedMaterialsText(snap.root, snap.view, new Set(kept), snap.cards).text : null;
+    return rebuiltContext(goal, text);
+  }
+  /** AE-02 — the material ids taken out of the conversation for the current work folder (empty when there is no list). */
+  private async excludedMaterials(): Promise<Set<string>> {
+    const base = this.context?.globalStorageUri?.fsPath, cwd = this.resolveCoachCwd();
+    if (!base || !cwd) return new Set();
+    const root = await fs.promises.realpath(cwd).catch(() => "");
+    return root ? new Set(loadManifest(materialsManifestFile(base, root)).excluded ?? []) : new Set();
+  }
+  /**
    * Part of a fresh send's preflight, before anything of the turn is consumed. The selection must be
    * this task's and folder's, and every selected item readable now; otherwise the send is held (the
    * draft goes back, the items are named) and nothing is sent. Returns the items read now, which the
    * model turn takes once (`takeMaterials`). Nothing unselected is read; a seat without the gate or a
    * folder set to "AI 안 씀" reads nothing here (REQ-STUDIO-FOLDER-CONSENT holds that turn itself).
    */
-  private async prepareMaterials(): Promise<{ own: NonNullable<ChatPanelProvider["materialSelection"]>; key: string; text: string | null } | null> {
+  private async prepareMaterials(): Promise<{ own: NonNullable<ChatPanelProvider["materialSelection"]>; key: string; text: string | null; sent: string[] } | null> {
     const own = this.materialSelection;
     if (!own || own.ids.size === 0 || this.materialsRefusal()) return null;
     const root = await fs.promises.realpath(this.resolveCoachCwd() ?? "").catch(() => "");
@@ -4633,20 +4667,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({ type: "materialsState", view: snap.view, error: MATERIALS_COPY.held(blocked) });
       throw new ActivityConnectionError(MATERIALS_COPY.held(blocked));
     }
-    return { own, key: [...own.ids.keys()].join("\n"), text: out.text };
+    return { own, key: [...own.ids.keys()].join("\n"), text: out.text, sent: out.sent };
   }
   /**
    * The model turn takes the prepared selection once and clears it, whether or not it goes (a later
    * refusal in the send does not restore it). It goes only when it is still the selection that was
    * checked, on the same task and folder, and the seat still has the gate; otherwise it is named.
    */
-  private async takeMaterials(prepared: Awaited<ReturnType<ChatPanelProvider["prepareMaterials"]>>, allowed: boolean): Promise<string | null> {
+  private async takeMaterials(prepared: Awaited<ReturnType<ChatPanelProvider["prepareMaterials"]>>, allowed: boolean): Promise<{ text: string; sent: string[] } | null> {
     const own = this.materialSelection;
     if (!own) return null;
     this.materialSelection = null;
     const root = await fs.promises.realpath(this.resolveCoachCwd() ?? "").catch(() => "");
     const same = prepared && prepared.own === own && prepared.key === [...own.ids.keys()].join("\n") && own.scope === this.turnRequestScope() && own.root === root;
-    if (same && allowed) { await this.postMaterials(); return prepared.text; }
+    if (same && allowed) { await this.postMaterials(); return prepared.text ? { text: prepared.text, sent: prepared.sent } : null; }
     await this.postMaterials(own.ids.size ? { error: MATERIALS_COPY.skipped([...own.ids.values()]) } : undefined);
     return null;
   }
@@ -9716,6 +9750,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "materialAddUrl": await this.addMaterial(String(msg.requestId), typeof msg.url === "string" ? msg.url : ""); return;
       case "materialAddDrop": await this.addMaterial(String(msg.requestId), undefined, { name: typeof msg.name === "string" ? msg.name : "",
         size: typeof msg.size === "number" ? msg.size : Number.POSITIVE_INFINITY, base64: typeof msg.base64 === "string" ? msg.base64 : "" }); return;
+      case "materialExclude": if (typeof msg.id === "string" && typeof msg.scope === "string" && typeof msg.excluded === "boolean") await this.excludeMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id, excluded: msg.excluded }); return;
       case "materialSelect": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.selectMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id, selected: msg.selected === true }); return;
       case "materialRemove": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.removeMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id }); return;
       case "removePageContext": {
@@ -10087,7 +10122,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // version group (an edit, or the error retry of one, which arrives without editOf) drops its whole group.
     const savedHistory = this.getHistory();
     const conversation = activityConnections(this.context) || savedHistory.length ? savedHistory : rawHistory;
-    const history = modelHistory(clampTimeline(modelConversation(attemptHistory(conversation, retrySourceId), versionOf), HISTORY_MAX));
+    // AE-02 / AE-41 (#555) — a material taken out of the conversation stays out: from the first message that carried it, the
+    // AI's answers go as one fixed line (contextExclusion.ts). Both runtimes read this same history.
+    const replay = replayHistory(modelHistory(clampTimeline(modelConversation(attemptHistory(conversation, retrySourceId), versionOf), HISTORY_MAX)), this.materialMarks(), await this.excludedMaterials());
+    const history = replay.history;
     if (retryRoot && userId !== retryRoot.id) await this.appendHistory([{ ...retryRoot, visibleAttemptId: userId }, userLine(text)]);
     // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
     // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
@@ -10259,7 +10297,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-KNOW-R-003 — the 자료 items the learner selected for this message, read in the preflight; nothing
     // else from the list. The gate is checked again on this turn's narrowed profile. A retry takes none.
-    const materialContext = carryFile ? await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) : null;
+    const takenMaterials = carryFile ? await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) : null;
+    const materialContext = takenMaterials?.text ?? null;
+    // AE-02 — which materials went with this user message (ids only, never their text), kept beside the transcript.
+    if (takenMaterials?.sent.length) await this.rememberMaterialMark(userId, takenMaterials.sent);
     const withMaterials = materialContext ? `${materialContext}\n\n${withFile}` : withFile;
     if (materialContext) (this.materialTurnIds ??= new Set()).add(userId);
     if (!carryFile && retrySourceId !== undefined && this.materialTurnIds?.has(retrySourceId)) void this.postMaterials({ notice: MATERIALS_COPY.retryNotice });
@@ -10298,7 +10339,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       instructor: this._instructorMode.isInstructor === true, local: toolSeat.local,
     });
     const hintObservation = this.runFailures.take(hintSeat);
-    const turnContext = joinTurnContext(memoryTurn?.text, hintObservation);
+    // AE-41 — after a cut, the turn rebuilds its context from the confirmed goal and the kept materials, model-only.
+    const rebuiltText = replay.cut ? await this.rebuiltExclusionContext(profile, replay.kept) : undefined;
+    const turnContext = joinTurnContext(memoryTurn?.text, hintObservation, rebuiltText);
+    const localLead = joinTurnContext(memoryTurn?.text, rebuiltText);
     // 2026-08-19 — pre-built guest worlds. When a child picks a guest they are not
     // made to wait 30–40 s for the coach to produce 5 KB: the filled-in HTML is
     // fetched from the worker, saved and shown immediately, and the coach is told
@@ -11052,7 +11096,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           try {
           result=await runInstructorTurn({
             local,cwd,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
+            history:history.map(m=>({role:m.role,content:m.content})),userText:localLead?`${localLead}\n\n${userTextForModel}`:userTextForModel,
             brief:this._instructorMode.brief,
             chalkCtx,
             browserTools,
@@ -11077,7 +11121,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
           const result=await runLocalCoach({config:local,profile,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
+            history:history.map(m=>({role:m.role,content:m.content})),userText:localLead?`${localLead}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
@@ -12777,6 +12821,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** CGP-CHAT-R-023 — the step marks of the transcript on screen (beside it, never inside the task file). */
+  /** AE-02 (#555) — material ids per user message id, beside the transcript like the step marks (the task file keeps its shape). */
+  private materialMarks() { try { return acceptMaterialMarks(this.context.workspaceState.get(MATERIAL_MARKS_KEY)); } catch { return acceptMaterialMarks(null); } }
+  private async rememberMaterialMark(messageId: string, ids: string[]): Promise<void> {
+    try { await this.context.workspaceState.update(MATERIAL_MARKS_KEY, rememberMaterialMark(this.materialMarks(), messageId, ids)); } catch { /* the mark only narrows a later exclusion */ }
+  }
   private stepMarks() { try { return acceptStepMarks(this.context.workspaceState.get(STEP_MARKS_KEY)); } catch { return acceptStepMarks(null); } }
   private async rememberStepMark(messageId: string, mark: LessonStepMark): Promise<void> {
     try { await this.context.workspaceState.update(STEP_MARKS_KEY, rememberStepMark(this.stepMarks(), messageId, mark)); }

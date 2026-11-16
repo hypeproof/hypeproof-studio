@@ -750,6 +750,8 @@ export type WebviewMessage = (
   | { type: "materialAddDrop"; requestId: string; name: string; size: number; base64: string }
   | { type: "materialSelect"; requestId: string; scope: string; id: string; selected: boolean }
   | { type: "materialRemove"; requestId: string; scope: string; id: string }
+  /** AE-02 (#555) — take a sent text material out of the conversation, or put it back. */
+  | { type: "materialExclude"; requestId: string; scope: string; id: string; excluded: boolean }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).
   | { type: "verifyOpen" }
   // `requestId`: the panel that asked; only it sends the resulting `sendText` (two chat views receive every post).

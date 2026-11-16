@@ -20,6 +20,10 @@ export interface MaterialItemView {
   selected: boolean;
   /** The learner may take it off the list. Never for an instructor's item. */
   removable: boolean;
+  /** AE-02: taken out of the conversation; it goes with no later message until the learner puts it back. */
+  excluded?: boolean;
+  /** AE-02: offers 이후 대화에서 빼기 / 다시 넣기 (a text file that went with a message, or one already out). */
+  excludable?: boolean;
 }
 
 /** A selected item that cannot go with the next message now (gone from the list or unreadable). */
@@ -42,6 +46,18 @@ export interface MaterialsView {
   /** How many items one message may carry. */
   maxSelected: number;
 }
+
+/**
+ * AE-02 / AE-41 (#555, contextExclusion.ts) — taking a sent text material out of the conversation. Short Korean copy that
+ * never says anything was deleted from the AI service: what was already sent stays where it went.
+ */
+export const CONTEXT_EXCLUSION_COPY = {
+  exclude: "이후 대화에서 빼기",
+  include: "다시 넣기",
+  excludedBadge: "대화에서 뺌",
+  excludedNote: "다음 질문부터 AI에게 보내지 않아요. 이미 보낸 내용은 지워지지 않아요.",
+  excludedSelect: "대화에서 뺀 자료예요. 먼저 '다시 넣기'를 눌러 주세요.",
+} as const;
 
 /** At most this many items go with one message. */
 export const MATERIALS_MAX_SELECTED = 3;

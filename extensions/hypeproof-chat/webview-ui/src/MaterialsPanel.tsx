@@ -12,7 +12,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import type { MaterialItemView, MaterialsView } from '../../src/activityMaterialsView';
-import { MATERIALS_COPY, MATERIALS_DROP_MAX_BYTES } from '../../src/activityMaterialsView';
+import { CONTEXT_EXCLUSION_COPY, MATERIALS_COPY, MATERIALS_DROP_MAX_BYTES } from '../../src/activityMaterialsView';
 import { ChatIcon } from './ChatDetails';
 import { imeComposing } from './imeGuard';
 import { onHostMessage, postToHost } from './vscode';
@@ -129,11 +129,18 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
         <MaterialAddedTime at={item.addedAt} />
         <span className="hp-materials-meta">{item.kind === 'url' ? '주소' : item.kind === 'note' ? '강사가 보낸 글' : '파일'}</span>
         {item.kind !== 'note' && <span className="hp-materials-detail">{item.detail}</span>}
+        {/* AE-02 (#555): a sent text material can be taken out of the conversation and put back; the host enforces it. */}
+        {item.excluded && <p className="hp-materials-meta" data-material-excluded="">{CONTEXT_EXCLUSION_COPY.excludedBadge} · {CONTEXT_EXCLUSION_COPY.excludedNote}</p>}
         <div className="hp-materials-actions">
-          <button type="button" className="hp-cta-quiet" aria-pressed={item.selected} aria-label={selectLabel(item)} disabled={busy}
+          {!item.excluded && <button type="button" className="hp-cta-quiet" aria-pressed={item.selected} aria-label={selectLabel(item)} disabled={busy}
             onClick={() => ask(requestId => ({ type: 'materialSelect', requestId, scope: view.scope, id: item.id, selected: !item.selected }))}>
             {item.selected ? '넣음' : '이번 질문에 넣기'}
-          </button>
+          </button>}
+          {item.excludable && <button type="button" className="hp-cta-quiet" data-material-exclude={item.excluded ? 'include' : 'exclude'}
+            aria-label={`${item.excluded ? CONTEXT_EXCLUSION_COPY.include : CONTEXT_EXCLUSION_COPY.exclude}: ${item.title}`} disabled={busy}
+            onClick={() => ask(requestId => ({ type: 'materialExclude', requestId, scope: view.scope, id: item.id, excluded: !item.excluded }))}>
+            {item.excluded ? CONTEXT_EXCLUSION_COPY.include : CONTEXT_EXCLUSION_COPY.exclude}
+          </button>}
           {item.removable
             ? <button type="button" className="hp-cta-quiet" data-material-remove="" aria-label={`목록에서 빼기: ${item.title}`} disabled={busy}
                 onClick={() => ask(requestId => ({ type: 'materialRemove', requestId, scope: view.scope, id: item.id }))}>목록에서 빼기</button>

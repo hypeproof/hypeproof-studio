@@ -16,6 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { defuseTag } from "./dataTag.ts";
+import { EXCLUDABLE_KINDS, excludedList } from "./contextExclusion.ts";
 import { decodeTextFile, FILE_ATTACH_MAX_BYTES, FILE_ATTACH_MAX_CHARS, FILE_REFUSAL_COPY, readWorkspaceTextFile, type FileRefusalCause } from "./fileAttachment.ts";
 import type { InboxCard } from "./classroomInbox.ts";
 import { MATERIAL_ORIGIN_LABELS, MATERIALS_COPY, MATERIALS_MAX_ITEMS, MATERIALS_MAX_SELECTED, type MaterialItemView, type MaterialOrigin, type MaterialsView, type MaterialUnavailableView } from "./activityMaterialsView.ts";
@@ -95,6 +96,8 @@ export interface MaterialsManifest {
   items: StoredMaterial[];
   /** `자료/` files the AI wrote that the learner took off the list. */
   hidden: string[];
+  /** AE-02 / AE-41 (contextExclusion.ts): material ids the learner took out of the conversation for this work folder. */
+  excluded?: string[];
 }
 export const emptyManifest = (): MaterialsManifest => ({ version: 1, items: [], hidden: [] });
 
@@ -119,7 +122,8 @@ export function loadManifest(file: string): MaterialsManifest {
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as MaterialsManifest;
     if (!raw || raw.version !== 1 || !Array.isArray(raw.items)) return emptyManifest();
     const hidden = Array.isArray(raw.hidden) ? raw.hidden.filter((p): p is string => typeof p === "string" && materialRelPath(p) !== null) : [];
-    return { version: 1, items: raw.items.filter(validStored).slice(0, MATERIALS_MAX_ITEMS), hidden };
+    const excluded = excludedList(raw.excluded);
+    return { version: 1, items: raw.items.filter(validStored).slice(0, MATERIALS_MAX_ITEMS), hidden, ...(excluded.length ? { excluded } : {}) };
   } catch {
     return emptyManifest();
   }
@@ -292,6 +296,8 @@ export interface MaterialSources {
   inbox: readonly InboxCard[];
   selected: ReadonlySet<string>;
   scope: string;
+  /** AE-02: ids that went with a message in the current conversation (the material marks, contextExclusion.ts). */
+  sent?: ReadonlySet<string>;
 }
 
 /** Plain, visible files directly in `<root>/자료/`: no links, no folders, no hidden names. */
@@ -319,9 +325,12 @@ export function instructorMaterials(cards: readonly InboxCard[]): InboxCard[] {
 }
 
 export function materialsView(src: MaterialSources): MaterialsView {
-  const files = new Set(src.folderFiles);
+  const files = new Set(src.folderFiles), excluded = new Set(src.manifest.excluded ?? []);
   const item = (id: string, kind: MaterialItemView["kind"], title: string, detail: string, origin: MaterialOrigin, addedAt?: number): MaterialItemView => ({
     id, kind, title, detail, origin, originLabel: MATERIAL_ORIGIN_LABELS[origin], selected: src.selected.has(id), removable: origin !== "instructor",
+    // AE-02: only a kind whose exclusion is enforced (a text file), and only once it went with a message or is already out.
+    ...(excluded.has(id) ? { excluded: true } : {}),
+    ...(EXCLUDABLE_KINDS.includes(kind) && (excluded.has(id) || !!src.sent?.has(id)) ? { excludable: true } : {}),
     ...(Number.isSafeInteger(addedAt) && addedAt! > 0 && addedAt! <= 8640000000000000 ? { addedAt } : {}),
   });
   const items: MaterialItemView[] = [];
@@ -402,6 +411,8 @@ export function selectedMaterialsText(root: string, view: MaterialsView, selecte
   const cards = new Map(instructorMaterials(inbox).map((c) => [inboxId(c), c]));
   for (const item of view.items) {
     if (!selected.has(item.id)) continue;
+    // AE-02: an excluded material never goes with a message, even if a stale selection still names it.
+    if (item.excluded) { skipped.push(item.title); continue; }
     const origin = attr(item.originLabel);
     if (item.kind === "file") {
       const read = readWorkspaceTextFile(root, path.join(root, ...item.detail.split("/")));
