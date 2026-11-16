@@ -554,10 +554,14 @@ struct SharedConversationView: View {
                         Spacer()
                         Button("멈춤") { voice.stop() }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("음성 멈춤").accessibilityIdentifier("sharedVoiceStop")
                     } else {
-                        Button { beginVoice(.dictation) } label: { Image(systemName: "mic").font(.system(size: 20)).frame(width: 44, height: 44) }
+                        Button { beginVoice(.dictation) } label: {
+                            Image(systemName: "mic").font(.system(size: 20)).frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
                             .disabled(!model.canEditDraft || model.busy).accessibilityLabel("말로 적기").accessibilityIdentifier("sharedDictate")
                         Button { if model.signedIn { beginVoice(.conversation) } else { startLogin() } } label: {
                             Image(systemName: "waveform").font(.system(size: 20)).frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }.accessibilityLabel(model.signedIn ? "음성 대화" : "로그인하고 음성 대화")
                             .accessibilityIdentifier("sharedVoice")
                             .disabled(model.signedIn ? !model.canSend || !model.draftText.isEmpty : model.busy || !model.accountStorageReady)

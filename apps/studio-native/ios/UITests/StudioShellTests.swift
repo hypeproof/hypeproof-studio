@@ -148,6 +148,21 @@ final class StudioJourneyTests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
     }
+    @MainActor private func tapVoiceTargetOnce(_ id: String, app: XCUIApplication) {
+        let button = app.buttons[id]
+        enabled(button)
+        let frame = button.frame
+        let point = button.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.15))
+        let observation = XCTAttachment(string: "id=\(id); frame=\(frame); enabled=\(button.isEnabled); hittable=\(button.isHittable); tap=\(point.screenPoint); window=\(app.frame)")
+        observation.name = id + "-single-edge-tap"; observation.lifetime = .keepAlways; add(observation)
+        XCTAssertGreaterThanOrEqual(frame.width, 44)
+        XCTAssertGreaterThanOrEqual(frame.height, 44)
+        XCTAssertTrue(app.frame.contains(frame), "The complete voice target must stay inside the app window.")
+        XCTAssertTrue(button.isHittable)
+        // One real touch in the padded corner, outside the old 18x21pt glyph.
+        // The caller must still prove its original draft/reply/continuation result.
+        point.tap()
+    }
     @MainActor private func valueContains(_ element: XCUIElement, _ text: String) {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", text), object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
@@ -401,7 +416,7 @@ final class StudioJourneyTests: XCTestCase {
     @MainActor func testDictationEditsDraftThenSendGetsReplyWithoutDesktop() throws {
         let app = launch("first-answer"); signIn(app)
         let input = field(app); input.tap(); input.typeText("My existing thought")
-        app.buttons["sharedDictate"].tap()
+        tapVoiceTargetOnce("sharedDictate", app: app)
         valueContains(field(app), "I want to understand my next step")
         enabled(app.buttons["sharedSend"])
         XCTAssertTrue((field(app).value as? String)?.contains("My existing thought") == true)
@@ -429,7 +444,7 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor func testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry() throws {
         let app = launch("voice-empty-results"); signIn(app)
-        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        tapVoiceTargetOnce("sharedVoice", app: app)
         answer(app) // Old code clears the useful partial and never submits this first turn.
         waitForVoiceEvent("noSpeechPaused", in: app)
         let result = try trace(app)

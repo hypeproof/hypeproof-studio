@@ -10126,6 +10126,12 @@ recoverable; no reply playback, resumed capture or automatic replay follows (#39
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
 
+On iPhone, both dictation and voice-conversation controls expose the full 44×44pt
+label as a touch target, including the padding outside the icon (#4259). A single
+touch in that padding must start the same guarded action. Existing draft-only
+dictation, explicit conversation start, reply continuation and Stop semantics
+remain unchanged; a layout frame alone is not evidence of a usable target.
+
 ### Native iPhone credential continuity — MIRS-01
 
 The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
