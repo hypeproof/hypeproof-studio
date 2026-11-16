@@ -9,6 +9,10 @@
 #   gh variable set RELEASE_AUTO --body on  --repo hypeproof/hypeproof-studio   # automatic
 #   gh variable set RELEASE_AUTO --body off --repo hypeproof/hypeproof-studio   # manual (approval) only
 # The publish gate reads the same variable, so turning it off also stops a promotion already under way.
+# Not every gate passed, evidence stayed missing for askAfterHours, or the switch is off: the pipeline asks the
+# whole team on the release PR (hps-release-ask/1, review requests to the release approvers); Harness
+# stakeholders.py relays it to Discord and the approval inbox. After publication it checks the SDK seed and
+# posts "출시됨 vX" (hps-release-published/1).
 # Decision: hypeprooflab docs/decisions/2026-11-16-studio-auto-release.md.
 name: release-auto
 
@@ -36,8 +40,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs with the switch off too: then nothing is promoted and the whole team is asked instead.
   auto:
-    if: vars.RELEASE_AUTO == 'on'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -52,7 +56,7 @@ jobs:
           node-version: "22.22.1"
 
       - name: Controls
-        run: node --test scripts/release/test/auto-release.test.mjs scripts/release/test/release-blockers.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
+        run: node --test scripts/release/test/auto-release.test.mjs scripts/release/test/release-ask.test.mjs scripts/release/test/release-blockers.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
 
       # A failed or unanswered check leaves the decision empty: the freeze gate then waits (fail closed).
       - name: Live-class freeze

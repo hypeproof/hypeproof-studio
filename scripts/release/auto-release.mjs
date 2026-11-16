@@ -31,6 +31,7 @@ import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {AUTO_SCHEMA, REQUIRED_GATES, depsEvidence, holds, kitEvidence} from './auto-release-record.mjs';
 import {checkBlockers} from './release-blockers.mjs';
+import {PUBLISHED_SCHEMA, alreadyAsked, askBody, askReason, publishChecks, publishedBody} from './release-ask.mjs';
 import {gatherPromotion, promotionDecision} from './promote.mjs';
 import {casebookEvidence} from './publish-gate.mjs';
 import {releasePlatforms} from './platforms.mjs';
@@ -42,7 +43,8 @@ const MARKER = '<!-- hps-auto-release-status -->';
 
 export function loadPolicy(file = path.join(scriptDir, '..', '..', 'config', 'release-auto.json')) {
   const p = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (p.version !== 1 || !p.pipeline?.length || !p.evidenceReporters?.length || !p.blackboxKit?.requiredScenarios?.length) {
+  if (p.version !== 1 || !p.pipeline?.length || !p.evidenceReporters?.length || !p.blackboxKit?.requiredScenarios?.length
+    || !p.releaseApprovers?.length || !p.team?.length || !(p.askAfterHours > 0)) {
     throw new Error('config/release-auto.json is incomplete');
   }
   return p;
@@ -206,6 +208,64 @@ function alert(text) {
   spawnSync('curl', ['-fsS', '-H', 'Content-Type: application/json', '-d', JSON.stringify({content: text.slice(0, 1900)}), hook], {stdio: 'inherit'});
 }
 
+// The latest public stable release, when it is recent and its release PR has no published record yet.
+function unpublishedRelease(repo, policy, now) {
+  const list = JSON.parse(gh(['api', `repos/${repo}/releases?per_page=20`]));
+  const r = list.filter(x => !x.draft && !x.prerelease && /^v\d+\.\d+\.\d+$/.test(x.tag_name))
+    .sort((a, b) => b.published_at.localeCompare(a.published_at))[0];
+  if (!r || now - Date.parse(r.published_at) > 72 * 3600 * 1000) return null;
+  const prs = JSON.parse(gh(['pr', 'list', '--repo', repo, '--state', 'merged', '--head', `release/${r.tag_name}`, '--json', 'number']));
+  if (prs.length !== 1) return null;
+  const number = prs[0].number;
+  const done = commentsWithState(repo, number).some(c => policy.pipeline.includes(c.user) && c.body.includes(PUBLISHED_SCHEMA));
+  return done ? null : {tag: r.tag_name, number, assets: r.assets.map(a => ({name: a.name, size: a.size}))};
+}
+
+function seedOf(repo, tag) {
+  const url = `https://github.com/${repo}/releases/download/${tag}/sdk-seed.json`;
+  const out = spawnSync('curl', ['-sL', '-o', '-', '-w', '\n%{http_code}', url], {encoding: 'utf8'});
+  const lines = String(out.stdout ?? '').trimEnd().split('\n');
+  const status = Number(lines.pop());
+  let seed = null;
+  try { seed = JSON.parse(lines.join('\n')); } catch { seed = null; }
+  return {status: Number.isFinite(status) ? status : 0, seed};
+}
+
+// Post-publish: the seed the App asks for exists, then "출시됨 vX" to the whole team.
+function postPublish({repo, policy, out, runUrl, say, pipelineToken}) {
+  const r = unpublishedRelease(repo, policy, Date.now());
+  if (!r) return;
+  const {status, seed} = seedOf(repo, r.tag);
+  const check = publishChecks({tag: r.tag, seedStatus: status, seed, assets: r.assets});
+  const file = path.join(out, 'published.md');
+  fs.writeFileSync(file, publishedBody({tag: r.tag, pr: r.number, ok: check.ok, problems: check.problems, team: policy.team, runUrl}));
+  gh(['pr', 'comment', String(r.number), '--repo', repo, '--body-file', file], pipelineToken);
+  if (check.ok) {
+    say(`${r.tag} is public and its SDK seed is in place; announced on #${r.number}.`);
+    return;
+  }
+  const issue = gh(['issue', 'create', '--repo', repo, '--title', `Post-publish check failed: ${r.tag} (sdk-seed)`, '--label', 'release-blocker', '--body-file', file]).split('\n').pop();
+  say(`${r.tag} post-publish check failed: ${check.problems.join('; ')}. ${issue}`);
+  alert(`Studio ${r.tag} is public but its post-publish check failed (${check.problems[0]}). ${issue} ${runUrl}`);
+}
+
+// Ask the whole team on the release PR, once per head.
+function askTeam({repo, number, facts, policy, version, gates, reason, out, runUrl, say, pipelineToken}) {
+  const pr = facts.promotion.pr;
+  if (alreadyAsked(facts.comments, policy.pipeline, pr.head)) { say(`Already asked the team about ${pr.head.slice(0, 8)}.`); return; }
+  const file = path.join(out, 'ask.md');
+  fs.writeFileSync(file, askBody({pr, candidate: facts.candidate, rcTag: facts.rcTag, version, reason, gates,
+    approvers: policy.releaseApprovers, team: policy.team, runUrl}));
+  gh(['pr', 'comment', String(number), '--repo', repo, '--body-file', file], pipelineToken);
+  // A review request is what GitHub emails as "review requested"; the approvers answer with a review.
+  try {
+    gh(['pr', 'edit', String(number), '--repo', repo, ...policy.releaseApprovers.flatMap(a => ['--add-reviewer', a])], pipelineToken);
+  } catch (error) {
+    say(`WARNING: review request failed: ${String(error.stderr || error.message).split('\n')[0]}`);
+  }
+  say(`Asked the team (${reason}) on #${number}; release approvers: ${policy.releaseApprovers.join(', ')}.`);
+}
+
 function run({pr: requested, out}) {
   const repo = process.env.GITHUB_REPOSITORY ?? 'hypeproof/hypeproof-studio';
   const runUrl = `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID ?? 'local'}`;
@@ -215,7 +275,10 @@ function run({pr: requested, out}) {
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Automatic release\n\n${summary.map(l => `- ${l}`).join('\n')}\n`);
     process.exit(code);
   };
-  if (process.env.RELEASE_AUTO !== 'on') { say('RELEASE_AUTO is not "on": automatic release is off; nothing read or written.'); finish(0); }
+  const pipelineToken = process.env.RELEASE_PR_TOKEN;
+  try { postPublish({repo, policy: loadPolicy(), out, runUrl, say, pipelineToken}); } catch (error) {
+    say(`WARNING: post-publish check could not run: ${String(error.stderr || error.message).split('\n')[0]}`);
+  }
   const number = requested ?? openReleasePr(repo);
   if (!number) { say('No single open release PR (label release, head release/vX.Y.Z): nothing to promote.'); finish(0); }
   const {policy, facts} = gatherAuto({number, repo, out});
@@ -223,8 +286,11 @@ function run({pr: requested, out}) {
   const version = facts.promotion.pr.headRef.replace(/^release\//, '');
   say(`#${number} ${facts.rcTag} (${facts.candidate.slice(0, 8)}): ${verdict}`);
   gates.forEach(x => say(`${x.id} ${x.status}: ${x.detail}`));
-  const pipelineToken = process.env.RELEASE_PR_TOKEN;
 
+  // Not every gate passed (or automatic release is off): ask the whole team once per head. A WAIT asks only
+  // after askAfterHours; before that the next run may still find the evidence.
+  const reason = askReason({verdict, headDate: facts.promotion.pr.headDate, now: Date.now(), askAfterHours: policy.askAfterHours});
+  if (reason) askTeam({repo, number, facts, policy, version, gates, reason, out, runUrl, say, pipelineToken});
   if (verdict === 'WAIT' || verdict === 'OFF') finish(0);
   if (verdict === 'FAIL') {
     const body = statusBody({gates, rcTag: facts.rcTag, runUrl});

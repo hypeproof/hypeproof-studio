@@ -97,7 +97,7 @@ test('evidence from an untrusted reporter, another candidate or before the head 
   const early = {...kitComment(), created_at: '2026-11-16T01:00:00Z'};
   assert.equal(kitEvidence({pr: {...pr, comments: [early]}, candidate: CAND, reporters: policy.evidenceReporters, required: SCEN}).status, 'WAIT');
   // a scenario added to the required list (e.g. concept conformance) waits until the kit reports it
-  assert.equal(kitEvidence({pr: {...pr, comments: [kitComment()]}, candidate: CAND, reporters: policy.evidenceReporters, required: [...SCEN, 's16']}).status, 'WAIT');
+  assert.equal(kitEvidence({pr: {...pr, comments: [kitComment()]}, candidate: CAND, reporters: policy.evidenceReporters, required: [...SCEN, 's99']}).status, 'WAIT');
   assert.equal(depsEvidence({pr: {...pr, comments: [depsComment('PASS', 'someone')]}, candidate: CAND, reporters: policy.evidenceReporters}).status, 'WAIT');
 });
 
@@ -147,7 +147,7 @@ test('policy, workflow and blocker title', () => {
   assert.deepEqual(policy.pipeline, ['hypeproof-org-lab-bot[bot]']);
   assert.ok(!policy.evidenceReporters.some(r => policy.pipeline.includes(r)), 'evidence reporters must not hold the pipeline authority');
   const wf = fs.readFileSync(path.join(here, '..', '..', '..', '.github', 'workflows', 'release-auto.yml'), 'utf8');
-  assert.match(wf, /if: vars\.RELEASE_AUTO == 'on'/);
+  assert.doesNotMatch(wf, /if: vars\.RELEASE_AUTO == 'on'/, 'the job runs with the switch off too, to ask the team');
   assert.match(wf, /RELEASE_AUTO: \$\{\{ vars\.RELEASE_AUTO \}\}/);
   assert.match(wf, /LIVE_DECISION: \$\{\{ steps\.live\.outputs\.decision \}\}/);
   for (const name of ['verify-unified-release.yml', 'release-promote.yml']) {
