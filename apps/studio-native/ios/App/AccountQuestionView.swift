@@ -15,6 +15,11 @@ struct AccountQuestionView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("accountQuestionStatus") }
+                    if model.state.answerConfirmed {
+                        Button { model.refresh() } label: { Text("다음 질문 보기").frame(minHeight: 44) }
+                            .buttonStyle(.borderedProminent).disabled(model.state.busy).accessibilityIdentifier("accountQuestionNext")
+                        Text("지금은 닫고 원래 대화로 돌아가도 좋아요.").foregroundStyle(.secondary)
+                    }
                     if model.state.canStart {
                         ForEach([("goal", "목표를 정리하고 싶어요"), ("method", "방법이 막혔어요"), ("decision", "결정을 앞두고 있어요")], id: \.0) { choice in
                             Button { Task { await model.controller?.begin(choice.0) } } label: { Text(choice.1).frame(minHeight: 44) }

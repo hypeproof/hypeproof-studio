@@ -11,7 +11,7 @@ export interface QuestionCard {
   skip: string | null; note: string | null;
 }
 export type CardAction = 'shown' | 'answer' | 'skip';
-export interface QuestionView { status: 'idle' | 'loading' | 'ready' | 'error'; card: QuestionCard | null; binding?: string; busy: boolean; message?: string }
+export interface QuestionView { status: 'idle' | 'loading' | 'ready' | 'answered' | 'error'; card: QuestionCard | null; binding?: string; busy: boolean; message?: string }
 export interface CardAnswer { action?: string; choice?: string; text?: string }
 const object = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const string = (v: unknown, max = 4000): v is string => typeof v === 'string' && v.length <= max;
@@ -92,7 +92,7 @@ export class AccountCardsController {
       else {
         const message = action === 'answer' ? response.thanks : response.message;
         if (!string(message)) throw new Error('Invalid receipt');
-        this.state = {status:'ready',card:null,busy:false,message};
+        this.state = {status:action === 'answer' ? 'answered' : 'ready',card:null,busy:false,message};
       }
       this.options.observed?.(action === 'shown' ? 'question.presented' : action === 'answer' ? 'question.answered' : 'question.skipped', binding);
     } catch { if (epoch === this.epoch) {

@@ -14,7 +14,7 @@ async function main(){
  const root=createRoot(document.getElementById('root')!);
  const update=async(state:any)=>act(async()=>window.dispatchEvent(new dom.window.MessageEvent('message',{data:{type:'startState',state}})));
  const card={schema:'hps-card/1',key:'growth:one',kind:'growth-choice',attempt:1,urgency:'normal',expires_at:null,deliver_via:['in_app'],title:'오늘의 질문',preface:null,prompt:'어디부터 시작할까요?',segments:[{kind:'text',label:null,text:'<img src=x onerror=alert(1)>'}],choices:[{id:'goal',label:'목표부터'}],select:'pick',text:{label:'내 생각',placeholder:'짧게 적어도 좋아요',max:2000,value:null},actions:[{id:'continue',label:'선택하고 이어가기',primary:true,needs_answer:true}],skip:'나중에',note:null};
- const state:any={checking:false,version:'test',account:{status:'signedIn',account:{id:'account-a',display_name:'테스트 사용자',email:'fixture@example.test'},passes:[]},questionCard:{status:'ready',card,binding:'account-a-bound-view',busy:false},memberApprovals:{entryVisible:true,status:'ready',cards:[],pending:[],busy:false}};
+ const state:any={checking:false,version:'test',account:{status:'signedIn',account:{id:'account-a',display_name:'테스트 사용자',email:'fixture@example.test'},passes:[]},questionCard:{status:'ready',card,binding:'account-a-bound-view',busy:false},memberApprovals:{entryVisible:true,status:'ready',cards:[],pending:[],busy:false},teamProduct:{available:true,busy:false,binding:'focus-binding',granted:false,notice:'선택 사항'}};
  try {
   await act(async()=>root.render(<StartPage/>)); await update(state);
   assert.match(document.querySelector('[data-testid="account-greeting"]')?.textContent ?? '',/안녕하세요, 테스트 사용자님/);
@@ -28,6 +28,23 @@ async function main(){
   assert.equal(button('목표부터').getAttribute('aria-pressed'),'true','same-card refresh preserves selection');
   await act(async()=>button('선택하고 이어가기').click());
   assert.deepEqual(posts.at(-1),{type:'questionCardAct',binding:'account-a-bound-view',key:'growth:one',action:'answer',answer:{choice:'goal',action:'continue',text:''}});
+  const beforeNext=posts.length;
+  await update({...state,questionCard:{status:'answered',card:null,busy:false,message:'답변을 남겼어요'}});
+  assert.equal(posts.length,beforeNext,'confirmed receipt does not request a follow-up automatically');
+  for(const label of ['이루고 싶은 일','다르게 해 볼 방법','결정이 필요한 일']) assert.equal(button(label),undefined,'answered state must wait for an explicit read');
+  assert(button('다음 질문 보기'));await act(async()=>button('다음 질문 보기').click());
+  assert.deepEqual(posts.at(-1),{type:'questionCardRefresh'});assert.equal(posts.length,beforeNext+1);
+  await update({...state,questionCard:{status:'loading',card:null,busy:true}});
+  for(const label of ['이루고 싶은 일','다르게 해 볼 방법','결정이 필요한 일']) assert.equal(button(label),undefined,'loading must not offer a focus POST');
+  await update({...state,questionCard:{status:'ready',card:null,busy:false},teamProduct:{available:true,busy:false,binding:'focus-binding',granted:false,notice:'선택 사항'}});
+  assert.equal(button('다음 질문 보기'),undefined);assert(button('이루고 싶은 일'));assert(button('다르게 해 볼 방법'));assert(button('결정이 필요한 일'));
+  assert(document.querySelector('[data-testid="personal-reflection-entry"]'),'existing conversation entry remains available');
+  assert.equal(posts.length,beforeNext+1,'empty follow-up does not choose a new focus');
+  await update({...state,questionCard:{status:'error',card:null,busy:false,message:'처리 결과를 확인하지 못했어요'}});
+  assert.equal(button('다음 질문 보기'),undefined);assert(button('다시 조회'));
+  for(const label of ['이루고 싶은 일','다르게 해 볼 방법','결정이 필요한 일']) assert.equal(button(label),undefined,'uncertain result must not offer a focus POST');
+  await update({...state,questionCard:{status:'ready',card:null,busy:false},teamProduct:{...state.teamProduct,pendingFocus:'method'}});
+  assert.equal(button('이루고 싶은 일').disabled,true);assert.equal(button('결정이 필요한 일').disabled,true);assert.equal(button('다르게 해 볼 방법').disabled,false,'confirmed empty read keeps explicit same-intent recovery');
   await update({...state,account:{status:'signedOut'}});
   assert.equal(document.querySelector('[data-testid="account-question-card"]'),null);assert.equal(document.querySelector('[data-testid="account-greeting"]'),null);assert.equal(document.querySelector('[data-testid="member-approval-entry"]'),null);
   await update({...state,account:{...state.account,account:{...state.account.account,id:'account-b',display_name:'새 사용자'}},questionCard:{...state.questionCard,binding:'account-b-bound-view'}});

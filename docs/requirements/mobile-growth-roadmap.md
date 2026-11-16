@@ -65,6 +65,13 @@ chosen idea needs files, tools and a software outcome. Quiet cached-history refr
 reconciliation without transient progress in an already ready conversation; initial/manual loading
 and errors remain visible. This does not change send authority, request IDs or polling.
 
+Under #4236, a confirmed question-answer receipt offers an explicit “다음 질문 보기”
+action in the existing iOS, Android and desktop surfaces. It performs one card GET
+only after a tap. An empty result keeps the existing available starting choices and
+the route back to the conversation; Close/Stop remain voluntary. An uncertain answer
+or a failed read must not appear as confirmed success or replay an answer, trigger,
+AI turn or approval. Account/session fences and the original conversation draft remain intact.
+
 The client requires Service `team-product-api` line `1` in the shared release
 dependency ledger. That line proves compatible source, not enabled operation:
 0091/0092 schema, team-event/push flags, verified membership and provider readiness
