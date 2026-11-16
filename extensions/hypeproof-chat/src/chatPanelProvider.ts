@@ -5836,12 +5836,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** CGP-SHELL-R-014 — the start page's 팁 보기 row follows this choice; any press (either surface) or a seat switch fires. */
-  private readonly lessonTipsListeners = new Set<() => void>();
+  // Created on first use, so a provider built without its constructor (test harnesses) still accepts a listener.
+  private lessonTipsListeners?: Set<() => void>;
   onLessonTipsChanged(listener: () => void): () => void {
-    this.lessonTipsListeners.add(listener);
-    return () => { this.lessonTipsListeners.delete(listener); };
+    (this.lessonTipsListeners ??= new Set()).add(listener);
+    return () => { this.lessonTipsListeners?.delete(listener); };
   }
-  private emitLessonTipsChanged(): void { for (const l of [...this.lessonTipsListeners]) { try { l(); } catch { /* a listener never breaks the chat */ } } }
+  private emitLessonTipsChanged(): void { for (const l of [...(this.lessonTipsListeners ?? [])]) { try { l(); } catch { /* a listener never breaks the chat */ } } }
 
   refreshConfig(): Promise<void> {
     return (async () => {
