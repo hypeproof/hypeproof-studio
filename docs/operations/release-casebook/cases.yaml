@@ -746,3 +746,23 @@ cases:
       ref: "#4111, #3767"
     status: active
     notes: TeamEntryUITests.testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft, testExplicitStartingChoiceRendersRealCardAndAnswerWithoutSharingConsent, testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry, testNotificationReceivedDuringRegistrationOpensOnceWhenRegistrationFinishes 를 실제 XCTest 기록으로 수집한다. 통제된 HTTP·화면·저장소 검증과 실제 로그인·설치 앱·운영 서버 수용은 구분한다. 등록 대기 알림 테스트는 합성 알림을 사용하며 실제 푸시 수신을 증명하지 않는다. iOS 앱 또는 실제 푸시가 실행되지 않았다면 해당 항목은 NOT RUN으로 남긴다.
+
+  - id: BB-040
+    journey: CUJ-4
+    priority: P0
+    title: Windows 에서 앱 안 업데이트를 누르면 설치되고 Studio 가 새 버전으로 다시 열린다
+    requirements: [REQ-STUDIO-AUTO-UPDATE, REQ-I2]
+    steps:
+      - Windows 11 새 PC 에 직전 안정 버전을 그 버전의 한 줄 설치로 깐다
+      - 새 안정 버전이 공개된 뒤 업데이트 배너에서 업데이트 를 누르고 재시작하고 업데이트 를 누른다
+      - 같은 PC 에서 한 번 더, 업데이트 배너를 누르지 않고 Studio 를 직접 닫아 닫을 때 설치(또는 30분 넘게 뒤로 둔 자동 업데이트)를 확인한다
+      - 두 경우 모두 설치 폴더의 버전과 %TEMP% 아래 hps-update-* 폴더를 확인한다
+    expect:
+      - Studio 가 닫혔다가 새 버전으로 다시 열리고 같은 활동·파일·대화가 그대로다 (닫을 때 설치는 닫힌 채로 남고, 다음에 열면 새 버전이다)
+      - hps-update-* 폴더의 설치 파일 이름이 .exe 로 끝난다 (예 HypeProof.StudioUserSetup-x64-<엔진 버전>.exe). 숫자만 있는 이름이 아니다
+      - 설치가 시작되지 못하면 Studio 가 닫힌 채로 끝나지 않고 다시 열리며, %TEMP%\hps-update-failure.log 에 이유가 남는다
+    origin:
+      kind: escaped-bug
+      date: "2026-11-16"
+      ref: "#4298"
+    notes: v2026.1109.0 -> v2026.1115.0 Windows 새 설치 두 대에서 업데이트 설치 파일이 확장자 없는 숫자 이름(릴리스 자산 id)으로 저장되어 설치가 시작되지 않았고 Studio 만 닫혔다(#1585 이후 모든 Windows 빌드). 자동 검사는 파일 이름과 PowerShell 실행 파일 검사(update-windows-installer.smoke.mjs, auto-update.smoke.mjs, 그리고 platform / windows-latest fixtures 의 update-windows-wrapper.smoke.mjs)까지만이며 진짜 설치 프로그램과 다시 열림은 사람이 Windows 에서 본다. 그래서 automated_by 는 적지 않는다. 이미 멈춘 빌드는 자기 업데이터로 고칠 수 없어 수동 재설치가 필요하다(#4298).

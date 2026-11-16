@@ -147,6 +147,7 @@ check("parseLatestRelease: win32 picker → resolves the UserSetup .exe download
   assert.equal(info.available, true);
   assert.equal(info.version, "0.1.2");
   assert.equal(info.downloadUrl, pickWindowsInstaller(WIN_ASSETS).url);
+  assert.equal(info.assetName, "HypeProof.StudioUserSetup-x64-1.116.04919.exe", "the asset's real file name travels with the REST URL");
   assert.equal(info.sizeBytes, 126 * 1024 * 1024);
 });
 check("parseLatestRelease: win32 picker + no installer asset → not available", () => {
