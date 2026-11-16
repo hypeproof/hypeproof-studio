@@ -156,3 +156,33 @@ actual cold simulator or native transport pass.
 
 - `hosted-pr4306/terminal-review.json`: `8569ddc0ae1808fd52d10dd95648bfaafc895448e07a716917424f0555ea6c5b`
 - `native-ci-corrections-handoff-v1.json`: `2f5d067e511d0c486e14244b11c99da6d977421b6f076192af3b3f9940cb387b`
+
+## Native transport failure and retained diagnostics
+
+Run `43853610332/1` tested source `f9863aa8b756a1e72fa9ce10008b3d3eb2dedd2c`
+at merge `c6c99463150960427e678c96a51cc7b19212163d`. The actual runtime query
+passed in 51.303 seconds; Debug SDK compilation, signing and installation passed.
+Pinned Darwin server preparation also passed. Native transport then failed with
+`evaluator_exited_early`, without a validated PCM, interruption or Stop receipt.
+That failure remains preserved; the original receipt did not distinguish the
+configuration wait from the native-result wait, so its cause is unresolved.
+
+The helper now records fixed phases, elapsed time, evaluator exit and remaining
+configuration lifetime, with allowlisted partial receipts before owned cleanup.
+Credential-bearing files, raw logs, URLs, room/session identifiers and arbitrary
+error messages are excluded. Malformed or unavailable diagnostic data cannot
+replace the primary failure. Two old-source controls failed as intended; fifteen
+corrected controls passed, including real early-exit child processes, malformed
+data, privacy sentinels and a diagnostic-reader failure. Previously executed real
+nested TERM/INT/timeout controls remain source-bound to unchanged cancellation
+functions; no repeated native acceptance is inferred from these controls.
+
+Owned app termination/container preparation now precede starting the evaluator
+and issuing its 75-second configuration. Previously those permitted cold-command
+delays could consume the fresh lifetime. A virtual-clock control proves the
+ordering correction, without extending TTL, changing acceptance or adding a
+retry. This source-level hazard is not proof of the historical failure's cause.
+Corrected native execution and physical audio remain unverified.
+
+- `hosted-pr4306-f986/voice-failure-review.json`: `32c9a7c60e649c2997f4862f913b5beedfc98c12fa824250b21b71091e398ebd`
+- `native-failure-observability-handoff-v2.json`: `a1bf7b663ea731a8812be7202a5f28c84b57bc6e9f72e7d156b802d8a4ff20c4`
