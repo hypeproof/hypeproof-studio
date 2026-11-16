@@ -9,6 +9,11 @@ The previous checklist for v0.1.0 is archived in
 ## 1. Before the cut
 
 - [ ] Make sure that no class is live. The release workflows stop for a live session.
+- [ ] Make sure that no issue labeled `release-blocker` is open in `hypeproof-studio`, `hypeproof-service` or
+      `hypeprooflab`. release-cut (create) and release-promote list them and stop
+      (`scripts/release/release-blockers.mjs`). Raise one with Harness `scripts/release/flag-blocker.sh`; close it when
+      fixed. Never remove the label to pass the gate.
+- [ ] Never merge a release PR by hand or by an agent. release-promote merges it after the approval.
 - [ ] Make sure that the PRs for this release are merged into `main`. Later merges go to
       the next release.
 - [ ] Select the release manager for this week. The release manager is a member with

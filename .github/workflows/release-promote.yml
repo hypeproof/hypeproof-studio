@@ -55,7 +55,7 @@ jobs:
           node-version: "22.22.1"
 
       - name: Controls
-        run: node --test scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
+        run: node --test scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-blockers.test.mjs
 
       # The release PR is merged with the org bot App, as release-cut opens it: a protected main
       # may refuse the workflow token.
@@ -66,10 +66,23 @@ jobs:
           app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
           private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
 
+      # Release blockers (scripts/release/release-blockers.mjs) are read in Studio, Service and Lab; the
+      # last two are private, so the org bot App token covers the three repositories. The App needs
+      # Issues: read. Without it the gate cannot read the list and refuses (fail closed).
+      - name: Release blocker read token (hypeproof-org-lab-bot)
+        id: blockers
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          owner: hypeproof
+          repositories: hypeproof-studio,hypeproof-service,hypeprooflab
+
       - name: Promote the approved rc
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
+          RELEASE_BLOCKER_TOKEN: ${{ steps.blockers.outputs.token }}
           PR: ${{ inputs.pr || github.event.pull_request.number }}
         run: |
           set -euo pipefail
