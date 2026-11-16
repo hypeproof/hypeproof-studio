@@ -23,6 +23,9 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
     private var timeoutTask: Task<Void, Never>?
     private var cleanupTask: Task<Void, Never>?
     private var cleanupDeadlineTask: Task<Void, Never>?
+    private var pendingStopOwner: UUID?
+    private var pendingStopEvaluatorSID: String?
+    private var stopAcknowledged = false
     private var priorEngineAvailability: AudioEngineAvailability?
     private var remoteReceipt: (track: RemoteAudioTrack, observer: LiveKitEvaluationAudioReceipt)?
     private var syntheticInput: LiveKitEvaluationSyntheticInput?
@@ -161,6 +164,12 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         ciRecord("stop_requested")
         let previousRoom = room
         let previousOwner = audioOwner
+        let previousConnection = connectionID
+        pendingStopOwner = message == nil ? nil : previousConnection
+        pendingStopEvaluatorSID = previousRoom?.remoteParticipants.values.first {
+            $0.identity?.stringValue == VoiceEvaluationSession.evaluatorIdentity
+        }?.sid?.stringValue
+        stopAcknowledged = false
         connectionID = nil
         fenceAudio()
         let pendingConnect = connectionTask
@@ -181,14 +190,14 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
                 let disableMicrophone = Task {
                     try? await previousRoom.localParticipant.setMicrophone(enabled: false)
                 }
-                // Reliable delivery is best effort during teardown, not an acknowledgement.
-                // Disconnect does not wait for a remote stop acknowledgement.
+                // Local output is already fenced. Observe the exact terminal ack
+                // before disconnect can make the evaluator reject a queued Stop.
                 let stopDelivery = Task {
                     if let message { try? await Self.publish(message, to: previousRoom) }
                 }
-                // A short bounded grace lets the local reliable channel send Stop.
-                // It is not evidence that the peer received or acknowledged it.
-                try? await Task.sleep(nanoseconds: 200_000_000)
+                if message != nil, let previousConnection {
+                    await self?.waitForStopAcknowledgement(in: previousRoom, owner: previousConnection)
+                }
                 await previousRoom.disconnect()
                 stopDelivery.cancel()
                 await pendingConnect?.value
@@ -201,12 +210,26 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
             guard let self else { return }
             self.cleanupDeadlineTask?.cancel(); self.cleanupDeadlineTask = nil
             self.releaseAudioGates(owner: previousOwner)
+            self.pendingStopOwner = nil
+            self.pendingStopEvaluatorSID = nil
+            self.stopAcknowledged = false
             self.room = nil
             self.busy = false
             self.ciRecord("cleanup_complete")
             self.status = Self.endStatus(reason)
             self.observation = "연결 종료 · 실제 재생/청취 범위 알 수 없음"
             self.cleanupTask = nil
+        }
+    }
+
+    private func waitForStopAcknowledgement(in previousRoom: Room, owner: UUID) async {
+        let clock = ContinuousClock()
+        // A sub-budget inside the unchanged 10s native cleanup acceptance gate.
+        // Missing ack still disconnects safely; it is never reported as received.
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while pendingStopOwner == owner, pendingStopEvaluatorSID != nil,
+              room === previousRoom, !stopAcknowledged, clock.now < deadline {
+            do { try await Task.sleep(nanoseconds: 10_000_000) } catch { return }
         }
     }
 
@@ -380,9 +403,17 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         // Only sender/topic/session/turn/generation authorization is claimed here.
         guard topic == VoiceEvaluationSession.topic, data.count <= 4096,
               let identity = participant?.identity?.stringValue,
+              let participantSID = participant?.sid?.stringValue,
               let message = try? JSONDecoder().decode(VoiceEvaluationEnvelope.self, from: data) else { return }
         Task { @MainActor [weak self] in
-            guard let self, self.room === room, self.connectionID != nil,
+            guard let self, self.room === room else { return }
+            if self.pendingStopOwner != nil, self.pendingStopEvaluatorSID == participantSID,
+               self.session.acknowledgesStop(message, participantIdentity: identity) {
+                if !self.stopAcknowledged { self.ciRecord("stop_acknowledged") }
+                self.stopAcknowledged = true
+                return
+            }
+            guard self.connectionID != nil,
                   self.session.receive(message, participantIdentity: identity) else { return }
             switch message.event {
             case .started:

@@ -92,6 +92,39 @@ final class VoiceEvaluationSessionTests: XCTestCase {
         XCTAssertNil(neverStarted.beginTurn())
     }
 
+    func testExactStoppedAcknowledgementIsObservationOnlyAndCannotRevivePlayback() throws {
+        var session = VoiceEvaluationSession()
+        let start = try XCTUnwrap(session.beginTurn())
+        let evaluator = VoiceEvaluationSession.evaluatorIdentity
+        let stopped = VoiceEvaluationEnvelope(sessionID: start.sessionID, turnID: start.turnID,
+            generation: start.generation, event: .stopped)
+        XCTAssertFalse(session.acknowledgesStop(stopped, participantIdentity: evaluator), "No unsolicited teardown acknowledgement")
+        XCTAssertTrue(session.receive(reply(to: start), participantIdentity: evaluator))
+        let track = try XCTUnwrap(session.authorizedTrack)
+        XCTAssertNotNil(session.stop())
+        XCTAssertTrue(session.acknowledgesStop(stopped, participantIdentity: evaluator))
+        XCTAssertFalse(session.acknowledgesStop(stopped, participantIdentity: "other-participant"))
+        for invalid in [
+            VoiceEvaluationEnvelope(version: 2, sessionID: start.sessionID, turnID: start.turnID, generation: start.generation, event: .stopped),
+            VoiceEvaluationEnvelope(sessionID: UUID(), turnID: start.turnID, generation: start.generation, event: .stopped),
+            VoiceEvaluationEnvelope(sessionID: start.sessionID, turnID: UUID(), generation: start.generation, event: .stopped),
+            VoiceEvaluationEnvelope(sessionID: start.sessionID, turnID: start.turnID, generation: start.generation + 1, event: .stopped),
+            VoiceEvaluationEnvelope(sessionID: start.sessionID, turnID: start.turnID, generation: 0, event: .stopped),
+            VoiceEvaluationEnvelope(sessionID: start.sessionID, turnID: start.turnID, generation: start.generation, event: .stopped, audioTrack: track),
+            reply(to: start), reply(to: start, event: .interrupted)
+        ] { XCTAssertFalse(session.acknowledgesStop(invalid, participantIdentity: evaluator)) }
+        XCTAssertFalse(session.receive(stopped, participantIdentity: evaluator), "Acknowledgement is not a state transition")
+        XCTAssertFalse(session.receive(reply(to: start), participantIdentity: evaluator))
+        XCTAssertFalse(session.shouldSubscribe(trackName: track, participantIdentity: evaluator))
+        XCTAssertEqual(session.phase, .stopped)
+        XCTAssertNil(session.beginTurn())
+        var nextConnection = VoiceEvaluationSession()
+        XCTAssertNotNil(nextConnection.beginTurn()); XCTAssertNotNil(nextConnection.stop())
+        XCTAssertFalse(nextConnection.acknowledgesStop(stopped, participantIdentity: evaluator), "An old connection cannot complete new teardown")
+        var neverStarted = VoiceEvaluationSession(); XCTAssertNil(neverStarted.stop())
+        XCTAssertFalse(neverStarted.acknowledgesStop(stopped, participantIdentity: evaluator))
+    }
+
     func testWireRoundTripAndServerInterruptionLeaveNoPlaybackAuthority() throws {
         var session = VoiceEvaluationSession()
         let start = try XCTUnwrap(session.beginTurn())

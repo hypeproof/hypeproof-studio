@@ -51,10 +51,27 @@ def free_port(kind):
 
 
 def private_json(path, value):
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, "w") as file:
-        json.dump(value, file, indent=2)
-        file.write("\n")
+    # Readers observe existence as readiness. Publish only complete bytes, while
+    # retaining O_EXCL's refusal to overwrite an earlier receipt or credential.
+    fd, temporary = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
+    primary = None
+    try:
+        with os.fdopen(fd, "w") as file:
+            os.fchmod(file.fileno(), 0o600)
+            json.dump(value, file, indent=2)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        os.link(temporary, path)  # Same filesystem, atomic and no-clobber.
+    except BaseException as error:
+        primary = error
+        raise
+    finally:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            if primary is None:
+                raise
 
 
 async def until(predicate, timeout=8, label="condition"):

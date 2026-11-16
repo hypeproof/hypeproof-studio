@@ -151,6 +151,7 @@ private final class LiveKitEvaluationCIRun: ObservableObject {
             guard stopped.phase == "stopped", !stopped.roomAttached,
                   !stopped.captureOpen, !stopped.outputOpen, !stopped.manualRendering,
                   stopped.events.contains("renderer_detached"),
+                  stopped.events.contains("stop_acknowledged"),
                   stopped.events.contains("cleanup_complete") else { throw Failure.cleanup }
             // Immediate fence may have an in-flight renderer tail. Measure it;
             // only require stability after detach/cleanup and a bounded grace.

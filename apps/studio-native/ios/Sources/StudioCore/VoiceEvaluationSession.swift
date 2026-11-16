@@ -96,6 +96,15 @@ public struct VoiceEvaluationSession: Sendable {
         phase == .playing && participantIdentity == Self.evaluatorIdentity && trackName == authorizedTrack
     }
 
+    /// Teardown observation only: this never changes terminal playback authority.
+    /// The adapter also binds the acknowledgement to its previous Room instance.
+    public func acknowledgesStop(_ message: VoiceEvaluationEnvelope, participantIdentity: String) -> Bool {
+        phase == .stopped && participantIdentity == Self.evaluatorIdentity && message.version == 1
+            && message.event == .stopped && message.audioTrack == nil
+            && message.sessionID == sessionID && message.turnID == turnID
+            && message.generation > 0 && message.generation == generation
+    }
+
     private func envelope(_ event: VoiceEvaluationEnvelope.Event, reason: String? = nil) -> VoiceEvaluationEnvelope? {
         guard let turnID else { return nil }
         return VoiceEvaluationEnvelope(sessionID: sessionID, turnID: turnID, generation: generation,

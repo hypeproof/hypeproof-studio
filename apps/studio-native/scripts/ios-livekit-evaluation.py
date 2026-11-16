@@ -24,7 +24,7 @@ SCENARIOS = ("energy_interrupt", "stop")
 EVENTS = {"manual_rendering_enabled", "connected", "admitted", "microphone_track_published",
           "start_sent", "started_received", "remote_track_subscribed", "audio_fenced",
           "local_energy_onset", "interrupt_user_speech", "interrupt_sent",
-          "interrupted_received", "stop_requested", "renderer_detached", "cleanup_complete"}
+          "interrupted_received", "stop_requested", "stop_acknowledged", "renderer_detached", "cleanup_complete"}
 HOST_STAGES = {"clang-version", "go-version", "source-init", "source-fetch", "source-checkout",
                "server-build", "modules-verify", "server-version", "server-libraries", "venv",
                "python-dependencies", "python-check", "python-freeze"}
@@ -34,7 +34,7 @@ FAILURE_CODES = {"actual_published_pcm_missing", "boolean", "candidate_identity"
     "native_failed", "no_actual_audio", "observation_window", "owned_cleanup_failed", "owned_command_failed",
     "phase", "receipt_resurrected", "receipt_size", "receipt_timeout", "runtime_identity", "server_cancel_missing",
     "server_failure", "server_identity_or_cleanup", "server_started_tuple", "server_stop_missing", "source_sha",
-    "state_schema", "transport_sequence", "tuple_changed"}
+    "state_schema", "transport_sequence", "tuple_changed", "client_stop_ack_missing"}
 
 
 class CheckFailure(Exception):
@@ -102,6 +102,7 @@ def validate(native, events, server, *, run_id, scenario, source, room, server_s
         require(stopped["phase"] == "stopped" and not any(stopped[k] for k in
                 ("busy", "roomAttached", "captureOpen", "outputOpen", "manualRendering"))
                 and {"renderer_detached", "cleanup_complete"}.issubset(stopped["events"]), "incomplete_cleanup")
+        require("stop_acknowledged" in stopped["events"], "client_stop_ack_missing")
     for metric in ("decodedBuffers", "decodedSamples"):
         require(final[metric] == drained[metric] >= fenced[metric] >= before[metric], "receipt_resurrected")
     require(server.get("status") == "PASS" and server.get("owned_server_reaped") is True
@@ -442,6 +443,13 @@ def main(args):
                 command([sys.executable, str(prepare), "--output", str(private / "host"), "--python", python],
                         timeout=600, termination_grace=15)
                 host = read_json(private / "host/host.json")
+                # Exercise the actual private-file publication before any of the
+                # bounded 75-second scenario credentials can become visible.
+                result["publication_control"] = {"status": "FAIL", "source_sha256": hashlib.sha256(
+                    prepare.with_name("test_publication.py").read_bytes()).hexdigest()}
+                command([host["python"], "-m", "unittest", "discover", "-s", str(prepare.parent),
+                         "-p", "test_publication.py", "-v"], timeout=15)
+                result["publication_control"]["status"] = "PASS"
                 for scenario in SCENARIOS:
                     result["scenarios"].append(scenario_run(args, host, private, scenario))
                 result["status"] = "PASS"

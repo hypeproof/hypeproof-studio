@@ -226,7 +226,7 @@ raise SystemExit(m.main(SimpleNamespace(evidence=str(r/'evidence'))))
         fenced = dict(before, phase="interrupted" if scenario == "energy_interrupt" else "stopped",
                       captureOpen=False, outputOpen=False)
         final = dict(fenced, phase="stopped", busy=False, roomAttached=False, manualRendering=False,
-                     events=before["events"] + ["audio_fenced", "renderer_detached", "cleanup_complete"])
+                     events=before["events"] + ["audio_fenced", "renderer_detached", "stop_acknowledged", "cleanup_complete"])
         expected = {"run_id": "33333333-3333-4333-8333-333333333333", "scenario": scenario,
                     "source": "a" * 40, "room": "hps-eval-44444444-4444-4444-8444-444444444444",
                     "server_sha": "c" * 64}
@@ -256,6 +256,18 @@ raise SystemExit(m.main(SimpleNamespace(evidence=str(r/'evidence'))))
             self.assertEqual(result["physical_audio"], "NOT_RUN")
             self.assertNotIn("untrusted_extra", result)
             self.assertEqual(result["runtime"]["server_sha256"], "c" * 64)
+
+    def test_server_sent_stop_does_not_prove_client_acknowledgement(self):
+        for scenario in gate.SCENARIOS:
+            native, events, server, expected = self.sample(scenario)
+            for key in ("afterDrain", "final"):
+                native[key]["events"].remove("stop_acknowledged")
+            # Actual server sent/cleanup observations remain intact. They cannot
+            # substitute for the client's accepted terminal receive callback.
+            with self.subTest(scenario=scenario):
+                with self.assertRaises(gate.CheckFailure) as caught:
+                    gate.validate(native, events, server, **expected)
+                self.assertEqual(str(caught.exception), "client_stop_ack_missing")
 
     def test_host_metadata_is_allowlisted_on_success_and_failure(self):
         for status in ("PASS", "FAIL"):
