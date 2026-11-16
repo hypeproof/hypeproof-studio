@@ -18,7 +18,7 @@ test('public Service activity creates and revises a synthetic file',async()=>{
   await start.getByRole('button',{name:'코드 확인하기',exact:true}).click();
   await start.getByRole('button',{name:'이 활동 시작하기',exact:true}).click();
   const chat=await chatFrame(ctx.win);
-  await expect(chat.getByLabel('현재 활동')).toContainText(trial?'AI 체험':'수업');
+  await expect(chat.getByLabel('현재 활동')).toContainText(trial?'개인 작업':'수업');
   expect(existsSync(join(ctx.wsDir,'index.html'))).toBe(false);
   await chooseChatModel(chat,'hypeproof-fast');
   const turns:any[]=[];

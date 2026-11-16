@@ -163,7 +163,7 @@ t("negative control: a pass seat that still carries the free flag has no link", 
 
 t("negative control: a code-issued trial (not free) that ended has no link", async () => {
   const h = await harness(null, seat({ free: undefined, trial: exhausted }));
-  ok(h.activityNow()?.startsWith("AI 체험"), "the header is drawn as a code-issued trial");
+  ok(h.activityNow()?.startsWith("개인 작업"), "the header is drawn as a code-issued seat (개인 작업, #4193)");
   eq(h.headerLink().length, 0, "code-issued trial keeps today's header");
   eq(h.endedNote(), undefined, "no note");
 });

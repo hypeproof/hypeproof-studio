@@ -112,9 +112,10 @@ test('paid pass survives a real offline restart without code re-entry', async ()
   try {
     expect(await encryptedStorage(ctx)).toEqual({ name: 'HypeProof Studio', encrypted: true });
     const start = await startFrame(ctx.win);
-    const choose = start.getByRole('button', { name: /^(?:AI 체험하기|수업에 참여하기)$/ }).first();
+    // #4193 — the class form is the only code form when the free card is not drawn.
+    const choose = start.getByRole('button', { name: '수업에 참여하기', exact: true });
     if (await choose.isVisible().catch(() => false)) await choose.click();
-    const code = start.getByLabel(/^(?:체험 참여 코드|수업 참여 코드)$/).first();
+    const code = start.getByLabel('수업 참여 코드', { exact: true });
     await expect(code).toBeVisible();
     await code.fill(ctx.token); codeEntries++;
     await start.getByRole('button', { name: /^(?:코드 확인하기|수업 확인하기)$/ }).click();

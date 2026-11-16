@@ -88,8 +88,8 @@ export function sdkUnavailableOutcome(args: {
 
 /**
  * The Service's 409 `trial_requires_sdk` reached the proxy route anyway (an older app
- * fallback, a machine `coachRuntime` override). Keep the Service's sentence and add the
- * cause and remedy. Returns null for any other response.
+ * fallback, a machine `coachRuntime` override). Keep the Service's sentence, unless it says
+ * 체험 (#4193), and add the cause and remedy. Returns null for any other response.
  */
 export function trialRequiresSdkMessage(status: number, bodyText: string): string | null {
   if (status !== 409) return null;
@@ -101,5 +101,7 @@ export function trialRequiresSdkMessage(status: number, bodyText: string): strin
   }
   if (parsed?.error?.code !== "trial_requires_sdk") return null;
   const serverMsg = typeof parsed.error.message === "string" ? parsed.error.message.trim() : "";
-  return serverMsg ? `${serverMsg} ${SDK_MISSING_NOTICE}` : SDK_MISSING_NOTICE;
+  // #4193 — the Service's sentence ("이 체험은 최신 Studio에서 실행해 주세요.") names trial mode, which
+  // Studio no longer shows; the notice alone says the cause and the remedy.
+  return serverMsg && !/체험/.test(serverMsg) ? `${serverMsg} ${SDK_MISSING_NOTICE}` : SDK_MISSING_NOTICE;
 }

@@ -202,7 +202,7 @@ try {
   }, { surface: 'start' });
   await test('TUX-SP-06', 'Disconnect delegates host request and disconnected host state replaces course', async p => {
     await startState(p, { profile: course }); await btn(p, '연결 해제').click(); await request(p, { type: 'disconnectCourse' });
-    await startState(p, {}); await expect(btn(p, 'AI 체험하기')).toBeVisible(); await expect(p.getByText(course.name, { exact: true })).toHaveCount(0);
+    await startState(p, {}); await expect(btn(p, '수업에 참여하기')).toBeVisible(); await expect(btn(p, 'AI 체험하기')).toHaveCount(0); await expect(p.getByText(course.name, { exact: true })).toHaveCount(0);
   }, { surface: 'start' });
   // CGP-SHELL-R-014 — 설정 opens the learner settings sheet in the page instead of a host request.
   await test('TUX-SP-08', '설정: keyboard action opens the learner settings sheet', async p => { await btn(p, '설정').focus(); await expect(btn(p, '설정')).toBeFocused(); await btn(p, '설정').press('Enter'); await expect(p.getByRole('dialog', { name: '설정' })).toBeVisible(); assert.ok(!(await p.evaluate(() => window.sent.map(m => m.type))).includes('openAdvancedSettings')); await p.keyboard.press('Escape'); await expect(p.getByRole('dialog', { name: '설정' })).toHaveCount(0); await expect(btn(p, '설정')).toBeFocused(); }, { surface: 'start' });
@@ -223,12 +223,14 @@ try {
   const trialActivity = trial => ({ id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true, trial });
   await test('TUX-SP-13A', 'Fresh trial: candidate card states the allowance; connected card shows what is left', async p => {
     await startState(p, { profile: trialSeat(fresh), candidate: true });
-    await expect(courseRow(p, '체험 한도')).toHaveText(/^AI 요청 40번 · (\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?까지$/); // the date appears when the end is not today
+    await expect(courseRow(p, '사용 한도')).toHaveText(/^AI 요청 40번 · (\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?까지$/); // the date appears when the end is not today
     await expect(btn(p, '이 활동 시작하기')).toBeEnabled();
     await startState(p, { profile: trialSeat(fresh) });
-    await expect(courseRow(p, '남은 체험')).toHaveText(/^AI 요청 40번 남음 · /);
+    await expect(courseRow(p, '남은 사용량')).toHaveText(/^AI 요청 40번 남음 · /);
     await btn(p, '이어서 하기').click(); await request(p, { type: 'beginCourse' });
-    await expect(p.getByText('체험이 끝났습니다')).toHaveCount(0);
+    await expect(p.getByText('사용이 끝났습니다')).toHaveCount(0);
+    // #4193 — a code-issued seat's card never says 체험 (the fixture's own name aside).
+    assert.doesNotMatch((await p.locator('.studio-connect').innerText()).replaceAll(course.name, ''), /체험/);
   }, { surface: 'start' });
   await test('TUX-SP-13B', 'Near-limit trial: passive remaining line in the chat header, no button', async p => {
     const line = p.locator('.hps-header .hps-trial-left');
@@ -257,7 +259,7 @@ try {
   await test('US-05-PERSONAL', 'Personal chat header names the current activity and its kind', async p => {
     const heading = p.locator('.tw-heading');
     const now = heading.getByLabel('현재 활동');
-    await expect(now).toHaveText('AI 체험 · 합성 체험');
+    await expect(now).toHaveText('개인 작업 · 합성 체험');
     await expect(now.locator('button, a')).toHaveCount(0);
     // 390px with a trial line: the activity stays in the accessibility tree but gives its room to the
     // remaining count, which stays whole (the trial line already says "AI 요청 … 남음").
@@ -268,7 +270,7 @@ try {
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'fits 390px');
     await p.screenshot({ path: path.join(out, 'US-05-personal-390.png') });
     await p.setViewportSize({ width: 1280, height: 900 });
-    assert.equal(await now.evaluate(el => el.innerText), 'AI 체험 · 합성 체험', 'a wide header shows the name too');
+    assert.equal(await now.evaluate(el => el.innerText), '개인 작업 · 합성 체험', 'a wide header shows the name too');
     assert.equal(await clipped(now), false, 'the activity line is whole at 1280px');
     const tops = await Promise.all([heading.locator('h1'), now, heading.locator('.hps-trial-left')].map(async l => { const b = await l.boundingBox(); return Math.round(b.y + b.height / 2); }));
     assert.ok(Math.max(...tops) - Math.min(...tops) <= 4, `one header row: ${tops}`);
@@ -292,9 +294,10 @@ try {
   }, { cfg: { taskWorkspace, activity: trialActivity(nearLimit) } });
   await test('TUX-SP-13C', 'Exhausted trial: ended card instead of "이어서 하기"; no pass offered', async p => {
     await startState(p, { profile: trialSeat(exhausted) });
-    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.locator('#connect-title')).toHaveText('사용이 끝났습니다');
     await expect(p.getByText('AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
-    await expect(courseRow(p, '체험')).toHaveText('AI 요청 40번 모두 사용');
+    await expect(courseRow(p, '사용')).toHaveText('AI 요청 40번 모두 사용');
+    await expect(p.getByRole('group', { name: '사용이 끝난 뒤 고르기' })).toBeVisible();
     await expect(btn(p, '이어서 하기')).toHaveCount(0);
     await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
     await expect(btn(p, '이어서 하려면 이용권으로 시작하기')).toHaveCount(0);
@@ -310,9 +313,9 @@ try {
   }, { surface: 'start' });
   await test('TUX-SP-13D', 'Expired trial: ended card, no "이어서 하기" and no stale begin', async p => {
     await startState(p, { profile: trialSeat(expiredTrial) });
-    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
-    await expect(p.getByText('체험 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
-    await expect(courseRow(p, '체험')).toHaveText(/^(\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?에 끝남$/);
+    await expect(p.locator('#connect-title')).toHaveText('사용이 끝났습니다');
+    await expect(p.getByText('사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
+    await expect(courseRow(p, '사용')).toHaveText(/^(\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?에 끝남$/);
     await expect(btn(p, '이어서 하기')).toHaveCount(0); await expect(btn(p, '지난 대화 보기')).toHaveCount(0);
     assert.equal(emitted(await requests(p), 'beginCourse').length, 0);
   }, { surface: 'start' });
@@ -321,11 +324,11 @@ try {
     await startState(p, { profile: trialSeat(exhausted, { pass }) });
     await expect(courseRow(p, '남은 이용')).toHaveText(/^AI 요청 180번 남음 · \d+월 \d+일까지$/);
     await expect(btn(p, '이어서 하기')).toBeEnabled();
-    await expect(p.getByText('체험이 끝났습니다')).toHaveCount(0);
-    await expect(courseRow(p, '체험')).toHaveCount(0); await expect(courseRow(p, '남은 체험')).toHaveCount(0);
+    await expect(p.getByText('사용이 끝났습니다')).toHaveCount(0);
+    await expect(courseRow(p, '사용')).toHaveCount(0); await expect(courseRow(p, '남은 사용량')).toHaveCount(0);
     // A classroom seat (no trial block) is unchanged too.
     await startState(p, { profile: course });
-    await expect(btn(p, '이어서 하기')).toBeEnabled(); await expect(courseRow(p, '남은 체험')).toHaveCount(0);
+    await expect(btn(p, '이어서 하기')).toBeEnabled(); await expect(courseRow(p, '남은 사용량')).toHaveCount(0);
   }, { surface: 'start' });
   await test('TUX-CHAT-01', 'All three real profile suggestions fill and focus draft without sending', async p => {
     for (const chip of native.ux.suggestions.initial) { const button = p.getByRole('button', { name: new RegExp(chip.text) }); await button.click(); await expect(draft(p)).toHaveValue(chip.text); await expect(draft(p)).toBeFocused(); }
@@ -579,15 +582,18 @@ try {
     await p.screenshot({ path: path.join(out, 'TUX-COND-07R-no-card.png'), fullPage: true });
   }, { cfg: endCardTrialSeat });
   // ── Free start (SPEC iteration 4 §2.3/§2.4; TUX-SP-14/15/16) ─────────────────────────────
-  // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
-  // start page (free start not advertised) does contain 체험, so the checker can fail.
+  // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: a card
+  // showing an activity whose own name says 체험 does contain it, so the checker can fail (#4193:
+  // Studio's own start-page copy no longer says 체험 anywhere).
   const FREE_OFFER = { entry: 'open', durationHours: 24, requestLimit: 10, unit: 'turn', claim: '/v1/free/claim', available: true };
   // Jay 2026-10-19: the host sends no allowance line for a free start; the end card speaks at the end.
   const freeStart = (extra = {}) => ({ trialOffer: FREE_OFFER, freeStart: { ...extra } });
   const cardText = p => p.locator('.studio-connect').innerText();
   await test('TUX-SP-14A', 'Free start: one age question, no 체험/수업 choice, code is a small link', async p => {
+    await startState(p, { profile: { ...course, name: '합성 체험' } });
+    assert.match(await cardText(p), /체험/, 'control: a card that says 체험 is caught, so the checker below can fail');
     await startState(p, {});
-    assert.match(await cardText(p), /체험/, 'control: today\'s start page says 체험, so the checker below can fail');
+    assert.doesNotMatch(await cardText(p), /체험/, '#4193: the chooser without the free card has no 체험 either');
     await expect(p.locator('.studio-free-allowance')).toHaveCount(0); // negative control: no free offer line without the advertisement
     await startState(p, freeStart());
     // POLISH iter4 — the card leads with what the person can do (start now, no login); the age check follows.
@@ -718,9 +724,9 @@ try {
     await expect(p.locator('#connect-title')).toHaveText('무료 사용이 끝났습니다');
     await expect(courseRow(p, '무료 사용')).toHaveText('무료 AI 요청 40번 모두 사용');
     assert.doesNotMatch(await cardText(p), /체험/);
-    // Negative control: the same seat without the free mark keeps today's wording.
+    // Negative control: the same seat without the free mark keeps its own wording (no 무료, no 체험; #4193).
     await startState(p, { profile: trialSeat(exhausted) });
-    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.locator('#connect-title')).toHaveText('사용이 끝났습니다');
     await expect(p.locator('.studio-card-footer')).toHaveText('참여 코드에 연결된 활동과 이용 조건이 적용됩니다.');
   }, { surface: 'start' });
   await test('TUX-SP-13G', 'Free seat chat header: 무료 사용 label, no remaining count while in use', async p => {

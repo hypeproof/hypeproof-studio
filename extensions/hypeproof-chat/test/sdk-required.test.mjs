@@ -48,10 +48,15 @@ test('install notice names cause and remedy, without staff, English or a retry',
   assert.equal(new SdkRequiredError().message, SDK_MISSING_NOTICE);
 });
 
-test('exact Service 409 body keeps the Service sentence and adds the cause and remedy', () => {
+test('exact Service 409 body: a sentence naming 체험 is dropped, any other is kept, and the cause and remedy are added', () => {
+  // #4193 — the Service's current sentence names trial mode; Studio shows only its own notice.
   const text = trialRequiresSdkMessage(409, SERVICE_409_BODY);
-  assert.ok(text.startsWith('이 체험은 최신 Studio에서 실행해 주세요. '), text);
+  assert.equal(text, SDK_MISSING_NOTICE, text);
+  assert.doesNotMatch(text, /체험/);
   assertInstallNotice(text, '409');
+  // Negative control: a Service sentence without 체험 is still kept in front of the notice.
+  const kept = trialRequiresSdkMessage(409, JSON.stringify({ error: { code: 'trial_requires_sdk', message: '최신 Studio에서 실행해 주세요.' } }));
+  assert.equal(kept, `최신 Studio에서 실행해 주세요. ${SDK_MISSING_NOTICE}`);
   // Negative controls: other statuses and codes are left to the existing classification.
   assert.equal(trialRequiresSdkMessage(409, JSON.stringify({ error: { code: 'other' } })), null);
   assert.equal(trialRequiresSdkMessage(429, SERVICE_409_BODY), null);
@@ -111,7 +116,7 @@ test('actual proxyChat turns the exact 409 body into a non-retryable install err
   assert.equal(err.name, 'SdkRequiredError');
   assert.equal(err.retry, false);
   assert.equal(err.requestId, 'req-409');
-  assert.ok(err.message.startsWith('이 체험은 최신 Studio에서 실행해 주세요.'));
+  assert.equal(err.message, SDK_MISSING_NOTICE, 'the 체험 sentence is not shown');
   assertInstallNotice(err.message, 'proxyChat 409');
 });
 

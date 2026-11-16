@@ -45,8 +45,8 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(freeStartAdvertised(null), false);
   const bad = parseTrialOffer({ entry: 'open', unit: 'minute', claim: 'https://evil.test/v1/free/claim', min_app_version: '1.0', available: 1, reason: 'other', resumes_at: 'tomorrow' });
   assert.deepEqual({ ...bad }, { entry: 'open' }, 'every bad optional field is dropped, the entry stays');
-  // The code-entry note is unchanged (negative control for the copy).
-  assert.equal(offerMod.trialEntryNote(parseTrialOffer({ entry: 'code' })).code, '지금은 발급받은 체험 코드가 있어야 시작할 수 있습니다.');
+  // #4193 — the trial-code note is gone with the trial-code entry.
+  assert.equal(offerMod.trialEntryNote, undefined);
 }
 
 // ── 2. Claim client ─────────────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(seat.isFreeSeat(null), false);
 
   assert.equal(labels.activityLabel('trial', undefined, undefined, true), '무료 사용');
-  assert.equal(labels.activityLabel('trial'), 'AI 체험', 'negative: code-issued trial label unchanged');
+  assert.equal(labels.activityLabel('trial'), '개인 작업', '#4193: a code-issued or older trial record reads 개인 작업, never 체험');
   assert.equal(labels.activityLabel('trial', { x: 1 }, undefined, true), '이용권', 'a pass wins over free');
   assert.equal(labels.trialAllowance(notStarted, now, true, 24), '무료 AI 요청 10번 · 첫 요청부터 24시간');
   assert.equal(labels.trialAllowance(notStarted, now, true), '무료 AI 요청 10번');
@@ -151,14 +151,15 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(labels.trialSummary(active, now), 'AI 요청 7번 남음 · 오후 3시 20분까지');
   assert.equal(labels.trialHeaderLine(spent, now, true), '무료 AI 요청을 모두 사용함');
   assert.equal(labels.trialHeaderLine(expired, now, true), '무료 사용 시간 끝남');
-  assert.equal(labels.trialHeaderLine(spent, now), '체험 요청을 모두 사용함', 'negative: code trial unchanged');
-  assert.equal(labels.trialHeaderLine(expired, now), '체험 시간 끝남');
+  assert.equal(labels.trialHeaderLine(spent, now), 'AI 요청을 모두 사용함', '#4193: code seat, no 체험');
+  assert.equal(labels.trialHeaderLine(expired, now), '사용 시간 끝남');
   assert.equal(labels.activityDetail({ trial: spent, free: true }, now), '무료 AI 요청을 모두 사용함');
   const fe = labels.trialEndedFacts(spent, now, true), fx = labels.trialEndedFacts(expired, now, true);
   assert.deepEqual(fe, { reason: 'exhausted', title: '무료 사용이 끝났습니다', description: '무료 AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.', row: '무료 AI 요청 10번 모두 사용' });
   assert.equal(fx.title, '무료 사용이 끝났습니다'); assert.equal(fx.description, '무료 사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.');
   for (const v of [...Object.values(fe), ...Object.values(fx)]) noTrialWord(v, 'free ended facts');
-  assert.equal(labels.trialEndedFacts(spent, now).title, '체험이 끝났습니다', 'negative: code trial unchanged');
+  assert.equal(labels.trialEndedFacts(spent, now).title, '사용이 끝났습니다', '#4193: code seat, no 체험');
+  for (const v of [...Object.values(labels.trialEndedFacts(spent, now)), ...Object.values(labels.trialEndedFacts(expired, now))]) noTrialWord(v, 'code-seat ended facts');
 }
 
 // ── 4. Matchers: free sentences match; code-trial sentences still match; unrelated 무료 does not ──
@@ -179,11 +180,12 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(purchase.freeDailyCapReached(new Error('지금은 무료 사용을 잠시 멈췄습니다.')), false, 'operator pause is not the daily cap');
   assert.equal(purchase.freeDailyCapReached(freeSpent), false);
   noTrialWord(purchase.FREE_DAILY_CAP_NOTICE, 'daily cap notice');
-  // Notices: free seat gets free copy; code trial keeps its sentence byte for byte.
+  // Notices: free seat gets free copy; a code seat gets its own sentence, without 체험 (#4193).
   assert.equal(purchase.trialEndNotice('exhausted', true), '무료로 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
   // 2026-11-13: no pass pointer (no pass is sold, no purchase view).
   assert.equal(purchase.trialEndNotice('expired', true), '무료 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.');
-  assert.equal(purchase.trialEndNotice('exhausted'), '체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
+  assert.equal(purchase.trialEndNotice('exhausted'), '이 활동에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
+  assert.equal(purchase.trialEndNotice('expired'), '이 활동의 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.');
   assert.equal(purchase.withTrialPassPointer, undefined);
   // Error banner.
   const b = banner.errorBannerPresentation;
@@ -191,7 +193,7 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.deepEqual({ ...b(purchase.FREE_EXPIRED_FRIENDLY) }, { icon: '⏳', title: '무료 사용 시간이 끝났어요' });
   assert.deepEqual({ ...b(purchase.FREE_DAILY_CAP_NOTICE) }, { icon: '🌙', title: '오늘 무료 사용량이 모두 소진됐어요', tone: 'notice' }, 'positive: the cap notice is a calm notice, not a lost connection (D4)');
   for (const m of [purchase.FREE_EXHAUSTED_FRIENDLY, purchase.TRIAL_EXHAUSTED_FRIENDLY, ...unrelated.map((e) => e.message)]) assert.equal(b(m).tone, undefined, `negative: only the daily cap is a notice: ${m}`);
-  assert.deepEqual({ ...b(purchase.TRIAL_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '체험이 끝났어요' }, 'negative: code trial banner unchanged');
+  assert.deepEqual({ ...b(purchase.TRIAL_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '사용이 끝났어요' }, '#4193: code seat banner, no 체험');
   for (const e of unrelated) assert.notEqual(b(e.message).icon, '⏳', `negative: ${e.message}`);
   assert.equal(b('무료 이미지 생성은 지원하지 않습니다.').title, '문제가 생겼어요');
 }
@@ -209,7 +211,8 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   const freeSummary = carry.carryoverSummary(history, { free: true });
   noTrialWord(freeSummary, 'free carry-over summary');
   assert.match(freeSummary, /무료 사용 중 요청한 것:/); assert.match(freeSummary, /무료 사용의 마지막 답변: 초안입니다\./);
-  assert.match(carry.carryoverSummary(history), /^체험에서 하던 대화를 이어서 해요\./, 'negative: code-trial source unchanged');
+  assert.match(carry.carryoverSummary(history), /^이전 활동에서 하던 대화를 이어서 해요\./, '#4193: code-seat source, no 체험');
+  noTrialWord(carry.carryoverSummary(history), 'code-seat carry-over summary');
   assert.deepEqual(carry.carryoverSourceOf({ id: 't', name: 'n', workspace: '/w', kind: 'trial', free: true }, 'p'), { id: 't', name: 'n', workspace: '/w', free: true });
   assert.deepEqual(carry.carryoverSourceOf({ id: 't', name: 'n', workspace: '/w', kind: 'trial' }, 'p'), { id: 't', name: 'n', workspace: '/w' });
   const offer = carry.newOffer('p', { id: 't', name: 'n', workspace: '/w', free: true });
@@ -217,7 +220,7 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(carry.validOffer({ ...offer, from: { ...offer.from, free: 'yes' } }, 'p'), null, 'negative: a forged flag is not trusted');
 
   assert.equal(image.imageEditFailureMessage('trial_busy_or_exhausted', true), '요청이 진행 중이거나 무료 사용량을 모두 썼어요.');
-  assert.equal(image.imageEditFailureMessage('trial_busy_or_exhausted'), '체험 요청이 진행 중이거나 허용 횟수를 모두 사용했어요.', 'negative: code trial unchanged');
+  assert.equal(image.imageEditFailureMessage('trial_busy_or_exhausted'), 'AI 요청이 진행 중이거나 허용 횟수를 모두 사용했어요.', '#4193: code seat, no 체험');
 
   // A free seat never reaches the classroom model-runtime sentence (no 강사, no 체험): it is an SDK-only seat.
   const out = sdkReq.sdkUnavailableOutcome({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, webSearch: false, modelPicked: true });

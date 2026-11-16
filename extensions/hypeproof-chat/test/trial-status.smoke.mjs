@@ -49,20 +49,20 @@ assert.equal(trialSummary(exhausted, now), null, "an ended trial gets the ended 
 assert.equal(trialHeaderLine(fresh, now), "AI 요청 40번 남음 · 오후 3시 20분까지");
 assert.equal(trialHeaderLine(nearLimit, now), "AI 요청 3번 남음 · 오후 3시 20분까지");
 assert.equal(trialHeaderLine(notStarted, now), "AI 요청 40번 남음");
-assert.equal(trialHeaderLine(exhausted, now), "체험 요청을 모두 사용함");
-assert.equal(trialHeaderLine(expired, now), "체험 시간 끝남");
+assert.equal(trialHeaderLine(exhausted, now), "AI 요청을 모두 사용함");
+assert.equal(trialHeaderLine(expired, now), "사용 시간 끝남");
 
 // ── Ended card facts ──
 assert.deepEqual(trialEndedFacts(exhausted, now), {
   reason: "exhausted",
-  title: "체험이 끝났습니다",
+  title: "사용이 끝났습니다",
   description: "AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.",
   row: "AI 요청 40번 모두 사용",
 });
 assert.deepEqual(trialEndedFacts(expired, now), {
   reason: "expired",
-  title: "체험이 끝났습니다",
-  description: "체험 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.",
+  title: "사용이 끝났습니다",
+  description: "사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.",
   row: "오후 2시에 끝남",
 });
 assert.equal(trialEndedFacts(fresh, now), null);

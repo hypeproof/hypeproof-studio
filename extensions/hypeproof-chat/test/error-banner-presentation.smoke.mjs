@@ -3,19 +3,25 @@
 // today; negative controls are real transport failures that must keep the connection frame.
 import assert from 'node:assert/strict';
 import { errorBannerPresentation } from '../webview-ui/src/errorBannerPresentation.ts';
+import { TRIAL_EXHAUSTED_FRIENDLY, TRIAL_EXPIRED_FRIENDLY } from '../src/passPurchase.ts';
 
-const TRIAL_END = { icon: '⏳', title: '체험이 끝났어요' };
+// #4193 — the frame says 사용이 끝났어요, and a sentence worded as 체험 is replaced by Studio's own.
+const TRIAL_END = { icon: '⏳', title: '사용이 끝났어요' };
 const CONNECTION = { icon: '🔌', title: '연결이 끊겼어요' };
 
 // Positive: trial expiry / exhaustion copy (proxyClientHelpers.classifyProfileFailure,
 // Service chat-gate trial_expired, Service native-trial-budget trial_exhausted).
 const trialEnd = [
-  '개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다. 다시 체험하려면 코드 발급 담당자에게 새 체험을 요청해 주세요.',
-  '개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.',
-  '개인 체험의 총 요청 한도에 도달했습니다.',
+  ['개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다. 다시 체험하려면 코드 발급 담당자에게 새 체험을 요청해 주세요.', TRIAL_EXPIRED_FRIENDLY],
+  ['개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.', TRIAL_EXPIRED_FRIENDLY],
+  ['개인 체험의 총 요청 한도에 도달했습니다.', TRIAL_EXHAUSTED_FRIENDLY],
+  // An older host's own copy, in case one is still on screen.
+  ['체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.', TRIAL_EXHAUSTED_FRIENDLY],
+  ['체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.', TRIAL_EXPIRED_FRIENDLY],
 ];
-for (const message of trialEnd) {
-  assert.deepEqual(errorBannerPresentation(message), TRIAL_END, `trial end is account state: ${message}`);
+for (const [message, body] of trialEnd) {
+  assert.deepEqual(errorBannerPresentation(message), { ...TRIAL_END, body }, `trial end is account state, said without 체험: ${message}`);
+  assert.ok(!(errorBannerPresentation(message).title + errorBannerPresentation(message).body).includes('체험'));
   assert.notEqual(errorBannerPresentation(message).icon, '🔌', `trial end never reads as connection loss: ${message}`);
 }
 
@@ -47,12 +53,16 @@ assert.deepEqual(
   { icon: '🔒', title: '잠시 멈춰요' },
   'an expired participation code stays an authentication notice',
 );
+// The host's current copy for a code seat is framed as an ending and shown as sent (no rewrite needed).
+for (const message of [TRIAL_EXHAUSTED_FRIENDLY, TRIAL_EXPIRED_FRIENDLY]) assert.deepEqual(errorBannerPresentation(message), TRIAL_END, message);
 // A busy-or-exhausted notice cannot prove the trial ended, so it is not framed as an ending.
 assert.notDeepEqual(
-  errorBannerPresentation('체험 요청이 진행 중이거나 허용 횟수를 모두 사용했어요.'),
+  errorBannerPresentation('AI 요청이 진행 중이거나 허용 횟수를 모두 사용했어요.'),
   TRIAL_END,
   'ambiguous busy/exhausted copy is not claimed as trial end',
 );
+// Negative control: a message without 체험 is never rewritten.
+assert.equal(errorBannerPresentation('네트워크 오류: fetch failed').body, undefined);
 assert.deepEqual(errorBannerPresentation('알 수 없는 오류'), { icon: '⚠️', title: '문제가 생겼어요' });
 
 console.log('error-banner-presentation: ok');

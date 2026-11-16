@@ -17,30 +17,19 @@ try {
  // CGP-SHELL-R-014 — 설정 opens the learner sheet in the page; no settings-editor request is sent.
  await p.getByRole('button',{name:'설정',exact:true}).click();await p.getByRole('dialog',{name:'설정'}).waitFor();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioFiles');
  await p.getByRole('button',{name:'설정 닫기'}).click();await p.getByRole('dialog',{name:'설정'}).waitFor({state:'detached'});
- // TUX-SP-12 — before "AI 체험하기" is chosen, the choice says a code is needed today and the
- // allowance the Service advertises. Offer off (positive), offer with numbers, offer open: this build
- // has only the code path, so the card keeps the code line and agrees with the screen it leads to.
- const codeLine='지금은 발급받은 체험 코드가 있어야 시작할 수 있습니다.';
- const offerState=async trialOffer=>p.evaluate(o=>window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{version:'test',checking:false,...(o?{trialOffer:o}:{})}}})),trialOffer);
- const trialChoice=p.getByRole('button',{name:'AI 체험하기',exact:true});
- await p.getByText(codeLine,{exact:true}).waitFor();
- assert.equal(await p.getByText(/AI 요청 \d/).count(),0,'no invented allowance when the Service does not advertise one');
- assert.match(await trialChoice.getAttribute('aria-describedby'),/trial-entry-note/);
- await offerState({entry:'code',durationHours:1.5,requestLimit:77});
- await p.getByText('체험 1시간 30분 · AI 요청 77번',{exact:true}).waitFor();assert.equal(await p.getByText(codeLine,{exact:true}).count(),1);
- await p.setViewportSize({width:390,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,'trial-note-390.png'),fullPage:true});await p.setViewportSize({width:1280,height:900});
- await offerState({entry:'open',durationHours:1,requestLimit:40});
- await p.getByText('체험 1시간 · AI 요청 40번',{exact:true}).waitFor();
- assert.equal(await p.getByText(codeLine,{exact:true}).count(),1,'a code-only build keeps the code line even when the Service advertises open entry');
- // The note never runs into the choice's accessible name.
- assert.equal(await trialChoice.count(),1);
- await trialChoice.click();
- assert.deepEqual(await p.evaluate(()=>window.sent.map(m=>m.type)),['startReady','openStudioFiles']);
- // The card and the screen it leads to agree: that screen asks for a code.
- await p.getByRole('heading',{name:'내 삶에 AI 더하기'}).waitFor();
- await p.getByText(/지금은 발급받은 체험 코드가 필요합니다/).waitFor();
- await p.getByRole('button',{name:'시작 방법 다시 선택'}).click();
- await offerState(undefined);await p.getByText(codeLine,{exact:true}).waitFor();
+ // #4193 — there is no trial-code choice. Without the free card the chooser says whether free start
+ // is being checked or could not be confirmed, offers a re-check, and keeps 수업에 참여하기.
+ const offerState=async check=>p.evaluate(c=>window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{version:'test',checking:false,...(c?{freeStartCheck:c}:{})}}})),check);
+ assert.equal(await p.getByRole('button',{name:'AI 체험하기',exact:true}).count(),0,'no trial-code choice');
+ assert.doesNotMatch(await p.locator('.studio-connect').innerText(),/체험/);
+ await offerState('unavailable');
+ const recheck=p.getByRole('button',{name:'무료 시작 다시 확인',exact:true});
+ await recheck.waitFor();await p.getByText('지금은 무료로 시작할 수 있는지 확인하지 못했습니다. 잠시 후 다시 확인해 주세요.',{exact:true}).waitFor();
+ assert.doesNotMatch(await p.locator('.studio-connect').innerText(),/체험/);
+ await recheck.click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'freeStartRecheck');
+ await offerState('checking');const checkingButton=p.getByRole('button',{name:'확인하는 중…',exact:true});await checkingButton.waitFor();assert.equal(await checkingButton.isDisabled(),true);
+ await p.setViewportSize({width:390,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,'free-start-check-390.png'),fullPage:true});await p.setViewportSize({width:1280,height:900});
+ await offerState(undefined);assert.equal(await p.getByTestId('free-start-check').count(),0,'switched off: no re-check');
  await p.getByRole('button',{name:'수업에 참여하기',exact:true}).click();
  assert.equal(await p.getByText('나비',{exact:true}).count(),0);assert.equal(await p.locator('#course-code').getAttribute('type'),'password');
  const submit=p.getByRole('button',{name:'코드 확인하기'});assert.equal(await submit.isDisabled(),true);
@@ -58,13 +47,14 @@ try {
  await p.getByRole('button',{name:'이어서 하기'}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'beginCourse');
  assert.equal(await p.getByRole('button',{name:'활동 여는 중…'}).isDisabled(),true);
  await state({profile,started:true});await p.getByRole('heading',{name:'코치와 작업을 시작하세요'}).waitFor();await p.getByRole('button',{name:'코치와 계속 작업하기'}).waitFor();
- await state({profile:{...profile,kind:'trial'}});await p.getByText('AI 체험',{exact:true}).waitFor();
+ // #4193 — a trial seat (code-issued, or a record saved by an older build) reads 개인 작업.
+ await state({profile:{...profile,kind:'trial'}});await p.locator('.studio-verified').getByText('개인 작업',{exact:true}).waitFor();assert.doesNotMatch(await p.locator('.studio-connect').innerText(),/체험/);
  await state({profile:{...profile,kind:'personal'}});await p.getByText('개인 작업',{exact:true}).waitFor();
  await state({error:'개인 체험 시간이 끝났습니다.'});await p.getByRole('alert').waitFor();assert.equal(await p.getByRole('button',{name:'이어서 하기'}).count(),0);
  await state({profile:{...profile,id:'kids-test',name:'어린이 만들기 수업',coach:'직접 이름 짓는 코치'}});await p.getByText('어린이 만들기 수업',{exact:true}).waitFor();
  await p.getByRole('button',{name:'연결 해제',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'disconnectCourse');
  // TUX-SP-14 — a full free-start advertisement replaces the three peer choices with the age card
- // (deeper cases live in e2e/trial-ux). Control: the code-only 'open' offer above kept the choices.
+ // (deeper cases live in e2e/trial-ux).
  await state({trialOffer:{entry:'open',durationHours:24,requestLimit:10,claim:'/v1/free/claim',available:true},freeStart:{}});
  // The person had opened the code form earlier in this run; with free start it offers "돌아가기".
  await p.getByRole('heading',{name:'참여 코드로 시작하기'}).waitFor();await p.getByRole('button',{name:'돌아가기',exact:true}).click();
