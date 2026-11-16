@@ -107,6 +107,10 @@ if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
 if [ "$journey_status" -ne 0 ]; then exit "$journey_status"; fi
 if [ "$attachment_status" -ne 0 ]; then exit "$attachment_status"; fi
 codesign --verify --strict "$sim_app" >> ../evidence/simulator-signature.log 2>&1
+# Reuse the built Debug app and owned simulator only after every existing journey
+# and its collectors passed. Private tokens/logs stay outside uploaded evidence.
+python3 ../scripts/ios-livekit-evaluation.py --device "$device" --app "$sim_app" \
+  --source-sha "${GITHUB_SHA:-$(git rev-parse HEAD)}" --evidence ../evidence
 xcrun simctl launch "$device" ai.hypeproof.studio.mobile
 sleep 2
 xcrun simctl io "$device" screenshot ../evidence/native-iphone.png

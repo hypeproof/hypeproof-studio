@@ -6,7 +6,9 @@ import AVFoundation
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--hps-livekit-evaluation") {
+            if ProcessInfo.processInfo.arguments.contains("--hps-livekit-evaluation-ci-synthetic") {
+                LiveKitEvaluationCIView()
+            } else if ProcessInfo.processInfo.arguments.contains("--hps-livekit-evaluation") {
                 LiveKitEvaluationView()
             } else {
                 StudioRoot()

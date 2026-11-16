@@ -25,8 +25,26 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
     private var cleanupDeadlineTask: Task<Void, Never>?
     private var priorEngineAvailability: AudioEngineAvailability?
     private var remoteReceipt: (track: RemoteAudioTrack, observer: LiveKitEvaluationAudioReceipt)?
+    private var syntheticInput: LiveKitEvaluationSyntheticInput?
+    private var priorManualRendering: Bool?
+    private var ciEnabled = false
+    private var ciEvents: [String] = []
+    private var ciDecodedBuffers = 0
+    private var ciDecodedSamples = 0
 
-    func start(endpoint: String, token: String, consent: Bool) {
+    var ciState: LiveKitEvaluationCIState {
+        LiveKitEvaluationCIState(sessionID: session.sessionID, turnID: session.turnID,
+            generation: session.generation, phase: session.phase.rawValue, busy: busy,
+            captureOpen: captureGate?.isOpen ?? false, outputOpen: outputGate?.isOpen ?? false,
+            roomAttached: room != nil, manualRendering: AudioManager.shared.isManualRenderingMode,
+            decodedBuffers: ciDecodedBuffers, decodedSamples: ciDecodedSamples, events: ciEvents)
+    }
+
+    private func ciRecord(_ event: String) {
+        if ciEnabled, ciEvents.count < 64 { ciEvents.append(event) }
+    }
+
+    func start(endpoint: String, token: String, consent: Bool, syntheticInput: LiveKitEvaluationSyntheticInput? = nil) {
         guard !busy else { return }
         guard consent, Self.isLoopbackEndpoint(endpoint), !token.isEmpty, token.utf8.count <= 16_384 else {
             status = "동의와 로컬 주소·평가용 토큰을 확인해 주세요."
@@ -38,6 +56,9 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
             status = "다른 음성 작업을 끝낸 뒤 다시 시작해 주세요."
             return
         }
+        self.syntheticInput = syntheticInput
+        ciEnabled = syntheticInput != nil
+        ciEvents = []; ciDecodedBuffers = 0; ciDecodedSamples = 0
         busy = true; canInterrupt = false
         status = "마이크 권한 확인 중"
         observation = "수신 전 · 실제 재생/청취 범위 알 수 없음"
@@ -51,13 +72,26 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         }
         connectionTask = Task { [weak self] in
             guard let self else { return }
-            let permitted = await LiveKitEvaluationPermission.request { reply in
-                AVAudioSession.sharedInstance().requestRecordPermission { allowed in reply(allowed) }
+            let permitted: Bool
+            if self.syntheticInput != nil {
+                // Explicit CI route has no physical device input. Normal evaluation
+                // still requests real microphone permission above the SDK boundary.
+                permitted = true
+            } else {
+                permitted = await LiveKitEvaluationPermission.request { reply in
+                    AVAudioSession.sharedInstance().requestRecordPermission { allowed in reply(allowed) }
+                }
             }
             guard self.connectionID == owner, !Task.isCancelled else { return }
             guard permitted else { self.stop(reason: "microphone_denied"); return }
             guard self.installAudioGates(owner: owner) else {
                 self.stop(reason: "audio_owner_busy"); return
+            }
+            if self.syntheticInput != nil {
+                self.priorManualRendering = AudioManager.shared.isManualRenderingMode
+                do { try AudioManager.shared.setManualRenderingMode(true) }
+                catch { self.stop(reason: "transport_error"); return }
+                self.ciRecord("manual_rendering_enabled")
             }
             let currentRoom = Room(delegate: self,
                 connectOptions: ConnectOptions(autoSubscribe: false, reconnectAttempts: 0, enableMicrophone: false))
@@ -65,6 +99,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
             self.status = "로컬 평가 서버에 연결 중"
             do {
                 try await currentRoom.connect(url: endpoint, token: token)
+                self.ciRecord("connected")
                 guard self.isCurrent(currentRoom, owner: owner), !Task.isCancelled else {
                     await currentRoom.disconnect(); return
                 }
@@ -77,17 +112,22 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
                     return
                 }
                 guard self.isCurrent(currentRoom, owner: owner), !Task.isCancelled else { return }
+                self.ciRecord("admitted")
                 self.captureGate?.setOpen(true)
                 try await currentRoom.localParticipant.setMicrophone(enabled: true,
-                    captureOptions: AudioCaptureOptions(echoCancellation: true, autoGainControl: true, noiseSuppression: true))
+                    captureOptions: AudioCaptureOptions(echoCancellation: self.syntheticInput == nil,
+                        autoGainControl: self.syntheticInput == nil, noiseSuppression: self.syntheticInput == nil))
                 guard self.isCurrent(currentRoom, owner: owner), !Task.isCancelled else {
                     try? await currentRoom.localParticipant.setMicrophone(enabled: false)
                     await currentRoom.disconnect(); return
                 }
                 guard let message = self.session.beginTurn() else { self.stop(reason: "invalid_state"); return }
+                self.ciRecord("microphone_track_published")
+                self.syntheticInput?.start()
                 self.canInterrupt = true
                 self.status = "마이크 전송 중 · 평가 응답 대기"
                 try await Self.publish(message, to: currentRoom)
+                self.ciRecord("start_sent")
             } catch {
                 // Raw SDK errors may include URLs or credentials. Keep UI errors fixed.
                 if self.isCurrent(currentRoom, owner: owner) { self.stop(reason: "transport_error") }
@@ -99,12 +139,13 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         guard let currentRoom = room, let owner = connectionID,
               let message = session.interrupt(reason: Self.wireReason(reason)) else { return }
         fenceAudio()
+        ciRecord("interrupt_" + Self.wireReason(reason))
         status = "출력 중단 · 새 평가는 연결을 끝낸 뒤 시작해 주세요."
         observation = "소프트웨어 출력 차단 · 이미 기기에 전달된 오디오의 실제 재생 범위 알 수 없음"
         controlTask = Task { [weak self] in
             try? await currentRoom.localParticipant.setMicrophone(enabled: false)
             guard let self, self.isCurrent(currentRoom, owner: owner), !Task.isCancelled else { return }
-            do { try await Self.publish(message, to: currentRoom) }
+            do { try await Self.publish(message, to: currentRoom); self.ciRecord("interrupt_sent") }
             catch { if self.isCurrent(currentRoom, owner: owner) { self.stop(reason: "control_failed") } }
         }
         unsubscribeAll(in: currentRoom)
@@ -115,6 +156,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
     func stop(reason: String) {
         guard busy, cleanupTask == nil else { return }
         let message = session.stop(reason: Self.wireReason(reason))
+        ciRecord("stop_requested")
         let previousRoom = room
         let previousOwner = audioOwner
         connectionID = nil
@@ -159,6 +201,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
             self.releaseAudioGates(owner: previousOwner)
             self.room = nil
             self.busy = false
+            self.ciRecord("cleanup_complete")
             self.status = Self.endStatus(reason)
             self.observation = "연결 종료 · 실제 재생/청취 범위 알 수 없음"
             self.cleanupTask = nil
@@ -175,6 +218,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         let observer = LiveKitEvaluationActivity { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.connectionID == owner, self.session.phase == .playing else { return }
+                self.ciRecord("local_energy_onset")
                 self.interrupt(reason: "local_energy")
             }
         }
@@ -191,6 +235,9 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
             // Pending connect/publish work has finished before restoring the engine.
             // Clear pending recording first so restoration cannot replay our request.
             try? AudioManager.shared.stopLocalRecording()
+            if let priorManualRendering {
+                try? AudioManager.shared.setManualRenderingMode(priorManualRendering)
+            }
             let availability = AudioManager.shared.engineAvailability
             if !availability.isInputAvailable && !availability.isOutputAvailable {
                 try? AudioManager.shared.setEngineAvailability(priorEngineAvailability)
@@ -205,6 +252,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         }
         captureGate = nil; outputGate = nil; activity = nil; audioOwner = nil
         priorEngineAvailability = nil
+        priorManualRendering = nil
     }
 
     private var ownsAudioGates: Bool {
@@ -214,6 +262,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
     }
 
     private func fenceAudio() {
+        syntheticInput?.stop()
         outputGate?.setOpen(false)
         captureGate?.setOpen(false)
         activity?.setArmed(false)
@@ -225,6 +274,7 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
         // The SDK's engine fence outranks late capture/play requests. Keep it
         // disabled until pending SDK work settles; never overwrite a new owner.
         if ownsAudioGates { try? AudioManager.shared.setEngineAvailability(.none) }
+        ciRecord("audio_fenced")
         canInterrupt = false
         guard let room else { return }
         for participant in room.remoteParticipants.values {
@@ -333,10 +383,12 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
                   self.session.receive(message, participantIdentity: identity) else { return }
             switch message.event {
             case .started:
+                self.ciRecord("started_received")
                 self.status = "응답 트랙 승인 · 마이크 전송 중"
                 self.observation = "started 수신 · 재생 큐/실제 청취 범위 알 수 없음"
                 self.authorizeSubscriptions(in: room)
             case .interrupted:
+                self.ciRecord("interrupted_received")
                 self.fenceAudio(); self.unsubscribeAll(in: room)
                 self.status = "서버 감지로 출력 중단 · 연결을 끝내 주세요."
                 self.observation = "interrupted 수신 · 실제 재생/청취 범위 알 수 없음"
@@ -365,9 +417,21 @@ final class LiveKitEvaluationController: NSObject, ObservableObject, RoomDelegat
                 return
             }
             self.outputGate?.setOpen(true)
+            self.ciRecord("remote_track_subscribed")
             self.activity?.setArmed(true)
             if self.remoteReceipt == nil {
-                let observer = LiveKitEvaluationAudioReceipt { [weak self] in
+                let observeBuffer: (@Sendable (Int) -> Void)?
+                if self.ciEnabled {
+                    observeBuffer = { [weak self] samples in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.room === room, self.connectionID != nil,
+                                  self.session.shouldSubscribe(trackName: publication.name,
+                                    participantIdentity: participant.identity?.stringValue ?? "") else { return }
+                            self.ciDecodedBuffers += 1; self.ciDecodedSamples += samples
+                        }
+                    }
+                } else { observeBuffer = nil }
+                let observer = LiveKitEvaluationAudioReceipt(observedBuffer: observeBuffer) { [weak self] in
                     Task { @MainActor [weak self] in
                         guard let self, self.room === room, self.connectionID != nil,
                               self.session.shouldSubscribe(trackName: publication.name,

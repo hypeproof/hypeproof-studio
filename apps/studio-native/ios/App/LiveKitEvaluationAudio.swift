@@ -14,6 +14,8 @@ final class LiveKitEvaluationAudioGate: NSObject, AudioCustomProcessingDelegate,
         open = value
     }
 
+    var isOpen: Bool { lock.lock(); defer { lock.unlock() }; return open }
+
     func audioProcessingInitialize(sampleRate sampleRateHz: Int, channels: Int) {}
     func audioProcessingRelease() {}
 
@@ -77,14 +79,18 @@ final class LiveKitEvaluationAudioReceipt: NSObject, AudioRenderer, @unchecked S
     private let lock = NSLock()
     private var enabled = true
     private let firstBuffer: @Sendable () -> Void
+    private let observedBuffer: (@Sendable (Int) -> Void)?
 
-    init(firstBuffer: @escaping @Sendable () -> Void) { self.firstBuffer = firstBuffer }
+    init(observedBuffer: (@Sendable (Int) -> Void)? = nil, firstBuffer: @escaping @Sendable () -> Void) {
+        self.observedBuffer = observedBuffer; self.firstBuffer = firstBuffer
+    }
 
     func disable() {
         lock.lock(); enabled = false; lock.unlock()
     }
 
     func render(pcmBuffer: AVAudioPCMBuffer) {
+        if pcmBuffer.frameLength > 0 { observedBuffer?(Int(pcmBuffer.frameLength)) }
         lock.lock()
         let notify = enabled && pcmBuffer.frameLength > 0
         if notify { enabled = false }
