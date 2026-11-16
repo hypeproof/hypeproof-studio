@@ -7,6 +7,7 @@ Raw SDK logs and disposable configs stay in a private temporary directory.
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -24,10 +25,17 @@ EVENTS = {"manual_rendering_enabled", "connected", "admitted", "microphone_track
           "start_sent", "started_received", "remote_track_subscribed", "audio_fenced",
           "local_energy_onset", "interrupt_user_speech", "interrupt_sent",
           "interrupted_received", "stop_requested", "renderer_detached", "cleanup_complete"}
+HOST_STAGES = {"clang-version", "go-version", "source-init", "source-fetch", "source-checkout",
+               "server-build", "modules-verify", "server-version", "server-libraries", "venv",
+               "python-dependencies", "python-check", "python-freeze"}
 
 
 class CheckFailure(Exception):
     pass
+
+
+class OwnedInterruption(Exception):
+    """Not InterruptedError: selector backends swallow that as retryable EINTR."""
 
 
 def require(condition, code):
@@ -58,7 +66,7 @@ def state(value):
     return value
 
 
-def validate(native, events, server, *, run_id, scenario, source, room):
+def validate(native, events, server, *, run_id, scenario, source, room, server_sha):
     """Cross-check actual renderer and server receipts; no independent PASS aggregation."""
     require(native.get("schema") == "hps-native-livekit-evaluation/1"
             and native.get("status") == "PASS", "native_failed")
@@ -90,6 +98,9 @@ def validate(native, events, server, *, run_id, scenario, source, room):
         require(final[metric] == drained[metric] >= fenced[metric] >= before[metric], "receipt_resurrected")
     require(server.get("status") == "PASS" and server.get("owned_server_reaped") is True
             and server.get("candidate_source_sha") == source and server.get("room") == room, "server_identity_or_cleanup")
+    require(server.get("sdk") == "1.2.1" and server.get("server") == "livekit-server version 1.13.11"
+            and server.get("server_sha256") == server_sha
+            and re.fullmatch(r"[0-9a-f]{64}", server_sha), "runtime_identity")
     require(not any(e.get("observation") in {"worker_failed", "cleanup_failed"} for e in events), "server_failure")
     sent = [e for e in events if e.get("observation") == "sent"]
     def matching(event):
@@ -113,15 +124,70 @@ def validate(native, events, server, *, run_id, scenario, source, room):
             "server_cancel": expected_reason, "server_queue_after_seconds": 0,
             "server_publication_removed": True, "server_stop_received": True,
             "server_disconnected": True, "server_reaped": True,
+            "runtime": {"rtc_sdk_version": server["sdk"], "server_version": "1.13.11",
+                        "server_sha256": server["server_sha256"]},
             "physical_audio": "NOT_RUN", "acoustic_played_range": "UNKNOWN",
             "unobserved_transport_tail": "UNKNOWN"}
 
 
-def command(argv, *, timeout=30, check=True):
-    result = subprocess.run(argv, timeout=timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def command(argv, *, timeout=30, check=True, termination_grace=2):
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except BaseException as primary:
+        # subprocess.run kills immediately on interruption. A preparation helper
+        # must first unwind/reap its own separate groups and write its receipt.
+        try:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.communicate(timeout=termination_grace)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.communicate(timeout=2)
+        except BaseException as cleanup_error:
+            if hasattr(primary, "add_note"):
+                primary.add_note("owned_command_cleanup_failed:" + type(cleanup_error).__name__)
+        raise
+    result = subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
     if check:
         require(result.returncode == 0, "owned_command_failed")
     return result
+
+
+def host_receipt(raw):
+    """Only bounded nonsecret provenance; never paths, raw logs or extra fields."""
+    safe = {}
+    for key, choices in {"status": {"PASS", "FAIL"}, "system": {"Darwin"}, "arch": {"arm64", "amd64"}}.items():
+        if raw.get(key) in choices:
+            safe[key] = raw[key]
+    for key, pattern in {"source_commit": r"[0-9a-f]{40}", "server_sha256": r"[0-9a-f]{64}",
+                         "server_version": r"[0-9]+\.[0-9]+\.[0-9]+", "go_version": r"[0-9]+\.[0-9]+\.[0-9]+",
+                         "error_type": r"[A-Za-z][A-Za-z0-9_]{0,63}"}.items():
+        value = raw.get(key)
+        if isinstance(value, str) and re.fullmatch(pattern, value):
+            safe[key] = value
+    def seconds(value):
+        return type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 3600
+    if seconds(raw.get("seconds")):
+        safe["seconds"] = raw["seconds"]
+    hashes = raw.get("module_hashes")
+    if isinstance(hashes, dict):
+        safe["module_hashes"] = {name: value for name, value in hashes.items()
+                                 if name in {"go.mod", "go.sum"} and isinstance(value, str)
+                                 and re.fullmatch(r"[0-9a-f]{64}", value)}
+    safe["steps"] = []
+    for item in raw.get("steps", [])[:32]:
+        if (isinstance(item, dict) and item.get("stage") in HOST_STAGES
+                and type(item.get("exit")) is int and -255 <= item["exit"] <= 255
+                and seconds(item.get("seconds"))):
+            safe["steps"].append({key: item[key] for key in ("stage", "exit", "seconds")})
+    return safe
 
 
 def await_file(path, process, seconds, allow_successful_exit=False):
@@ -181,13 +247,13 @@ def scenario_run(args, host, private, scenario):
             require(process.wait(timeout=15) == 0, "evaluator_failed")
             events, server = read_json(output / "events.json"), read_json(output / "result.json")
             return validate(native, events, server, run_id=run_id, scenario=scenario,
-                            source=args.source_sha, room=room)
+                            source=args.source_sha, room=room, server_sha=host["server_sha256"])
     except BaseException as error:
         primary = error
         raise
     finally:
         # Attempt both sides independently; never publish a token-bearing private file.
-        actions = [lambda: command(["xcrun", "simctl", "terminate", args.device, BUNDLE], timeout=10, check=False),
+        actions = [lambda: command(["xcrun", "simctl", "terminate", args.device, BUNDLE], timeout=5, check=False),
                    lambda: reap(process)]
         actions.extend(lambda path=path: path.unlink(missing_ok=True)
                        for path in (config_path, receipt_path) if path is not None)
@@ -212,7 +278,10 @@ def main(args):
     result = {"schema": "hps-native-livekit-host/1", "source_sha": args.source_sha,
               "status": "FAIL", "scenarios": [], "physical_audio": "NOT_RUN"}
     def interrupted(_signum, _frame):
-        raise InterruptedError("owned_execution_interrupted")
+        # Preserve the first interruption while nested finally blocks reap children.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        raise OwnedInterruption("owned_execution_interrupted")
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     try:
@@ -221,11 +290,18 @@ def main(args):
             private = Path(directory)
             prepare = Path(__file__).resolve().parents[1] / "voice-evaluation/prepare-host.py"
             python = shutil.which("python3.12") or shutil.which("python3.13") or sys.executable
-            command([sys.executable, str(prepare), "--output", str(private / "host"), "--python", python], timeout=600)
-            host = read_json(private / "host/host.json")
-            for scenario in SCENARIOS:
-                result["scenarios"].append(scenario_run(args, host, private, scenario))
-            result["status"] = "PASS"
+            try:
+                command([sys.executable, str(prepare), "--output", str(private / "host"), "--python", python],
+                        timeout=600, termination_grace=15)
+                host = read_json(private / "host/host.json")
+                for scenario in SCENARIOS:
+                    result["scenarios"].append(scenario_run(args, host, private, scenario))
+                result["status"] = "PASS"
+            finally:
+                try:
+                    result["host"] = host_receipt(read_json(private / "host/host.json"))
+                except Exception as error:
+                    result["host"] = {"status": "UNAVAILABLE", "error_type": type(error).__name__}
     except Exception as error:
         result["failure"] = str(error) if isinstance(error, CheckFailure) else type(error).__name__
     finally:

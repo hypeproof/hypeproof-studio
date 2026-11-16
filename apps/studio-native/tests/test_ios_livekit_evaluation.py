@@ -42,7 +42,8 @@ class NativeMediaReceiptControls(unittest.TestCase):
         final = dict(fenced, phase="stopped", busy=False, roomAttached=False, manualRendering=False,
                      events=before["events"] + ["audio_fenced", "renderer_detached", "cleanup_complete"])
         expected = {"run_id": "33333333-3333-4333-8333-333333333333", "scenario": scenario,
-                    "source": "a" * 40, "room": "hps-eval-44444444-4444-4444-8444-444444444444"}
+                    "source": "a" * 40, "room": "hps-eval-44444444-4444-4444-8444-444444444444",
+                    "server_sha": "c" * 64}
         native = {"schema": "hps-native-livekit-evaluation/1", "status": "PASS", "runID": expected["run_id"],
                   "scenario": scenario, "candidateSourceSHA": expected["source"], "room": expected["room"],
                   "beforeFence": before, "afterFence": fenced, "afterDrain": copy.deepcopy(final), "final": final,
@@ -56,7 +57,8 @@ class NativeMediaReceiptControls(unittest.TestCase):
                    "queued_after_seconds": 0, "publication_removed": True},
                   {"observation": "energy_onset", "generation": 1}]
         server = {"status": "PASS", "owned_server_reaped": True,
-                  "candidate_source_sha": expected["source"], "room": expected["room"]}
+                  "candidate_source_sha": expected["source"], "room": expected["room"],
+                  "sdk": "1.2.1", "server": "livekit-server version 1.13.11", "server_sha256": "c" * 64}
         return native, events, server, expected
 
     def test_matching_receipts_are_scoped_and_allowlisted(self):
@@ -67,6 +69,28 @@ class NativeMediaReceiptControls(unittest.TestCase):
             self.assertEqual(result["status"], "PASS")
             self.assertEqual(result["physical_audio"], "NOT_RUN")
             self.assertNotIn("untrusted_extra", result)
+            self.assertEqual(result["runtime"]["server_sha256"], "c" * 64)
+
+    def test_host_metadata_is_allowlisted_on_success_and_failure(self):
+        for status in ("PASS", "FAIL"):
+            raw = {"status": status, "system": "Darwin", "arch": "arm64", "source_commit": "a" * 40,
+                   "server_version": "1.13.11", "go_version": "1.26.11", "server_sha256": "b" * 64,
+                   "module_hashes": {"go.mod": "c" * 64, "go.sum": "d" * 64, "token": "private"},
+                   "steps": [{"stage": "server-build", "exit": 1, "seconds": 2.0, "log": "/private/raw"}],
+                   "error_type": "InterruptedError", "seconds": 3.0,
+                   "server": "/private/server", "python": "/private/python", "token": "private", "raw_log": "private"}
+            safe = gate.host_receipt(raw)
+            self.assertEqual(set(safe), {"status", "system", "arch", "source_commit", "server_version", "go_version",
+                                        "server_sha256", "module_hashes", "steps", "error_type", "seconds"})
+            self.assertEqual(safe["steps"], [{"stage": "server-build", "exit": 1, "seconds": 2.0}])
+            self.assertNotIn("private", str(safe))
+
+    def test_runtime_receipt_must_match_prepared_server_and_sdk(self):
+        for key, value in (("server_sha256", "d" * 64), ("sdk", "other"), ("server", "other")):
+            native, events, server, expected = self.sample()
+            server[key] = value
+            with self.assertRaises(gate.CheckFailure):
+                gate.validate(native, events, server, **expected)
 
     def test_inflight_tail_is_reported_and_only_post_cleanup_stability_is_required(self):
         native, events, server, expected = self.sample()
