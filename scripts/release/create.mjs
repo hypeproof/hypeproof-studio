@@ -130,7 +130,15 @@ function main() {
     process.exit(1);
   }
 
-  // An open release-blocker issue in Studio, Service or Lab stops the cut before the rc tag (fail closed).
+  // Reject invalid identities and a missing PR token before creating a tag or making any GitHub writes.
+  const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
+  if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
+  const releasePrToken = prToken(decision.steps, process.env);
+  if (releasePrToken) {
+    pr = (...a) => execFileSync('gh', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: {...process.env, GH_TOKEN: releasePrToken}}).trim();
+  }
+  // An open release-blocker issue in Studio, Service or Lab stops the cut before the rc tag (fail closed),
+  // after the local identity checks and before any GitHub write.
   // A smoke FAIL still files its issue.
   if (decision.steps.includes('tag')) {
     const blockers = checkBlockers();
@@ -144,13 +152,6 @@ function main() {
     say('No open release-blocker issue in Studio, Service or Lab.');
   }
 
-  // Reject invalid identities and a missing PR token before creating a tag or making any GitHub writes.
-  const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
-  if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
-  const releasePrToken = prToken(decision.steps, process.env);
-  if (releasePrToken) {
-    pr = (...a) => execFileSync('gh', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: {...process.env, GH_TOKEN: releasePrToken}}).trim();
-  }
   let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
   if (dispatches.length && values['managed-draft']) {
     const original = fs.readFileSync(prBodyFile, 'utf8');
