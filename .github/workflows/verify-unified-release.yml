@@ -180,19 +180,36 @@ jobs:
           Expand-Archive -LiteralPath $asset[0].FullName -DestinationPath "$env:RUNNER_TEMP/candidate-app"
           node e2e/unified-release/install-windows.mjs "$env:RUNNER_TEMP/candidate-assets" "$env:RUNNER_TEMP/candidate-app"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      # hypeproof/hypeprooflab#997: same per-machine SDK binary precondition as
-      # verify-service-activities.yml; run.mjs refuses to start without it.
-      - name: Seed the Agent SDK binary the candidate expects
-        if: runner.os == 'macOS'
+      # Real install path (#4074, which hid #3865). Nothing here seeds the SDK binary itself any more: the
+      # candidate's own installer (install-mac.sh / update-windows.cmd, rendered by the same install-kit
+      # code the publish job uses, run on the accepted bytes through its HPS_INSTALL_ASSET_DIR seam) installs
+      # the App and the SDK, and acceptance-install.mjs then asserts the SDK is present and trusted. A
+      # missing seed fails here, however the installer exited. run.mjs below still needs that binary at the
+      # per-user location (hypeproof/hypeprooflab#997); the installer is now what puts it there.
+      - name: Download the SDK seed the release will carry
         shell: bash
-        run: bash scripts/seed-sdk-binary.sh --version "$(node e2e/unified-release/sdk-seed.mjs version "$RUNNER_TEMP/candidate-app/HypeProof Studio.app")"
-      - name: Seed the Agent SDK binary the candidate expects
-        if: runner.os == 'Windows'
-        shell: pwsh
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          $version = node e2e/unified-release/sdk-seed.mjs version "$env:RUNNER_TEMP/candidate-app"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./scripts/seed-sdk-binary.ps1 -Version $version
+          set -euo pipefail
+          app="$RUNNER_TEMP/candidate-app"
+          if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
+          sdk="$(node e2e/unified-release/sdk-seed.mjs version "$app")"
+          bash scripts/seed-sdk-binary.sh --platform "$PLATFORM" --version "$sdk" --download-only "$RUNNER_TEMP/sdk-seed"
+      - name: Install the candidate the way users do, then check the SDK
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/candidate-app"
+          if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
+          node scripts/release/acceptance-install.mjs install --platform "$PLATFORM" --tag "$TAG" --source-sha "$SOURCE_SHA" --version "$VERSION" \
+            --app "$app" --assets "$RUNNER_TEMP/candidate-assets" --seed-dir "$RUNNER_TEMP/sdk-seed" --work "$RUNNER_TEMP/acceptance-install/fresh" \
+            --evidence "$RUNNER_TEMP/unified-evidence/install/fresh.json"
       - name: Both activities in the shipped App
         shell: bash
         env:
@@ -243,6 +260,44 @@ jobs:
           set -euo pipefail
           HPS_UPDATE_APP_PATH="$RUNNER_TEMP/candidate-app/HypeProof Studio.app" node e2e/update-check/run.mjs
           cat "$HPS_UPDATE_REPORT_DIR/update-check-result.json" >> "$GITHUB_STEP_SUMMARY"
+      # Windows screenshots for the visual review below: the same read-only script in shipped mode. Best effort
+      # (continue-on-error): it has not been run on a Windows runner yet, and a screenshot never gates publish.
+      - name: Screenshots of the shipped App (Windows, best effort)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: bash
+        env:
+          HPS_UPDATE_CHECK_SHIPPED: '1'
+          HPS_UPDATE_REPORT_DIR: ${{ runner.temp }}/unified-evidence/update-check
+        run: HPS_UPDATE_APP_PATH="$RUNNER_TEMP/candidate-app" node e2e/update-check/run.mjs
+      # Upgrade path, as far as it is truthful: the previous published stable is installed with its own public
+      # install command, then brought to the candidate with the candidate's installer (the Windows updater
+      # command, or install-mac.sh again), and the App version and the SDK are asserted after each hop. NOT
+      # verified: the in-app updater itself (it reads only the latest published stable release, never an
+      # -rc, and the script cannot point it elsewhere), and BB-028 (background auto-update). If the previous
+      # stable has no install command asset the step reports NOT RUN in the summary instead of failing.
+      - name: Upgrade path — previous stable to candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORM: ${{ matrix.platform }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
+        run: |
+          set -uo pipefail
+          app="$RUNNER_TEMP/candidate-app"
+          if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
+          node scripts/release/acceptance-install.mjs upgrade --platform "$PLATFORM" --tag "$TAG" --source-sha "$SOURCE_SHA" --version "$VERSION" \
+            --app "$app" --assets "$RUNNER_TEMP/candidate-assets" --seed-dir "$RUNNER_TEMP/sdk-seed" --work "$RUNNER_TEMP/acceptance-install/upgrade" \
+            --evidence "$RUNNER_TEMP/unified-evidence/install/upgrade.json"
+          rc=$?
+          if [[ $rc -eq 3 ]]; then
+            echo "::warning::NOT RUN: upgrade path on $PLATFORM (previous stable has no install command)"
+            echo "Upgrade path on $PLATFORM: NOT RUN (see install/upgrade.json)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit $rc
       - name: Upload synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -251,6 +306,38 @@ jobs:
           path: ${{ runner.temp }}/unified-evidence/
           if-no-files-found: warn
           retention-days: 14
+  # Visual-breakage review of the acceptance screenshots, once per rc (scripts/release/screenshot-review.mjs).
+  # Non-blocking by construction: publish does not need this job, and the job itself may fail. One model call
+  # per OS at most; without the HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY secret the model call is skipped with a
+  # notice and only the free local blank-window check runs. The secret is not created by this workflow.
+  screenshot-review:
+    needs: [candidate, acceptance]
+    if: ${{ always() && needs.acceptance.result != 'skipped' }}
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: unified-*
+          path: receipts
+      - name: Review the screenshots
+        env:
+          HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY: ${{ secrets.HPS_SCREENSHOT_REVIEW_ANTHROPIC_API_KEY }}
+        run: node scripts/release/screenshot-review.mjs --input receipts --out "$RUNNER_TEMP/screenshot-review"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshot-review
+          path: ${{ runner.temp }}/screenshot-review/
+          if-no-files-found: ignore
   publish:
     needs: [candidate, acceptance]
     # A promoted release skips acceptance (candidate.outputs.accepted) and publishes on the rc's receipts.
