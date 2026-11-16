@@ -235,7 +235,7 @@ try {
   await b.evaluate(`Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});document.dispatchEvent(new Event('visibilitychange'))`);
   await wait(async()=>await live()===0,'hidden ended the session');await mouse('mouseReleased',h.x,h.y);
   await b.evaluate(`delete document.visibilityState`);await drain();
-  assert(await b.evaluate(`!document.querySelector('.hps-voice-hold')`),'the session stopped');}
+  await wait(async()=>await b.evaluate(`!document.querySelector('.hps-voice-hold')`),'the session stopped');}
  controls.push('push-to-talk: pointer hold and release outside, Space on the button only, blur and hide end the hold, no reopen after the answer');
  // R-027: the automatic end-of-speech detector cannot start: that session switches to push-to-talk, the stored mode stays.
  await send({type:'config',config});await drain();
