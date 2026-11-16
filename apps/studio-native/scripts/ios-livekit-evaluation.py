@@ -28,10 +28,18 @@ EVENTS = {"manual_rendering_enabled", "connected", "admitted", "microphone_track
 HOST_STAGES = {"clang-version", "go-version", "source-init", "source-fetch", "source-checkout",
                "server-build", "modules-verify", "server-version", "server-libraries", "venv",
                "python-dependencies", "python-check", "python-freeze"}
+FAILURE_CODES = {"actual_published_pcm_missing", "boolean", "candidate_identity", "claim_scope", "config_room",
+    "config_source", "darwin_required", "decoded_count", "disconnect_missing", "evaluator_exited_early",
+    "evaluator_failed", "event_schema", "generation", "identity", "incomplete_cleanup", "missing_fence",
+    "native_failed", "no_actual_audio", "observation_window", "owned_cleanup_failed", "owned_command_failed",
+    "phase", "receipt_resurrected", "receipt_size", "receipt_timeout", "runtime_identity", "server_cancel_missing",
+    "server_failure", "server_identity_or_cleanup", "server_started_tuple", "server_stop_missing", "source_sha",
+    "state_schema", "transport_sequence", "tuple_changed"}
 
 
 class CheckFailure(Exception):
-    pass
+    def __init__(self, code):
+        super().__init__(code if isinstance(code, str) and code in FAILURE_CODES else "qualification_failed")
 
 
 class OwnedInterruption(Exception):
@@ -190,6 +198,102 @@ def host_receipt(raw):
     return safe
 
 
+def partial_json(path, kind=dict):
+    """Read bounded optional evidence without letting diagnostics mask the failure."""
+    try:
+        if path is None or not path.is_file():
+            return "missing", None
+        value = read_json(path)
+        return ("present", value) if isinstance(value, kind) else ("invalid", None)
+    except Exception:
+        return "invalid", None
+
+
+def diagnostic_snapshot(reader, path):
+    try:
+        return reader(path)
+    except Exception:
+        # An unreadable/malformed diagnostic must never replace the primary failure.
+        return {"availability": "unavailable"}
+
+
+def native_failure_snapshot(path):
+    availability, raw = partial_json(path)
+    safe = {"availability": availability}
+    if raw is None:
+        return safe
+    if raw.get("schema") != "hps-native-livekit-evaluation/1":
+        return {"availability": "invalid"}
+    for key, allowed in {"status": {"PASS", "FAIL"}, "scenario": set(SCENARIOS) | {"unknown"},
+                         "failure": {"config", "receipt", "interruption", "fence", "cleanup", "bounded_execution"}}.items():
+        if isinstance(raw.get(key), str) and raw[key] in allowed:
+            safe[key] = raw[key]
+    for key in ("beforeFence", "afterFence", "afterDrain", "final"):
+        value = raw.get(key)
+        if not isinstance(value, dict):
+            continue
+        state = {}
+        if value.get("phase") in ("ready", "starting", "playing", "interrupted", "stopped"):
+            state["phase"] = value["phase"]
+        for name in ("busy", "captureOpen", "outputOpen", "roomAttached", "manualRendering"):
+            if type(value.get(name)) is bool:
+                state[name] = value[name]
+        for name, maximum in (("generation", 4294967295), ("decodedBuffers", 48000 * 90), ("decodedSamples", 48000 * 90)):
+            if type(value.get(name)) is int and 0 <= value[name] <= maximum:
+                state[name] = value[name]
+        if isinstance(value.get("events"), list):
+            state["events"] = [event for event in value["events"][:64] if isinstance(event, str) and event in EVENTS]
+        safe[key] = state
+    return safe
+
+
+def evaluator_failure_snapshot(output):
+    availability, raw = partial_json(output / "result.json")
+    safe = {"availability": availability}
+    error_types = {"AssertionError", "RuntimeError", "ValueError", "TimeoutError", "CancelledError", "OSError"}
+    if raw is not None:
+        if raw.get("status") in ("PASS", "FAIL"):
+            safe["status"] = raw["status"]
+        if isinstance(raw.get("error_type"), str) and raw["error_type"] in error_types:
+            safe["error_type"] = raw["error_type"]
+        error_codes = {"timeout: stopped acknowledgement and client disconnect": "stop_disconnect_timeout",
+                       "server exited before readiness": "server_exited_before_ready",
+                       "server readiness timed out": "server_readiness_timeout"}
+        if isinstance(raw.get("error"), str) and raw["error"] in error_codes:
+            safe["error_code"] = error_codes[raw["error"]]
+        if type(raw.get("owned_server_reaped")) is bool:
+            safe["owned_server_reaped"] = raw["owned_server_reaped"]
+        value = raw.get("duration_seconds")
+        if type(value) in (int, float) and 0 <= value <= 3600 and math.isfinite(value):
+            safe["duration_seconds"] = value
+    availability, events = partial_json(output / "events.json", list)
+    safe["events_availability"] = availability
+    safe["observations"] = []
+    observations = {"manual_room_ready", "client_admitted", "sent", "rejected", "worker_failed",
+                    "producer_finished", "cancelled", "energy_onset", "client_disconnected",
+                    "attribute_cleanup_failed", "cleanup_failed", "manual_client_left", "manual_session_complete"}
+    reasons = {"sender_or_reliability", "not_admitted", "capacity_session_closed", "schema", "input_track_limit",
+               "session_or_terminal", "duplicate_or_stale", "tuple", "duplicate_interrupt",
+               "energy_onset", "client_interrupt", "client_stop", "disconnect", "limit"}
+    for event in (events or [])[-64:]:
+        if not isinstance(event, dict) or event.get("observation") not in tuple(observations):
+            continue
+        item = {"observation": event["observation"]}
+        for key, allowed in {"event": {"start", "started", "interrupt", "interrupted", "stop", "stopped"},
+                             "reason": reasons, "error_type": error_types}.items():
+            if isinstance(event.get(key), str) and event[key] in allowed:
+                item[key] = event[key]
+        for key in ("current", "publication_removed"):
+            if type(event.get(key)) is bool:
+                item[key] = event[key]
+        for key, maximum in (("at_ms", 3600000), ("queued_after_seconds", 90)):
+            value = event.get(key)
+            if type(value) in (int, float) and 0 <= value <= maximum and math.isfinite(value):
+                item[key] = value
+        safe["observations"].append(item)
+    return safe
+
+
 def await_file(path, process, seconds, allow_successful_exit=False):
     deadline = time.monotonic() + seconds
     while not path.is_file():
@@ -221,35 +325,76 @@ def scenario_run(args, host, private, scenario):
     process = None
     config_path = receipt_path = None
     primary = None
+    started = time.monotonic()
+    phases = []
+    config_lifetime = {}
+    def phase(name):
+        elapsed = round(time.monotonic() - started, 3)
+        if phases:
+            phases[-1]["duration_seconds"] = round(elapsed - phases[-1]["elapsed_seconds"], 3)
+        phases.append({"phase": name, "elapsed_seconds": elapsed})
+    def config_remaining(point, connection):
+        expires = connection.get("expires_at")
+        if type(expires) is int:
+            remaining = expires - int(time.time())
+            if -3600 <= remaining <= 3600:
+                config_lifetime[point] = remaining
     try:
+        # Resolve the owned app/container before the evaluator issues its fresh
+        # 75-second config. Cold preflight must not consume credential lifetime.
+        phase("terminate_previous_app")
+        command(["xcrun", "simctl", "terminate", args.device, BUNDLE], check=False)
+        phase("app_container")
+        container = Path(command(["xcrun", "simctl", "get_app_container", args.device, BUNDLE, "data"]).stdout.decode().strip())
+        phase("prepare_paths")
+        caches = container / "Library/Caches"
+        caches.mkdir(parents=True, exist_ok=True)
+        config_path = caches / "hps-livekit-ci-config.json"
+        receipt_path = caches / "hps-livekit-ci-result.json"
+        config_path.unlink(missing_ok=True)
+        receipt_path.unlink(missing_ok=True)
+        phase("evaluator_start")
         with (private / (scenario + ".log")).open("xb") as log:
             process = subprocess.Popen([host["python"], str(lab), "--server", host["server"],
                 "--output", str(output), "--serve-seconds", "75", "--exit-after-client",
                 "--source-sha", args.source_sha], stdout=log, stderr=log, start_new_session=True)
+            phase("await_config")
             connection = await_file(output / "connection.private.json", process, 15)
+            config_remaining("read_seconds_remaining", connection)
+            phase("validate_config")
             require(connection.get("candidate_source_sha") == args.source_sha, "config_source")
             room = connection.get("room")
             require(isinstance(room, str) and re.fullmatch(r"hps-eval-[0-9a-f-]{36}", room), "config_room")
             run_id = str(uuid.uuid4())
             connection.update(run_id=run_id, scenario=scenario, synthetic_consent=True)
-            command(["xcrun", "simctl", "terminate", args.device, BUNDLE], check=False)
-            container = Path(command(["xcrun", "simctl", "get_app_container", args.device, BUNDLE, "data"]).stdout.decode().strip())
-            caches = container / "Library/Caches"
-            caches.mkdir(parents=True, exist_ok=True)
-            config_path = caches / "hps-livekit-ci-config.json"
-            receipt_path = caches / "hps-livekit-ci-result.json"
-            receipt_path.unlink(missing_ok=True)
+            phase("write_config")
             with config_path.open("w") as file:
                 json.dump(connection, file)
             config_path.chmod(0o600)
+            phase("launch_app")
+            config_remaining("launch_seconds_remaining", connection)
             command(["xcrun", "simctl", "launch", args.device, BUNDLE, "--hps-livekit-evaluation-ci-synthetic"])
+            config_remaining("launched_seconds_remaining", connection)
+            phase("await_native_result")
             native = await_file(receipt_path, process, 65, allow_successful_exit=True)
+            phase("await_evaluator_exit")
             require(process.wait(timeout=15) == 0, "evaluator_failed")
+            phase("validate_receipts")
             events, server = read_json(output / "events.json"), read_json(output / "result.json")
             return validate(native, events, server, run_id=run_id, scenario=scenario,
                             source=args.source_sha, room=room, server_sha=host["server_sha256"])
     except BaseException as error:
         primary = error
+        # Read partial receipts before cleanup removes them. These diagnostics
+        # cannot grant PASS and contain no raw identity, URL, token or error text.
+        elapsed = round(time.monotonic() - started, 3)
+        phases[-1]["duration_seconds"] = round(elapsed - phases[-1]["elapsed_seconds"], 3)
+        error.scenario_diagnostics = {"schema": "hps-native-livekit-scenario-failure/1",
+            "scenario": scenario, "phase": phases[-1]["phase"],
+            "elapsed_seconds": elapsed, "phases": phases, "config_lifetime": config_lifetime,
+            "evaluator_exit": process.poll() if process is not None else None,
+            "native": diagnostic_snapshot(native_failure_snapshot, receipt_path),
+            "evaluator": diagnostic_snapshot(evaluator_failure_snapshot, output)}
         raise
     finally:
         # Attempt both sides independently; never publish a token-bearing private file.
@@ -264,6 +409,9 @@ def scenario_run(args, host, private, scenario):
             except BaseException as error:
                 if cleanup_error is None:
                     cleanup_error = error
+        if primary is not None:
+            primary.scenario_diagnostics["evaluator_exit_after_cleanup"] = process.poll() if process is not None else None
+            primary.scenario_diagnostics["evaluator_after_cleanup"] = diagnostic_snapshot(evaluator_failure_snapshot, output)
         if primary is None and cleanup_error is not None:
             raise CheckFailure("owned_cleanup_failed") from None
 
@@ -304,6 +452,8 @@ def main(args):
                     result["host"] = {"status": "UNAVAILABLE", "error_type": type(error).__name__}
     except Exception as error:
         result["failure"] = str(error) if isinstance(error, CheckFailure) else type(error).__name__
+        if hasattr(error, "scenario_diagnostics"):
+            result["scenario_failure"] = error.scenario_diagnostics
     finally:
         (output / "native-livekit.json").write_text(json.dumps(result, indent=2) + "\n")
     print("native LiveKit transport: " + result["status"])
