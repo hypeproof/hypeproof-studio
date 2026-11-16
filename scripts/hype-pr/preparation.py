@@ -297,14 +297,15 @@ def inspect(checkout, repo, base="main", roots=None, members=(), local_gaps=Fals
     for gap in source_gaps:
         # Said before the reads start: a run stopped for being slow has then already said why.
         print(f"hype-pr: {gap_notice(gap)}", file=sys.stderr)
-    after = impact.snapshot(reader, policy, {repo: head})
-    before_policy = policy
-    if initial_onboarding:
-        before_policy = {**policy, "repositories": {r: c for r, c in policy["repositories"].items() if r != repo}}
-        stages = {n["stage"] for n in after["nodes"].values() if n["repo"] == repo}
-        if not {"intent", "requirement", "design", "implementation", "test"} <= stages:
-            raise ValueError("initial onboarding needs intent, requirement, design, implementation and test nodes")
-    before = impact.snapshot(reader, before_policy, {**after["commits"], repo: merge_base})
+    with reader:
+        after = impact.snapshot(reader, policy, {repo: head})
+        before_policy = policy
+        if initial_onboarding:
+            before_policy = {**policy, "repositories": {r: c for r, c in policy["repositories"].items() if r != repo}}
+            stages = {n["stage"] for n in after["nodes"].values() if n["repo"] == repo}
+            if not {"intent", "requirement", "design", "implementation", "test"} <= stages:
+                raise ValueError("initial onboarding needs intent, requirement, design, implementation and test nodes")
+        before = impact.snapshot(reader, before_policy, {**after["commits"], repo: merge_base})
     planned = impact.plan(before, after)
     blockers, debt = [], []
     new_gaps = set(planned["structural_gaps"]) - set(impact.structural_gaps(before["nodes"]))
