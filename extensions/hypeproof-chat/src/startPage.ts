@@ -167,6 +167,8 @@ export class StartPage {
     // REQ-STUDIO-START-UPDATE-NOTICE — a found, cleared or dismissed update redraws an open start page.
     // Optional: hosts without the hook (tests, older providers) just show no notice.
     this.chat.onAvailableUpdateChanged?.(() => { if (this.panel) void this.refresh(); });
+    // CGP-SHELL-R-014 — the chat's 팁 그만 보기 / 다시 켜기 (or a seat switch) redraws an open sheet's 팁 보기 row.
+    this.chat.onLessonTipsChanged?.(() => { if (this.panel) void this.refresh(); });
   }
   /** The chat banner's offer, for the start page; the dismissal rule already ran in the scheduler. */
   private updateView(): StartState["update"] {
@@ -953,6 +955,7 @@ export class StartPage {
       theme: this.themeInput(),
       reduceMotion: vscode.workspace.getConfiguration("workbench").get("reduceMotion"),
       notices: vscode.workspace.getConfiguration("hypeproofChat").get("osTaskNotices"),
+      tips: this.chat.lessonTipsState?.(),
       profileMinor: p ? isMinorProfile(p) : null,
       age: this.context.globalState?.get<unknown>(AGE_KEY),
     });
@@ -1087,6 +1090,8 @@ export class StartPage {
           if (themeState(this.themeInput()) !== "custom") for (const w of themeWrites(write.value)) await vscode.workspace.getConfiguration(w.section).update(w.key, w.value, true);
         }
         else if (write.key === "reduceMotion") await vscode.workspace.getConfiguration("workbench").update("reduceMotion", write.value, true);
+        // CGP-SHELL-R-014 / R-019 — the chat's own switch, same preference and seat: the chat redraws its tip row.
+        else if (write.key === "tips") { if (await this.chat.setLessonTips?.(write.value) === "refused") throw Error("tips refused"); }
         else await vscode.workspace.getConfiguration("hypeproofChat").update("osTaskNotices", write.value, true);
       } catch { this.error = "설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요."; }
       await this.refresh(); return;

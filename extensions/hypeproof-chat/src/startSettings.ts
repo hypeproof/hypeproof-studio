@@ -10,8 +10,9 @@
  * 글자 크기 (CGP-DS-R-009 text size), 움직임 줄이기 (workbench.reduceMotion, CGP-DS-R-015) and
  * 알림 (hypeproofChat.osTaskNotices, the task-notice core patch), 화면 밝기 (CGP-SHELL-R-016: HP Dark, HP Light or the
  * device's setting) and 내 작업 내보내기 (REQ-SHELL-28), an action row that runs the shipped export (CGP-SHELL-R-028).
- * 팁 보기 (REQ-SHELL-19) joins the list when its row ships;
- * a row without its behaviour would be a switch that does nothing.
+ * 팁 보기 (REQ-SHELL-19): the per-seat lesson tips switch (CGP-SHELL-R-019, lessonTips.ts). The host reads and writes it
+ * through the chat provider's own LessonTipsPreference and seat, so this row and the chat's 팁 그만 보기 / 다시 켜기 are one
+ * choice: either one changes what the other shows, without a reload.
  */
 import { normalizeTextSize, type TextSize } from "./textSize";
 
@@ -20,7 +21,7 @@ export const START_SETTING_ROWS = ["textSize", "theme", "reduceMotion", "notices
 export type StartSettingRow = (typeof START_SETTING_ROWS)[number];
 export const START_SETTINGS_MAX_ROWS = 6;
 /** Rows whose behaviour exists in this build. */
-export const START_SETTING_ROWS_AVAILABLE: readonly StartSettingRow[] = ["textSize", "theme", "reduceMotion", "notices", "export"];
+export const START_SETTING_ROWS_AVAILABLE: readonly StartSettingRow[] = ["textSize", "theme", "reduceMotion", "notices", "tips", "export"];
 
 /**
  * CGP-SHELL-R-016 — 화면 밝기. `dark` / `light` pin one of the two HP themes; `system` follows the device (VS Code's
@@ -59,6 +60,9 @@ export const START_SETTINGS_COPY = {
   notices: "알림",
   noticesLabel: "창을 보고 있지 않을 때 컴퓨터 알림으로도 알려 줘요.",
   noticesHint: "코치가 일을 마치거나 확인을 기다릴 때 알려요. 답변 내용은 알림에 넣지 않아요.",
+  tips: "팁 보기",
+  tipsHint: "수업 단계의 도움말을 입력창 위에 보여 줘요. 대화의 '팁 그만 보기'와 같은 설정이에요.",
+  tipsWindowHint: "아직 수업 좌석이 정해지지 않아서 이 창에서만 기억해요.",
   export: "내 작업 내보내기",
   exportHint: "작업 폴더와 대화를 ZIP 파일 하나로 저장해요. 저장할 폴더는 직접 골라요.",
   advanced: "고급 설정",
@@ -70,6 +74,10 @@ export interface StartSettingsView {
   theme: ThemeState;
   reduceMotion: ReduceMotionChoice;
   notices: boolean;
+  /** 팁 보기: on unless this seat turned lesson tips off (CGP-SHELL-R-019). */
+  tips: boolean;
+  /** No seat is known yet, so the tips choice lasts only for this window (lessonTips.ts, an empty seat). */
+  tipsWindowOnly: boolean;
   /** "고급 설정" is drawn (and honoured by the host) only when this is true. */
   advanced: boolean;
 }
@@ -95,6 +103,8 @@ export function startSettingsView(input: {
   theme?: { colorTheme: unknown; explicitTheme: unknown; autoDetect: unknown };
   reduceMotion: unknown;
   notices: unknown;
+  /** The chat provider's lessonTipsState(): the seat's choice and the seat ("" when none is known). */
+  tips?: { on: unknown; seat: unknown };
   profileMinor: boolean | null;
   age: unknown;
 }): StartSettingsView {
@@ -104,6 +114,8 @@ export function startSettingsView(input: {
     theme: themeState(input.theme ?? { colorTheme: undefined, explicitTheme: undefined, autoDetect: undefined }),
     reduceMotion: normalizeReduceMotion(input.reduceMotion),
     notices: input.notices === true,
+    tips: input.tips?.on !== false,
+    tipsWindowOnly: !(typeof input.tips?.seat === "string" && input.tips.seat.length > 0),
     advanced: advancedSettingsAllowed({ profileMinor: input.profileMinor, age: input.age }),
   };
 }
@@ -112,7 +124,8 @@ export type StartSettingWrite =
   | { key: "textSize"; value: TextSize }
   | { key: "theme"; value: ThemeChoice }
   | { key: "reduceMotion"; value: ReduceMotionChoice }
-  | { key: "notices"; value: boolean };
+  | { key: "notices"; value: boolean }
+  | { key: "tips"; value: boolean };
 
 /** A webview message is hostile input: only an exact known key with an exact known value is written. */
 export function parseStartSettingWrite(msg: unknown): StartSettingWrite | null {
@@ -122,5 +135,6 @@ export function parseStartSettingWrite(msg: unknown): StartSettingWrite | null {
   if (key === "theme" && typeof value === "string" && (THEME_CHOICES as readonly string[]).includes(value)) return { key, value: value as ThemeChoice };
   if (key === "reduceMotion" && typeof value === "string" && normalizeReduceMotion(value) === value) return { key, value: value as ReduceMotionChoice };
   if (key === "notices" && typeof value === "boolean") return { key, value };
+  if (key === "tips" && typeof value === "boolean") return { key, value };
   return null;
 }

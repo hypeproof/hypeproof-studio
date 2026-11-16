@@ -7299,8 +7299,8 @@ every hinted step shows one quiet line in the tip's place, `팁을 꺼 두었어
 region, so it is not re-read). The chat's settings dialog of a lesson seat (opened from the access
 chip) has a lasting `팁 보기` checkbox with the hint `수업 단계의 도움말을 입력창 위에 보여 줘요.`, bound
 to the host's `lessonTipsState()` / `setLessonTips()`; a seat without a lesson has no such switch.
-The start page's 팁 보기 row (CGP-SHELL-R-014) uses the same host methods and is added by that row's
-follow-up. `setLessonTips` refuses a non-boolean (`refused`, nothing changes) and says whether
+The start page's 팁 보기 row (CGP-SHELL-R-014) uses the same host methods, so it and the chat's
+switches are one choice (see REQ-SHELL-14). `setLessonTips` refuses a non-boolean (`refused`, nothing changes) and says whether
 the choice was `stored` for the seat or kept `memory-only` (no seat known yet, or an empty seat), so a
 caller can tell the learner it was not saved. The host takes the seat only in a config build that passed its staleness check, so a
 press never lands on a previous seat. Per-step 닫기 is unchanged. Seats
@@ -8492,10 +8492,16 @@ behaviour exists in the build (DEC-SHELL-R014):
   result line, its busy and active-turn guards). It is offered where the shipped entry is: the
   chat settings dialog draws that entry with no seat condition, so the row has none either and
   adds no gate of its own. Only the exact `startExportMyWork` message runs it.
+- 팁 보기 (2026-11-16) — one checkbox for the per-seat lesson tips choice (CGP-SHELL-R-019), with the note
+  "수업 단계의 도움말을 입력창 위에 보여 줘요. 대화의 '팁 그만 보기'와 같은 설정이에요.". It is the chat's own choice, not a
+  copy: the host reads `ChatPanelProvider.lessonTipsState()` and writes through `setLessonTips()`, the same
+  `LessonTipsPreference` and seat the chat uses. A press on the row redraws the chat's tip row, and the chat's
+  팁 그만 보기 / 다시 켜기 (or its settings checkbox) or a seat switch redraws an open sheet
+  (`onLessonTipsChanged`), with no reload. With no seat known yet the choice lasts for this window only, and
+  the note adds "아직 수업 좌석이 정해지지 않아서 이 창에서만 기억해요.".
 
-화면 밝기(테마) joins with REQ-SHELL-16 (CGP-SHELL-R-016, #4053). 팁 보기 joins when REQ-SHELL-19
-(CGP-SHELL-R-019) ships: the tips themselves are not built yet. Until then neither is drawn, so
-no row is a switch that does nothing.
+화면 밝기(테마) joined with REQ-SHELL-16 (CGP-SHELL-R-016, #4053) and 팁 보기 with REQ-SHELL-19 (CGP-SHELL-R-019),
+so all six rows are drawn and none is a switch that does nothing.
 
 "고급 설정" at the end of the sheet is the only start-page path to the VS Code settings editor.
 It is hidden for a minor cohort: a connected or previewed profile that `isMinorProfile` calls
@@ -8503,7 +8509,7 @@ minor (it fails closed on an unknown tier) or a free start answered "under14". T
 the same rule when the request arrives, so a forged request from a minor seat opens nothing. With
 no seat and no under-14 answer it stays (adult or staff setup, as before this row).
 
-Every write is host-validated: only the three setting keys with their exact values are stored; any other
+Every write is host-validated: only the known setting keys with their exact values are stored; any other
 key or value stores nothing and sends nothing. A failed write says
 "설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요." and keeps the shown value. The sheet reuses the
 chat settings dialog: Escape, × and the backdrop close it, focus returns to "설정", 44px targets,
