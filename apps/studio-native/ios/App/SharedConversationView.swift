@@ -577,8 +577,11 @@ struct SharedConversationView: View {
                             ProgressView().padding(.horizontal, 8)
                             Button("취소") { model.cancelLogin() }.frame(minHeight: 44).accessibilityLabel("로그인 취소").accessibilityIdentifier("accountCancel")
                         } else {
-                            Button("로그인") { startLogin() }.font(.callout.weight(.semibold))
-                                .padding(.horizontal, 16).frame(minHeight: 44)
+                            Button { startLogin() } label: {
+                                Text("로그인").font(.callout.weight(.semibold))
+                                    .padding(.horizontal, 16).frame(minHeight: 44)
+                                    .contentShape(Capsule())
+                            }
                                 .background(ConversationStyle.accent, in: Capsule()).foregroundStyle(ConversationStyle.onAccent)
                                 .disabled(!model.accountStorageReady).accessibilityLabel("로그인하고 대화하기").accessibilityIdentifier("linkDesktop")
                         }

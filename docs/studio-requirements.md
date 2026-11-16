@@ -10089,6 +10089,10 @@ label as a touch target, including the padding outside the icon (#4259). A singl
 touch in that padding must start the same guarded action. Existing draft-only
 dictation, explicit conversation start, reply continuation and Stop semantics
 remain unchanged; a layout frame alone is not evidence of a usable target.
+The login pill similarly includes its visible padding inside the actionable label
+(#4236). Its existing account-storage readiness guard and login flow remain intact.
+One touch inside the pill must start login; input reliability is checked separately
+from credential exchange and authenticated account adoption.
 
 ### Native iPhone credential continuity — MIRS-01
 
