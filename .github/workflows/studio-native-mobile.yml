@@ -80,6 +80,8 @@ jobs:
           retention-days: 14
       - name: Verify trusted native acceptance recipe controls
         run: python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v
+      - name: Verify owned host preparation cancellation
+        run: python3 -m unittest discover -s apps/studio-native/voice-evaluation -p 'test_prepare_host.py' -v
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

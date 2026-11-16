@@ -52,16 +52,20 @@ independently, preserving the body failure or first cleanup failure.
 
 Native iOS SDK resolution/build, the native client connected to the server,
 physical iPhone speaker/Bluetooth, Korean naturalness, AEC/false interruptions
-and installed-app acceptance are NOT RUN. The launcher currently runs on Linux
-loopback; an iPhone's loopback does not connect to a Mac. The development screen
+and installed-app acceptance are NOT RUN. The launcher has now run on Darwin
+loopback too; an iPhone's loopback still does not connect to a Mac. The development screen
 cannot yet be presented as an end-to-end native acceptance result. Production
 account/coach integration and continuous audio cost controls remain separate.
 
-## Source and receipt bindings
+## Earlier source and receipt bindings
+
+These bind the earlier Linux/core run. The new native CI extension and Darwin
+source-build work have separate manifests and are not covered by an earlier
+adapter source PASS.
 
 The lab source originated at `2a3749ccebeffc5c84e07e9c5f621cf49452af02` with
 cleanup/observer correction `f014c45a0a550034c372b01c37e6510f0456c5ea`;
-all eight v6 source hashes match the integrated source. Native adapter source came
+all eight v6 source hashes matched the integration at the v6 checkpoint. Native adapter source came
 from `7156b84f5d309a4c37bbdee9f73c7041fa6ab8eb` with admission correction
 `a48461e6d864f317be098bfdba06d17bbf4195cd`. Root core/test working bytes were
 bound by the Swift run's input manifest rather than represented as an all-HEAD pass.
@@ -81,3 +85,39 @@ Local evidence bundle: `artifacts/studio-livekit-implementation-20261116/` in th
 - `lab-handoff-v6.json`: `6473b7aab68702c4220d43f737a244cfc9c1de1da83b4a9a1c19a2387503093a`
 - `lab-evidence-v6/media/result.json`: `880822399fefe6aed3b6c38cf49b56d6dd291c3f11dc62c1c499d94e473cb91d`
 - `lab-evidence-v6/execution.json`: `5480813a88941cd859e65339b5c5565b91bff92dc5f125bb176a5d1dd68979ec`
+
+## Darwin and native CI extension
+
+Darwin v9 executed the exact server source commit
+`385aa40f9292fe1db8caad87301e4b285b7c198a` with SHA-verified Go 1.26.11 and the
+existing Apple clang 17 / SDK 26.2. Host preparation passed in 87.887 seconds;
+nine host/cleanup/protocol controls, eight actual loopback controls and one
+same-room client Stop/disconnect session passed. Owned servers were reaped and
+all observed server sockets were loopback. Native iOS execution remains pending.
+
+V7 failed before compilation on an overly strict archive directory check. V8
+failed at Darwin source compilation with CGO disabled: the pinned CPU dependency
+requires Darwin cgo. V9 used the existing compiler, without changing upstream
+source, module files or system tools. These failed runs remain separate.
+
+The new native CI observer's first version filtered counts by session state,
+which could falsely hide post-fence callbacks. Independent review rejected it.
+The correction retains the actual registered observer and counts raw callbacks
+under a lock, independent of session state. Five receipt-gate controls and two
+owned-runner controls passed; Ubuntu Swift syntax parsing passed. These do not
+constitute iOS semantic compilation or native RTC acceptance.
+
+The nested host-preparation cancellation path was subsequently corrected: an
+actual old-source SIGTERM run left its child alive, while corrected SIGTERM and
+SIGINT controls reaped the child and retained a failed receipt. The outer native
+helper must allow that bounded cleanup before killing its process group.
+
+The actual workflow shell ran against synthetic Git/receipt fixtures: eleven
+controls passed, including refusal to produce acceptance when the new parallel
+voice job is missing, queued, failed, cancelled or skipped in selected scope.
+The original iOS/Android join and test suite were preserved.
+
+- `lab-handoff-v9.json`: `9233269f3b9a127aaeac450192e54d45539ddc8eb446b6d3a03d23fc41d88723`
+- `native-ci-handoff-v3.json`: `cb6600a75e6254f5397bb44976fcf9cf7f133beea04b1804ce16181722138420`
+
+- `lab-handoff-v10.json`: `cbdc0402a6f297b4023c5318cc73391f834e29dcf6d1ef4dee208d4e74a2696e`

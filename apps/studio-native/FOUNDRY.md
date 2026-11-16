@@ -187,3 +187,12 @@ This recipe is a development evaluation, not an installed release gate or a
 production provider. Public ingress, account authorization, continuous audio
 metering and paid voice activation remain Service integration work. The existing
 mobile recipe and its failing-journey gate remain authoritative for releases.
+
+The native counterpart is `scripts/ios-livekit-verify.py`: a separate bounded
+Mac job builds the existing Debug app, owns one simulator and calls the pinned
+local server recipe. It runs in parallel with the unchanged ordinary UI suite.
+`native / acceptance` refuses a non-successful selected voice job. Private room
+credentials stay in temporary files/app storage; only allowlisted observations
+are uploaded. Raw callback counts remain independent of the session fence so
+cancellation cannot manufacture a passing observation. Nested preparation and
+server cancellation must reap every owned child before an execution is accepted.

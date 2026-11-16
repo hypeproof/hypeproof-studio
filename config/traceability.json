@@ -20534,6 +20534,12 @@
         },
         {
           "path": "apps/studio-native/voice-evaluation/requirements.txt"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/prepare-host.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/host-requirements.txt"
         }
       ]
     },
@@ -20563,6 +20569,24 @@
         },
         {
           "path": "apps/studio-native/voice-evaluation/test_cleanup.py"
+        },
+        {
+          "path": "apps/studio-native/ios/App/LiveKitEvaluationCI.swift"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-livekit-evaluation.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-livekit-verify.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_livekit_evaluation.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_host.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_prepare_host.py"
         }
       ]
     }

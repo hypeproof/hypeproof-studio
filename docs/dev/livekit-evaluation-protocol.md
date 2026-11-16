@@ -64,9 +64,12 @@ the physical VO-T06/07/08/09/39 acceptance gates. iPhone speaker, AirPods,
 Bluetooth, interruptions and Korean naturalness remain separate checks.
 
 The development screen is compiled and selected explicitly in Debug. Release
-has no evaluation entry. The initial runtime accepts loopback connections only;
-an iPhone's loopback address is the iPhone itself, so this setup alone does not
-enable physical-phone testing against a Mac. Public ingress, persistent server
+has no evaluation entry. The runtime accepts loopback connections only. The
+pinned Darwin source-build recipe lets a Mac simulator share its host server;
+the separate CI job builds
+only the existing Debug app and exercises actual RTC alongside the original UI
+job. An iPhone's loopback address is the iPhone itself, so this setup alone does
+not enable physical-phone testing against a Mac. Public ingress, persistent server
 installation, paid STT/LLM/TTS, production account transport and any new recording
 policy require the next integration slice. No provider cost occurs in this lab;
 owned compute and any separately reserved CI remain costs.
@@ -80,3 +83,26 @@ script, including names, numbers, short acknowledgements and interruption.
 Measure user-end to first audible response and speech-onset to audible stop on
 the installed app; do not substitute SDK timestamps for acoustic observations.
 Keep desktop and mobile history continuous without requiring a computer to be on.
+
+## Native synthetic execution
+
+The explicit `--hps-livekit-evaluation-ci-synthetic` Debug route consumes and
+removes a private file from its own app container. No token is typed into UI,
+placed in launch arguments/environment, or uploaded as evidence. It uses the
+same controller, Room, participant admission and authorized remote audio track
+as the manual evaluation. Only capture input is substituted with deterministic
+PCM through the pinned SDK's manual-rendering mixer. This never proves physical
+microphone, speaker, Korean turn detection or AEC behavior.
+
+The host joins app and evaluator observations by candidate source, room, run and
+session/turn/generation. A brief actual published PCM burst must trigger server
+energy cancellation; a separate Stop case verifies terminal cleanup. Raw remote
+AudioRenderer counts increment under a lock independently of session authority
+and remain observable after renderer removal. Immediate in-flight callbacks are
+recorded separately from stability after cleanup and two bounded grace periods.
+A logical state transition cannot make a continued receiver appear silent.
+
+The original iOS/Android tests remain unchanged. The additional parallel voice
+job must succeed before the native acceptance join; a missing, skipped, failed
+or cancelled selected voice job cannot produce acceptance. The output is a
+sanitized JSON receipt, not raw SDK logs, tokens or a human listening verdict.
