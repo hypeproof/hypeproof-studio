@@ -15,6 +15,9 @@
   - It is for that session only (coordinator). The loop has no way to write the stored mode, and the next ordinary start is automatic again.
   - Push-to-talk itself needs no detector, so an `observe` failure in push-to-talk is ignored.
 - **Not built.** The Chalk class default (REQ-CGPV-38 "Chalk can make PTT the class default"): nothing serves it.
+- **After verify-4244 (fix).** Focus leaving the hold button (Tab, a click elsewhere) ends a Space or toggle hold, so no microphone stays open. While Space is still down after such a move, its repeats are swallowed in the capture phase until keyup, so no space reaches the next field.
+- **After verify-4244 (agent choice: keyboard and assistive technology).** Enter, or an assistive-technology click (a click with no pointer, `detail` 0), toggles: the first press starts the turn and the second sends it. `aria-pressed` reflects it, and window `pointerup` does not end a toggle. Space keeps hold-to-talk, and a pointer's own click is ignored because the pointer holds instead.
+- **After verify-4244 (agent choice: pointercancel).** A platform `pointercancel` (a palm, a scroll gesture, the OS taking the pointer) discards the turn. The microphone closes, nothing is sent, and no extra line is shown; the session waits for the next hold.
 - **Unchanged.** No flag, policy, Service or minor-seat change; no audio stored or logged.
 - **Not covered.** Real microphones and a real-device hold: NOT RUN (#3626).
 - Confirmed by Jay: no (the automatic default is Jay's; the rest is agent choice).

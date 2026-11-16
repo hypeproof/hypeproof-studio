@@ -93,6 +93,20 @@ const phase = (r) => r.loop.state.phase;
   r.loop.stop();
 }
 {
+  // verify-4244 (agent choice): a platform pointercancel discards the turn: closed, nothing sent, ready again, no extra line.
+  const r = rig();
+  r.loop.start({ mode: 'push_to_talk' }); await r.flush();
+  r.loop.hold(); await r.flush(); await r.tick(1200);
+  assert.equal(r.live(), 1, 'control: holding');
+  r.loop.discard(); await r.flush(); await r.flush();
+  assert.deepEqual([phase(r), r.loop.state.note, r.live(), r.clips.length], ['ready', PTT_READY, 0, 0], 'discarded: closed, nothing sent, the plain ready line');
+  r.loop.discard();
+  assert.equal(phase(r), 'ready', 'a discard with no hold does nothing');
+  r.loop.hold(); await r.flush(); await r.tick(900); r.loop.release(); await r.flush();
+  assert.equal(r.clips.length, 1, 'the next hold works');
+  r.loop.stop();
+}
+{
   // Automatic stays the default and is unchanged.
   const r = rig();
   r.loop.start(); await r.flush();

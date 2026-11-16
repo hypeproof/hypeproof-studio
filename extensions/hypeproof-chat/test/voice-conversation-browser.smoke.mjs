@@ -237,6 +237,47 @@ try {
   await b.evaluate(`delete document.visibilityState`);await drain();
   assert(await b.evaluate(`!document.querySelector('.hps-voice-hold')`),'the session stopped');}
  controls.push('push-to-talk: pointer hold and release outside, Space on the button only, blur and hide end the hold, no reopen after the answer');
+ // verify-4244 (1): a Space hold, then focus moves (Tab): the microphone closes, the turn is sent, and Space repeats type
+ // nothing into the next field until Space is released.
+ await startPtt();
+ {const before=transcribes();await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  await key('keyDown',{text:' '});await wait(async()=>await live()===1,'Space hold');await new Promise(r=>setTimeout(r,900));
+  for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+  await wait(async()=>await live()===0,'focus moved: microphone closed');
+  await wait(async()=>transcribes()===before+1,'the turn ended by the focus move was sent');
+  await b.evaluate('document.querySelector(".hps-input textarea").focus()');const draft=await b.evaluate('document.querySelector(".hps-input textarea").value');
+  for(let i=0;i<3;i++)await key('keyDown',{text:' ',autoRepeat:true});
+  assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),draft,'Space repeats after the focus move typed nothing');
+  await key('keyUp');await drain();}
+ await stopPtt();
+ // verify-4244 (2, agent choice): Enter or an assistive-tech click toggles: the first press starts, the second sends.
+ await startPtt();
+ {const before=transcribes();await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  const enter=async()=>{for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r'}:{})});};
+  await enter();await wait(async()=>await live()===1,'Enter started');
+  assert.equal((await holdBox()).pressed,'true','aria-pressed while toggled on');
+  await new Promise(r=>setTimeout(r,900));assert.equal(await live(),1,'still listening after Enter was released');
+  await enter();await wait(async()=>await live()===0,'Enter again sent');await wait(async()=>transcribes()===before+1,'the toggled turn was sent');}
+ await stopPtt();
+ await startPtt();
+ {const before=transcribes();
+  await b.evaluate(`document.querySelector('.hps-voice-hold').click()`);await wait(async()=>await live()===1,'an AT click started');
+  assert.equal((await holdBox()).pressed,'true','aria-pressed while toggled on');
+  await new Promise(r=>setTimeout(r,900));
+  await b.evaluate(`document.querySelector('.hps-voice-hold').click()`);await wait(async()=>await live()===0,'a second AT click sent');
+  await wait(async()=>transcribes()===before+1,'the AT-toggled turn was sent');}
+ await stopPtt();
+ // verify-4244 (3, agent choice): pointercancel discards the turn: the microphone closes, nothing is sent, no extra line.
+ await startPtt();
+ {const before=transcribes();const h=await holdBox();await mouse('mousePressed',h.x,h.y);await wait(async()=>await live()===1,'held');await new Promise(r=>setTimeout(r,900));
+  await b.evaluate(`document.querySelector('.hps-voice-hold').dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:1,pointerType:'mouse'}))`);
+  await wait(async()=>await live()===0,'pointercancel closed the microphone');await mouse('mouseReleased',h.x,h.y);
+  await new Promise(r=>setTimeout(r,600));await drain();
+  assert.equal(transcribes(),before,'nothing was sent');
+  const after=await holdBox();assert.deepEqual([after.pressed,after.text],['false','누르고 말하기'],'ready for the next hold');
+  assert.equal(await b.evaluate(`document.querySelector('[aria-label="음성 대화"] [role=status]').textContent`),'버튼을 누르고 있는 동안 들어요. 손을 떼면 보내요.','no extra line');}
+ await stopPtt();
+ controls.push('verify-4244: focus move ends a Space hold and swallows repeats; Enter and AT clicks toggle; pointercancel discards');
  // R-027: the automatic end-of-speech detector cannot start: that session switches to push-to-talk, the stored mode stays.
  await send({type:'config',config});await drain();
  {

@@ -619,7 +619,10 @@ A real coach shell command and the packaged app are not run here.
 - Space in the text box types a space and opens nothing;
 - a window blur during a hold closes the microphone;
 - a hide during a hold stops the session;
-- a failing analyser switches that session to push-to-talk with its line and posts no mode write.
+- a failing analyser switches that session to push-to-talk with its line and posts no mode write;
+- (verify-4244) a Space hold followed by Tab closes the microphone and sends the turn, and Space repeats typed afterwards reach no field;
+- Enter, and an assistive-technology `click()`, toggle a turn on (`aria-pressed`) and off (sent);
+- a `pointercancel` during a hold discards the turn: the microphone closes, nothing is sent, and the plain ready line stays. `voice-ptt.smoke.mjs` pins `discard()` on the loop. Five verify-4244 mutants each fail the real-App smoke: no onBlur end, repeats leaking, pointercancel sending, no assistive-technology toggle, and no Enter toggle.
 
 **Red on the base.** The smoke fails without the mode module, and the App has no switch.
 

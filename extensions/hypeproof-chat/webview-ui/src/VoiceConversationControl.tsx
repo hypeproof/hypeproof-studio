@@ -12,7 +12,7 @@ import { ChatIcon } from './ChatDetails';
 import { windowOutputMute } from '../../src/voiceOutputMute';
 import { readServedVoice } from '../../src/voiceServed';
 import { windowVoiceLiveTask } from '../../src/voiceLiveTask';
-import { nativeComposing } from './imeGuard';
+import { imeComposing, nativeComposing } from './imeGuard';
 import { PTT_GROUP_LABEL, PTT_HOLD, PTT_HOLDING, PTT_MODE_HOLD, PTT_MODE_NEXT, PTT_START_LABEL, RECOVER_USE_DEFAULT } from '../../src/voiceCopy';
 
 export function voiceConversationScope(config: ChatConfig | undefined): string {
@@ -108,13 +108,33 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
   const active = !['idle', 'stopped'].includes(view.phase);
   // CGP-VOICE-R-026 — the hold. Released by the button, Space, a release anywhere (pointer capture plus a window listener)
   // and the window losing focus, so a hold can never leave the microphone open.
-  const holding = useRef(false);
-  const endHold = () => { if (!holding.current) return; holding.current = false; loop.current?.release(); };
-  const beginHold = () => { if (holding.current) return; holding.current = true; loop.current?.hold(); };
+  // `source` says what holds: a pointer, Space, or a toggle (Enter / an assistive-tech click: first press starts, second sends).
+  const holding = useRef<null | 'pointer' | 'space' | 'toggle'>(null);
+  /** verify-4244: Space is still down (it may have moved focus); its repeats are swallowed until it is released. */
+  const spaceDown = useRef(false);
+  /** A Space release may still produce a keyboard click (detail 0); it must not start a toggle. */
+  const spaceUpAt = useRef(0);
+  const [toggled, setToggled] = useState(false);
+  const endHold = () => { if (!holding.current) return; holding.current = null; setToggled(false); loop.current?.release(); };
+  const beginHold = (source: 'pointer' | 'space' | 'toggle') => { if (holding.current) return; holding.current = source; if (source === 'toggle') setToggled(true); loop.current?.hold(); };
+  /** verify-4244 (agent choice): a platform pointercancel discards the turn (nothing sent). */
+  const cancelHold = () => { if (holding.current !== 'pointer') return; holding.current = null; loop.current?.discard(); };
+  /** verify-4244 (agent choice): Enter or an assistive-tech click: the first press starts, the second sends. */
+  const toggleHold = () => { if (holding.current === 'toggle') endHold(); else if (!holding.current) beginHold('toggle'); };
   useEffect(() => {
-    const up = () => endHold();
-    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up); window.addEventListener('blur', up);
-    return () => { window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('blur', up); };
+    const up = () => { if (holding.current === 'pointer') endHold(); };
+    const cancel = () => cancelHold();
+    const blur = () => endHold();
+    const space = (event: KeyboardEvent) => event.key === ' ' || event.code === 'Space';
+    // Capture phase: a held Space that moved focus elsewhere types nothing into the next field.
+    const keydown = (event: KeyboardEvent) => { if (spaceDown.current && space(event)) { event.preventDefault(); event.stopPropagation(); } };
+    const keyup = (event: KeyboardEvent) => { if (!space(event) || !spaceDown.current) return; spaceDown.current = false; spaceUpAt.current = performance.now(); event.preventDefault(); if (holding.current === 'space') endHold(); };
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', cancel); window.addEventListener('blur', blur);
+    window.addEventListener('keydown', keydown, true); window.addEventListener('keyup', keyup, true);
+    return () => {
+      window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancel); window.removeEventListener('blur', blur);
+      window.removeEventListener('keydown', keydown, true); window.removeEventListener('keyup', keyup, true);
+    };
   }, []);
   useLayoutEffect(() => { loop.current?.stop(); }, [scope]);
   useLayoutEffect(() => { if (!served || turn.interrupted) loop.current?.stop(); }, [served, turn.interrupted]);
@@ -140,13 +160,20 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
       disabled={!active && (!ready() || !speech.available)} onClick={() => active ? loop.current?.stop() : start()}>
       <ChatIcon kind={active ? 'stop' : 'level'} /> {active ? '중지' : '음성 대화'}
     </button>
-    {active && ptt && <button type="button" className="hps-voice-hold" aria-pressed={capturing} disabled={view.phase !== 'ready' && !capturing}
-      onPointerDown={(event) => { event.preventDefault(); try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* not capturable */ } beginHold(); }}
-      onPointerUp={endHold} onPointerCancel={endHold} onLostPointerCapture={endHold}
-      // Space holds only while this button has focus; it is consumed here, so no space reaches any text field.
-      onKeyDown={(event) => { if (!space(event)) return; event.preventDefault(); event.stopPropagation(); if (!event.repeat) beginHold(); }}
-      onKeyUp={(event) => { if (!space(event)) return; event.preventDefault(); event.stopPropagation(); endHold(); }}
-      onClick={(event) => event.preventDefault()}>
+    {active && ptt && <button type="button" className="hps-voice-hold" aria-pressed={capturing || toggled} disabled={view.phase !== 'ready' && !capturing}
+      onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* not capturable */ } beginHold('pointer'); }}
+      onPointerUp={() => { if (holding.current === 'pointer') endHold(); }} onPointerCancel={cancelHold}
+      onLostPointerCapture={() => { if (holding.current === 'pointer') endHold(); }}
+      // verify-4244: focus leaving the button (Tab, a click elsewhere) ends a Space or toggle hold: no microphone stays open.
+      onBlur={() => { if (holding.current && holding.current !== 'pointer') endHold(); }}
+      // Space holds only while this button has focus; it is consumed here, and its repeats are swallowed until keyup.
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); if (!event.repeat && !imeComposing(event)) toggleHold(); return; }
+        if (!space(event)) return; event.preventDefault(); event.stopPropagation(); if (event.repeat || spaceDown.current) return; spaceDown.current = true; beginHold('space'); }}
+      onKeyUp={(event) => { if (!space(event)) return; event.preventDefault(); event.stopPropagation(); spaceDown.current = false; spaceUpAt.current = performance.now(); if (holding.current === 'space') endHold(); }}
+      // verify-4244 (agent choice): Enter or an assistive-tech click (no pointer: detail 0) toggles: the first press starts,
+      // the second sends. A pointer's own click is ignored here (the pointer holds instead).
+      onClick={(event) => { event.preventDefault(); if (event.detail !== 0 || spaceDown.current || performance.now() - spaceUpAt.current < 500) return; toggleHold(); }}>
       {capturing ? PTT_HOLDING : PTT_HOLD}
     </button>}
     {/* R-026: the choice, per computer. A running session keeps its mode; the change applies to the next one. */}

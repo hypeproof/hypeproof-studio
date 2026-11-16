@@ -145,6 +145,17 @@ export class VoiceConversation {
     if (!this.valid() || !this.env.ready()) { this.stop('입력 상태가 바뀌어 음성 대화를 멈췄어요.'); return; }
     this.capture();
   }
+  /**
+   * R-026 (verify-4244, agent choice): the hold was cancelled by the platform (pointercancel: a palm, a scroll gesture, the
+   * OS taking the pointer). The turn is discarded: the microphone closes, nothing is sent, and the session waits for the
+   * next hold with no extra line.
+   */
+  discard(): void {
+    if (this.mode !== 'push_to_talk' || (this.view.phase !== 'starting' && this.view.phase !== 'listening')) return;
+    this.releasePending = false; this.endpoint = false;
+    this.recorder.cancel();
+    this.toReady();
+  }
   /** R-026: the hold ended (release anywhere, the window losing focus). The turn ends and is sent. */
   release(): void {
     if (this.mode !== 'push_to_talk') return;
