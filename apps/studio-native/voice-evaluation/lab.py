@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import secrets
 import signal
 import shutil
@@ -413,21 +414,45 @@ async def failed_ack_scenario(url, key, secret, record):
         await cleanup_owned(record, evaluator=evaluator, rooms=(client, room), primary=primary)
 
 
-async def serve(url, key, secret, output, record, seconds):
+async def serve(url, key, secret, output, record, seconds, exit_after_client=False, source_sha=None):
     room_name = "hps-eval-" + str(uuid.uuid4())
     room = rtc.Room()
-    evaluator = Evaluator(room, CLIENT_ID, record)
+    finished = {"stopped": False, "disconnected": False}
+    def observe(observation, **fields):
+        if observation == "sent" and fields.get("event") == "stopped":
+            finished["stopped"] = True
+        record(observation, **fields)
+    evaluator = Evaluator(room, CLIENT_ID, observe)
+    @room.on("participant_disconnected")
+    def client_left(participant):
+        if participant.identity == CLIENT_ID and participant.sid == evaluator.sid:
+            finished["disconnected"] = True
+            record("manual_client_left", participant_sid=participant.sid)
     primary, private_path = None, None
     try:
         await connect(room, url, jwt(key, secret, room_name, EVALUATOR_ID))
         private_json(output / "connection.private.json", {
             "url": url, "token": jwt(key, secret, room_name, CLIENT_ID),
             "evaluator_identity": EVALUATOR_ID, "client_identity": CLIENT_ID,
-            "expires_at": int(time.time()) + min(seconds, 900)})
+            "expires_at": int(time.time()) + min(seconds, 900),
+            "room": room_name, "candidate_source_sha": source_sha})
         private_path = output / "connection.private.json"
-        await asyncio.sleep(seconds)
+        record("manual_room_ready", room=room_name, candidate_source_sha=source_sha)
+        if exit_after_client:
+            def completed():
+                if evaluator.failure:
+                    raise RuntimeError("evaluator worker failed: " + evaluator.failure)
+                return (all(finished.values()) and evaluator.session is not None
+                        and evaluator.ended and evaluator.active is None)
+            await until(completed, timeout=seconds, label="stopped acknowledgement and client disconnect")
+            record("manual_session_complete", room=room_name, candidate_source_sha=source_sha,
+                   session_id=evaluator.session, turn_id=evaluator.last_turn, generation=evaluator.generation)
+        else:
+            await asyncio.sleep(seconds)
         if evaluator.failure:
             raise RuntimeError("evaluator worker failed: " + evaluator.failure)
+        return {"room": room_name, "session_id": evaluator.session,
+                "turn_id": evaluator.last_turn, "generation": evaluator.generation}
     except BaseException as error:
         primary = error
         raise
@@ -437,8 +462,16 @@ async def serve(url, key, secret, output, record, seconds):
 
 
 def socket_evidence(pid):
+    if platform.system() == "Darwin":
+        result = subprocess.run(["/usr/sbin/lsof", "-nP", "-a", "-p", str(pid), "-i", "-FpnP"],
+                                check=True, capture_output=True, text=True)
+        owned = [line[1:] for line in result.stdout.splitlines() if line.startswith("n")]
+        if not owned or any(not re.fullmatch(r"127\.0\.0\.1:[0-9]+(?:->127\.0\.0\.1:[0-9]+)?", name)
+                            for name in owned):
+            raise AssertionError("server has missing or non-loopback sockets")
+        return owned
     if platform.system() != "Linux":
-        raise RuntimeError("automated socket proof currently requires Linux ss; native simulator remains separate")
+        raise RuntimeError("socket proof supports only Linux ss and Darwin lsof")
     result = subprocess.run(["ss", "-lnptu"], check=True, capture_output=True, text=True)
     owned = [line for line in result.stdout.splitlines() if f"pid={pid}," in line]
     if not owned or any(not line.split()[4].startswith("127.0.0.1:") for line in owned):
@@ -451,6 +484,10 @@ async def main(args):
     loop, owner = asyncio.get_running_loop(), asyncio.current_task()
     for sig in (signal.SIGTERM, signal.SIGHUP):
         loop.add_signal_handler(sig, owner.cancel)
+    if args.source_sha is not None and not re.fullmatch(r"[a-f0-9]{40}", args.source_sha):
+        raise ValueError("source-sha must be an exact lowercase commit SHA")
+    if args.exit_after_client and (not args.serve_seconds or args.source_sha is None):
+        raise ValueError("exit-after-client requires serve-seconds and source-sha")
     output = Path(args.output).resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     events, started = [], time.monotonic()
@@ -466,12 +503,15 @@ async def main(args):
     config = {"port": signal_port, "bind_addresses": ["127.0.0.1"], "development": True,
               "keys": {key: secret}, "rtc": {"tcp_port": 0, "udp_port": media,
               "use_external_ip": False, "node_ip": "127.0.0.1", "stun_servers": [],
-              "enable_loopback_candidate": True, "interfaces": {"includes": ["lo"]},
+              "enable_loopback_candidate": True,
+              "interfaces": {"includes": ["lo0" if platform.system() == "Darwin" else "lo"]},
               "ips": {"includes": ["127.0.0.1/32"]}}, "logging": {"level": "warn"}}
     result = {"status": "FAIL", "kind": "synthetic_loopback_media", "hostname": socket.gethostname(),
               "sdk": importlib.metadata.version("livekit"), "server": version,
               "server_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-              "physical_audio": "NOT_RUN", "speech_recognition": "NOT_RUN", "aec": "NOT_RUN"}
+              "physical_audio": "NOT_RUN", "speech_recognition": "NOT_RUN", "aec": "NOT_RUN",
+              "candidate_source_sha": args.source_sha,
+              "lab_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     process = None
     try:
         with tempfile.TemporaryDirectory(prefix="hps-livekit-") as private:
@@ -495,7 +535,8 @@ async def main(args):
                     if not 1 <= args.serve_seconds <= 600:
                         raise ValueError("serve duration must be 1..600 seconds")
                     result["kind"] = "bounded_manual_media_server"
-                    await serve(url, key, secret, output, record, args.serve_seconds)
+                    result.update(await serve(url, key, secret, output, record, args.serve_seconds,
+                                              args.exit_after_client, args.source_sha))
                 else:
                     await asyncio.wait_for(scenario(url, key, secret, output, record), 35)
                     await asyncio.wait_for(scenario(url, key, secret, output, record, disconnect_only=True), 20)
@@ -525,4 +566,6 @@ if __name__ == "__main__":
     parser.add_argument("--server", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--serve-seconds", type=int, default=0)
+    parser.add_argument("--exit-after-client", action="store_true")
+    parser.add_argument("--source-sha")
     asyncio.run(main(parser.parse_args()))

@@ -17,6 +17,9 @@ class CleanupControls(unittest.IsolatedAsyncioTestCase):
                 self.index = sum(c[0] == 'created' for c in calls)
                 calls.append(('created', self.index))
 
+            def on(self, event):
+                return lambda callback: callback
+
             async def disconnect(self):
                 calls.append(('disconnect', self.index))
                 if room_error is not None:
@@ -24,6 +27,7 @@ class CleanupControls(unittest.IsolatedAsyncioTestCase):
 
         class Evaluator:
             failure = worker_failure
+            session, last_turn, generation = None, None, 0
             def __init__(self, *args):
                 pass
 

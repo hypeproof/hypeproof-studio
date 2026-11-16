@@ -9,5 +9,20 @@
       "browser_download_url": "https://github.com/livekit/livekit/releases/download/v1.13.11/livekit_1.13.11_linux_amd64.tar.gz",
       "digest": "sha256:1e9ee90ca301e1842b2887fc77cb122759756a9c8aeb4334ee91de3325ec43fb"
     }
-  ]
+  ],
+  "server_commit": "385aa40f9292fe1db8caad87301e4b285b7c198a",
+  "go_version": "1.26.11",
+  "go_source": "https://go.dev/dl/?mode=json&include=all",
+  "go_archives": {
+    "darwin-amd64": {
+      "url": "https://go.dev/dl/go1.26.11.darwin-amd64.tar.gz",
+      "sha256": "394baae971332f2bc783d6e2004ae57101479bd3b06ed8209a3fe3570d4ce498",
+      "size": 67888638
+    },
+    "darwin-arm64": {
+      "url": "https://go.dev/dl/go1.26.11.darwin-arm64.tar.gz",
+      "sha256": "e3a42e67a7a8acf450ebada2b074c7ca863000ca514907b7185b45e8f5cdff57",
+      "size": 64730001
+    }
+  }
 }

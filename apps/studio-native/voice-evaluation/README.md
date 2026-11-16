@@ -16,9 +16,9 @@ Do not install a daemon or use system-wide package installation.
 .venv/bin/python lab.py --server ./livekit-server --output ./evidence-run-1
 ```
 
-The initial executable controls run on Linux with `ss` available. Signalling
+The executable controls support Linux with `ss` and Darwin with `/usr/sbin/lsof`. Signalling
 binds 127.0.0.1. RTC TCP is disabled (the pinned server's TCP mux otherwise binds
-all interfaces); UDP is restricted to interface `lo` and 127.0.0.1/32. Owned
+all interfaces); UDP is restricted to `lo` (Linux) or `lo0` (Darwin) and 127.0.0.1/32. Owned
 listeners are checked before and after media. STUN is loopback-only, TURN is
 absent. Credentials exist only in a private temporary file and in memory, expire
 after 15 minutes, and are not printed. Only the owned child server is terminated.
@@ -63,11 +63,10 @@ a data packet can arrive before the remote participant registration. Unknown
 senders remain refused; there is no blind first-start retry. The attribute is
 connection admission for synthetic evaluation, not account authentication.
 
-For a bounded **same Linux host** manual session, add `--serve-seconds 120`.
-The private `connection.private.json` is removed on exit. It does not make a Mac
-simulator or physical iPhone reachable. Those require a separately validated
-same-host server or a tunnel carrying the actual ICE media ports as well as
-signalling; no public/LAN listener is created here.
+For a bounded **same-host** manual session, add `--serve-seconds 120`.
+The private `connection.private.json` is removed on exit. A same-host iOS simulator must be validated through the actual native SDK. A
+physical iPhone remains unreachable without separately authorized networking;
+no public/LAN listener is created here.
 
 Receiver PCM receipts are generation-bound. Interruption/Stop/unpublication closes
 the corresponding SDK AudioStream; later generations cannot append to its file.
@@ -77,3 +76,42 @@ Cleanup attempts receiver/source/evaluator release, every owned room disconnect
 and the owned connection-file deletion independently. A body failure remains the
 primary failure; otherwise the first cleanup error fails the run. Secondary
 cleanup errors are recorded by stage/type, without credential values.
+
+## Darwin host preparation
+
+The official 1.13.11 release publishes Linux/Windows archives only. The optional
+Darwin helper builds exact source commit `385aa40f9292fe1db8caad87301e4b285b7c198a`
+with the checksum-pinned official Go 1.26.11 archive, `GOTOOLCHAIN=local`, and
+`CGO_ENABLED=1` using the existing Apple clang and macOS SDK. The pinned
+`go-osstat` Darwin CPU implementation requires Mach headers through Cgo; the
+Linux/Windows release's Cgo-disabled setting does not build this Darwin source.
+The receipt records clang/SDK identity and the resulting binary's linked libraries.
+`go.mod`/`go.sum` remain unchanged, checksum verification stays enabled, generated
+Wire source comes from the pinned commit, and all caches stay in the task folder.
+Use an existing Python >=3.12; the helper installs only exact binary-wheel versions
+from `host-requirements.txt` into its own venv. It never installs Homebrew packages
+or changes the system. Its total preparation deadline defaults to 600 seconds;
+missing dependencies or expiry fail without a fallback or retry.
+
+```sh
+python3 prepare-host.py --output /private/tmp/hps-eval-host-UNIQUE --python /absolute/python3.13
+```
+
+Run that command inside the shared resource allocation. Read `host.json` only when
+`status` is `PASS`; it gives absolute `python` and `server` paths plus source/tool
+hashes. Reuse those prepared paths for the two fresh native scenarios within the
+same task instead of rebuilding. Do not reuse an unverified directory or private
+connection config across sessions.
+
+The native runner uses `--serve-seconds 75 --exit-after-client --source-sha <40-hex>`.
+This mode finishes only after the same session sends `stopped`, the configured
+client actually disconnects, and owned cleanup succeeds. The deadline is a failure,
+not an implicit successful Stop. `connection.private.json` includes the ephemeral
+`room` and `candidate_source_sha`; consume/delete it privately without putting its
+token in argv, logs, test attachments or diagnostics. Host events and result bind
+that room/source to the same session/turn/generation as the native receipt. A host
+PASS alone does not establish native output or device acceptance.
+
+Source build references: [LiveKit pinned build instructions](https://github.com/livekit/livekit/blob/v1.13.11/README.md#building-from-source),
+[pinned release recipe](https://github.com/livekit/livekit/blob/v1.13.11/.goreleaser.yaml),
+[official Go archive checksums](https://go.dev/dl/).
