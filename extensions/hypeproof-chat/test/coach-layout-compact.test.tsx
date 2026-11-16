@@ -41,7 +41,7 @@ const golden = (name: string) => readFileSync(`test/fixtures/coach-layout-head-$
 const norm = (html: string) => html.replace(/:R[0-9a-z]+:/g, ":R:");
 // The host messages a mounted, non-compact panel sent at HEAD 7ea4479f (two of them materialsRequest: the rail card and its composer line).
 // CGP-AGENT-R-031 adds serviceStatusRequest after lowDiskRequest: the busy banner's mount ask (not part of the coach layout).
-const HEAD_POSTED = "materialsRequest,materialsRequest,perfTraceStateRequest,memoryNoticeRequest,accuracyEducationRequest,whatsNewRequest,planFirstRequest,queueState,inboxRequest,turnReviewRequest,pageCardsRequest,missingTaskFolderRequest,lowDiskRequest,serviceStatusRequest,previewRecoveryRequest,helpRequest";
+const HEAD_POSTED = "materialsRequest,materialsRequest,perfTraceStateRequest,memoryNoticeRequest,accuracyEducationRequest,whatsNewRequest,planFirstRequest,questIntakeRequest,queueState,inboxRequest,turnReviewRequest,pageCardsRequest,missingTaskFolderRequest,lowDiskRequest,serviceStatusRequest,previewRecoveryRequest,helpRequest";
 
 const item = (over: Partial<MaterialsView["items"][number]>) => ({ kind: "file", detail: "", selected: false, removable: true, origin: "learner", originLabel: "나", ...over }) as MaterialsView["items"][number];
 const VIEW: MaterialsView = {

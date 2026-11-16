@@ -11,6 +11,8 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
+import { QuestIntakeSession, questIntakePolicy, type QuestIntakeSnapshot } from "./questIntake";
+import { LEARNER_QUEST_COPY, renderQuestHtml } from "./automationQuest";
 import { PLANNING_GATE, PlanFirstSession, planFirstAvailable, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
 import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
@@ -2276,6 +2278,85 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.spool?.recordWorkflow({ turnId: msg.planId, event: "plan_first_approved", payload: { revision: approved?.revision ?? 1, edited: approved?.edited === true } });
     }
     await this.handleSend(action.sendText, [], undefined, undefined, undefined, undefined, undefined, undefined, undefined, false);
+  }
+  // REQ-QUEST-* (#4283) — intent → at most N key questions → "퀘스트 생성하기" → quest. The host owns the
+  // state (questIntake.ts); the webview only draws it and posts the learner's click.
+  private questIntakeSession?: QuestIntakeSession;
+  private get questIntake(): QuestIntakeSession {
+    return this.questIntakeSession ??= new QuestIntakeSession({
+      newId: () => randomId(),
+      restore: (() => { try { return this.context.workspaceState.get<Partial<QuestIntakeSnapshot>>("hps.questIntake.v1") ?? null; } catch { return null; } })(),
+      onChange: snapshot => { try { void this.context.workspaceState.update("hps.questIntake.v1", snapshot); } catch { /* the flow simply starts fresh next time */ } },
+    });
+  }
+  /**
+   * Adult personal seats only: not a lesson (its curriculum leads), not a minor seat, not the instructor surface, not a
+   * "기록 없이 묻기" task (it keeps nothing), and not a seat with the email automation flow (it has its own quest).
+   */
+  private questIntakeEligible(profile: ResolvedProfile | null | undefined): { eligible: boolean; maxQuestions: number } {
+    const policy = questIntakePolicy(profile);
+    const eligible = !!profile && policy.enabled && !!this.currentTaskStore?.() && !profile.lesson && !isMinorProfile(profile)
+      && this._instructorMode.isInstructor !== true && !this.inTemporaryTask() && profile.automations?.enabled !== true;
+    return { eligible, maxQuestions: policy.maxQuestions };
+  }
+  private async postQuestIntake(start?: { id: string; text: string }): Promise<void> {
+    const view = this.questIntakeEligible(this.cachedProfile).eligible ? this.questIntake.viewFor(this.planTaskKey()) : { phase: null };
+    await this.post({ type: "questIntakeState", view: start && view.phase === "quest" ? { ...view, start } : view });
+  }
+  private async showQuestCanvas(task: string | null): Promise<void> {
+    const quest = this.questIntake.questFor(task);
+    if (quest) await this.preview.showAutomation(renderQuestHtml(quest, LEARNER_QUEST_COPY));
+  }
+  /**
+   * The one structured call of the flow: non-streaming, on the coach route, with no model id so the Service's seat
+   * policy picks it (free seats run Haiku). It carries the same token, funding choice and lesson binding as a coach turn.
+   */
+  private async questGenerationCall(prompt: string): Promise<{ text: string | null; model: string | null }> {
+    const folderRefusal = await this.folderAiRefusal();
+    if (folderRefusal) { this.postPageNotice(folderRefusal, "folder"); return { text: null, model: null }; }
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    if (!token) return { text: null, model: null };
+    const profile = await this.ensureProfile().catch(() => null);
+    const binding = lessonBindingHeader(profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined);
+    const funding = this.accessState?.selected;
+    const baseHeaders = { ...buildProxyHeaders({ token }), ...(funding && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(funding) ? { "x-hps-funding-source": funding } : {}) };
+    const result = await completeSkillRequest(fetch, { proxyUrl: this.proxyUrl(), baseHeaders, binding, prompt, headers: {} });
+    return { text: result.ok ? result.text ?? null : null, model: result.model ?? null };
+  }
+  private async handleQuestIntake(msg: Extract<WebviewMessage, { type: "questIntakeRequest" | "questIntakeCreate" | "questIntakeDismiss" | "questIntakeStep" | "questIntakeShow" }>): Promise<void> {
+    const task = this.planTaskKey();
+    if (msg.type === "questIntakeRequest" || !this.questIntakeEligible(this.cachedProfile).eligible) { await this.postQuestIntake(); return; }
+    if (msg.type === "questIntakeShow") { await this.showQuestCanvas(task); return; }
+    if (msg.type === "questIntakeDismiss") {
+      if (typeof msg.offerId === "string" && this.questIntake.dismiss(task, msg.offerId)) this.spool?.recordWorkflow({ event: "quest_offer_dismissed", payload: {} });
+      await this.postQuestIntake();
+      return;
+    }
+    if (msg.type === "questIntakeStep") {
+      if (typeof msg.stepId !== "string") return;
+      const quest = this.questIntake.completeStep(task, msg.stepId);
+      if (quest) {
+        this.spool?.recordWorkflow({ event: "quest_step_checked", payload: { step: msg.stepId, done: quest.nodes.filter(node => node.status === "succeeded").length, total: quest.nodes.length } });
+        await this.showQuestCanvas(task);
+      }
+      await this.postQuestIntake();
+      return;
+    }
+    if (typeof msg.offerId !== "string") return;
+    const prompt = this.questIntake.startGeneration(task, msg.offerId);
+    if (!prompt) { await this.postQuestIntake(); return; }
+    await this.postQuestIntake();
+    const started = Date.now();
+    let reply: { text: string | null; model: string | null } = { text: null, model: null };
+    try { reply = await this.questGenerationCall(prompt); } catch { /* the offer comes back with its retry line */ }
+    const made = this.questIntake.finishGeneration(task, msg.offerId, reply.text);
+    // Cost-first: every paid call records its model and why it ran.
+    this.spool?.recordWorkflow({ event: "quest_generated", payload: { ok: !!made, model: reply.model, reason: "quest_create_click", steps: made?.quest.nodes.length ?? 0, ms: Date.now() - started } });
+    if (!made) { await this.postQuestIntake(); return; }
+    await this.showQuestCanvas(task);
+    // The conversation continues on the first step as the learner's own message, sent by the webview through its
+    // ordinary send path so the bubble, queueing and history behave like any other send.
+    await this.postQuestIntake(this.planTaskKey() === task ? { id: msg.offerId, text: `「${made.first}」 단계부터 시작할게요.` } : undefined);
   }
   private async postWhatsNew(requestId?: string): Promise<void> {
     if (!requestId) { await this.post({ type: 'whatsNewChanged' }); return; }
@@ -9273,6 +9354,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "planFirstRequest": case "planFirstSet": case "planFirstApprove": case "planFirstRedo": case "planFirstDecline": await this.handlePlanFirst(msg); return;
+      case "questIntakeRequest": case "questIntakeCreate": case "questIntakeDismiss": case "questIntakeStep": case "questIntakeShow": await this.handleQuestIntake(msg); return;
       case "whatsNewRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postWhatsNew(msg.requestId); return;
       case "voiceTipRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postVoiceTip(msg.requestId, msg.taskEmpty === true); return;
       case "voiceTipShown": await this.noteVoiceTip(true); return;
@@ -10448,6 +10530,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
     if (plan.planning && !conversationOnly) userTextForModel = planFirstTurnText(userTextForModel);
+    // REQ-QUEST-ASK (#4283) — the intake line for this turn. The question cap is the host's (questIntake.ts afterReply):
+    // the line only tells the coach how many questions are left.
+    const questTask = this.planTaskKey();
+    const questGuide = mode === 'auto' && !plan.planning && !conversationOnly && !carriesAnnotations
+      ? this.questIntake.beginTurn(questTask, text, { ...this.questIntakeEligible(profile), firstTurn: history.length === 0, fresh: retrySourceId === undefined && !editOf })
+      : null;
+    if (questGuide) userTextForModel = `${userTextForModel}\n\n${questGuide}`;
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
@@ -11338,6 +11427,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (plan.planning) {
           const ready = plan.ready(finishedItems.filter(item => item.role === 'assistant').map(item => item.content).join('\n\n'));
           if (ready) { this.spool?.recordWorkflow({ turnId: streamId, event: 'plan_first_shown', payload: {} }); void this.postPlanFirst(); }
+        }
+        // REQ-QUEST-OFFER — a "목표 정리:" line, or the cap reached, turns into the "퀘스트 생성하기" card.
+        if (questGuide && this.questIntake.afterReply(questTask, finishedItems.filter(item => item.role === 'assistant').map(item => item.content).join('\n\n'))) {
+          this.spool?.recordWorkflow({ turnId: streamId, event: 'quest_offer_shown', payload: {} });
+          void this.postQuestIntake();
         }
         // CGP-KNOW-R-026 — the finished answer of a request that carried memory gets the count.
         await this.rememberMemoryTurn(streamId, finishedItems);

@@ -141,6 +141,7 @@ import { VoiceEarcons, VoiceSoundsSetting } from "./VoiceEarcons";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
+import { QuestCard, QuestOfferCard, useQuestIntake } from "./QuestIntake";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -680,6 +681,8 @@ export function ChatPanel(props: Props) {
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
   const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  // REQ-QUEST-* (#4283) — intent → key questions → 퀘스트 생성하기 → quest card.
+  const questIntake = useQuestIntake(JSON.stringify([activityId, taskId]), props.instructor === true);
   const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
@@ -1706,6 +1709,15 @@ export function ChatPanel(props: Props) {
     sendWhenOnline(() => props.onSend(text), 'press');
   };
 
+  // REQ-QUEST-LIST — the host made the quest: continue on step 1 as the learner's own message, once per quest.
+  const questStartSent = useRef<string | null>(null);
+  useEffect(() => {
+    const start = questIntake.start;
+    if (!start || questStartSent.current === start.id) return;
+    questStartSent.current = start.id;
+    sendWhenOnline(() => props.onSend(start.text), 'press');
+  }, [questIntake.start?.id]);
+
   const handleRollClick = () => {
     // Capture the current draft as the "first thought" and prompt expansion.
     setRollExpand({ original: draft.trim() });
@@ -2642,6 +2654,8 @@ export function ChatPanel(props: Props) {
         {!statusScreen && config && <BudgetRequestCard config={config} post={postToHost} />}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {!streaming && <QuestOfferCard view={questIntake} />}
+        <QuestCard view={questIntake} />
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         {addon && <addon.Notice />}

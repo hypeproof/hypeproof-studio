@@ -17691,6 +17691,60 @@
       ]
     },
     {
+      "id": "ST-REQ-QUEST-INTAKE",
+      "stage": "requirement",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-REQ-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Intent to quest (#4283)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-QUEST-INTAKE",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-QUEST-INTAKE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/questIntake.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/QuestIntake.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/questIntake.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-QUEST-INTAKE",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-QUEST-INTAKE",
+        "ST-IMP-QUEST-INTAKE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/quest-intake.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quest-intake.test.tsx"
+        },
+        {
+          "path": "e2e/task-workspace/quest-intake-native.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-VOICE-DICTATION-READALOUD",
       "stage": "requirement",
       "owner": "jayleekr",
