@@ -20,7 +20,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const shipped = process.env.HPS_UPDATE_CHECK_SHIPPED === '1';
 // In CI the shipped check must not fall back to the runner IP's anonymous budget (it decides nothing).
 if (shipped && process.env.GITHUB_ACTIONS === 'true' && !process.env.HPS_UPDATE_CHECK_TOKEN?.trim()) {
-  throw new Error('shipped update check in CI needs HPS_UPDATE_CHECK_TOKEN (the job token for the public release read)');
+  throw new Error('shipped update check in CI needs HPS_UPDATE_CHECK_TOKEN (the job token for the public release read): '
+    + 'add `HPS_UPDATE_CHECK_TOKEN: ${{ github.token }}` to this step\'s env in .github/workflows/verify-unified-release.yml '
+    + '(docs/dev/06-release-process.md). Without it the check would read on the runner IP\'s shared 60/h anonymous budget.');
 }
 const mac = process.platform === 'darwin';
 if (!mac && !(process.platform === 'win32' && shipped)) throw new Error('update-check drives a macOS App bundle, or a Windows install in shipped mode only (NOT RUN, not skipped silently)');
