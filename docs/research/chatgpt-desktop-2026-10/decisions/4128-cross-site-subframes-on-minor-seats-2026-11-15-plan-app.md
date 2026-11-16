@@ -29,11 +29,14 @@
     - No page-script `WebSocket` wrapper (coordinator, 2026-11-15): workers and service workers bypass it, and it would read as coverage it is not.
     - Planned fix: block ws/wss upgrades to off-list hosts for minor seats in the safe session's `webRequest`, through a `vscodium-base/patches/` core patch.
     - Until then a test pins the residual as expected: a minor loopback page's WebSocket to an off-list host still connects.
+  - *Core patch scope (Jay, 2026-11-16).* Confirmed by Jay: yes (2026-11-16). For the #4209 core patch (draft studio#4216), Jay approved commit 1 only: the safe session's `webRequest` cancels ws/wss upgrades from a loopback top document to a host that is neither loopback nor on the lesson list, on minor seats (branch `feat/4209-ws-core-block`, commit "cancel ws/wss upgrades from AI-made pages to off-list hosts on minor seats in core", ebcc24a60 when recorded).
+    - Not approved: commit 2, which also cancels `xhr` and `ping` in core and so would cover dedicated, shared and service workers (60dd3ec6a when recorded).
+    - Consequence: shared-worker and service-worker `fetch`/XHR/beacon to an off-list host stay an expected residual on minor seats, pinned by `test/outbound-hold-browser.smoke.mjs`. The WebSocket residual flips when commit 1 lands and the core-batch base is rebuilt.
   - *Tests.* `test/outbound-hold-browser.smoke.mjs`:
     - From a loopback top, all four types to an off-list site send nothing: from the page, from same-origin and cross-site frames, and from a popup. Each refusal is reported.
     - Images, CSS and CDN scripts from that site load. The lesson list, loopback-to-loopback and same-origin requests go on. A non-loopback page and an adult seat are unaffected.
     - Red first: the page, frame and popup cases reached the off-list site on a0ca56902.
-    - Expected residuals: a WebSocket, a shared worker's fetch and a service worker's fetch to an off-list host still go. These are pinned, to be flipped when the core patch lands.
+    - Expected residuals: a WebSocket, a shared worker's fetch and a service worker's fetch to an off-list host still go. These are pinned. The WebSocket case flips when the approved ws/wss commit lands; the worker cases stay, because Jay did not approve the xhr/ping commit (2026-11-16).
     - Also pinned: the 302 hop, keepalive fetch and sendBeacon on `pagehide` (to a loopback and to a non-loopback next page), and a dedicated worker's fetch, all refused, with an adult-seat control for the workers.
     - `link-confirm-host` section 15 has loopback-spelling vectors (29 cases).
     - `link-confirm-host` section 14 covers the patterns (minor seats only), the refusal and its line, the 10 s cap, and the positive controls.

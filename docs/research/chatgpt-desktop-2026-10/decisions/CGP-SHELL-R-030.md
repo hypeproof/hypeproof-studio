@@ -11,3 +11,10 @@ Supersedes the "blocked on the Service" note in CGP-SHELL-D-029.md (2026-10-25) 
 - **Older Service:** without `request_policy`, Studio keeps the earlier required-note form. A malformed policy offers no form, never the free-text one.
 - **Not built:** 승인 / 거절 labels. The resolution is free text without an outcome; adding one needs a Service column on the approval side.
 - Confirmed by Jay: no.
+
+### CGP-SHELL-R-030: where the request starts (2026-11-16, Jay)
+
+- Chosen option: "다 쓰면 채팅에 버튼". When the allowance runs out, the chat shows an inline card with [요청하기] and a reason picker.
+- Children pick a reason only; they cannot write free text.
+- Token details are not shown to children.
+- Confirmed by Jay: yes (2026-11-16).
