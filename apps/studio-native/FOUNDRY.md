@@ -239,3 +239,16 @@ credentials stay in temporary files/app storage; only allowlisted observations
 are uploaded. Raw callback counts remain independent of the session fence so
 cancellation cannot manufacture a passing observation. Nested preparation and
 server cancellation must reap every owned child before an execution is accepted.
+
+When preparation or receipt helpers change, run the complete affected native
+contract recipe before pushing, not just the newly added test module:
+`python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v`
+from the repository root, under the shared resource allocation. Use semantic
+ordering assertions: preparation must finish before credential issuance, failure
+must not start a scenario, and a failed attempt must not be replayed. An exact
+prefix of internal command names can reject a harmless additional preflight
+step without detecting a product defect. Command doubles must still reject
+unknown commands; checking for absent files after cleanup is not evidence that
+credentials were never issued. Preserve failed source/run evidence and bind the
+full contract result to the tested inputs. Contract success does not replace the
+actual native SDK and media recipe.

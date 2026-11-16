@@ -278,3 +278,27 @@ source-identical evidence is reused. New hosted native execution, physical
 audio, naturalness and production integration remain NOT_RUN. Credential TTL,
 the overall execution allowance and all existing PCM/cleanup assertions remain
 unchanged.
+
+## Precredential contract integration
+
+Run `43882717145/1`, source `3d623ed4724784e8746f5ab472e25691e70301fa`,
+failed before native execution. Of 146 contract methods, one existing method's
+three subcases rejected the new publication check because its command double
+treated that command as a simulator action and asserted a fixed three-command
+prefix. iOS, Android and actual voice evaluation were skipped; the strict join
+correctly failed. This is not a native SDK result or evidence of the historical
+evaluator failure's cause.
+
+Change only the tests: classify publication and simulator commands explicitly,
+reject unknown commands, and require all relevant preparation to precede the
+single credential issuance. Retain fresh-lifetime, original failure, diagnostic
+privacy and no-replay assertions. A failed-publication control observes that
+neither a scenario nor an evaluator process starts; it does not infer this from
+files absent after cleanup. The final exact-source Ubuntu contract execution at
+`f81daa6de9a04a555cca99b5d0498cdda1de0050` passed all 147 methods in
+72.403 seconds. The original ordering oracle fails against the unchanged helper
+as expected. Product, native adapter, helper and workflow code are unchanged by
+this correction. New hosted/native execution remains pending.
+
+- `publication-contract-v2/handoff.json`: `6c7694e47e11e8f05cf35ae6acd279ef277befc2e5039b4561b6cb257d7eb85a`
+- `hosted-pr4306-3d623ed4/independent-review.json`: `9f51a75a37affb1b041832bd062eebd761903a5125450be1f07b9da9a5cd9a0b`

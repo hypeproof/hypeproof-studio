@@ -20593,6 +20593,9 @@
         },
         {
           "path": "apps/studio-native/tests/test_ios_livekit_cancellation.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_livekit_failure.py"
         }
       ]
     }
