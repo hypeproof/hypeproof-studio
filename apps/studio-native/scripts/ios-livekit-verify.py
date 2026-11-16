@@ -75,6 +75,39 @@ def runtime_diagnostics(log):
             "error_codes": [{"domain": domain, "code": int(code)} for domain, code in codes[:8]]}
 
 
+def image_metadata(environment):
+    """Publish only known runner metadata formats, never arbitrary environment values."""
+    version = environment.get("ImageVersion", "")
+    image_os = environment.get("ImageOS", "")
+    arch = environment.get("RUNNER_ARCH", "")
+    return {
+        "ImageVersion": version if re.fullmatch(r"[0-9]{8}\.[0-9]{4}\.[0-9]{1,3}", version) else "unknown",
+        "ImageOS": image_os if image_os in {"macos13", "macos14", "macos14-arm64", "macos15",
+                                             "macos15-arm64", "macos26", "macos26-arm64"} else "unknown",
+        "RUNNER_ARCH": arch if arch in {"ARM64", "X64", "X86", "ARM"} else "unknown",
+    }
+
+
+def runtime_process_counts(private, timeout):
+    """Bound one read-only process-name snapshot; expose counts, not paths or PIDs."""
+    log = private / "runtime-processes.log"
+    with log.open("wb") as output:
+        process = subprocess.Popen(["/bin/ps", "-A", "-o", "comm="], stdout=output,
+                                   stderr=subprocess.DEVNULL)
+        try:
+            code = process.wait(timeout=timeout)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=1)
+    if code or log.stat().st_size > 1048576:
+        return {"status": "unavailable"}
+    names = [Path(line.strip()).name for line in log.read_text(errors="replace").splitlines()]
+    return {"status": "observed", "CoreSimulatorService": sum(name in {
+        "com.apple.CoreSimulator.CoreSimulatorService", "CoreSimulatorService"} for name in names),
+        "simdiskimaged": names.count("simdiskimaged")}
+
+
 def main(args):
     os.umask(0o077)
     native = Path(__file__).resolve().parents[1]
@@ -82,7 +115,8 @@ def main(args):
     evidence.mkdir(parents=True, exist_ok=True)
     source = subprocess.check_output(["git", "-C", str(native), "rev-parse", "HEAD"], text=True).strip()
     result = {"schema": "hps-native-livekit-runner/1", "source_sha": source,
-              "status": "FAIL", "physical_audio": "NOT_RUN", "steps": []}
+              "status": "FAIL", "physical_audio": "NOT_RUN", "steps": [],
+              "runner_image": image_metadata(os.environ)}
     device = None
     deadline = time.monotonic() + 1050  # Reserve final cleanup within a 20-minute job.
     def interrupted(_signum, _frame):
@@ -95,6 +129,21 @@ def main(args):
     signal.signal(signal.SIGINT, interrupted)
     with tempfile.TemporaryDirectory(prefix="hps-native-rtc-") as directory:
         private = Path(directory)
+        def diagnose_runtime(log, code):
+            try:
+                result["runtime_diagnostics"] = runtime_diagnostics(log)
+            except Exception:
+                result["runtime_diagnostics"] = {"status": "unavailable"}
+            if code == 124:
+                remaining = deadline - time.monotonic()
+                if remaining <= 1:
+                    result["runtime_process_counts"] = {"status": "skipped_budget"}
+                else:
+                    try:
+                        # Reserve up to one second to reap this owned read-only ps.
+                        result["runtime_process_counts"] = runtime_process_counts(private, min(2, remaining - 1))
+                    except Exception:
+                        result["runtime_process_counts"] = {"status": "unavailable"}
         def run(stage, argv, seconds):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -103,20 +152,22 @@ def main(args):
             timeout = min(seconds, remaining)
             started = time.monotonic()
             step = {"stage": stage, "timeout_seconds": round(timeout, 3)}
+            if stage == "runtimes":
+                step.update(configured_timeout_seconds=seconds, remaining_seconds=round(remaining, 3))
             try:
                 code = execute(argv, timeout=timeout, log=log)
                 step["exit"] = code
             except BaseException as error:
                 step.update(exit=125, error_type=type(error).__name__)
                 if stage == "runtimes":
-                    result["runtime_diagnostics"] = runtime_diagnostics(log)
+                    diagnose_runtime(log, 125)
                 raise
             finally:
                 step["seconds"] = round(time.monotonic() - started, 3)
                 result["steps"].append(step)
             if code:
                 if stage == "runtimes":
-                    result["runtime_diagnostics"] = runtime_diagnostics(log)
+                    diagnose_runtime(log, code)
                 if stage == "debug_build":
                     # No room/token exists during compilation. Keep only bounded
                     # compiler diagnostics, never runtime SDK output.
@@ -132,8 +183,9 @@ def main(args):
             if int(sdk.split(".")[0]) < 26:
                 raise StageFailure("sdk_floor", 2)
             # This is the first CoreSimulator operation on a fresh hosted runner.
-            # Allow bounded service readiness once, inside the unchanged job deadline.
-            runtimes = json.loads(run("runtimes", ["xcrun", "simctl", "list", "runtimes", "--json"], 60))
+            # This engineering allocation is not a guaranteed readiness duration.
+            # Query once, clipped by the same remaining execution-stage deadline.
+            runtimes = json.loads(run("runtimes", ["xcrun", "simctl", "list", "runtimes", "--json"], 180))
             available = [r for r in runtimes["runtimes"] if r["isAvailable"] and ".iOS-" in r["identifier"]
                          and r["version"].split(".")[:2] == sdk.split(".")[:2]]
             if not available:

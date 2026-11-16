@@ -31,11 +31,14 @@ class NativeMediaReceiptControls(unittest.TestCase):
         spec.loader.exec_module(actual)
         # Virtual elapsed time exercises the real runner's stage/deadline decisions
         # without making the test wait for a hosted CoreSimulator service.
-        cases = ((20, 0, "create"), (61, 0, "runtimes"), (20, 1045, "runtimes"))
+        cases = ((90, 0, "create", False), (179, 0, "create", False),
+                 (181, 0, "runtimes", False), (90, 1045, "runtimes", False),
+                 (181, 0, "runtimes", True))
         if os.environ.get("HPS_RUNNER_CONTROL_SOURCE"):
-            cases = cases[:1]  # Preserve the old 15-second failure independently.
-        for duration, prior_elapsed, expected_failure in cases:
-            with self.subTest(duration=duration, prior_elapsed=prior_elapsed), tempfile.TemporaryDirectory() as directory:
+            cases = cases[:2]  # Both slow completions fail under the old 60-second bound.
+        for duration, prior_elapsed, expected_failure, diagnostic_failure in cases:
+            with self.subTest(duration=duration, prior_elapsed=prior_elapsed,
+                              diagnostic_failure=diagnostic_failure), tempfile.TemporaryDirectory() as directory:
                 now = [0.0]
                 calls = []
                 def execute(argv, *, timeout, log):
@@ -59,9 +62,18 @@ class NativeMediaReceiptControls(unittest.TestCase):
                         return 9
                     else: self.fail("unexpected app/provider stage: " + stage)
                     return 0
+                read_diagnostics = getattr(actual, "runtime_diagnostics")
                 with patch.object(actual.sys, "platform", "darwin"), \
                      patch.object(actual.subprocess, "check_output", return_value="a" * 40), \
                      patch.object(actual.signal, "signal"), \
+                     patch.dict(actual.os.environ, {"ImageVersion": "unknown-private-value", "ImageOS": "/private/path",
+                                                    "RUNNER_ARCH": "token=private-value"}), \
+                     patch.object(actual, "runtime_diagnostics", side_effect=OSError("private-read-error")
+                                  if diagnostic_failure else read_diagnostics), \
+                     patch.object(actual, "runtime_process_counts", create=True,
+                                  side_effect=OSError("private-process-error") if diagnostic_failure else None,
+                                  return_value={"status": "observed", "CoreSimulatorService": 1,
+                                                "simdiskimaged": 2}) as process_snapshot, \
                      patch.object(actual.time, "monotonic", side_effect=lambda: now[0]), \
                      patch.object(actual, "execute", side_effect=execute):
                     self.assertEqual(actual.main(SimpleNamespace(evidence=directory)), 1)
@@ -70,22 +82,66 @@ class NativeMediaReceiptControls(unittest.TestCase):
                 self.assertEqual(receipt["failure"], expected_failure)
                 runtime_calls = [bound for stage, bound in calls if stage == "runtimes"]
                 self.assertEqual(len(runtime_calls), 1, "runtime enumeration must not retry")
-                self.assertLessEqual(runtime_calls[0], 60)
+                self.assertEqual(runtime_calls[0], min(180, 1050 - prior_elapsed))
                 if prior_elapsed: self.assertLessEqual(runtime_calls[0], 1050 - prior_elapsed)
                 runtime_step = next(step for step in receipt["steps"] if step["stage"] == "runtimes")
                 self.assertEqual(runtime_step["seconds"], min(duration, runtime_calls[0]))
                 self.assertEqual(runtime_step["timeout_seconds"], runtime_calls[0])
+                self.assertEqual(runtime_step["configured_timeout_seconds"], 180)
+                self.assertEqual(runtime_step["remaining_seconds"], 1050 - prior_elapsed)
+                self.assertEqual(receipt["runner_image"], {"ImageVersion": "unknown", "ImageOS": "unknown",
+                                                          "RUNNER_ARCH": "unknown"})
+                self.assertNotIn("private", json.dumps(receipt))
                 if expected_failure == "runtimes":
                     self.assertEqual(receipt["failure_exit"], 124)
                     self.assertEqual([stage for stage, _ in calls], ["xcode", "sdk", "runtimes"])
                     diagnostics = receipt["runtime_diagnostics"]
-                    self.assertIn("connection_invalid", diagnostics["markers"])
-                    self.assertEqual(diagnostics["error_codes"], [{"domain": "NSPOSIXErrorDomain", "code": 60}])
-                    self.assertNotIn("private", json.dumps(receipt))
+                    if diagnostic_failure:
+                        self.assertEqual(diagnostics, {"status": "unavailable"})
+                        self.assertEqual(receipt["runtime_process_counts"], {"status": "unavailable"})
+                    else:
+                        self.assertIn("connection_invalid", diagnostics["markers"])
+                        self.assertEqual(diagnostics["error_codes"], [{"domain": "NSPOSIXErrorDomain", "code": 60}])
+                    if prior_elapsed:
+                        process_snapshot.assert_not_called()
+                        self.assertEqual(receipt["runtime_process_counts"], {"status": "skipped_budget"})
+                    else:
+                        process_snapshot.assert_called_once()
+                        self.assertEqual(process_snapshot.call_args.args[1], 2)
                 else:
                     self.assertEqual([stage for stage, _ in calls], ["xcode", "sdk", "runtimes", "create"])
+                    process_snapshot.assert_not_called()
                 print(json.dumps({"virtual_runtime_seconds": duration, "prior_elapsed": prior_elapsed,
                                   "runtime_bound": runtime_calls[0], "failure": receipt["failure"]}), flush=True)
+
+    def test_runner_image_metadata_accepts_only_known_formats(self):
+        self.assertEqual(runner.image_metadata({"ImageVersion": "20261104.0514.1", "ImageOS": "macos15-arm64",
+                                              "RUNNER_ARCH": "ARM64", "PRIVATE_TOKEN": "sentinel"}),
+                         {"ImageVersion": "20261104.0514.1", "ImageOS": "macos15-arm64", "RUNNER_ARCH": "ARM64"})
+        for environment in ({}, {"ImageVersion": "20261104.0514.1\nsentinel", "ImageOS": "unknown-sentinel",
+                                 "RUNNER_ARCH": "ARM64 sentinel", "PRIVATE_TOKEN": "sentinel"}):
+            self.assertEqual(set(runner.image_metadata(environment).values()), {"unknown"})
+
+    def test_runtime_process_snapshot_redacts_names_and_reaps_its_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def spawn(_argv, *, stdout, stderr):
+                stdout.write(b"/private/sentinel/com.apple.CoreSimulator.CoreSimulatorService\n"
+                             b"/private/sentinel/simdiskimaged\n/secret/token-process\n"
+                             b"CoreSimulatorService-not-a-match\n")
+                stdout.flush()
+                return SimpleNamespace(wait=lambda timeout: 0, poll=lambda: 0)
+            with patch.object(runner.subprocess, "Popen", side_effect=spawn) as child:
+                result = runner.runtime_process_counts(Path(directory), 2)
+            self.assertEqual(result, {"status": "observed", "CoreSimulatorService": 1, "simdiskimaged": 1})
+            self.assertEqual(child.call_args.args[0], ["/bin/ps", "-A", "-o", "comm="])
+            self.assertNotIn("sentinel", json.dumps(result))
+            with patch.object(runner.subprocess, "Popen") as child:
+                child.return_value.wait.side_effect = [subprocess.TimeoutExpired("ps", 2), 0]
+                child.return_value.poll.return_value = None
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    runner.runtime_process_counts(Path(directory), 2)
+                child.return_value.kill.assert_called_once_with()
+                self.assertEqual([call.kwargs["timeout"] for call in child.return_value.wait.call_args_list], [2, 1])
 
     def test_runner_repeated_signal_preserves_its_owned_cleanup_window(self):
         source = Path(os.environ.get("HPS_RUNNER_CONTROL_SOURCE", PATH.with_name("ios-livekit-verify.py")))
