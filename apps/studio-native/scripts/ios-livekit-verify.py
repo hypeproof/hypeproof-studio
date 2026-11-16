@@ -67,6 +67,10 @@ def main(args):
     device = None
     deadline = time.monotonic() + 1050  # Reserve final cleanup within a 20-minute job.
     def interrupted(_signum, _frame):
+        # CI cancellation can escalate INT -> TERM while execute is allowing
+        # the owned helper group to unwind. Preserve that first cleanup window.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         raise InterruptedError("owned_execution_interrupted")
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)

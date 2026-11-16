@@ -1,9 +1,15 @@
 """Receipt gate controls; these are not evidence that the iOS SDK ran."""
 import copy
+import contextlib
 import importlib.util
+import json
+import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +23,66 @@ RUNNER_SPEC.loader.exec_module(runner)
 
 
 class NativeMediaReceiptControls(unittest.TestCase):
+    def test_runner_repeated_signal_preserves_its_owned_cleanup_window(self):
+        source = Path(os.environ.get("HPS_RUNNER_CONTROL_SOURCE", PATH.with_name("ios-livekit-verify.py")))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / "held.py"
+            child.write_text('''import os,signal,time,sys
+from pathlib import Path
+r=Path(sys.argv[1])
+def stop(*args):
+ signal.signal(signal.SIGTERM,signal.SIG_IGN)
+ (r/'cleaning').write_text('owned cleanup started')
+ while not (r/'release').exists():time.sleep(.01)
+ raise SystemExit(0)
+signal.signal(signal.SIGTERM,stop)
+(r/'pid').write_text(str(os.getpid()))
+while True:time.sleep(.01)
+''')
+            driver = root / "driver.py"
+            driver.write_text('''import importlib.util,sys
+from pathlib import Path
+from types import SimpleNamespace
+spec=importlib.util.spec_from_file_location('actual_runner',sys.argv[1])
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+r=Path(sys.argv[2]);m.sys.platform='darwin'
+m.subprocess.check_output=lambda *args,**kwargs:'a'*40
+actual=m.execute
+def first_stage(argv,**kwargs):
+ return actual([sys.executable,str(r/'held.py'),str(r)],**kwargs)
+m.execute=first_stage
+raise SystemExit(m.main(SimpleNamespace(evidence=str(r/'evidence'))))
+''')
+            process = subprocess.Popen([sys.executable, str(driver), str(source), str(root)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            child_pid = None
+            try:
+                deadline = time.monotonic() + 5
+                while not (root / "pid").exists():
+                    self.assertIsNone(process.poll()); self.assertLess(time.monotonic(), deadline); time.sleep(.01)
+                child_pid = int((root / "pid").read_text())
+                os.kill(process.pid, signal.SIGINT)
+                while not (root / "cleaning").exists():
+                    self.assertIsNone(process.poll()); self.assertLess(time.monotonic(), deadline); time.sleep(.01)
+                os.kill(process.pid, signal.SIGTERM)
+                time.sleep(.05)
+                print(json.dumps({"runner_alive_during_child_cleanup": process.poll() is None}), flush=True)
+                self.assertIsNone(process.poll(), "second signal cut short the owned cleanup window")
+                (root / "release").write_text("finish cleanup")
+                process.communicate(timeout=5)
+                with self.assertRaises(ProcessLookupError): os.kill(child_pid, 0)
+                receipt = json.loads((root / "evidence/native-livekit-runner.json").read_text())
+                self.assertEqual(process.returncode, 1)
+                self.assertEqual(receipt["status"], "FAIL")
+                self.assertEqual(receipt["failure"], "InterruptedError")
+            finally:
+                (root / "release").write_text("finish cleanup")
+                if child_pid is not None:
+                    with contextlib.suppress(ProcessLookupError): os.killpg(child_pid, signal.SIGKILL)
+                if process.poll() is None: os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=5)
+
     def test_standalone_runner_reaps_its_timed_out_process(self):
         with tempfile.TemporaryDirectory() as directory:
             code = runner.execute([sys.executable, "-c", "import time; time.sleep(60)"],
