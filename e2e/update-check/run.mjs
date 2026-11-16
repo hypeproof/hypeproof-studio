@@ -90,7 +90,15 @@ try {
   };
   await shot('start-page', startPage);
   const input = win.locator('.quick-input-widget input.input').first();
-  const message = win.locator('.notifications-toasts').getByText(/새 버전 v.*발견|최신 버전입니다/);
+  // Every answer the update command can give (updateChecker.ts checkForUpdates / reportManualUpdateCheckFailure).
+  // Only the first two prove the public API answered; the others are read so a run reports what the App said
+  // instead of "no answer" (an info toast hides itself before the failure screenshot).
+  const ANSWERS = [
+    ['found', /새 버전 v.*발견/], ['latest', /최신 버전입니다/],
+    ['rate-limited', /지금은 새 버전을 확인할 수 없어요/], ['no-access', /앱 안에서 새 버전을 확인할 수 없어요/],
+    ['failed', /업데이트를 확인하지 못했습니다/],
+  ];
+  const message = win.locator('.notifications-toasts').getByText(new RegExp(ANSWERS.map(([, re]) => re.source).join('|'))).first();
   // The extension activates lazily, so the first palette run can precede the command's registration and
   // do nothing. Run the command again (3 tries, 15 s each) before calling it a failure.
   let shown = false;
@@ -108,6 +116,13 @@ try {
     throw new Error('the update command gave no answer in 3 attempts (see update-check-failed.png)');
   }
   const answer = await message.innerText();
+  const kind = ANSWERS.find(([, re]) => re.test(answer))?.[0];
+  if (kind !== 'found' && kind !== 'latest') {
+    await win.screenshot({ path: join(report, 'update-check-failed.png') });
+    const why = kind === 'rate-limited' ? 'the public release API rate limited this runner (anonymous GitHub API budget, HTTP 403/429); the updater handled it as designed (D19) but the API answer was not observed'
+      : kind === 'no-access' ? 'the public release API refused the anonymous read (HTTP 401/403/404)' : 'the update check failed';
+    throw new Error(`update command answered "${answer}" (${kind}): ${why}`);
+  }
   console.log('PASS real Electron update command:', answer);
   const found = /새 버전/.test(answer);
   if (found) {
