@@ -48,7 +48,14 @@ export interface GhRelease {
 export interface UpdateInfo {
   available: boolean;
   version: string;            // "0.1.2" (no v prefix)
+  /**
+   * Authenticated download endpoint. For release assets this is the REST API URL
+   * (`…/releases/assets/<numeric id>`, #1585), so its last path segment is NOT a file name.
+   * Never derive a file name from it: use `assetName`.
+   */
   downloadUrl: string;
+  /** The release asset's real file name (`asset.name`), carried through for naming the staged file. */
+  assetName?: string;
   releaseUrl: string;
   notes: string;              // raw markdown
   sizeBytes: number;
@@ -87,6 +94,32 @@ export function pickWindowsInstaller(assets: ReleaseAsset[]): ReleaseAsset | und
   );
 }
 
+/**
+ * A release asset name that is safe to use as the staged Windows installer's file name:
+ * a plain `*.exe` file name, with no path part, control, bidi or Windows-reserved
+ * characters, no trailing dot/space, and not a reserved device name. Returns "" otherwise.
+ */
+export function safeInstallerFileName(name: unknown): string {
+  if (typeof name !== "string" || name.length === 0 || name.length > 128) return "";
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\\/:*?"<>|]/.test(name)) return "";
+  if (!/\.exe$/i.test(name) || /^\.exe$/i.test(name)) return "";
+  if (/[. ]$/.test(name) || /^[. ]/.test(name) || name.includes("..")) return "";
+  if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i.test(name)) return "";
+  return name;
+}
+
+/**
+ * The file name the Windows installer is staged under: the release asset's own name when it
+ * is safe, otherwise `HypeProofStudioSetup-<version>.exe`. The name must come from
+ * `UpdateInfo.assetName`, never from `downloadUrl` (a REST asset URL ends in a numeric id,
+ * which staged the installer as an extensionless file the PowerShell wrapper could not run).
+ */
+export function windowsInstallerFileName(info: { assetName?: string; version: string }): string {
+  return safeInstallerFileName(info.assetName)
+    || `HypeProofStudioSetup-${String(info.version).replace(/[^A-Za-z0-9._-]/g, "_")}.exe`;
+}
+
 export interface WindowsUpdateWrapperInput {
   // App executable base name WITHOUT ".exe" (Get-Process -Name form), e.g.
   // "HypeProof Studio". The wrapper waits for every process of this name to exit.
@@ -97,6 +130,12 @@ export interface WindowsUpdateWrapperInput {
   installerArgs: string[];
   // How long to wait for the app to exit before cancelling safely.
   maxWaitMs?: number;
+  // Absolute path of the installed app executable. When the installer cannot be started
+  // (or exits non-zero) after the app has quit, the wrapper starts this so Studio is not
+  // left closed and un-updated silently.
+  appExePath?: string;
+  // File the wrapper appends failure and relaunch records to.
+  failureLogPath?: string;
 }
 
 /**
@@ -148,7 +187,7 @@ export function installerEnv(env: Record<string, string | undefined>): Record<st
 }
 
 export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): string {
-  const { appProcessName, installerPath, installerArgs, maxWaitMs = 60000 } = input;
+  const { appProcessName, installerPath, installerArgs, maxWaitMs = 60000, appExePath, failureLogPath } = input;
   // PowerShell single-quote escaping: double any embedded single quote.
   const ps = (s: string): string => "'" + String(s).replace(/'/g, "''") + "'";
   const argList = installerArgs.map(ps).join(", ");
@@ -166,11 +205,33 @@ export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): st
     "if (Get-Process -Name $name -ErrorAction SilentlyContinue) { throw 'Studio is still running; update cancelled without installing.' }",
     "# Grace for the OS to release the single-instance lock after the last exit.",
     "Start-Sleep -Milliseconds 1200",
+    "# The app has quit by now. If Setup cannot be started (missing file, wrong extension,",
+    "# launch error) or exits non-zero, record why and bring the existing app back instead of",
+    "# leaving Studio closed and un-updated without a trace.",
     "# Hold the handoff lease until Setup itself exits. Not -Wait: that also waits for",
     "# descendants, and Setup relaunches Studio after an explicit restart, so the wrapper",
     "# would stay alive for the whole relaunched session and block the next update.",
-    `$setup = Start-Process -PassThru -FilePath ${ps(installerPath)} -ArgumentList ${argList}`,
-    "$setup.WaitForExit()",
+    `$installer = ${ps(installerPath)}`,
+    `$appExe = ${ps(appExePath ?? "")}`,
+    `$failLog = ${ps(failureLogPath ?? "")}`,
+    "function Write-UpdateLog([string]$line) {",
+    "  if (-not $failLog) { return }",
+    "  try { Add-Content -LiteralPath $failLog -Value ((Get-Date -Format o) + ' ' + $line) -Encoding UTF8 } catch { }",
+    "}",
+    "try {",
+    "  if ($installer -notmatch '\\.exe$') { throw \"installer path does not end in .exe: $installer\" }",
+    "  if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw \"installer file is missing: $installer\" }",
+    `  $setup = Start-Process -PassThru -FilePath ${ps(installerPath)} -ArgumentList ${argList}`,
+    "  $setup.WaitForExit()",
+    "  if ($null -ne $setup.ExitCode -and $setup.ExitCode -ne 0) { throw \"installer exited with code $($setup.ExitCode)\" }",
+    "} catch {",
+    "  Write-UpdateLog ('update failed, installer not completed: ' + $_.Exception.Message)",
+    "  if ($appExe -and (Test-Path -LiteralPath $appExe -PathType Leaf)) {",
+    "    try { Start-Process -FilePath $appExe; Write-UpdateLog ('relaunched existing app: ' + $appExe) }",
+    "    catch { Write-UpdateLog ('relaunch failed: ' + $_.Exception.Message) }",
+    "  } else { Write-UpdateLog 'no app executable known; not relaunched' }",
+    "  exit 1",
+    "}",
     "",
   ].join("\r\n");
 }
@@ -214,6 +275,7 @@ export function parseLatestRelease(
     available: true,
     version,
     downloadUrl: asset.url ?? "",
+    assetName: asset.name,
     releaseUrl: release.html_url,
     notes: releaseNotesText(release.body),
     sizeBytes: typeof asset.size === "number" ? asset.size : 0,

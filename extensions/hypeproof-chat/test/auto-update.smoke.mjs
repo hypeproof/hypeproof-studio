@@ -128,7 +128,7 @@ try {
     const spawned = [], commands = [], notices = [], opened = [], timers = [];
     let downloaded, rejectVerification = false, verificationCalls = 0;
     const bytes = Buffer.from('fixture verified archive bytes');
-    const info = { available: true, sizeBytes: bytes.length, version: '0.1.51', releaseUrl: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.51', downloadUrl: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', digest: 'sha256:' + createHash('sha256').update(bytes).digest('hex') };
+    const info = { available: true, assetName: platform === 'darwin' ? 'HypeProof-Studio-darwin-arm64.zip' : 'HypeProof.StudioUserSetup-x64-0.1.51.exe', sizeBytes: bytes.length, version: '0.1.51', releaseUrl: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.51', downloadUrl: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', digest: 'sha256:' + createHash('sha256').update(bytes).digest('hex') };
     const vscode = {
       ProgressLocation: { Notification: 1 },
       Uri: { parse: s => ({ toString: () => s }) },
@@ -184,6 +184,14 @@ try {
     assert.equal(stagedUpdateVersion(context), '0.1.51');
     assert.deepEqual(JSON.parse(JSON.stringify(state.get(AUTO_UPDATE_NOTICE_KEY))), { version: '0.1.51', releaseUrl: info.releaseUrl });
     assert.equal(verificationCalls, platform === 'darwin' ? 1 : 0, 'Mac background staging verifies the candidate');
+    if (platform === 'win32') {
+      // Regression (2026-11-16): downloadUrl is the REST asset URL ending in a numeric id; the staged installer was
+      // named after it, had no .exe, and the wrapper could not start it.
+      assert.equal(path.basename(downloaded), info.assetName, 'the staged installer keeps the release asset name');
+      assert.match(path.basename(downloaded), /\.exe$/);
+      const stagedScript = JSON.parse(fs.readFileSync(path.join(dir, 'storage/updates', fs.readdirSync(path.join(dir, 'storage/updates'))[0], 'pending-update.json'), 'utf8')).script;
+      assert.ok(fs.readFileSync(stagedScript, 'utf8').includes(`-FilePath '${downloaded}'`), 'the wrapper starts the staged .exe');
+    }
 
     // A rejected newer Mac candidate cannot replace an already verified stage or interrupt the learner.
     if (platform === 'darwin') {
