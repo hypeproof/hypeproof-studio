@@ -9,6 +9,7 @@ version: 1
 #           it: not hype-merge, not the loop, not `hype-pr --auto-merge`.
 #   Tier B  everything else. It merges when the repository's required checks are
 #           green and the latest hype-review has no blocker. No human approval.
+#   Either tier waits while an objection is open (`objections` below, #679).
 #
 # A PR's tier is the riskiest tier of its files. A file list that cannot be read in
 # full, an empty one, or a repository missing below is a classification error, and
@@ -42,6 +43,18 @@ automation_actors:
   - hypeproof-automation
   - hypeproof-agent[bot]
   - app/hypeproof-agent
+
+# Objections (#679, docs/MERGE-OBJECTIONS.md). Both tiers wait on an open objection: a
+# human's requested changes, an open question (app or `/hold`), a P0-P2 review finding,
+# or a review in progress. Objections count from human_approvers, `reviewers` below and
+# the repository's own members (OWNER/MEMBER/COLLABORATOR), never from bots or the author.
+objections:
+  # A `member-work-lease` marker by a non-author holds the merge for at most this long
+  # from the marker time, until that reviewer posts a review. Then it fails open.
+  review_lease_minutes: 30
+  # Extra logins whose findings and holds count although they are not approvers or
+  # repository members. Empty: approvers and members are the reviewers today.
+  reviewers: []
 
 # Tier A in every repository below. A repository may not have every one of these
 # paths yet (sync.sh vendors policy/ and scripts/merge-tier/ later); a PR that adds

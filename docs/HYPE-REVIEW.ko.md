@@ -203,6 +203,24 @@ Expected fix: <원하는 수정>
 Re-test: <작성자가 다시 돌려야 할 검증>
 ```
 
+### 지적 표시와 병합 보류 (#679)
+
+COMMENT나 Request Changes 리뷰 본문의 지적은 병합을 멈출 수 있다. 지적마다 숨은
+marker를 앞에 붙인다. 형식과 해제 규칙은 [MERGE-OBJECTIONS.md](MERGE-OBJECTIONS.md)에 있다.
+
+```markdown
+<!-- hype-finding v1 id=instructor-compact severity=P2 -->
+**P2: Keep the instructor command dialog outside the compact-layout gate.**
+```
+
+- `P0`/`P1`: 같은 리뷰어가 새 head를 지적 없이 다시 리뷰하거나, 승인하거나,
+  `status=resolved`로 닫을 때까지, 또는 사람 승인자가 지적 이후에 head를 승인할 때까지 막는다.
+- `P2`: 위와 같고, 작성자가 그 지적에 답하면(스레드 답글, 리뷰어 멘션, 인용) 풀린다.
+- `P3`: 막지 않는다.
+- marker 없는 `**P2: …**`, `**P2 — …**`, `[P2] …` 줄도 지적으로 읽는다.
+- 질문으로 병합을 멈추려면 `/hold <이유>` 줄을 쓴다. 질문하신 분이 승인하거나
+  `/withdraw`를 쓰거나, 작성자가 답하면 풀린다. `/hold` 없는 질문 comment는 막지 않는다.
+
 ---
 
 ## 팀 운영 규칙

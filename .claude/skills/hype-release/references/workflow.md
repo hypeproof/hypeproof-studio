@@ -453,3 +453,94 @@ physical evidence. Reusable product journey coverage is tracked in
 observed checks through the existing `check` command with exact source/package and
 host identity; do not relabel a receipt as user acceptance. Apple processing and
 tester availability must be observed before describing the candidate as available.
+
+## Release blockers
+
+The `release-blocker` label exists in `hypeproof/hypeproof-studio`,
+`hypeproof/hypeproof-service` and `hypeproof/hypeprooflab`. While any open issue in
+those three repositories carries it:
+
+- `release-cut` with `mode=create` stops before the rc tag and lists the issues
+  (`scripts/release/release-blockers.mjs` in Studio).
+- `release-promote` stops before the v tag, so an approval does not publish.
+- A blocker list that cannot be read in full also stops both (fail closed).
+
+Raise a blocker when the candidate should not ship: a black-box kit failure at
+`origin/main`, a security finding against the candidate, an acceptance FAIL. Use
+
+```bash
+scripts/release/flag-blocker.sh hypeproof/hypeproof-service \
+  "Black-box FAIL: s3 (service abc1234, lab def5678)" /tmp/body.md \
+  https://github.com/hypeproof/hypeproof-studio/pull/<release PR>
+```
+
+It opens the issue with the label (or comments on an open blocker with the same
+title), then comments on the release PR with the issue link. Writes run as
+`hypeproof-agent[bot]`. Keep evidence that names members or customers out of the
+public Studio repository; the black-box kit files into `hypeproof-service`.
+`tests/blackbox/studio-continuation/remote.sh run-all` calls it automatically when a
+full run at `origin/main` fails (`BLACKBOX_FLAG_BLOCKER=0` turns that off).
+
+Close the issue when the fix is merged and the failing check passes again, then cut
+a new rc. Removing the label without a fix is not a resolution.
+
+### Release PRs are not bot-merged
+
+A release PR (head `release/vX.Y.Z`, label `release`) changes only
+`releases/<version>.md`, so the merge-tier classifier calls it tier B. It is still
+merged only by the release pipeline identity (`hypeproof-org-lab-bot`, inside Studio's
+`release-auto` or `release-promote`), after every automatic gate passed or a member with
+write access approved its head (`policy/release-merge-authority.json`: `genericMerge:
+refuse-delegate-to-publisher`). On 2026-11-15 a release-watch loop merged
+hypeproof-studio#4205 with `with-agent-identity.sh gh pr merge --squash` while the PR
+had an open security warning. `with-agent-identity.sh` now runs
+`scripts/agent-identity/release_pr_guard.py` before it mints a token. The guard
+refuses `gh pr merge` and `gh api .../pulls/<n>/merge` for release PRs, and also
+refuses a merge whose PR it cannot read. A loop that finds a green release PR gives
+the human its link.
+
+## Automatic release
+
+Owner decision 2026-11-16 (hypeprooflab `docs/decisions/2026-11-16-studio-auto-release.md`).
+Studio's `.github/workflows/release-auto.yml` runs after each verify-unified-release and
+hourly. With the repository variable `RELEASE_AUTO=on` it evaluates
+`scripts/release/auto-release.mjs` on the single open release PR. Every gate is checked
+on the PR head and its rc candidate (the head's single parent):
+
+| Gate | Passes when |
+|---|---|
+| kill-switch | `RELEASE_AUTO` is `on` |
+| release-pr | record-only head on the candidate; the rc tag is on the candidate |
+| required-ci | `mergeStateStatus` is CLEAN |
+| acceptance | `unified-acceptance.json` has PASS at the candidate for every configured platform |
+| notarization | the Mac signing receipt says `Accepted` |
+| blockers | no open `release-blocker` issue in Studio, Service or Lab |
+| blackbox-kit | an `hps-blackbox-kit/1` record from `hypeproof-agent[bot]` for the candidate, with every scenario in Studio `config/release-auto.json` PASS |
+| casebook | the release casebook P0 run (`hps-blackbox-run/1`) at the head |
+| holds | no unhidden comment outside the release machinery, no changes-requested review |
+| release-deps | an `hps-release-deps/1` record from `hypeproof-agent[bot]` for the candidate with verdict PASS |
+| freeze | `check-live-sessions.mjs` answers `proceed` |
+
+- PASS: `hypeproof-org-lab-bot` posts an `hps-auto-release/1` record and runs
+  `promote.mjs`. The publish gate accepts that record (route `auto`) only while
+  `RELEASE_AUTO` is still `on`.
+- WAIT (missing evidence, CI running, live class): nothing is written. The next run
+  tries again.
+- FAIL: the run comments on the release PR and opens a `release-blocker` issue in
+  Studio, which carries gate names only. It also posts once to #alerts.
+
+Supply the evidence after the head commit; older records do not count:
+
+```bash
+tests/blackbox/studio-continuation/remote.sh run-all       # posts hps-blackbox-kit/1 (full origin/main run)
+python3 scripts/release-deps/release_deps.py check --candidate studio=<candidate> \
+  --fact hypeproof-studio-db=<live D1 head> --json > /tmp/deps.json
+python3 scripts/release/evidence.py deps --pr <release PR url> --deps-json /tmp/deps.json --apply
+```
+
+Adding a required scenario (for example concept conformance) is a Studio
+`config/release-auto.json` change. Until the kit reports that scenario, the gate waits.
+Hide a handled warning comment as Resolved. Never edit a record by hand. Never post a
+record for a run that did not happen.
+
+Kill switch: `gh variable set RELEASE_AUTO --body off --repo hypeproof/hypeproof-studio`.
