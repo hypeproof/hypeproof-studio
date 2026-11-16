@@ -131,11 +131,11 @@ public class QuestionJourneyTest {
         }catch(Exception error){throw new AssertionError(error);}
     }
     private void saveDictationTouch(String outcome)throws Exception{
-        saveDictationTouch(outcome,"touch.json");
+        saveDictationTouch(outcome,"guest-dictation/touch.json");
     }
     private void saveDictationTouch(String outcome,String filename)throws Exception{
-        File dir=new File(context.getExternalFilesDir(null),"evidence/guest-dictation");assertTrue(dir.isDirectory()||dir.mkdirs());
-        Files.write(new File(dir,filename).toPath(),new JSONObject().put("outcome",outcome).put("events",new JSONArray(dictationTouchEvents)).toString(2).getBytes(StandardCharsets.UTF_8));
+        File file=new File(context.getExternalFilesDir(null),"evidence/"+filename);File dir=file.getParentFile();assertTrue(dir.isDirectory()||dir.mkdirs());
+        Files.write(file.toPath(),new JSONObject().put("outcome",outcome).put("events",new JSONArray(dictationTouchEvents)).toString(2).getBytes(StandardCharsets.UTF_8));
     }
     @Test public void guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend()throws Exception{
         java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No guest network");};
@@ -478,12 +478,12 @@ public class QuestionJourneyTest {
         assertFalse(voice.controller.session.active());assertTrue(submitted.isEmpty());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("인식이 끝나지 않아도 남길 말")));
         app.recreate();onView(withContentDescription("질문 대화 입력")).check(matches(withText("인식이 끝나지 않아도 남길 말")));
-        saveDictationTouch("PASS","endpoint-timeout.json");
+        saveDictationTouch("PASS","guest-dictation/endpoint-timeout.json");
         }catch(Exception|AssertionError failure){
             try{if(target.get()!=null)app.onActivity(a->dictationTouch("failure",a,target.get(),voice,null));}
             catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
-            try{saveDictationTouch("FAIL","endpoint-timeout.json");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
-            try{screen("android-dictation-endpoint-timeout-failure");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
+            try{saveDictationTouch("FAIL","failures/dictation-endpoint-timeout.json");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
+            try{screen("failures/android-dictation-endpoint-timeout-failure");}catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
             throw failure;
         }
     }
