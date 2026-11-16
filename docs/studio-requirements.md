@@ -6808,6 +6808,22 @@ form may send comes from the Service's `request_policy` on that choice.
   "추가 사용이 필요한 이유 (내가 쓴 글)" with its byte size. Nothing is sent on Cancel.
 - **Request side only.** Resolving a request changes no cap, budget or charge.
 
+**In-chat request card (Jay, 2026-11-16).** `BudgetRequestCard` puts the request where the learner meets the problem.
+- **When it shows.** It needs a request policy, a requestable choice and authoritative usage. When the allowance has run out
+  (exhausted), it is drawn inside the status screen, under the cause. At 10% or less it is drawn above the composer, which
+  stays usable.
+- **What it shows.** "AI를 더 쓰려면 선생님께 요청할 수 있어요" (16 px) and a 요청하기 button of at least 48 px. The button opens
+  the same policy form (fixed reasons, 44 px rows, no text field on minor seats, and the adult note of 200), with 보내기 and
+  취소.
+- **States** are plain words in a polite status line: "요청했어요 · 선생님 확인 기다리는 중" (no second request), and "방금
+  요청했어요. HH:MM 이후에 다시 요청할 수 있어요." during the repeat block. Once answered, "선생님이 확인했어요: <resolution>" is
+  shown.
+- **No figures.** The card shows no meter figure, and it passes the SX audit.
+- **Usage panel.** A minor seat (profile `minor_cohort`, or a policy with `note: false`) sees no token or meter rows there,
+  only "남은 사용량이 얼마 없어요."; adults and instructors keep them.
+- **Evidence.** `budget-request-card.test.tsx` and `budget-request-card-browser.smoke.mjs` (real ChatPanel; exhausted and
+  low; light/dark at 320 and 800 px; forced colours).
+
 **Without a request policy (an older Service).** The form is the earlier one:
 - a reason of up to 200 characters, labelled "(필수)";
 - the "N / 200자" counter and the IME guard;
