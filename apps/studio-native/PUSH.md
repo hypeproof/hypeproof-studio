@@ -51,6 +51,25 @@ then reloads the existing question/inbox surface. An old reference, old account,
 missing configuration or rejected registration does not enable an action. These
 client observations are not physical-delivery evidence.
 
+## Approval alerts (iOS, #4169 / Service #522)
+
+- The Service sends approval alerts as `승인 요청이 왔어요` / `<repo>#<number> · <summary>`, right
+  after the relay stores the card (not at the next 15-minute tick). Questions stay generic.
+- Tapping an approval alert opens the approval inbox scrolled to that card, marked
+  `알림에서 연 요청이에요`. The inbox read stays authoritative: if the card is gone or no longer
+  readable the inbox says `알림의 요청은 이미 처리됐거나 지금은 볼 수 없어요.` and no action is enabled.
+- A card another approver settled (`state: resolved`, `resolution: {reason, by, at}`) shows
+  `<login>님이 HH:mm에 처리했어요` or `다른 곳에서 이미 처리됐어요`, has no buttons and counts as finished.
+  Older Service builds without these fields still decode.
+- When a card stops waiting, the Service sends one silent APNs update (`content-available`,
+  `hps.withdraw: true`). `UIBackgroundModes` includes `remote-notification` so the app can remove its
+  own delivered alert for that card. Apple may throttle or drop background updates and never wakes a
+  force-quit app, so every inbox refresh also removes delivered alerts for cards that no longer wait.
+- An enrolled approver without notifications on sees a `알림 켜기` prompt in the inbox. It is the same
+  explicit opt-in as the setting (system permission first, then registration); nothing turns on by itself.
+- Android: alerts show with the same text through FCM; tap routing, withdrawal and an approval view
+  are not built yet.
+
 Primary references: [Apple registration](https://developer.apple.com/documentation/usernotifications/registering-your-app-with-apns),
 [Firebase Android setup](https://firebase.google.com/docs/android/setup),
 [FCM token API](https://firebase.google.com/docs/reference/android/com/google/firebase/messaging/FirebaseMessaging),

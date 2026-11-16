@@ -94,4 +94,20 @@ final class AccountPushTests: XCTestCase {
         }
         XCTAssertThrowsError(try AccountPushReference(["schema": "hps-push/1", "delivery_id": UUID().uuidString.lowercased(), "kind": "approve", "id": "review-1", "revision": 1]))
     }
+    func testWithdrawalIsStrictApprovalOnlyAndRemovesOnlySettledApprovalAlerts() throws {
+        let hps: (String, String, Any?) -> [String: Any] = { kind, id, withdraw in
+            var value: [String: Any] = ["schema": "hps-push/1", "delivery_id": UUID().uuidString.lowercased(), "kind": kind, "id": id, "revision": 12]
+            if let withdraw { value["withdraw"] = withdraw }; return value
+        }
+        XCTAssertTrue(try AccountPushReference(hps("approval", "REQ-1", true)).withdraw)
+        XCTAssertFalse(try AccountPushReference(hps("approval", "REQ-1", nil)).withdraw, "older Service payloads still parse")
+        for bad in [false, NSNumber(value: 1), "true"] as [Any] { XCTAssertThrowsError(try AccountPushReference(hps("approval", "REQ-1", bad))) }
+        XCTAssertThrowsError(try AccountPushReference(hps("question", "Q-1", true)), "a question cannot be withdrawn")
+        let delivered: [(identifier: String, userInfo: [AnyHashable: Any])] = [
+            ("alert-settled", ["hps": hps("approval", "REQ-1", nil)]), ("alert-waiting", ["hps": hps("approval", "REQ-2", nil)]),
+            ("question", ["hps": hps("question", "REQ-1", nil)]), ("foreign", ["aps": ["alert": "x"]]), ("malformed", ["hps": ["schema": "hps-push/1", "id": "REQ-1"]])]
+        XCTAssertEqual(AccountPushAlerts.stale(delivered, settled: ["REQ-1"]), ["alert-settled"])
+        XCTAssertEqual(AccountPushAlerts.stale(delivered, settled: []), [])
+        XCTAssertNil(AccountPushAlerts.approvalCardID(["hps": hps("approval", "REQ-1", true)]), "a withdrawal is not itself an alert to open")
+    }
 }

@@ -18,7 +18,16 @@ import UIKit
         }
     }
     func failed() { guard accepting else { return }; token = nil; registrationFailed = true }
-    func received(_ value: [AnyHashable: Any]) { guard let raw = value["hps"] as? [String: Any], let parsed = try? AccountPushReference(raw) else { return }; reference = parsed }
+    func received(_ value: [AnyHashable: Any]) { guard let raw = value["hps"] as? [String: Any], let parsed = try? AccountPushReference(raw), !parsed.withdraw else { return }; reference = parsed }
+    /// Takes delivered approval alerts off the lock screen once their card no longer waits for this person:
+    /// on a silent Service withdrawal and after every inbox refresh (Apple may drop background pushes).
+    func clearSettled(_ settled: Set<String>) async {
+        guard !settled.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        let delivered = await center.deliveredNotifications().map { (identifier: $0.request.identifier, userInfo: $0.request.content.userInfo) }
+        let stale = AccountPushAlerts.stale(delivered, settled: settled)
+        if !stale.isEmpty { center.removeDeliveredNotifications(withIdentifiers: stale) }
+    }
     func consume() { reference = nil }
     func stop() { generation = UUID(); accepting = false; token = nil; reference = nil; UIApplication.shared.unregisterForRemoteNotifications() }
     func permits(_ value: String) async -> Bool {
@@ -41,6 +50,12 @@ final class NativePushDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool { UNUserNotificationCenter.current().delegate = self; return true }
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) { Task { @MainActor in NativePushCenter.shared.registered(deviceToken) } }
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) { Task { @MainActor in NativePushCenter.shared.failed() } }
+    // Silent approval withdrawal (#522): only removes this app's own delivered alert; never opens or answers anything.
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard let raw = userInfo["hps"] as? [String: Any], let reference = try? AccountPushReference(raw), reference.withdraw else { completionHandler(.noData); return }
+        let card = reference.id
+        Task { @MainActor in await NativePushCenter.shared.clearSettled([card]); completionHandler(.newData) }
+    }
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         let value = response.notification.request.content.userInfo
         Task { @MainActor in NativePushCenter.shared.received(value); completionHandler() }
@@ -51,6 +66,17 @@ final class NativePushDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
 @MainActor final class AccountPushPresentation: ObservableObject {
     @Published var state = AccountPushController.View()
     var controller: AccountPushController?
+    /// The one explicit opt-in path, shared by the notification setting and the approval inbox prompt.
+    func enable() async {
+        guard controller?.enable() == true else { return }
+        guard let ticket = controller?.permissionTicket else { return }
+        do {
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            guard controller?.acceptsPermission(ticket) == true else { return }
+            if granted { await NativePushCenter.shared.register() }
+            else { await controller?.disable(); controller?.unavailable("알림을 허용하지 않았어요. 대화와 질문은 그대로 사용할 수 있어요.") }
+        } catch { if controller?.acceptsPermission(ticket) == true { controller?.unavailable("시스템 알림 권한을 확인하지 못했어요.") } }
+    }
 }
 struct AccountPushView: View {
     @ObservedObject var model: AccountPushPresentation
@@ -60,20 +86,10 @@ struct AccountPushView: View {
             ScrollView { VStack(alignment: .leading, spacing: 18) {
                 Text("새 질문과 확인 요청이 오면 알려드려요. 알림을 열어도 답변이나 승인은 자동으로 전송되지 않아요.")
                 Text(NativePushCenter.configured ? model.state.status : "이 버전은 알림 연결이 아직 준비되지 않았어요. 질문과 확인 요청에서 직접 확인할 수 있어요.").foregroundStyle(.secondary).accessibilityIdentifier("pushStatus")
-                Button { Task { await enable() } } label: { Text("알림 켜기").frame(minHeight: 44) }.buttonStyle(.borderedProminent).disabled(!NativePushCenter.configured || model.state.busy).accessibilityIdentifier("enableAccountPush")
+                Button { Task { await model.enable() } } label: { Text("알림 켜기").frame(minHeight: 44) }.buttonStyle(.borderedProminent).disabled(!NativePushCenter.configured || model.state.busy).accessibilityIdentifier("enableAccountPush")
                 Button { NativePushCenter.shared.stop(); Task { await model.controller?.disable() } } label: { Text("알림 끄기").frame(minHeight: 44) }.buttonStyle(.bordered).accessibilityIdentifier("disableAccountPush")
             }.padding(24) }.navigationTitle("질문 알림").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() } } }
         }
-    }
-    private func enable() async {
-        guard model.controller?.enable() == true else { return }
-        guard let ticket = model.controller?.permissionTicket else { return }
-        do {
-            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
-            guard model.controller?.acceptsPermission(ticket) == true else { return }
-            if granted { await NativePushCenter.shared.register() }
-            else { await model.controller?.disable(); model.controller?.unavailable("알림을 허용하지 않았어요. 대화와 질문은 그대로 사용할 수 있어요.") }
-        } catch { if model.controller?.acceptsPermission(ticket) == true { model.controller?.unavailable("시스템 알림 권한을 확인하지 못했어요.") } }
     }
 }
