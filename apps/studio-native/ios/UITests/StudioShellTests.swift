@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 final class StudioShellTests: XCTestCase {
     @MainActor func testFirstInstallExplainsAccountStorageWithoutASeparateForm() {
         let app = XCUIApplication(); app.launchArguments = ["--verify-account-storage"]; app.launch()
@@ -586,6 +587,27 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 2)
         let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
         XCTAssertFalse(timeline.contains("syntheticPlayback"))
+        let playback = try XCTUnwrap(try trace(app)["requested_playback_voice"] as? [String: Any])
+        let inventory = try XCTUnwrap(playback["inventory"] as? [[String: String]])
+        let requested = try XCTUnwrap(playback["requested"] as? [String: String])
+        let excludedTraits = UInt64(AVSpeechSynthesisVoice.Traits.isNoveltyVoice.rawValue)
+            | UInt64(AVSpeechSynthesisVoice.Traits.isPersonalVoice.rawValue)
+        let korean = try inventory.filter {
+            let rawTraits = try XCTUnwrap(UInt64(try XCTUnwrap($0["platform_traits_raw"])))
+            return $0["language"] == "ko-KR" && rawTraits & excludedTraits == 0
+        }
+        XCTAssertFalse(korean.isEmpty, "This actual OS playback journey requires an ordinary installed Korean voice.")
+        // Read platform values directly, independently of the app's quality
+        // bridge. Raw values identify cases; their numeric order is not a rank.
+        let knownQualities: [AVSpeechSynthesisVoiceQuality] = [.premium, .enhanced, .default]
+        let expected = knownQualities.compactMap { quality in
+            korean.first { $0["platform_quality_raw"] == String(quality.rawValue) }
+        }.first ?? korean.first
+        XCTAssertEqual(requested, try XCTUnwrap(expected), "The actual utterance must request the best available Korean tier with stable ties.")
+        XCTAssertEqual(playback["prefers_assistive_technology_settings"] as? Bool, true)
+        XCTAssertEqual(playback["effective_voice"] as? String, "unobserved", "Accessibility may override the requested voice; callback completion is not an acoustic quality verdict.")
+        let selection = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: playback, options: [.sortedKeys]), encoding: .utf8) ?? "")
+        selection.name = "requested-korean-voice-inventory-not-effective-audio"; selection.lifetime = .keepAlways; add(selection)
         let observation = XCTAttachment(string: timeline); observation.name = "actual-os-korean-playback-synthetic-next-capture"; observation.lifetime = .keepAlways; add(observation)
         try evidence("journey-real-playback-handoff", app: app)
     }

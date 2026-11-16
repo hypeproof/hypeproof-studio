@@ -9,10 +9,19 @@ import CryptoKit
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String {
         let value = JourneyTransport.store.trace()
-        guard !emptyStopBoundary.isEmpty,
+        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty,
               var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
-        fields["empty_stop_boundary"] = emptyStopBoundary
+        if !emptyStopBoundary.isEmpty { fields["empty_stop_boundary"] = emptyStopBoundary }
+        if !requestedPlaybackVoice.isEmpty { fields["requested_playback_voice"] = requestedPlaybackVoice }
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
+    }
+    private static var requestedPlaybackVoice: [String: Any] = [:]
+    static func recordRequestedPlaybackVoice(inventory: [[String: String]], requested: [String: String]?,
+                                            prefersAssistiveTechnologySettings: Bool) {
+        guard realPlayback else { return }
+        requestedPlaybackVoice = ["inventory": inventory, "requested": requested ?? [:],
+                                  "prefers_assistive_technology_settings": prefersAssistiveTechnologySettings,
+                                  "effective_voice": "unobserved"]
     }
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
     static var queuedVoice: Bool { enabled && JourneyConfiguration.scenario == "queued-voice" }

@@ -350,19 +350,45 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             return
         }
 #endif
-        guard let voice = AVSpeechSynthesisVoice.speechVoices().first(where: { $0.language == "ko-KR" }) else {
+        let installed = AVSpeechSynthesisVoice.speechVoices()
+        let catalog = installed.map {
+            KoreanVoiceSelection.Candidate(language: $0.language, quality: Self.quality($0),
+                                           isNovelty: $0.voiceTraits.contains(.isNoveltyVoice),
+                                           isPersonal: $0.voiceTraits.contains(.isPersonalVoice))
+        }
+        guard let index = KoreanVoiceSelection.preferredIndex(in: catalog) else {
             fail("한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요."); return
         }
+        let voice = installed[index]
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
             let utterance = AVSpeechUtterance(string: text)
             utterance.voice = voice; utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+            utterance.prefersAssistiveTechnologySettings = true
+#if DEBUG
+            if NativeJourneyFixture.realPlayback {
+                // This is the requested utterance voice, not proof of the
+                // effective accessibility output or what a person heard.
+                NativeJourneyFixture.recordRequestedPlaybackVoice(
+                    inventory: installed.filter { $0.language == "ko-KR" }.map { ["identifier": $0.identifier, "language": $0.language, "platform_quality_raw": String($0.quality.rawValue), "platform_traits_raw": String($0.voiceTraits.rawValue)] },
+                    requested: utterance.voice.map { ["identifier": $0.identifier, "language": $0.language, "platform_quality_raw": String($0.quality.rawValue), "platform_traits_raw": String($0.voiceTraits.rawValue)] },
+                    prefersAssistiveTechnologySettings: utterance.prefersAssistiveTechnologySettings)
+            }
+#endif
             utteranceID = ObjectIdentifier(utterance)
             status = "답변을 읽고 있어요. 마이크는 꺼져 있어요."
             record(.playbackQueued)
             speaker.speak(utterance)
         } catch { fail("답변을 읽지 못했어요. 화면에서 확인해 주세요.") }
+    }
+    private static func quality(_ voice: AVSpeechSynthesisVoice) -> KoreanVoiceSelection.Quality {
+        switch voice.quality {
+        case .premium: return .premium
+        case .enhanced: return .enhanced
+        case .default: return .standard
+        @unknown default: return .unknown
+        }
     }
 #if DEBUG
     func finishFixturePlayback() {
