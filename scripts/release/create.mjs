@@ -5,6 +5,7 @@
 //
 // smoke FAIL    → the smoke-failure issue of this version: a new one, or a comment on the open one. No tag, no PR.
 // smoke NOT_RUN → stop, unless --accept-not-run (the release PR then says NOT_RUN in its smoke section).
+// open issue labeled release-blocker (Studio, Service, Lab) → nothing created (release-blockers.mjs).
 // smoke PASS    → rc tag on the candidate (its annotation makes the builds embed the final version, #3172), the rc builds, branch release/<version> adding
 //                 releases/<version>.md, and the release PR (or, for a later rc of the same version,
 //                 the existing PR updated with a comment). Then the open smoke-failure issues of this
@@ -15,6 +16,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {assertManagedCandidateSupport, buildDispatches, buildTagMessage} from './build-contract.mjs';
+import {checkBlockers} from './release-blockers.mjs';
 
 // The title release-cut.mjs gives the smoke-failure issue. Matched exactly: other issues are not ours to close.
 const SMOKE_ISSUE_TITLE = /^Smoke failed — release (v\d{4}\.\d+\.\d+) stopped$/;
@@ -135,6 +137,21 @@ function main() {
   if (releasePrToken) {
     pr = (...a) => execFileSync('gh', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: {...process.env, GH_TOKEN: releasePrToken}}).trim();
   }
+  // An open release-blocker issue in Studio, Service or Lab stops the cut before the rc tag (fail closed),
+  // after the local identity checks and before any GitHub write.
+  // A smoke FAIL still files its issue.
+  if (decision.steps.includes('tag')) {
+    const blockers = checkBlockers();
+    if (!blockers.allow) {
+      say(`Nothing created: the release is blocked.`);
+      blockers.reasons.forEach(say);
+      say('Fix and close each release-blocker issue, then run release-cut again.');
+      finish(summary);
+      process.exit(1);
+    }
+    say('No open release-blocker issue in Studio, Service or Lab.');
+  }
+
   let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
   if (dispatches.length && values['managed-draft']) {
     const original = fs.readFileSync(prBodyFile, 'utf8');

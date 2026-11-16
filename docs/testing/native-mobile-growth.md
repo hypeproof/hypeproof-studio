@@ -27,6 +27,13 @@ No second tap, longer answer timeout or direct handler invocation can substitute
 for that input. Synthetic speech verifies the native input/controller path;
 physical Korean recognition remains a separate device check.
 
+The shared iPhone sign-in journey also uses one padded-corner touch on the login
+pill, then retains the original visible account-opening and completed-login
+assertions (#4236). No handler invocation, second touch or extended login wait is
+allowed. The preserved failed center touch did not enter the login action; a
+passing corner-touch check establishes the full-pill interaction contract, not
+the unproved cause of that earlier event loss.
+
 MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
 a confirmation sheet or manual next-turn tap prove only the previous behavior
 and cannot satisfy these revised cases. Android alignment remains open under
@@ -508,6 +515,17 @@ Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
 `NativeTeamModelTest.java`, `TeamEntryJourneyTest.java`, `AccountPushTests.swift`,
 `NativePushTest.java`. A fixture name or compiled APK alone is not
 an executed native journey. Report the actual run and any missing physical/provider evidence.
+
+For #4236, extend the existing MENT-T01/T02 question-answer journeys through the
+confirmed receipt: observe the visible next-question action, record unchanged GET,
+answer and trigger counts before the tap, tap once, then observe one new card GET
+and either a different card or the empty-inbox choices. Retain before/after screenshots
+and verify the original conversation draft after Close. The bounded fixtures consume
+the answered card rather than returning it forever. Controller controls cover read
+failure, uncertain answer, duplicate in-flight reads and identity invalidation; none
+may retransmit the answer. A successful skip remains distinct from a confirmed answer.
+Desktop render/host controls and native simulator/emulator execution are separate;
+unexecuted native journeys and physical/live-account acceptance remain NOT RUN.
 
 Capability controls must exercise unavailable/error/account-switch metadata as
 well as available-but-declined consent. Both the visible choice and controller

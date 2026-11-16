@@ -23,7 +23,7 @@ public class NativeTeamModelTest {
         final ReflectionModelTest.Queue worker=new ReflectionModelTest.Queue();final Deque<Runnable> ui=new ArrayDeque<>();final Disk disk=new Disk();
         final AtomicReference<NativeDeviceSignIn.Credentials> account=new AtomicReference<>(new NativeDeviceSignIn.Credentials("A","session-A","test-access","test-refresh",System.currentTimeMillis()+3600000));
         final List<String> requests=new CopyOnWriteArrayList<>();final List<JSONObject> answers=new CopyOnWriteArrayList<>(),decisions=new CopyOnWriteArrayList<>();
-        volatile int capabilityStatus=200;volatile boolean capabilityMalformed;volatile String malformedTrigger;volatile boolean wrongSession,uncertain,changedDigest,emptyQuestions,lostTrigger;volatile int attempt=1;volatile JSONObject served;final NativeTeamModel model;final DeviceSignInHttp http;
+        volatile int capabilityStatus=200;volatile boolean capabilityMalformed;volatile String malformedTrigger;volatile boolean failQuestionRead,lostAnswer,wrongSession,uncertain,changedDigest,emptyQuestions,lostTrigger;volatile int attempt=1;volatile JSONObject served;final NativeTeamModel model;final DeviceSignInHttp http;
         final List<JSONObject> triggers=new CopyOnWriteArrayList<>();
         Harness()throws Exception{
             served=approval();server=new TestHttpServer(exchange->{
@@ -32,10 +32,10 @@ public class NativeTeamModelTest {
                 JSONObject out;int code=200;
                 if(path.equals("/me"))out=new JSONObject().put("account",new JSONObject().put("id","A").put("status","active").put("display_name","지윤")).put("session_id",wrongSession?"other-session":"session-A");
                 else if(path.equals("/me/product-events/consent")){code=capabilityStatus;out=new JSONObject().put("schema",capabilityMalformed?"bad":"hps-product-consent/1").put("notice_version","team-ux/1").put("title","사용 경험 공유").put("notice","거절해도 질문을 사용할 수 있어요").put("preference",new JSONObject().put("notice_version","team-ux/1").put("granted",0));}
-                else if(path.equals("/me/cards")){assertEquals("/v1/me/cards?surface=mobile",exchange.path);out=new JSONObject().put("card",emptyQuestions?JSONObject.NULL:question().put("attempt",attempt));}
+                else if(path.equals("/me/cards")){if(failQuestionRead)code=503;assertEquals("/v1/me/cards?surface=mobile",exchange.path);out=new JSONObject().put("card",emptyQuestions?JSONObject.NULL:question().put("attempt",attempt));}
                 else if(path.equals("/me/question-triggers")){JSONObject body=new JSONObject(new String(exchange.body,StandardCharsets.UTF_8));assertTrue(body.get("source_revision") instanceof Number);assertEquals(1,body.getInt("source_revision"));assertEquals(body.getString("id"),body.getString("source_id"));assertEquals(UUID.fromString(body.getString("id")).toString(),body.getString("id"));triggers.add(body);if(lostTrigger){code=503;}else emptyQuestions=false;out=new JSONObject().put("schema","hps-question-trigger/1").put("key","growth:choice-a").put("source",new JSONObject().put("kind","choice").put("id",body.getString("id")).put("revision",1)).put("reentry",new JSONObject().put("method","GET").put("path","/v1/me/cards")).put("model_calls",0).put("policy","team-question/1").put("created",true);if(malformedTrigger!=null)switch(malformedTrigger){case "policy"->out.put("policy","unreviewed/2");case "created"->out.put("created",1);case "key"->out.put("key","pmf:other");default->out.remove(malformedTrigger);}}
                 else if(path.endsWith("/shown"))out=new JSONObject().put("ok",true);
-                else if(path.endsWith("/answer")){JSONObject body=new JSONObject(new String(exchange.body,StandardCharsets.UTF_8));answers.add(body);out=new JSONObject().put("ok",true).put("thanks","선택한 생각을 남겼어요");}
+                else if(path.endsWith("/answer")){JSONObject body=new JSONObject(new String(exchange.body,StandardCharsets.UTF_8));answers.add(body);if(lostAnswer)code=503;out=new JSONObject().put("ok",true).put("thanks","선택한 생각을 남겼어요");}
                 else if(path.equals("/me/approval-inbox"))out=new JSONObject().put("schema","hps-member-approval-inbox/1").put("availability","ready").put("cards",new JSONArray().put(served));
                 else if(path.endsWith("/decisions")){
                     JSONObject body=new JSONObject(new String(exchange.body,StandardCharsets.UTF_8));
@@ -60,6 +60,22 @@ public class NativeTeamModelTest {
             h.model.words="직접 쓴 답";h.model.choice="method";h.model.answer(h.account.get(),"continue",null,false);h.finish();
             assertEquals(1,h.answers.size());assertEquals("직접 쓴 답",h.answers.get(0).getString("text"));assertEquals("method",h.answers.get(0).getString("choice"));assertEquals("mobile",h.answers.get(0).getString("surface"));assertNull(h.model.question);assertEquals("선택한 생각을 남겼어요",h.model.message);
             assertTrue(h.requests.stream().noneMatch(x->x.contains("reflection")||x.endsWith("/decisions")));
+        }
+    }
+    @Test public void confirmedAnswerWaitsForExplicitReadAndFailureCannotReplay()throws Exception{
+        try(Harness h=new Harness()){
+            h.model.questions(h.account.get());h.finish();h.model.choice="method";
+            h.model.answer(h.account.get(),"continue",null,false);h.finish();assertTrue(h.model.answerConfirmed);
+            assertEquals(1,h.requests.stream().filter(x->x.equals("GET /me/cards")).count());assertTrue(h.worker.tasks.isEmpty());
+            h.emptyQuestions=true;h.failQuestionRead=true;h.model.questions(h.account.get());h.model.questions(h.account.get());h.finish();
+            assertFalse(h.model.answerConfirmed);assertEquals(1,h.answers.size());assertEquals(2,h.requests.stream().filter(x->x.equals("GET /me/cards")).count());
+            h.failQuestionRead=false;h.model.questions(h.account.get());h.finish();assertTrue(h.model.canStart);assertEquals(1,h.answers.size());assertTrue(h.triggers.isEmpty());
+        }
+        try(Harness h=new Harness()){
+            h.model.questions(h.account.get());h.finish();h.model.words="사라지면 안 되는 답";h.model.choice="method";h.lostAnswer=true;
+            h.model.answer(h.account.get(),"continue",null,false);h.finish();assertFalse(h.model.answerConfirmed);assertNull(h.model.question);
+            h.model.questions(h.account.get());h.finish();assertEquals(1,h.answers.size());assertEquals("사라지면 안 되는 답",h.model.words);
+            h.model.invalidate();assertFalse(h.model.answerConfirmed);
         }
     }
     @Test public void wrongSessionAndLateOtherAccountCannotPopulateHome()throws Exception{

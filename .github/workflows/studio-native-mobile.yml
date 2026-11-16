@@ -4,7 +4,6 @@ on:
     branches: ['main']
     paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
   pull_request:
-    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,7 +11,57 @@ concurrency:
   group: studio-native-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  scope:
+    name: native / scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_native: ${{ steps.scope.outputs.run_native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify native scope from trusted base
+        id: scope
+        env:
+          NATIVE_EVENT: ${{ github.event_name }}
+          NATIVE_BASE: ${{ github.event.pull_request.base.sha || github.sha }}
+          NATIVE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          NATIVE_CHECKOUT: ${{ github.sha }}
+        run: |
+          trusted="$RUNNER_TEMP/native-merge-control"
+          mkdir -p "$trusted"
+          git show "$NATIVE_BASE:apps/studio-native/scripts/verify-native-candidate.py" > "$trusted/verify-native-candidate.py"
+          receipt="$RUNNER_TEMP/native-merge-scope.json"
+          if git cat-file -e "$NATIVE_BASE:apps/studio-native/scripts/native-merge-gate.py" 2>/dev/null; then
+            git show "$NATIVE_BASE:apps/studio-native/scripts/native-merge-gate.py" > "$trusted/native-merge-gate.py"
+            python3 "$trusted/native-merge-gate.py" scope --event "$NATIVE_EVENT" --base "$NATIVE_BASE" --head "$NATIVE_HEAD" --checkout "$NATIVE_CHECKOUT" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --receipt "$receipt" --output "$receipt"
+          else
+            # The introducing PR cannot exempt itself with candidate-authored code.
+            python3 - "$trusted/verify-native-candidate.py" "$receipt" <<'PYBOOT'
+          import importlib.util, json, os, sys
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('identity', sys.argv[1]); identity = importlib.util.module_from_spec(spec); spec.loader.exec_module(identity)
+          source = identity.source_identity(Path.cwd())
+          if source['checkout_sha'] != identity.sha(os.environ['NATIVE_CHECKOUT']): raise SystemExit('Wrong checkout')
+          value = identity.identity_document(source, os.environ['NATIVE_HEAD'], int(os.environ['GITHUB_RUN_ID']), int(os.environ['GITHUB_RUN_ATTEMPT']))
+          value.update(schema='hps-native-merge-bootstrap/1', base_sha=identity.sha(os.environ['NATIVE_BASE']), event=os.environ['NATIVE_EVENT'], decision='FULL')
+          Path(sys.argv[2]).write_text(json.dumps(value, sort_keys=True) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output: output.write('run_native=true\n')
+          print('FULL: trusted native scope classifier not yet on base')
+          PYBOOT
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-native-merge-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-merge-scope.json
+          if-no-files-found: error
+          retention-days: 14
   contract:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.run_native != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -107,4 +156,70 @@ jobs:
             apps/studio-native/android/app/build/reports/
             apps/studio-native/android/app/build/outputs/androidTest-results/
             apps/studio-native/evidence/android/
+          retention-days: 14
+  acceptance:
+    name: native / acceptance
+    if: always()
+    needs: [scope, contract, ios, android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: studio-native-merge-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-merge-scope
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.scope.outputs.run_native != 'false' }}
+        with:
+          name: studio-native-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-merge-candidate
+      - name: Verify exact native scope and existing job results
+        if: always()
+        env:
+          NATIVE_EVENT: ${{ github.event_name }}
+          NATIVE_BASE: ${{ github.event.pull_request.base.sha || github.sha }}
+          NATIVE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          NATIVE_CHECKOUT: ${{ github.sha }}
+          NATIVE_SELECTED: ${{ needs.scope.outputs.run_native }}
+          NATIVE_RESULTS: '{"scope":"${{ needs.scope.result }}","contract":"${{ needs.contract.result }}","ios":"${{ needs.ios.result }}","android":"${{ needs.android.result }}"}'
+        run: |
+          trusted="$RUNNER_TEMP/native-merge-control"
+          mkdir -p "$trusted"
+          git show "$NATIVE_BASE:apps/studio-native/scripts/verify-native-candidate.py" > "$trusted/verify-native-candidate.py"
+          receipt="$RUNNER_TEMP/native-merge-scope/native-merge-scope.json"
+          candidate="$RUNNER_TEMP/native-merge-candidate/native-candidate.json"
+          output="$RUNNER_TEMP/native-merge-acceptance.json"
+          if git cat-file -e "$NATIVE_BASE:apps/studio-native/scripts/native-merge-gate.py" 2>/dev/null; then
+            git show "$NATIVE_BASE:apps/studio-native/scripts/native-merge-gate.py" > "$trusted/native-merge-gate.py"
+            args=()
+            if [ "$NATIVE_SELECTED" != 'false' ]; then args=(--candidate "$candidate"); fi
+            python3 "$trusted/native-merge-gate.py" verify --event "$NATIVE_EVENT" --base "$NATIVE_BASE" --head "$NATIVE_HEAD" --checkout "$NATIVE_CHECKOUT" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --receipt "$receipt" --results "$NATIVE_RESULTS" --output "$output" "${args[@]}"
+          else
+            python3 - "$trusted/verify-native-candidate.py" "$receipt" "$candidate" "$output" <<'PYBOOT'
+          import importlib.util, json, os, sys
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('identity', sys.argv[1]); identity = importlib.util.module_from_spec(spec); spec.loader.exec_module(identity)
+          source = identity.source_identity(Path.cwd())
+          if source['checkout_sha'] != identity.sha(os.environ['NATIVE_CHECKOUT']): raise SystemExit('Wrong checkout')
+          expected = identity.identity_document(source, os.environ['NATIVE_HEAD'], int(os.environ['GITHUB_RUN_ID']), int(os.environ['GITHUB_RUN_ATTEMPT']))
+          expected.update(schema='hps-native-merge-bootstrap/1', base_sha=identity.sha(os.environ['NATIVE_BASE']), event=os.environ['NATIVE_EVENT'], decision='FULL')
+          results = json.loads(os.environ['NATIVE_RESULTS'])
+          if results != dict(scope='success', contract='success', ios='success', android='success') or json.loads(Path(sys.argv[2]).read_text()) != expected: raise SystemExit('First adoption requires exact scope and all native jobs succeeding')
+          candidate = json.loads(Path(sys.argv[3]).read_text())
+          identity.verify_identity(candidate, source, dict(head_sha=os.environ['NATIVE_HEAD'], id=int(os.environ['GITHUB_RUN_ID']), run_attempt=int(os.environ['GITHUB_RUN_ATTEMPT'])))
+          if candidate['checkout_sha'] != source['checkout_sha']: raise SystemExit('Wrong native candidate checkout')
+          Path(sys.argv[4]).write_text(json.dumps(dict(schema='hps-native-merge-acceptance/1', verdict='PASS', scope=expected, jobs=results, native_execution='PASS', release_authorization='NOT_GRANTED'), sort_keys=True) + '\n')
+          print('PASS: existing contract, iOS and Android jobs succeeded for this source/run/attempt')
+          PYBOOT
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-native-merge-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-merge-acceptance.json
+          if-no-files-found: ignore
           retention-days: 14

@@ -140,6 +140,8 @@ REQ-CGPV-42 status (2026-11-16, CGP-VOICE-R-029): implemented in Studio. One tip
 
 REQ-CGPV-43 status (2026-11-14, CGP-VOICE-R-030): implemented in Studio. While the automatic voice conversation has a live session, its task's rail row shows "음성 대화 중" (an icon plus words, and the row name ends with them). The marker is removed when the session stops, after the microphone is released, and it never shows when voice is not served. Requirement: `docs/studio-requirements.md` "Voice session marker in the task rail".
 
+REQ-CGPV-22 status (2026-11-16, CGP-VOICE-R-018): implemented in Studio. A 시작·끝 소리 내기 switch, off by default and kept per seat, plays one short start and one end sound per dictation and per voice conversation session. Nothing plays while the window's sound is off, and the coach's read-aloud never makes one. Requirement: `docs/studio-requirements.md` "Start and end sounds"; choices: `decisions/CGP-VOICE-R-018.md`.
+
 ## 3. Design requirements
 
 | DES ID | Visual/interaction requirement | Acceptance (measurable) |

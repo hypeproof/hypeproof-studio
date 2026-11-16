@@ -323,6 +323,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { LESSON_TIPS_KEY, LessonTipsPreference } from "./lessonTips";
 import { VOICE_TIP_KEY, voiceTipDue, voiceTipStore, withVoiceTipSeen } from "./voiceTip";
+import { VOICE_SOUNDS_KEY, VoiceSoundsPreference } from "./voiceSounds";
 import { MIC_INPUT_KEY, readMicChoice, writeMicChoice } from "./micInput";
 import { VOICE_CONVERSATION_MODE_KEY, readConversationMode, writeConversationMode } from "./voiceConversationMode";
 import { RunFailureTracker, hintSeatFor, joinTurnContext } from "./runFailureHint";
@@ -5836,6 +5837,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return next ? "stored" : "memory-only";
   }
 
+  /** CGP-VOICE-R-018 — turn this seat's start and end sounds on or off and refresh the chat. Same results as setLessonTips. */
+  async setVoiceSounds(on: unknown): Promise<"stored" | "memory-only" | "refused"> {
+    if (typeof on !== "boolean") return "refused";
+    const next = this.voiceSounds.write(this.context.globalState.get(VOICE_SOUNDS_KEY), on);
+    if (next) await this.context.globalState.update(VOICE_SOUNDS_KEY, next);
+    await this.postConfig();
+    return next ? "stored" : "memory-only";
+  }
+
   refreshConfig(): Promise<void> {
     return (async () => {
       await this.postConfig();
@@ -9542,6 +9552,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.globalState.update(TEXT_SIZE_KEY, normalizeTextSize(msg.size));
         await this.postConfig();
         return;
+      case "setVoiceSounds":
+        // CGP-VOICE-R-018 — a personal sensory choice, kept per seat like 팁 보기; an empty seat keeps it in memory only.
+        if (typeof msg.on !== "boolean") return;
+        await this.setVoiceSounds(msg.on);
+        return;
       case "setLessonTips":
         // CGP-SHELL-R-019 — one learner's choice, kept per seat on this computer (shared classroom PCs); an
         // empty seat keeps it in memory only. Written only from a boolean; nothing leaves this computer.
@@ -12451,6 +12466,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try { await this.context.globalState.update(VOICE_TIP_KEY, withVoiceTipSeen(this.context.globalState.get(VOICE_TIP_KEY), seat)); } catch { /* the tip stays closed here */ }
   }
   private get lessonTips(): LessonTipsPreference { return this.lessonTipsPref ??= new LessonTipsPreference(); }
+  private voiceSoundsPref: VoiceSoundsPreference | undefined;
+  /** CGP-VOICE-R-018 — lazy, like lessonTips, so a harness-built provider (Object.create) never throws. */
+  private get voiceSounds(): VoiceSoundsPreference { return this.voiceSoundsPref ??= new VoiceSoundsPreference(); }
   /** CGP-SHELL-R-019 — failed runs per lesson step, this window only (memory; nothing stored or sent but the observation). */
   private runFailuresTracker: RunFailureTracker | undefined;
   private get runFailures(): RunFailureTracker { return this.runFailuresTracker ??= new RunFailureTracker(); }
@@ -12570,6 +12588,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
     this.lessonTips.forSeat(tipsSeat);
+    this.voiceSounds.forSeat(tipsSeat);
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
@@ -12616,6 +12635,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
         lessonTips: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
+        voiceSounds: this.voiceSounds.on(this.context.globalState?.get(VOICE_SOUNDS_KEY)),
         // CGP-VOICE-R-019 — only when a microphone was chosen: the default config is unchanged.
         ...(micInput ? { micInput } : {}),
         // CGP-VOICE-R-026 — only when push-to-talk was chosen: the default config is unchanged.

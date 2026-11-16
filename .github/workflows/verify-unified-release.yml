@@ -47,6 +47,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          # Kill switch for the automatic route (hps-auto-release/1); only "on" enables it.
+          RELEASE_AUTO: ${{ vars.RELEASE_AUTO }}
         run: node scripts/release/publish-gate.mjs --tag "$TAG"
       # Which OS packages to wait for, test and require comes from the tag's own
       # config/release-platforms.json (scripts/release/platforms.mjs). Mac only
@@ -412,6 +414,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          # Kill switch for the automatic route (hps-auto-release/1); only "on" enables it.
+          RELEASE_AUTO: ${{ vars.RELEASE_AUTO }}
         run: node scripts/release/publish-gate.mjs --tag "$TAG" --summary dist/publish-gate.json
       - name: Keep the publish gate record
         if: always()

@@ -148,7 +148,7 @@ final class StudioJourneyTests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
     }
-    @MainActor private func tapVoiceTargetOnce(_ id: String, app: XCUIApplication) {
+    @MainActor private func tapComposerTargetOnce(_ id: String, app: XCUIApplication) {
         let button = app.buttons[id]
         enabled(button)
         let frame = button.frame
@@ -157,9 +157,9 @@ final class StudioJourneyTests: XCTestCase {
         observation.name = id + "-single-edge-tap"; observation.lifetime = .keepAlways; add(observation)
         XCTAssertGreaterThanOrEqual(frame.width, 44)
         XCTAssertGreaterThanOrEqual(frame.height, 44)
-        XCTAssertTrue(app.frame.contains(frame), "The complete voice target must stay inside the app window.")
+        XCTAssertTrue(app.frame.contains(frame), "The complete composer target must stay inside the app window.")
         XCTAssertTrue(button.isHittable)
-        // One real touch in the padded corner, outside the old 18x21pt glyph.
+        // One real touch in the padded corner, outside the icon or text glyph.
         // The caller must still prove its original draft/reply/continuation result.
         point.tap()
     }
@@ -168,7 +168,7 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
     }
     @MainActor private func signIn(_ app: XCUIApplication) {
-        let start = app.buttons["linkDesktop"]; enabled(start); start.tap()
+        tapComposerTargetOnce("linkDesktop", app: app)
         _ = field(app)
         XCTAssertTrue(app.staticTexts["reflectionOpening"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["accountCancel"].exists, "Successful account adoption must finish the login state.")
@@ -416,7 +416,7 @@ final class StudioJourneyTests: XCTestCase {
     @MainActor func testDictationEditsDraftThenSendGetsReplyWithoutDesktop() throws {
         let app = launch("first-answer"); signIn(app)
         let input = field(app); input.tap(); input.typeText("My existing thought")
-        tapVoiceTargetOnce("sharedDictate", app: app)
+        tapComposerTargetOnce("sharedDictate", app: app)
         valueContains(field(app), "I want to understand my next step")
         enabled(app.buttons["sharedSend"])
         XCTAssertTrue((field(app).value as? String)?.contains("My existing thought") == true)
@@ -444,7 +444,7 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor func testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry() throws {
         let app = launch("voice-empty-results"); signIn(app)
-        tapVoiceTargetOnce("sharedVoice", app: app)
+        tapComposerTargetOnce("sharedVoice", app: app)
         answer(app) // Old code clears the useful partial and never submits this first turn.
         waitForVoiceEvent("noSpeechPaused", in: app)
         let result = try trace(app)

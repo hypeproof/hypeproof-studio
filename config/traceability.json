@@ -18015,6 +18015,9 @@
         },
         {
           "path": "release.json"
+        },
+        {
+          "path": "apps/studio-native/scripts/native-merge-gate.py"
         }
       ]
     },
@@ -18098,6 +18101,12 @@
         },
         {
           "path": "apps/studio-native/tests/test_ios_cleanup.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_merge_gate.py"
+        },
+        {
+          "path": "docs/testing/native-merge-acceptance.md"
         }
       ]
     },
@@ -20347,6 +20356,71 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/VoiceTip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-VOICE-EARCONS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Start and end sounds (CGP-VOICE-R-018)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-EARCONS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-EARCONS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-sounds-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-earcons-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-EARCONS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-EARCONS",
+        "ST-TEST-VOICE-EARCONS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voiceSounds.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceEarcons.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoiceEarcons.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DictationControl.tsx"
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
