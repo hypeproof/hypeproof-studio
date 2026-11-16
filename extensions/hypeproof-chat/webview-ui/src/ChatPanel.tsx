@@ -76,6 +76,7 @@ import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
 import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
 import { LessonSettingsChangeLine, useLessonSettingsAnnouncement } from './LessonSettingsChange';
 import { AccessControl, requiresFundingSelection } from './AccessControl';
+import { BudgetRequestCard } from './BudgetRequestCard';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -2634,8 +2635,11 @@ export function ChatPanel(props: Props) {
           onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
           onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
-          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
+          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}
+          request={config && <BudgetRequestCard config={config} post={postToHost} />}>
         </ActivityStatus>}
+        {/* CGP-SHELL-R-030 — too low to send but not yet out: the same card above the composer (it draws nothing otherwise). */}
+        {!statusScreen && config && <BudgetRequestCard config={config} post={postToHost} />}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}

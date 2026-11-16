@@ -23,7 +23,9 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
  useEffect(()=>{if(collapseKey)setExpanded(false);},[collapseKey]);
  if(config.localSubscription===true)return <p className="hps-access-muted">이 대화의 AI 사용량은 연결한 로컬 계정의 구독에 적용돼요. 서버 이용권은 사용하지 않아요.</p>;
  if(!a)return null;
- const label=<>이용권 · 사용량 {config.profile?.automations?.enabled ? (a.status==='unknown'?'· 미확인':'') : choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</>;
+ // CGP-SHELL-R-030 (Jay, 2026-11-16): a minor seat sees no token or meter figures, only the state in words.
+ const minor=minorAccessSeat(config,choice);
+ const label=<>이용권 · 사용량 {config.profile?.automations?.enabled ? (a.status==='unknown'?'· 미확인':'') : choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{!minor&&choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</>;
  const content=<>
   {a.status==='unknown'&&<p role="status">이용권과 사용량을 확인하지 못했습니다. 이전 잔액으로 실행 가능 여부를 판단하지 않습니다.</p>}
   {view?.configured===false&&<p>{config.activity?.free?'무료 사용의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.':'현재 연결은 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.'}</p>}
@@ -37,11 +39,13 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
   {choice&&<>
    {config.profile?.model_selection?.choices.some(c=>c.alias===config.model&&!choice.allowed.models.includes(c.id))&&<p role="status">선택한 모델은 이 이용권에 포함되지 않습니다. 모델을 직접 변경해 주세요.</p>}
    <p><strong>{stateLabels[choice.state]??'상태 미확인'}</strong> · {new Date(choice.ends_at).toLocaleDateString()}까지</p>
+   {minor ? (lowAllowance(choice)&&<p data-minor-usage="">남은 사용량이 얼마 없어요.</p>) : <>
    {choice.resources.map(r=><div className="hps-access-resource" key={r.meter}><strong>{unit(r.meter)} · {amount(r.remaining,r.meter)} 남음</strong>
     <span>{r.shared?'수업·기관과 함께 쓰는 한도':'본인 사용 상한'} · 확인된 내 사용 {amount(r.spent,r.meter)}</span>
     <span>내 예약 {amount(r.held,r.meter)} · 미확인 {r.unresolved}건{r.overrun>0?' · 초과 '+amount(r.overrun,r.meter):''}</span></div>)}
    {choice.resources.some(r=>r.meter.startsWith('currency:'))&&<p className="hps-access-muted">AI 사용을 계산하는 정산 기준이며, 학생이 결제할 금액이나 현금 잔액이 아닙니다.</p>}
    <p className="hps-access-muted">모델·Effort·도구에 따라 사용량이 달라집니다. 응답이 끊기면 비용을 확인할 때까지 예약이 남을 수 있습니다.</p>
+   </>}
    <p>한도에 도달해도 중지, 기존 파일과 결과 열람·내보내기는 계속할 수 있습니다.</p>
    {choice.pending_request&&<p role="status"><span className="hps-budget-request-state">{choice.pending_request.state==='pending'?'요청함 · 강사 검토 대기':'요청 처리 · '+(choice.pending_request.resolution??'처리 내용 미확인')}</span></p>}
    {a.status==='ready'&&choice.can_request&&choice.pending_request?.state!=='pending'&&(choice.request_policy===undefined
@@ -65,6 +69,14 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
 }
 
 /**
+ * CGP-SHELL-R-030 (Jay, 2026-11-16) — a minor seat: the profile says so, or the Service's request policy allows no note
+ * (it is decided per seat on the Service, with an unresolvable profile counted as a minor's).
+ */
+export function minorAccessSeat(config:ChatConfig,choice?:AccessChoiceView|null):boolean{
+ return config.profile?.minor_cohort===true||choice?.request_policy?.note===false;
+}
+
+/**
  * DES-SHELL-29: the request sits inside the low-allowance notice, at 10% or less of any metered allowance or when the
  * choice is exhausted. (The older form without a Service policy keeps showing whenever a request is possible.)
  */
@@ -76,7 +88,7 @@ export function lowAllowance(choice:AccessChoiceView):boolean{
  * CGP-SHELL-R-030: the Service names the fixed reasons, whether this seat may also write a note (never on a minor
  * seat) and when the next request is accepted. A minor seat must pick a reason; an adult may pick, write, both or neither.
  */
-function PolicyRequestForm({policy,post}:{policy:BudgetRequestPolicy;post:(m:WebviewMessage)=>void}){
+export function PolicyRequestForm({policy,post,submitLabel='선생님께 더 요청하기',onCancel}:{policy:BudgetRequestPolicy;post:(m:WebviewMessage)=>void;submitLabel?:string;onCancel?:()=>void}){
  const [reason,setReason]=useState<string|null>(null),[note,setNote]=useState('');const composing=useRef(false);const counter=useId(),wait=useId();
  // The clock is read on every render (a new policy may arrive at any time); the timer only re-renders at the end.
  const [,setTick]=useState(0);
@@ -94,8 +106,9 @@ function PolicyRequestForm({policy,post}:{policy:BudgetRequestPolicy;post:(m:Web
    onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
    onKeyDown={e=>{if(e.key==='Enter'&&(composing.current||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229))e.preventDefault();}}/></label>
    <small id={counter}>{note.length} / {policy.note_max}자</small></>}
-  {cooling&&<p id={wait} role="status">방금 요청했어요. {new Date(until!).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} 이후에 다시 요청할 수 있어요.</p>}
-  <button type="submit" disabled={disabled} aria-describedby={cooling?wait:undefined}>선생님께 더 요청하기</button>
+  {cooling&&<p id={wait} role="status">방금 요청했어요. {new Date(until!).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 이후에 다시 요청할 수 있어요.</p>}
+  <button type="submit" disabled={disabled} aria-describedby={cooling?wait:undefined}>{submitLabel}</button>
+  {onCancel&&<button type="button" className="hp-cta-quiet" onClick={onCancel}>취소</button>}
  </form>;
 }
 
