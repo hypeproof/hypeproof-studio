@@ -9,6 +9,9 @@
 // a case in cases.yaml whose
 //   - origin.ref names the PR or the closed issue (#N), or
 //   - automated_by names a test file this PR adds.
+// A case already present at the PR head whose origin.ref names the closed issue also counts
+// (#4304): the issue already has its case, usually from the fix PR, and a release PR that
+// lists that fix as "closes #N" must not need a second one.
 // Escape hatch: the label `no-casebook-needed` together with a body line
 // `No casebook: <reason>`. Its use is logged (annotation + job summary).
 // PRs are merged by a bot with no human reviewer, so this check is the reviewer.
@@ -54,8 +57,9 @@ export function changedCases(baseCases = [], headCases = []) {
 const refNumbers = ref => [...String(ref ?? '').matchAll(/#(\d+)/g)].map(m => Number(m[1]));
 
 // Pure decision. Every input is already fetched.
-//   issues: [{number, labels, isPr}] closed by the PR; changed: changedCases(); addedFiles: paths the PR adds
-export function decide({pr, body = '', labels = [], issues = [], changed = [], addedFiles = []}) {
+//   issues: [{number, labels, isPr}] closed by the PR; changed: changedCases(); addedFiles: paths the PR adds;
+//   present: every case at the PR head
+export function decide({pr, body = '', labels = [], issues = [], changed = [], addedFiles = [], present = []}) {
   const escaped = issues.filter(i => !i.isPr && isEscaped(i.labels));
   if (!escaped.length) {
     return {ok: true, route: 'not-escaped', reasons: [issues.length
@@ -68,8 +72,11 @@ export function decide({pr, body = '', labels = [], issues = [], changed = [], a
   for (const issue of escaped) {
     const byRef = changed.filter(c => refNumbers(c.origin?.ref).some(n => n === issue.number || n === pr));
     const byTest = changed.filter(c => c.automated_by && added.has(String(c.automated_by).trim()));
+    // Only the issue number counts for an existing case: an old case naming this PR's number is a coincidence.
+    const existing = present.filter(c => refNumbers(c.origin?.ref).includes(issue.number));
     if (byRef.length) hits.push(`#${issue.number}: ${byRef.map(c => c.id).join(', ')} (origin.ref ${byRef.map(c => c.origin.ref).join(', ')})`);
     else if (byTest.length) hits.push(`#${issue.number}: ${byTest.map(c => c.id).join(', ')} (automated_by ${byTest.map(c => c.automated_by).join(', ')}, added here)`);
+    else if (existing.length) hits.push(`#${issue.number}: ${existing.map(c => c.id).join(', ')} already in ${CASEBOOK} (origin.ref ${existing.map(c => c.origin.ref).join(', ')})`);
     else missing.push(issue.number);
   }
   if (!missing.length) return {ok: true, route: 'case', reasons: hits};
@@ -120,11 +127,12 @@ export function gather({repo, pr}) {
   const files = api(`repos/${repo}/pulls/${pr}/files?per_page=100`);
   const addedFiles = files.filter(f => f.status === 'added').map(f => f.filename);
   let changed = [];
+  const present = issues.some(i => !i.isPr && isEscaped(i.labels)) ? casesAt(repo, p.head.sha) : [];
   if (files.some(f => f.filename === CASEBOOK)) {
     const mergeBase = one(`repos/${repo}/compare/${p.base.sha}...${p.head.sha}`).merge_base_commit.sha;
-    changed = changedCases(casesAt(repo, mergeBase), casesAt(repo, p.head.sha));
+    changed = changedCases(casesAt(repo, mergeBase), present);
   }
-  return {pr, body: p.body ?? '', labels: p.labels.map(l => l.name), issues, changed, addedFiles};
+  return {pr, body: p.body ?? '', labels: p.labels.map(l => l.name), issues, changed, addedFiles, present};
 }
 
 function main() {

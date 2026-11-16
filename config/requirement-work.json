@@ -990,7 +990,7 @@
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "c72a20b19226429a14ce02bbcf064b5a656bf46a322161d043b0497ce014c8b2",
+      "sha256": "39d284c99fe45384cc922b44ce976007ab100bc8f7215167194e0ee48ef71b26",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4843,6 +4843,38 @@
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "ios-installed-korean-voice",
+      "title": "Prefer installed high-quality Korean reply voices",
+      "issue": 4307,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MVOICE-03",
+            "MVOICE-04",
+            "MVOICE-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Implement installed Korean voice quality selection and observe the existing real OS playback journey; physical naturalness remains separate from source and simulator evidence.",
+      "design_delta": "Use available exact Korean standard-purpose voices in premium/enhanced/default order with stable ties and conservative unknown fallback; exclude novelty/personal voices from the automatic default while respecting active assistive-technology settings. Preserve speech rate, text fallback and existing turn/Stop/account guards.",
+      "positive_control": "Basic Korean first and enhanced Korean later select enhanced; installed Korean premium wins; actual OS playback finishes into the same next-capture boundary.",
+      "negative_control": "English, novelty and personal premium voices cannot win; absent eligible Korean voice preserves text fallback; stale playback cannot reopen capture; quality enum cannot substitute for physical listening acceptance.",
+      "evidence_required": "Portable old-policy negative and revised-policy controls, exact-source native real-synthesis journey, independent review; five physical Korean turns and human voice preference remain separately NOT RUN until observed.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/App/NativeJourneyFixture.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
       ]
     },
     {

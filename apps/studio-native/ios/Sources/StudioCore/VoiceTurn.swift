@@ -1,5 +1,41 @@
 import Foundation
 
+/// Select from the device's installed catalog; never infer quality from its order.
+public enum KoreanVoiceSelection {
+    public enum Quality: String, Sendable {
+        case unknown, standard, enhanced, premium
+        fileprivate var rank: Int {
+            switch self {
+            case .unknown: return 0
+            case .standard: return 1
+            case .enhanced: return 2
+            case .premium: return 3
+            }
+        }
+    }
+    public struct Candidate: Sendable {
+        public let language: String
+        public let quality: Quality
+        public let isNovelty: Bool
+        public let isPersonal: Bool
+        public init(language: String, quality: Quality, isNovelty: Bool = false, isPersonal: Bool = false) {
+            self.language = language; self.quality = quality
+            self.isNovelty = isNovelty; self.isPersonal = isPersonal
+        }
+    }
+    public static func preferredIndex(in installed: [Candidate]) -> Int? {
+        var best: Int?
+        for index in installed.indices where installed[index].language == "ko-KR"
+            && !installed[index].isNovelty && !installed[index].isPersonal {
+            // Unknown future qualities remain a last local fallback. Equal
+            // qualities keep their original order rather than changing voices.
+            if let current = best, installed[current].quality.rank >= installed[index].quality.rank { continue }
+            best = index
+        }
+        return best
+    }
+}
+
 /// Client interaction state only. Question selection remains Service-owned.
 public struct VoiceTurn: Equatable, Sendable {
     public enum Mode: Equatable, Sendable { case dictation, conversation }
