@@ -81,6 +81,23 @@ No live config, existing product pins, credentials, worker ownership or deployme
 policy is changed by these files. Onboarding and profile admission remain with
 the existing Foundry owner. Do not restart or replace that worker to run this.
 
+## Measuring native verification latency
+
+Preserve source, runner, test inventory and final receipts when comparing duration.
+Main run `43842465814/1` completed the iOS recipe in 42m09s; run
+`43853610332/1` passed the same 37 UI cases but was cancelled during finalization.
+Its UI suite was faster while build/startup was slower. Neither a cancelled job
+nor `TEST SUCCEEDED` alone qualifies a package, and a longer job allowance is not
+a speed improvement.
+
+Studio #4310 removes redundant existence polling only when a fresh query already
+finds the supported text field/text view or diagnostic node. If absent, the
+original bounded fallback and assertions remain. No element is cached across
+launches; late-event/no-repoll observation windows and all 37 journeys remain.
+Report the actual new helper waits, suite duration and full-recipe result before
+claiming a speedup. The source change and equivalence review do not establish
+native execution or faster CI by themselves.
+
 ## Focused synthetic controls
 
 ```sh
