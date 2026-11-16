@@ -184,5 +184,21 @@ ordering correction, without extending TTL, changing acceptance or adding a
 retry. This source-level hazard is not proof of the historical failure's cause.
 Corrected native execution and physical audio remain unverified.
 
+The ordinary iOS job from the same run was cancelled at its 45-minute bound.
+Its actual log contains 87 passing core controls, 37 passing UI cases (1,573.012
+seconds) and `TEST SUCCEEDED` at 44m53s into the build/test step. Cancellation
+arrived twelve seconds later while evidence finalization was still incomplete.
+The archive lacks the final native/sign-in receipts and cleanup proof; therefore
+the overall job remains cancelled, not accepted. No UI failure or hang was observed.
+The prior qualified main run `43842465814/1` took 42m09s for the iOS job, showing
+that the old bound had little finalization margin even before this change.
+
+Increase only the workflow iOS job bound to 55 minutes, updating its stale
+31-case comment to 37. The entire `ios-verify.sh`, individual test allowances,
+test assertions/count, acceptance join and release gates remain unchanged.
+This provides finalization/upload time without treating missing receipts as a
+pass. It does not attribute every elapsed delay to the SDK or prove the corrected
+run will qualify; that requires a fresh complete execution.
+
 - `hosted-pr4306-f986/voice-failure-review.json`: `32c9a7c60e649c2997f4862f913b5beedfc98c12fa824250b21b71091e398ebd`
 - `native-failure-observability-handoff-v2.json`: `a1bf7b663ea731a8812be7202a5f28c84b57bc6e9f72e7d156b802d8a4ff20c4`
