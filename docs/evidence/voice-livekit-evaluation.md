@@ -211,8 +211,12 @@ job failed during its first `simctl list runtimes --json` query after 60.043
 seconds (exit 124, no stdout/stderr). Xcode/SDK inspection had succeeded. No
 simulator creation, app build, credentials or media stage executed, so this run
 does not exercise the new native failure diagnostics. The daemon cause remains
-unknown. Android passed 44 emulator cases; ordinary iOS finalization is tracked
-separately and cannot make the failed voice job pass.
+unknown. Android passed 44 emulator cases. Ordinary iOS later passed 87 core
+controls and 36/37 UI cases, then failed the question-card case after a partial
+keyboard dismissal. Its cleanup completed with original exit 65. Those results
+cannot make the failed voice job pass. The separately reviewed native-readiness
+change in #4311 preserves the original assertions and completes the single
+keyboard gesture; it does not retroactively qualify this failed execution.
 
 The three voice attempts used the same hosted image `20261104.0514.1` with
 Xcode 26.3: the initial query timed out at 15 seconds, completed in 51.303
@@ -244,3 +248,33 @@ native execution and physical audio remain NOT_RUN.
 - `hosted-pr4306-5e3223fb/voice-failure-review.json`: `b2a846de41755743cf0ba363a40d24d5a8073cf7d3fb3ac2060ab699e4aa09a6`
 - `cold-simulator-readiness-research/recommendation.json`: `a09e4c9b381aa41f91945b36830f2c4ec94de3c4507be6e5dbb62e21b796ffc6`
 - `native-cold-readiness-handoff-v2.json`: `60874005c5aa11fd6219bcd9de810891f7d62210d12e16f972266fd551b297a3`
+
+## Terminal acknowledgement and atomic private publication
+
+Source review also found two independent hazards; neither is established as the
+historical `evaluator_exited_early` cause. A visible configuration path could
+contain partial JSON before the writer finished, and a fixed 200ms Stop grace
+could end without observing the evaluator acknowledgement.
+
+Publish complete, fsynced 0600 JSON through a same-directory no-clobber hard link,
+then remove the temporary name. Existing receipts are never overwritten. The
+actual-filesystem controls hold a partial write and inject a write failure; both
+expose the prior writer's unsafe readiness boundary. The prepared host Python
+runs these controls before issuing any 75-second credential.
+
+On Stop, fence local capture and playback immediately and retain terminal
+session state. Within the existing cleanup allowance, wait at most one second
+for the exact previous Room, evaluator SID, session, turn and generation's
+`stopped` acknowledgement before disconnecting. A missing acknowledgement is
+not success. Only an actually accepted callback emits the fixed, content-free
+`stop_acknowledged` event; both native and helper receipts require that event.
+It grants no playback authority and cannot restart a stopped or later session.
+
+Portable checks exercise the actual Swift acknowledgement matcher separately
+from the native SDK. Python RTC strategy observations do not qualify Swift
+teardown or reproduce historical server-disconnect ordering. Failed controls
+and the unsupported whole-Linux-Core/CryptoKit attempt remain preserved; only
+source-identical evidence is reused. New hosted native execution, physical
+audio, naturalness and production integration remain NOT_RUN. Credential TTL,
+the overall execution allowance and all existing PCM/cleanup assertions remain
+unchanged.

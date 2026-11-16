@@ -20571,6 +20571,9 @@
           "path": "apps/studio-native/voice-evaluation/test_cleanup.py"
         },
         {
+          "path": "apps/studio-native/voice-evaluation/test_publication.py"
+        },
+        {
           "path": "apps/studio-native/ios/App/LiveKitEvaluationCI.swift"
         },
         {

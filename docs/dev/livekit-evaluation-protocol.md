@@ -49,6 +49,12 @@ terminal, including after an interruption or before the first start. Background,
 screen dismissal and failed connection must release the microphone and room.
 An asynchronous connect completion cannot reopen a stopped session.
 
+Stop fences local audio before waiting. Teardown may observe the previous Room
+and evaluator SID's exact session/turn/generation acknowledgement for at most one
+second, within the existing cleanup bound. That observation grants no playback
+authority. Only an accepted client callback records `stop_acknowledged`; missing
+acknowledgement still disconnects and cannot qualify a successful native receipt.
+
 ## Observation and limits
 
 Report generated, queued, received and drained audio separately. None proves
