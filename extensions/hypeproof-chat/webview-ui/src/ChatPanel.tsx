@@ -53,6 +53,7 @@ import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { insertAtCaret, PassThrough } from './composerAddon';
 import { CONVERSATION_BLOCKED_BY_DICTATION, DICTATE_BLOCKED_BY_CONVERSATION } from "../../src/voiceCopy";
 import { VoiceConversationControl } from './VoiceConversationControl';
+import { VoiceTip } from './VoiceTip';
 import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
@@ -2421,6 +2422,7 @@ export function ChatPanel(props: Props) {
       <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
       {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice, get blockedReason() { return dictationBusy || dictationBusyRef.current ? CONVERSATION_BLOCKED_BY_DICTATION : null; } }} onActive={reportVoiceActive} />}
+      {!props.instructor && <VoiceTip config={config} taskEmpty={messages.length === 0} />}
 
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
