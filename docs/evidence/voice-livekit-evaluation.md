@@ -12,16 +12,20 @@ is not physical voice, learner-growth or full requirement acceptance.
 - Cancellation-aware permission source compiled with Swift 5 language mode and
   complete strict concurrency; its executable controls passed (exit 0). The OS
   permission callback is controlled; this does not claim real iOS permission UI.
-- LiveKit RTC Python 1.2.1 / server 1.13.11: three protocol controls and seven
-  actual loopback media controls passed. The 17.923-second media execution
-  received decoded synthetic PCM, interrupted output by actual incoming energy,
-  cleared the real SDK queue and removed its publication. Stop, late/stale
-  messages, foreign sender, disconnect, injected acknowledgement failure and
-  controlled queue overflow were exercised. Owned listeners were loopback-only;
-  the child server was reaped. There was no STT/LLM/TTS provider call.
-- Playback queue examples were 0.206 seconds to zero on onset and 0.215 seconds
-  to zero on Stop. These are SDK queue observations, not acoustic latency or
-  evidence of what a human heard. Decoded tracks contained 149, 43 and 12 frames.
+- LiveKit RTC Python 1.2.1 / server 1.13.11: three protocol controls passed.
+  The corrected v6 media run passed eight controls over actual loopback RTC in
+  17.897 seconds. It received decoded synthetic PCM, interrupted output on actual
+  incoming energy, cleared the SDK queue and removed its publication. Admission,
+  foreign/duplicate sender, Stop, stale/late events, disconnect, acknowledgement
+  failure and queue overflow were exercised. Owned listeners remained loopback-only;
+  the child server was reaped. No STT/LLM/TTS provider was called.
+- Four cleanup controls passed on the candidate. Applied to the actual old base,
+  the same controls exposed one failure and two errors: cleanup could skip room
+  disconnect and mask the primary exception. The old failures remain evidence.
+- The old generation's receiver now closes at interruption/unpublication. Its
+  final 87-frame receipt stays unchanged through the next generation (21 frames)
+  and Stop. This proves receiver attribution isolation, not physical silence or
+  the size of an unobserved RTP/hardware tail. Those ranges remain unknown.
 
 ## Preserved failures and remaining gates
 
@@ -38,6 +42,14 @@ inferred from JSON and the first Start is not blindly retried. A v4 launcher
 variable collision failed before server creation; v5 corrected it. Failed logs
 remain separate from the corrected execution.
 
+Independent review revoked v5 media acceptance: its receiver stayed alive and
+attributed the next generation's 43 frames to the old receipt (106 became 149).
+The original v5 result is preserved, not relabeled as passing. V6 closes the old
+AudioStream and rechecks its final receipt after the later generation and Stop.
+A first v6 driver setup failed before remote execution; that log is also retained.
+Cleanup now attempts every owned receiver/source/evaluator/room/private-file release
+independently, preserving the body failure or first cleanup failure.
+
 Native iOS SDK resolution/build, the native client connected to the server,
 physical iPhone speaker/Bluetooth, Korean naturalness, AEC/false interruptions
 and installed-app acceptance are NOT RUN. The launcher currently runs on Linux
@@ -47,8 +59,9 @@ account/coach integration and continuous audio cost controls remain separate.
 
 ## Source and receipt bindings
 
-The lab source originated at `2a3749ccebeffc5c84e07e9c5f621cf49452af02`;
-its seven file hashes match the integrated source. Native adapter source came
+The lab source originated at `2a3749ccebeffc5c84e07e9c5f621cf49452af02` with
+cleanup/observer correction `f014c45a0a550034c372b01c37e6510f0456c5ea`;
+all eight v6 source hashes match the integrated source. Native adapter source came
 from `7156b84f5d309a4c37bbdee9f73c7041fa6ab8eb` with admission correction
 `a48461e6d864f317be098bfdba06d17bbf4195cd`. Root core/test working bytes were
 bound by the Swift run's input manifest rather than represented as an all-HEAD pass.
@@ -64,3 +77,7 @@ Local evidence bundle: `artifacts/studio-livekit-implementation-20261116/` in th
 - `swift-ubuntu-probe-v1/summary.json`: `34600b2439df3d5ccc1ad10a25b6fb80ebacec361b32b67d1cc47e956d9d32cd`
 - `swift-ubuntu-probe-v1/result.json`: `75be744068e42887be87a10916334e1df460c885cc22f24acf230ef38bb589d5`
 - `lab-evidence-v5/media/result.json`: `d32bd1101f54af3888d54e8e4c48cc9970cf02e63da9df2bf46d4b93ca71b9bb`
+
+- `lab-handoff-v6.json`: `6473b7aab68702c4220d43f737a244cfc9c1de1da83b4a9a1c19a2387503093a`
+- `lab-evidence-v6/media/result.json`: `880822399fefe6aed3b6c38cf49b56d6dd291c3f11dc62c1c499d94e473cb91d`
+- `lab-evidence-v6/execution.json`: `5480813a88941cd859e65339b5c5565b91bff92dc5f125bb176a5d1dd68979ec`
