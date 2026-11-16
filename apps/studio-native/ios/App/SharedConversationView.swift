@@ -569,6 +569,7 @@ struct SharedConversationView: View {
                         if model.signedIn {
                             Button { focused = false; voice.stop(); model.send() } label: {
                                 Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
                                     .background(model.canSend && !model.draftText.isEmpty ? ConversationStyle.accent : ConversationStyle.surface, in: Circle())
                                     .foregroundStyle(model.canSend && !model.draftText.isEmpty ? ConversationStyle.onAccent : Color.secondary)
                             }.disabled(!model.canSend || (try? SharedRequest.checkedText(model.draftText)) == nil)
