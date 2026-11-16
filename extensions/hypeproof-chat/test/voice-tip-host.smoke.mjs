@@ -55,6 +55,11 @@ assert.equal(JSON.stringify(state.data.get(VOICE_TIP_KEY)),JSON.stringify({seen:
 // Open for A, the seat switches to B, the tip goes away (dismiss arrives under B), back to A: not due (verify-r027).
 {const st=memento();const v=host(st);v.seat(A);assert.equal(await v.ask(),true);await v.shown();
  v.seat(B);await v.dismiss();v.seat(A);assert.equal(await v.ask(),false,'a dismiss after a seat switch still closes A for good');}
+// Open for A, the seat switches to B with no dismiss at all (panel hidden), B is asked about, back to A: not due.
+{const st=memento();const v=host(st);v.seat(A);assert.equal(await v.ask(),true);await v.shown();
+ v.seat(B);assert.equal(await v.ask(),true,'B is due on its own');v.seat(A);assert.equal(await v.ask(),false,'a seat change closed the tip left open for A');}
+// Open for A, B's tip is drawn (no dismiss for A), back to A: not due.
+{const st=memento();const v=host(st);v.seat(A);await v.ask();await v.shown();v.seat(B);await v.shown();v.seat(A);assert.equal(await v.ask(),false,'drawing for B closed A');}
 {const st=memento();const v=host(st);v.seat(A);assert.equal(await v.ask(),true);await v.shown();
  v.seat('');await v.dismiss();v.seat(A);assert.equal(await v.ask(),false,'a dismiss under an empty seat still closes A');}
 // A seat with tips off never sees it, and nothing is recorded for it.

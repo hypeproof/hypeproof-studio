@@ -12415,6 +12415,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let show = false;
     try {
       const seat = this.lessonTips.currentSeat;
+      // A seat change closes a tip left open for the previous seat, even when no dismiss arrived (hidden panel).
+      if (this.voiceTipOpenSeat !== undefined && this.voiceTipOpenSeat !== seat) this.voiceTipOpenSeat = undefined;
       show = voiceTipDue(this.context.globalState?.get(VOICE_TIP_KEY), {
         seat, taskEmpty, instructor: this._instructorMode?.isInstructor === true, openSeat: this.voiceTipOpenSeat,
         tipsOn: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)),
@@ -12435,6 +12437,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!seat) return;
     const seen = voiceTipStore(this.context.globalState?.get(VOICE_TIP_KEY)).seen.includes(seat);
     if (open && !seen) this.voiceTipOpenSeat = seat;
+    else if (open && this.voiceTipOpenSeat !== seat) this.voiceTipOpenSeat = undefined;
     if (seen) return;
     try { await this.context.globalState.update(VOICE_TIP_KEY, withVoiceTipSeen(this.context.globalState.get(VOICE_TIP_KEY), seat)); } catch { /* the tip stays closed here */ }
   }
