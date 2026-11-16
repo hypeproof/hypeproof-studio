@@ -131,6 +131,7 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
         {item.kind !== 'note' && <span className="hp-materials-detail">{item.detail}</span>}
         {/* AE-02 (#555): a sent text material can be taken out of the conversation and put back; the host enforces it. */}
         {item.excluded && <p className="hp-materials-meta" data-material-excluded="">{CONTEXT_EXCLUSION_COPY.excludedBadge} · {CONTEXT_EXCLUSION_COPY.excludedNote}</p>}
+        {item.excludable && !item.excluded && <p className="hp-materials-meta" data-material-exclude-hint="" id={`hp-material-exclude-hint-${item.id}`}>{CONTEXT_EXCLUSION_COPY.excludeHint}</p>}
         <div className="hp-materials-actions">
           {!item.excluded && <button type="button" className="hp-cta-quiet" aria-pressed={item.selected} aria-label={selectLabel(item)} disabled={busy}
             onClick={() => ask(requestId => ({ type: 'materialSelect', requestId, scope: view.scope, id: item.id, selected: !item.selected }))}>
@@ -138,6 +139,7 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
           </button>}
           {item.excludable && <button type="button" className="hp-cta-quiet" data-material-exclude={item.excluded ? 'include' : 'exclude'}
             aria-label={`${item.excluded ? CONTEXT_EXCLUSION_COPY.include : CONTEXT_EXCLUSION_COPY.exclude}: ${item.title}`} disabled={busy}
+            aria-describedby={item.excluded ? undefined : `hp-material-exclude-hint-${item.id}`}
             onClick={() => ask(requestId => ({ type: 'materialExclude', requestId, scope: view.scope, id: item.id, excluded: !item.excluded }))}>
             {item.excluded ? CONTEXT_EXCLUSION_COPY.include : CONTEXT_EXCLUSION_COPY.exclude}
           </button>}

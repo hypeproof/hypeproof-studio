@@ -223,6 +223,31 @@ await t("typing the fixed texts excludes nothing; an address is never excludable
   assert.ok(!item(s, (i) => i.id === url.id).excluded, "a forged request for an address changes nothing");
 });
 
+await t("the learner's own later messages and the confirmed goal go through verbatim after a cut", async () => {
+  const f = fixture();
+  const { plan, notes } = await twoMaterials(f);
+  const later = ["표지에 \"제목\" 만 넣을까? (2/3쪽)", "그다음엔\n색을 바꿔 줘"];
+  await sendWith(f, plan.id, "표지 어떻게 해?", "u-1");
+  await f.send(later[0], "u-2");
+  await f.send(later[1], "u-3");
+  await f.req("materialExclude", { scope: f.last().view.scope, id: plan.id, excluded: true });
+  await f.send("계속", "u-4");
+  const users = f.proxyCalls.at(-1).history.filter((m) => m.role === "user").map((m) => m.content);
+  assert.deepEqual(users, ["표지 어떻게 해?", ...later], "every later learner message, byte for byte");
+  // The goal: a lesson seat with a saved goal; the provider's rebuilt context carries it as saved.
+  const { acceptGoalSave, STUDENT_GOAL_KEY } = await import("../src/studentGoal.ts");
+  const lesson = { course_id: "c1", version: "v1", sha256: "a".repeat(64), content: { steps: [] } };
+  const goal = "발표 표지를 \"한 장\"으로 끝내기 (색 2가지)";
+  const saved = acceptGoalSave(lesson, null, { lesson: lesson.sha256, goal, criteria: [], base: 0 }, {}, Date.now());
+  assert.ok(saved.ok, JSON.stringify(saved));
+  f.state.set(STUDENT_GOAL_KEY, saved.all);
+  const ctx = await f.h.rebuiltExclusionContext({ ...f.seat, lesson }, [notes.id]);
+  assert.ok(ctx.includes(`학습자가 확인한 목표: ${goal}`), `the goal verbatim: ${ctx}`);
+  assert.ok(ctx.startsWith(REBUILT_CONTEXT_HEAD));
+  await sendWith(f, notes.id, "메모 봐", "u-5");
+  assert.ok((await f.h.rebuiltExclusionContext({ ...f.seat, lesson }, [notes.id])).includes("NOTES-MARKER"), "kept material read again");
+});
+
 // The wiring both runtimes share (source pins): one replayed history for every runtime call, the rebuilt context beside the
 // learner's message, and no runtime call in the exclusion handler.
 await t("both runtimes read the same replayed history; the exclusion handler calls no runtime", async () => {

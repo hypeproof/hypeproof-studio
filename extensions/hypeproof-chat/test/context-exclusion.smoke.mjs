@@ -103,7 +103,8 @@ await t("SX audit: the learner copy carries no judgment word or score", () => {
     assert.equal(r.ok, true, `${s}: ${JSON.stringify(r.findings)}`);
   }
   assert.match(C.CONTEXT_EXCLUSION_COPY.excludedNote, /이미 보낸 내용은 지워지지 않아요/, "says nothing is deleted from the AI service");
-  assert.ok(Object.values(C.CONTEXT_EXCLUSION_COPY).every((s) => s.length <= 40), "short");
+  assert.match(C.CONTEXT_EXCLUSION_COPY.excludeHint, /보낸 뒤의 AI 답도/, "says, before the press, that the AI's later answers go too");
+  assert.ok(Object.values(C.CONTEXT_EXCLUSION_COPY).every((s) => s.length <= 45), "short");
 });
 
 // The SDK coach builds its prompt from the history it is given and creates one session per turn. Fed the replayed

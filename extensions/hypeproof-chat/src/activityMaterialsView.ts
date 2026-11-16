@@ -56,6 +56,8 @@ export const CONTEXT_EXCLUSION_COPY = {
   include: "다시 넣기",
   excludedBadge: "대화에서 뺌",
   excludedNote: "다음 질문부터 AI에게 보내지 않아요. 이미 보낸 내용은 지워지지 않아요.",
+  /** Said beside 이후 대화에서 빼기, before the press: the AI's later answers go too (the slice's trade-off, AE-41). */
+  excludeHint: "이 자료를 보낸 뒤의 AI 답도 다음 질문부터 다시 보내지 않아요.",
   excludedSelect: "대화에서 뺀 자료예요. 먼저 '다시 넣기'를 눌러 주세요.",
 } as const;
 
