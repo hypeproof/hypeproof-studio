@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -23,6 +24,69 @@ RUNNER_SPEC.loader.exec_module(runner)
 
 
 class NativeMediaReceiptControls(unittest.TestCase):
+    def test_cold_runtime_enumeration_is_bounded_before_app_or_provider_work(self):
+        source = Path(os.environ.get("HPS_RUNNER_CONTROL_SOURCE", PATH.with_name("ios-livekit-verify.py")))
+        spec = importlib.util.spec_from_file_location("runtime_readiness_control", source)
+        actual = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(actual)
+        # Virtual elapsed time exercises the real runner's stage/deadline decisions
+        # without making the test wait for a hosted CoreSimulator service.
+        cases = ((20, 0, "create"), (61, 0, "runtimes"), (20, 1045, "runtimes"))
+        if os.environ.get("HPS_RUNNER_CONTROL_SOURCE"):
+            cases = cases[:1]  # Preserve the old 15-second failure independently.
+        for duration, prior_elapsed, expected_failure in cases:
+            with self.subTest(duration=duration, prior_elapsed=prior_elapsed), tempfile.TemporaryDirectory() as directory:
+                now = [0.0]
+                calls = []
+                def execute(argv, *, timeout, log):
+                    stage = log.stem
+                    calls.append((stage, timeout))
+                    if stage == "xcode": log.write_text("Xcode 26.3\nBuild version 17C529")
+                    elif stage == "sdk":
+                        log.write_text("26.3")
+                        now[0] = prior_elapsed
+                    elif stage == "runtimes":
+                        now[0] += min(duration, timeout)
+                        if duration > timeout:
+                            log.write_text('CoreSimulator connection invalid: Error Domain=NSPOSIXErrorDomain Code=60 "/private/secret/path" token=private-value')
+                            return 124
+                        log.write_text(json.dumps({"runtimes": [{"isAvailable": True,
+                            "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3", "version": "26.3"}]}))
+                    elif stage == "create":
+                        # Stop at the first downstream operation; this control does
+                        # not manufacture a native build or transport PASS.
+                        log.write_text("injected simulator creation refusal")
+                        return 9
+                    else: self.fail("unexpected app/provider stage: " + stage)
+                    return 0
+                with patch.object(actual.sys, "platform", "darwin"), \
+                     patch.object(actual.subprocess, "check_output", return_value="a" * 40), \
+                     patch.object(actual.signal, "signal"), \
+                     patch.object(actual.time, "monotonic", side_effect=lambda: now[0]), \
+                     patch.object(actual, "execute", side_effect=execute):
+                    self.assertEqual(actual.main(SimpleNamespace(evidence=directory)), 1)
+                receipt = json.loads((Path(directory) / "native-livekit-runner.json").read_text())
+                self.assertEqual(receipt["status"], "FAIL")
+                self.assertEqual(receipt["failure"], expected_failure)
+                runtime_calls = [bound for stage, bound in calls if stage == "runtimes"]
+                self.assertEqual(len(runtime_calls), 1, "runtime enumeration must not retry")
+                self.assertLessEqual(runtime_calls[0], 60)
+                if prior_elapsed: self.assertLessEqual(runtime_calls[0], 1050 - prior_elapsed)
+                runtime_step = next(step for step in receipt["steps"] if step["stage"] == "runtimes")
+                self.assertEqual(runtime_step["seconds"], min(duration, runtime_calls[0]))
+                self.assertEqual(runtime_step["timeout_seconds"], runtime_calls[0])
+                if expected_failure == "runtimes":
+                    self.assertEqual(receipt["failure_exit"], 124)
+                    self.assertEqual([stage for stage, _ in calls], ["xcode", "sdk", "runtimes"])
+                    diagnostics = receipt["runtime_diagnostics"]
+                    self.assertIn("connection_invalid", diagnostics["markers"])
+                    self.assertEqual(diagnostics["error_codes"], [{"domain": "NSPOSIXErrorDomain", "code": 60}])
+                    self.assertNotIn("private", json.dumps(receipt))
+                else:
+                    self.assertEqual([stage for stage, _ in calls], ["xcode", "sdk", "runtimes", "create"])
+                print(json.dumps({"virtual_runtime_seconds": duration, "prior_elapsed": prior_elapsed,
+                                  "runtime_bound": runtime_calls[0], "failure": receipt["failure"]}), flush=True)
+
     def test_runner_repeated_signal_preserves_its_owned_cleanup_window(self):
         source = Path(os.environ.get("HPS_RUNNER_CONTROL_SOURCE", PATH.with_name("ios-livekit-verify.py")))
         with tempfile.TemporaryDirectory() as directory:

@@ -56,6 +56,25 @@ def cleanup(device, private):
     return outcomes
 
 
+def runtime_diagnostics(log):
+    """Keep fixed precredential signals, never raw simulator paths or log text."""
+    data = log.read_bytes() if log.exists() else b""
+    tail = data[-16384:].decode("utf-8", errors="replace")
+    lower = tail.lower()
+    markers = {
+        "coresimulator": "coresimulator_mentioned",
+        "timed out": "timeout_mentioned",
+        "connection refused": "connection_refused",
+        "connection invalid": "connection_invalid",
+        "failed to initialize": "initialization_failed",
+        "unable to boot": "boot_failed",
+    }
+    codes = re.findall(r"\b(NSPOSIXErrorDomain|NSCocoaErrorDomain|com\.apple\.CoreSimulator\.SimError)\s+Code=(-?\d+)\b", tail)
+    return {"output_bytes": len(data), "output_sha256": hashlib.sha256(data).hexdigest(),
+            "markers": sorted({label for text, label in markers.items() if text in lower}),
+            "error_codes": [{"domain": domain, "code": int(code)} for domain, code in codes[:8]]}
+
+
 def main(args):
     os.umask(0o077)
     native = Path(__file__).resolve().parents[1]
@@ -81,9 +100,23 @@ def main(args):
             if remaining <= 0:
                 raise StageFailure(stage, 124)
             log = private / (stage + ".log")
-            code = execute(argv, timeout=min(seconds, remaining), log=log)
-            result["steps"].append({"stage": stage, "exit": code})
+            timeout = min(seconds, remaining)
+            started = time.monotonic()
+            step = {"stage": stage, "timeout_seconds": round(timeout, 3)}
+            try:
+                code = execute(argv, timeout=timeout, log=log)
+                step["exit"] = code
+            except BaseException as error:
+                step.update(exit=125, error_type=type(error).__name__)
+                if stage == "runtimes":
+                    result["runtime_diagnostics"] = runtime_diagnostics(log)
+                raise
+            finally:
+                step["seconds"] = round(time.monotonic() - started, 3)
+                result["steps"].append(step)
             if code:
+                if stage == "runtimes":
+                    result["runtime_diagnostics"] = runtime_diagnostics(log)
                 if stage == "debug_build":
                     # No room/token exists during compilation. Keep only bounded
                     # compiler diagnostics, never runtime SDK output.
@@ -98,7 +131,9 @@ def main(args):
             sdk = run("sdk", ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"], 10)
             if int(sdk.split(".")[0]) < 26:
                 raise StageFailure("sdk_floor", 2)
-            runtimes = json.loads(run("runtimes", ["xcrun", "simctl", "list", "runtimes", "--json"], 15))
+            # This is the first CoreSimulator operation on a fresh hosted runner.
+            # Allow bounded service readiness once, inside the unchanged job deadline.
+            runtimes = json.loads(run("runtimes", ["xcrun", "simctl", "list", "runtimes", "--json"], 60))
             available = [r for r in runtimes["runtimes"] if r["isAvailable"] and ".iOS-" in r["identifier"]
                          and r["version"].split(".")[:2] == sdk.split(".")[:2]]
             if not available:
