@@ -202,3 +202,45 @@ run will qualify; that requires a fresh complete execution.
 
 - `hosted-pr4306-f986/voice-failure-review.json`: `32c9a7c60e649c2997f4862f913b5beedfc98c12fa824250b21b71091e398ebd`
 - `native-failure-observability-handoff-v2.json`: `a1bf7b663ea731a8812be7202a5f28c84b57bc6e9f72e7d156b802d8a4ff20c4`
+
+## Subsequent cold-runtime timeout and bounded readiness
+
+Run `43862198817/1` tested source `5e3223fb1c12dd121e789df0d18e15482b9e04a5`
+at merge `a5f94ede1f4abf970a1d7b3e31024d6e5c04f326`. The separate voice
+job failed during its first `simctl list runtimes --json` query after 60.043
+seconds (exit 124, no stdout/stderr). Xcode/SDK inspection had succeeded. No
+simulator creation, app build, credentials or media stage executed, so this run
+does not exercise the new native failure diagnostics. The daemon cause remains
+unknown. Android passed 44 emulator cases; ordinary iOS finalization is tracked
+separately and cannot make the failed voice job pass.
+
+The three voice attempts used the same hosted image `20261104.0514.1` with
+Xcode 26.3: the initial query timed out at 15 seconds, completed in 51.303
+seconds, then timed out at 60.043 seconds. This evidence supports allowing more
+cold preparation time, but not a proven diagnosis or guaranteed duration. Give
+that single query at most 180 seconds, clipped by the unchanged remaining
+1,050-second execution-stage budget. Do not add a second query, warmup, retry,
+component installation, daemon restart or SDK change. Existing process-reaping
+and final-cleanup grace remain separately bounded.
+
+Capture only validated ImageVersion, ImageOS and RUNNER_ARCH fields. After a
+runtime timeout, use at most two seconds plus one second for reaping an owned
+read-only process snapshot, clipped to remaining execution time. Publish only
+counts of known CoreSimulatorService and simdiskimaged names. Skip that snapshot
+when insufficient time remains; diagnostic failure cannot replace the original
+timeout. No raw process names, paths, arguments, credentials or arbitrary logs
+are uploaded.
+
+Three focused controls passed: virtual 90/179-second completions reach the
+subsequent injected create failure; 181-second preparation and five-second
+remaining budget fail before creating a simulator; diagnostic-reader failure
+retains the primary timeout. Metadata/process sentinels and owned snapshot
+reaping were checked. Both slow-completion controls fail against the prior
+60-second implementation. These controls validate budget/error behavior, not
+CoreSimulator readiness or native audio. Previously executed cancellation
+controls are reused only for byte/AST-identical functions; actual new-source
+native execution and physical audio remain NOT_RUN.
+
+- `hosted-pr4306-5e3223fb/voice-failure-review.json`: `b2a846de41755743cf0ba363a40d24d5a8073cf7d3fb3ac2060ab699e4aa09a6`
+- `cold-simulator-readiness-research/recommendation.json`: `a09e4c9b381aa41f91945b36830f2c4ec94de3c4507be6e5dbb62e21b796ffc6`
+- `native-cold-readiness-handoff-v2.json`: `60874005c5aa11fd6219bcd9de810891f7d62210d12e16f972266fd551b297a3`
