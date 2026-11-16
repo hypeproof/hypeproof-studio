@@ -18,6 +18,10 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const shipped = process.env.HPS_UPDATE_CHECK_SHIPPED === '1';
+// In CI the shipped check must not fall back to the runner IP's anonymous budget (it decides nothing).
+if (shipped && process.env.GITHUB_ACTIONS === 'true' && !process.env.HPS_UPDATE_CHECK_TOKEN?.trim()) {
+  throw new Error('shipped update check in CI needs HPS_UPDATE_CHECK_TOKEN (the job token for the public release read)');
+}
 const mac = process.platform === 'darwin';
 if (!mac && !(process.platform === 'win32' && shipped)) throw new Error('update-check drives a macOS App bundle, or a Windows install in shipped mode only (NOT RUN, not skipped silently)');
 const resources = (dir) => (mac ? join(dir, 'Contents/Resources/app') : join(dir, 'resources/app'));
@@ -62,8 +66,11 @@ try {
     executablePath: mac ? join(appPath, 'Contents/MacOS/HypeProof Studio') : join(appPath, 'HypeProof Studio.exe'),
     args: [`--user-data-dir=${data}`, `--extensions-dir=${join(data, 'extensions')}`, '--use-inmemory-secretstorage', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', '--folder-uri', pathToFileURL(join(data, 'workspace')).href],
     timeout: 30_000,
-    // Shipped mode must not depend on whichever token the runner happens to carry.
-    ...(shipped ? { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !['HPS_RELEASE_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'].includes(k))) } : {}),
+    // Shipped mode must not depend on whichever token the runner happens to carry. The only credential it
+    // gets is the job token for the public read, through the acceptance-only path (updateTransport.ts
+    // acceptanceCheckToken): a hosted runner's shared IP exhausts the 60/h anonymous budget.
+    ...(shipped ? { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !['HPS_RELEASE_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'].includes(k))),
+      ...(process.env.HPS_UPDATE_CHECK_TOKEN ? { HPS_UPDATE_CHECK_ACCEPTANCE: '1' } : {}) } } : {}),
   });
   await app.evaluate(({ app: a, BrowserWindow }, v) => { a.dock?.hide(); for (const w of BrowserWindow.getAllWindows()) { w.setContentSize(v.width, v.height); w.setPosition(-4000, -4000); } }, VIEWPORT);
   const win = await app.firstWindow();
@@ -90,7 +97,15 @@ try {
   };
   await shot('start-page', startPage);
   const input = win.locator('.quick-input-widget input.input').first();
-  const message = win.locator('.notifications-toasts').getByText(/새 버전 v.*발견|최신 버전입니다/);
+  // Every answer the update command can give (updateChecker.ts checkForUpdates / reportManualUpdateCheckFailure).
+  // Only the first two prove the public API answered; the others are read so a run reports what the App said
+  // instead of "no answer" (an info toast hides itself before the failure screenshot).
+  const ANSWERS = [
+    ['found', /새 버전 v.*발견/], ['latest', /최신 버전입니다/],
+    ['rate-limited', /지금은 새 버전을 확인할 수 없어요/], ['no-access', /앱 안에서 새 버전을 확인할 수 없어요/],
+    ['failed', /업데이트를 확인하지 못했습니다/],
+  ];
+  const message = win.locator('.notifications-toasts').getByText(new RegExp(ANSWERS.map(([, re]) => re.source).join('|'))).first();
   // The extension activates lazily, so the first palette run can precede the command's registration and
   // do nothing. Run the command again (3 tries, 15 s each) before calling it a failure.
   let shown = false;
@@ -108,6 +123,13 @@ try {
     throw new Error('the update command gave no answer in 3 attempts (see update-check-failed.png)');
   }
   const answer = await message.innerText();
+  const kind = ANSWERS.find(([, re]) => re.test(answer))?.[0];
+  if (kind !== 'found' && kind !== 'latest') {
+    await win.screenshot({ path: join(report, 'update-check-failed.png') });
+    const why = kind === 'rate-limited' ? 'the public release API rate limited this runner (anonymous GitHub API budget, HTTP 403/429); the updater handled it as designed (D19) but the API answer was not observed'
+      : kind === 'no-access' ? 'the public release API refused the anonymous read (HTTP 401/403/404)' : 'the update check failed';
+    throw new Error(`update command answered "${answer}" (${kind}): ${why}`);
+  }
   console.log('PASS real Electron update command:', answer);
   const found = /새 버전/.test(answer);
   if (found) {
