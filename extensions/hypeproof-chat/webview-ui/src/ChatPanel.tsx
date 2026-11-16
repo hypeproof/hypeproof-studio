@@ -141,6 +141,8 @@ import { VoiceEarcons, VoiceSoundsSetting } from "./VoiceEarcons";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
+import { QuestCard, QuestOfferCard, useQuestIntake } from "./QuestIntake";
+import { questChoicesAllowed } from "../../src/questIntake";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -680,6 +682,17 @@ export function ChatPanel(props: Props) {
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
   const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  // REQ-QUEST-* (#4283) — intent → key questions → 퀘스트 생성하기 → quest card.
+  const questIntake = useQuestIntake(JSON.stringify([activityId, taskId]), props.instructor === true);
+  // REQ-QUEST-LIST — the host made the quest: continue on step 1 as the learner's own message, once per quest.
+  // Declared with the other hooks (before any early return); sendWhenOnline is read when the effect runs.
+  const questStartSent = useRef<string | null>(null);
+  useEffect(() => {
+    const start = questIntake.start;
+    if (!start || questStartSent.current === start.id) return;
+    questStartSent.current = start.id;
+    sendWhenOnline(() => props.onSend(start.text), 'press');
+  }, [questIntake.start?.id]);
   const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
@@ -2200,7 +2213,7 @@ export function ChatPanel(props: Props) {
               nextStepsMode={compactLayout && m.role === "assistant" ? (streaming && m.id === streamingId ? "streaming" : nextStepChips && m.id === lastSpoken?.id ? "strip" : undefined) : undefined}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
-              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
+              onPickReply={personalWorkspace && questChoicesAllowed(questIntake) && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
               replyTyping={composing || draft.length > 0}
               replySelectionValid={lastReplyChoice.current?.messageId === m.id}
@@ -2642,6 +2655,8 @@ export function ChatPanel(props: Props) {
         {!statusScreen && config && <BudgetRequestCard config={config} post={postToHost} />}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {!streaming && <QuestOfferCard view={questIntake} />}
+        <QuestCard view={questIntake} />
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         {addon && <addon.Notice />}

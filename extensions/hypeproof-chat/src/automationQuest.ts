@@ -105,7 +105,20 @@ function escape(value: string): string {
 }
 
 /** Static HTML for PreviewProvider.show(): no scripts, network or actions. */
-export function renderQuestHtml(snapshot: AutomationQuestSnapshot): string {
+/** Page copy. The defaults are the automation workflow's; a learner-checked quest (questIntake.ts) passes its own. */
+export interface QuestPageCopy { eyebrow: string; intro: string; listLabel: string; progressLabel: string; footer: string; focusSucceeded: string }
+const AUTOMATION_COPY: QuestPageCopy = {
+  eyebrow: "AUTOMATION WORKFLOW", intro: "대화로 설계하고, 확인된 단계부터 완성합니다.", listLabel: "자동화 알고리즘 단계",
+  progressLabel: "확인된 자동화 단계", footer: "연결선은 단계의 순서를 나타냅니다. 완료 표시는 Studio에서 확인된 결과에만 적용됩니다.",
+  focusSucceeded: "Studio에서 이 단계의 결과를 확인했습니다.",
+};
+export const LEARNER_QUEST_COPY: QuestPageCopy = {
+  eyebrow: "QUEST", intro: "대화로 한 단계씩 진행하고, 끝낸 단계는 대화창의 퀘스트 카드에서 완료로 표시합니다.", listLabel: "퀘스트 단계",
+  progressLabel: "완료한 퀘스트 단계", footer: "연결선은 단계의 순서를 나타냅니다. 완료 표시는 학습자가 직접 누른 단계에만 적용됩니다.",
+  focusSucceeded: "이 단계를 완료로 표시했습니다.",
+};
+
+export function renderQuestHtml(snapshot: AutomationQuestSnapshot, copy: QuestPageCopy = AUTOMATION_COPY): string {
   const plan = validateQuestPlan({ title: snapshot.title, nodes: snapshot.nodes.map(({ status: _status, ...node }) => node) });
   if (snapshot.nodes.some((node) => !states.includes(node.status))) return invalid();
   const nodes = plan.nodes.map((node) => ({ ...node, status: snapshot.nodes.find((entry) => entry.id === node.id)!.status }));
@@ -118,7 +131,7 @@ export function renderQuestHtml(snapshot: AutomationQuestSnapshot): string {
     pending: "앞 단계의 결과를 확인한 뒤 이어갑니다.",
     current: "대화에서 질문에 답하고 다음 단계를 진행해 주세요.",
     running: "처리 결과가 확인되면 이 흐름에 반영됩니다.",
-    succeeded: "Studio에서 이 단계의 결과를 확인했습니다.",
+    succeeded: copy.focusSucceeded,
     failed: "대화에서 원인을 확인하고 이 단계부터 다시 진행해 주세요.",
     blocked: "대화에 표시된 연결 또는 설정을 마치면 이어갈 수 있습니다.",
   };
@@ -149,5 +162,5 @@ ${dependencies.length ? `<div class="dependency"><span class="dependency-label">
 @media(max-width:440px){:root{--rail:30px;--gap:16px}main{padding:20px 12px 28px}.intro{margin-bottom:18px}.focus{padding:12px}.node{padding:14px 12px 14px 20px}.node-top{gap:6px}h2{flex-basis:100%;font-size:14px}.node p{font-size:12px}.edge{margin-left:calc(2px + 13px*var(--lane))}.node-marker{width:25px;height:25px;left:-13px;top:19px;font-size:9px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){.node,.focus,.node-marker,.badge,.edge{border-color:CanvasText}.edge::after{border-color:CanvasText}.node[aria-current="step"]{outline:2px solid Highlight}.fill{background:Highlight}}
-</style></head><body><main><header><div class="eyebrow">AUTOMATION WORKFLOW</div><h1>${escape(snapshot.title)}</h1><p class="intro">대화로 설계하고, 확인된 단계부터 완성합니다.</p></header><div class="progress-label"><span>${phase}</span><span class="progress-count">${complete} / ${nodes.length} 완료</span></div><div class="track" role="progressbar" aria-label="확인된 자동화 단계" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><div class="fill" style="width:${percent}%"></div></div><section class="focus ${active?.status ?? ""}" aria-live="polite"><div class="focus-title">${active ? labels[active.status] : finished ? "흐름 완료" : "다음 단계 대기"}</div><strong>${active ? escape(active.label) : finished ? "모든 단계의 결과를 확인했습니다" : "앞선 결과를 확인하고 있습니다"}</strong><p>${active ? focusCopy[active.status] : finished ? "실행 결과와 다음 작업을 대화에서 확인해 주세요." : "아직 완료되지 않은 단계가 있습니다. 대화에서 진행 상황을 확인해 주세요."}</p></section><div class="graph">${edges}<ol aria-label="자동화 알고리즘 단계">${cards}</ol></div><footer>연결선은 단계의 순서를 나타냅니다. 완료 표시는 Studio에서 확인된 결과에만 적용됩니다.</footer></main></body></html>`;
+</style></head><body><main><header><div class="eyebrow">${escape(copy.eyebrow)}</div><h1>${escape(snapshot.title)}</h1><p class="intro">${escape(copy.intro)}</p></header><div class="progress-label"><span>${phase}</span><span class="progress-count">${complete} / ${nodes.length} 완료</span></div><div class="track" role="progressbar" aria-label="${escape(copy.progressLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><div class="fill" style="width:${percent}%"></div></div><section class="focus ${active?.status ?? ""}" aria-live="polite"><div class="focus-title">${active ? labels[active.status] : finished ? "흐름 완료" : "다음 단계 대기"}</div><strong>${active ? escape(active.label) : finished ? "모든 단계의 결과를 확인했습니다" : "앞선 결과를 확인하고 있습니다"}</strong><p>${active ? focusCopy[active.status] : finished ? "실행 결과와 다음 작업을 대화에서 확인해 주세요." : "아직 완료되지 않은 단계가 있습니다. 대화에서 진행 상황을 확인해 주세요."}</p></section><div class="graph">${edges}<ol aria-label="${escape(copy.listLabel)}">${cards}</ol></div><footer>${escape(copy.footer)}</footer></main></body></html>`;
 }

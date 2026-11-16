@@ -616,6 +616,11 @@ export interface UxConfig {
    * the coach-driven next-step chips. Absent or any other value is the standard layout.
    */
   coach_layout?: "compact";
+  /**
+   * REQ-QUEST-POLICY (#4283) — intent → key questions → "퀘스트 생성하기". Absent: on, two questions. Only an explicit
+   * `enabled: false` turns it off; `max_questions` is clamped to 0..3 (questIntake.ts `questIntakePolicy`).
+   */
+  quest_intake?: { enabled?: boolean; max_questions?: number };
 }
 
 export interface SuggestionChip {
@@ -816,6 +821,12 @@ export type WebviewMessage = (
   | { type: "planFirstRequest" }
   | { type: "planFirstSet"; on: boolean }
   | { type: "planFirstApprove"; planId: string; text: string }
+  /** REQ-QUEST-OFFER / REQ-QUEST-LIST (#4283) — the quest offer card and quest card. The host re-checks every id. */
+  | { type: "questIntakeRequest" }
+  | { type: "questIntakeCreate"; offerId: string }
+  | { type: "questIntakeDismiss"; offerId: string }
+  | { type: "questIntakeStep"; stepId: string }
+  | { type: "questIntakeShow" }
   | { type: "planFirstRedo"; planId: string; text: string }
   | { type: "planFirstDecline"; planId: string }
   | { type: "whatsNewRequest"; requestId: string }
@@ -1208,6 +1219,7 @@ export type HostMessage = (
   | { type: "accuracyEducationChanged" }
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
   | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null; available?: false; switchedOff?: true }
+  | { type: "questIntakeState"; view: import("./questIntake").QuestIntakeView }
   | { type: "whatsNewChanged" }
   /** CGP-VOICE-R-029 — the host's answer to `voiceTipRequest`. */
   | { type: "voiceTip"; requestId: string; show: boolean }
