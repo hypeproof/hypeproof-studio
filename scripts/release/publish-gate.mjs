@@ -93,6 +93,13 @@ export function casebookEvidence({number, head, headDate, p0 = [], comments = []
     + (notes.length ? ` [${notes.slice(-3).join('; ')}]` : '')]};
 }
 
+// The first APPROVED or CHANGES_REQUESTED review on `head` by someone in `allowed` (all when null).
+// Reviews on an earlier head are void: a new candidate needs a new answer.
+export function firstDecisive(reviews = [], head, allowed) {
+  return reviews.find(r => r.commit === head && (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED')
+    && (!allowed || allowed.has(r.user))) ?? null;
+}
+
 // Pure decision. Every input is already fetched.
 //   releasePrs: [{number, labels, head, headDate, comments, reviews: [{user, state, commit}]}] in review order
 //   p0:         P0 case ids of the tag's casebook (p0CaseIds); undefined refuses the approval route
@@ -113,7 +120,16 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
     const states = latestReviewStates(pr.reviews, pr.head);
     const approvers = [...states].filter(([, s]) => s === 'APPROVED').map(([u]) => u);
     const stale = [...states].filter(([, s]) => s === 'STALE').map(([u]) => u);
-    const writerApprovers = approvers.filter(u => writers.has(u));
+    // Only the release approvers' answers count (config/release-auto.json releaseApprovers; canon: Harness
+    // policy/authority.yaml area studio-desktop-release). The first decisive answer on the current head wins:
+    // a "Request changes" before any approval holds the release even if someone approves later.
+    const allowed = auto?.approvers?.length ? new Set(auto.approvers) : null;
+    const first = firstDecisive(pr.reviews, pr.head, allowed ?? writers);
+    if (first?.state === 'CHANGES_REQUESTED') {
+      reasons.push(`#${pr.number}: held by ${first.user} (Request changes on the current head; first answer wins)`);
+      continue;
+    }
+    const writerApprovers = approvers.filter(u => writers.has(u) && (!allowed || allowed.has(u)));
     let route = writerApprovers.length ? 'approval' : null;
     let authorityReason = writerApprovers.length ? `#${pr.number} approved by ${writerApprovers.join(', ')}` : '';
     if (!route && auto?.enabled) {
@@ -181,9 +197,12 @@ export function gatherApproval({tag, repo}) {
 
 // RELEASE_AUTO (repository variable, passed as env by the workflows) is the kill switch: only "on" enables it.
 export function autoSetting(env = process.env) {
-  let pipeline = [];
-  try { pipeline = JSON.parse(fs.readFileSync(new URL('../../config/release-auto.json', import.meta.url), 'utf8')).pipeline ?? []; } catch { pipeline = []; }
-  return {enabled: env.RELEASE_AUTO === 'on' && pipeline.length > 0, pipeline};
+  let pipeline = [], approvers = [];
+  try {
+    const cfg = JSON.parse(fs.readFileSync(new URL('../../config/release-auto.json', import.meta.url), 'utf8'));
+    pipeline = cfg.pipeline ?? []; approvers = cfg.releaseApprovers ?? [];
+  } catch { pipeline = []; approvers = []; }
+  return {enabled: env.RELEASE_AUTO === 'on' && pipeline.length > 0, pipeline, approvers};
 }
 
 // Only read when the approval route fails. A hotfix range is a few commits; a longer one is not a
