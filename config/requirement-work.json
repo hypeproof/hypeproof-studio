@@ -5244,6 +5244,38 @@
         "apps/studio-native/tests/test_apple_push_config.py",
         "apps/studio-native/tests/test_native_deployment_contract.py"
       ]
+    },
+    {
+      "id": "voice-livekit-evaluation",
+      "title": "Bounded native LiveKit interruption evaluation",
+      "issue": 4300,
+      "kind": "implementation",
+      "feature_ids": [
+        "voice-conversation"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/voice-conversation.md",
+          "ids": [
+            "VO-03",
+            "VO-06",
+            "VO-07",
+            "VO-09"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Validate the opt-in native adapter and actual local media interruption path described in docs/dev/livekit-evaluation-protocol.md. Preserve failed checks; production authority and physical voice acceptance remain in #898/#901/#902.",
+      "design_delta": "Development-only existing-app route; exact participant admission, turn generation and actual SDK queue cancellation. No second conversation, provider or account authority.",
+      "positive_control": "Actual SDK media arrives and an admitted explicit start authorizes only the matching generation; existing production conversation entry is preserved.",
+      "negative_control": "Unknown or stale participant/SID/turn/generation, late audio, Stop, background and cancelled permission must not resume playback or capture.",
+      "evidence_required": "Exact source and dependency revisions; source controls, actual transport and native build results separated. Synthetic PCM is not Korean voice quality or physical acceptance. Do not close the parent Voice V1 requirements from this evaluation.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/LiveKitEvaluationController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceEvaluationSession.swift",
+        "apps/studio-native/voice-evaluation"
+      ],
+      "verification_inputs": []
     }
   ]
 }

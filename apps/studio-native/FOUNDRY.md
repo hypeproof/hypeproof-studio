@@ -165,3 +165,25 @@ This infrastructure change must be committed/reviewed before the existing
 Foundry recipe consumes it. The reviewed-patch path for app features does not
 admit changed recipe, verification script or workflow files. A standalone
 collector invocation still does not prove actual Foundry execution.
+
+
+## Real media interruption evaluation — Studio #4300
+
+The development-only LiveKit path has a reusable local media recipe in
+`voice-evaluation/README.md` and a shared wire fixture consumed by Python and
+Swift controls. It does not replace the account journeys above. The recipe
+records exact server/SDK/source revisions, actual decoded synthetic PCM, source
+queue cancellation, publication removal, admission and session fences, and owned
+process cleanup. It retains failed attempts and refuses to label transport
+receipt or queue drain as acoustic playback.
+
+Keep source controls, actual transport, native SDK compilation, simulator UI and
+physical iPhone/Korean voice acceptance as separate results. `Room.connect` is
+not remote participant admission: the sender must wait for the exact evaluator's
+SID-bound readiness before opening its microphone or sending Start. Original
+failures, including unresolved sender identity, remain evidence.
+
+This recipe is a development evaluation, not an installed release gate or a
+production provider. Public ingress, account authorization, continuous audio
+metering and paid voice activation remain Service integration work. The existing
+mobile recipe and its failing-journey gate remain authoritative for releases.
