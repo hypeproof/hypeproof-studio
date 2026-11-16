@@ -157,10 +157,26 @@ async function isRateLimitResponse(response: Response): Promise<boolean> {
   } catch { return false; }
 }
 
-/** Anonymous read of the public release (D19). Never carries a credential. */
+/**
+ * Release acceptance only (verify-unified-release.yml -> e2e/update-check/run.mjs): the CI job's own token
+ * for the public latest-release read, so a hosted runner's shared IP and its 60/h anonymous budget cannot
+ * decide the check. Honoured only when HPS_UPDATE_CHECK_ACCEPTANCE is exactly "1" AND HPS_UPDATE_CHECK_TOKEN
+ * is non-empty. A normal launch sets neither, so the public read stays anonymous (D19). Never used for the
+ * private mirror or for an asset download.
+ */
+export function acceptanceCheckToken(env: Record<string, string | undefined> = process.env): string | null {
+  if (env.HPS_UPDATE_CHECK_ACCEPTANCE !== "1") return null;
+  const token = env.HPS_UPDATE_CHECK_TOKEN?.trim();
+  return token ? token : null;
+}
+
+/** Read of the public release (D19). Anonymous; only release acceptance adds its job token (above). */
 export async function fetchPublicLatestRelease(): Promise<unknown> {
+  const headers: Record<string, string> = { accept: "application/vnd.github+json" };
+  const acceptanceToken = acceptanceCheckToken();
+  if (acceptanceToken) headers.authorization = `Bearer ${acceptanceToken}`;
   const response = await fetch(PUBLIC_RELEASES_API, {
-    headers: { accept: "application/vnd.github+json" },
+    headers,
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });

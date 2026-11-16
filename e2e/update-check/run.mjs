@@ -18,6 +18,10 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const shipped = process.env.HPS_UPDATE_CHECK_SHIPPED === '1';
+// In CI the shipped check must not fall back to the runner IP's anonymous budget (it decides nothing).
+if (shipped && process.env.GITHUB_ACTIONS === 'true' && !process.env.HPS_UPDATE_CHECK_TOKEN?.trim()) {
+  throw new Error('shipped update check in CI needs HPS_UPDATE_CHECK_TOKEN (the job token for the public release read)');
+}
 const mac = process.platform === 'darwin';
 if (!mac && !(process.platform === 'win32' && shipped)) throw new Error('update-check drives a macOS App bundle, or a Windows install in shipped mode only (NOT RUN, not skipped silently)');
 const resources = (dir) => (mac ? join(dir, 'Contents/Resources/app') : join(dir, 'resources/app'));
@@ -62,8 +66,11 @@ try {
     executablePath: mac ? join(appPath, 'Contents/MacOS/HypeProof Studio') : join(appPath, 'HypeProof Studio.exe'),
     args: [`--user-data-dir=${data}`, `--extensions-dir=${join(data, 'extensions')}`, '--use-inmemory-secretstorage', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', '--folder-uri', pathToFileURL(join(data, 'workspace')).href],
     timeout: 30_000,
-    // Shipped mode must not depend on whichever token the runner happens to carry.
-    ...(shipped ? { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !['HPS_RELEASE_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'].includes(k))) } : {}),
+    // Shipped mode must not depend on whichever token the runner happens to carry. The only credential it
+    // gets is the job token for the public read, through the acceptance-only path (updateTransport.ts
+    // acceptanceCheckToken): a hosted runner's shared IP exhausts the 60/h anonymous budget.
+    ...(shipped ? { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !['HPS_RELEASE_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'].includes(k))),
+      ...(process.env.HPS_UPDATE_CHECK_TOKEN ? { HPS_UPDATE_CHECK_ACCEPTANCE: '1' } : {}) } } : {}),
   });
   await app.evaluate(({ app: a, BrowserWindow }, v) => { a.dock?.hide(); for (const w of BrowserWindow.getAllWindows()) { w.setContentSize(v.width, v.height); w.setPosition(-4000, -4000); } }, VIEWPORT);
   const win = await app.firstWindow();
