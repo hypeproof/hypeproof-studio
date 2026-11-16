@@ -19,3 +19,7 @@
   - The browser smoke measures rendered sizes, not computed ones.
   - The Service width rule is unchanged. It is stricter than the HTML layer needs.
   - Confirmed by Jay: no.
+- **Service deploy with migration 0095 (Jay, 2026-11-16).** Confirmed by Jay: yes (2026-11-16), chosen option "내가 적용·배포".
+  - Service main carries this row's catalog part (hypeproof-service#541) and the CGP-SHELL-R-030 Service half (hypeproof-service#544). It also carries migration 0095 `account_handoff_tickets` (hypeproof-service#542, another session), so the deploy waited for prod D1, which was at 0094.
+  - Decision: the parity loop applies 0095 to prod D1 and runs `release:deploy` for Service main, rather than leaving 0095 to #542's owner.
+  - Steps: check that no live session is running, take a D1 restore bookmark first, apply 0095, then deploy.
