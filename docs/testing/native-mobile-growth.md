@@ -18,6 +18,15 @@ inferred from UI use or passing these tests.
 | MVOICE-T04 | MVOICE-04 | Deny actual OS microphone permission, background capture, change project, stop while waiting/read-aloud, and inject late callback; partial words survive and no capture/transfer resumes. Physical route changes remain a separate hardware check. |
 | MVOICE-T05 | MVOICE-05 | Unsupported recognition/voice returns to text. Observe recognition with network disabled on a supported physical Korean device; reconnection never replays automatically. Fixtures cannot prove offline ASR. |
 
+For #4259, the existing iPhone dictation and empty-recognition journeys first
+require an enabled, hittable, fully onscreen target of at least 44×44pt. They
+record its frame and touch coordinate, then tap once at 15% of each dimension,
+inside the padding outside the old icon. The original draft preservation,
+visible reply, unique submissions, retry budget and Stop assertions remain.
+No second tap, longer answer timeout or direct handler invocation can substitute
+for that input. Synthetic speech verifies the native input/controller path;
+physical Korean recognition remains a separate device check.
+
 MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
 a confirmation sheet or manual next-turn tap prove only the previous behavior
 and cannot satisfy these revised cases. Android alignment remains open under
