@@ -57,10 +57,16 @@ def _result(status: int, body: dict) -> str:
     return f"discord error {body.get('code', 'unknown')}"
 
 
-def _post(channel_id: str, content: str, token: str, mention_user_ids) -> tuple[int, str]:
+# A person-to-person card pings at most five people. A whole-team release card (release_relay.py) names
+# everyone on purpose and may ping up to TEAM_MENTIONS.
+TEAM_MENTIONS = 10
+
+
+def _post(channel_id: str, content: str, token: str, mention_user_ids, limit: int = 5) -> tuple[int, str]:
     if len(content) > MAX_BODY:
         content = content[: MAX_BODY - 20] + "\n…(truncated)"
-    payload = {"content": content, "allowed_mentions": {"parse": [], "users": [str(u) for u in mention_user_ids][:5]}}
+    users = [str(u) for u in mention_user_ids][:min(limit, TEAM_MENTIONS)]
+    payload = {"content": content, "allowed_mentions": {"parse": [], "users": users}}
     status, body = _call(f"/channels/{channel_id}/messages", token, payload)
     return status, _result(status, body)
 
@@ -74,8 +80,8 @@ def _dm(user_id: str, content: str, token: str) -> tuple[int, str]:
     return status, _result(status, body)
 
 
-async def post(channel_id: str, content: str, *, token: str, mention_user_ids=()) -> tuple[int, str]:
-    return await asyncio.to_thread(_post, channel_id, content, token, mention_user_ids)
+async def post(channel_id: str, content: str, *, token: str, mention_user_ids=(), limit: int = 5) -> tuple[int, str]:
+    return await asyncio.to_thread(_post, channel_id, content, token, mention_user_ids, limit)
 
 
 async def dm(user_id: str, content: str, *, token: str) -> tuple[int, str]:
