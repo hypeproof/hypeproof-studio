@@ -3,7 +3,9 @@
 
     stakeholders.py plan    --repo hypeproof/R --pr N [--card card.json] [--registry reg.json]
     stakeholders.py request --repo hypeproof/R --pr N --card card.json --registry reg.json --state ledger.db [--only LOGIN] [--apply]
-    stakeholders.py tick    --registry reg.json --state ledger.db [--apply]
+    stakeholders.py tick    --registry reg.json --state ledger.db [--apply] [--no-release] [--inbox-config C --inbox-state S]
+
+`tick` also relays Studio release asks ("출시 결정") and "출시됨 vX" to the whole team (release_relay.py).
 
 Recipients come from data, never guesses: the human approvers a gate still needs (the
 approval inbox's GitHubProvider.snapshot, i.e. hype-merge and the control-plane gate), the
@@ -51,6 +53,9 @@ ROOT = Path(__file__).resolve().parents[2]
 _owner_spec = importlib.util.spec_from_file_location("notify_ownership", Path(__file__).with_name("ownership.py"))
 ownership = importlib.util.module_from_spec(_owner_spec)
 _owner_spec.loader.exec_module(ownership)
+_relay_spec = importlib.util.spec_from_file_location("notify_release_relay", Path(__file__).with_name("release_relay.py"))
+release_relay = importlib.util.module_from_spec(_relay_spec)
+_relay_spec.loader.exec_module(release_relay)
 
 KST = dt.timezone(dt.timedelta(hours=9))
 QUIET_FROM, QUIET_UNTIL = 22, 9
@@ -508,6 +513,28 @@ def tick(registry: dict, db, *, apply: bool = False, now: float | None = None, g
     return report
 
 
+def team_post(registry: dict) -> Callable[[str, list[str]], tuple[str, str]]:
+    """A whole-team #team card (Studio release asks and "출시됨 vX"); may ping every named contact."""
+    def post(text: str, ids: list[str]) -> tuple[str, str]:
+        token, channel = _discord(registry)
+        if not token or not channel:
+            return "skipped", "no Discord bot or #team channel"
+        mod = _transport("discord_bot")
+        status, info = asyncio.run(mod.post(channel, text, token=token, mention_user_ids=ids, limit=mod.TEAM_MENTIONS))
+        return ("sent", info) if 200 <= status < 300 else ("failed", f"HTTP {status} {info}")
+    return post
+
+
+def release_tick(registry: dict, db, *, apply: bool = False, now: float | None = None, gh: Callable = gh_json,
+                 inbox: Callable | None = None) -> list[dict]:
+    """Studio release asks and announcements to the whole team (release_relay.py)."""
+    now = time.time() if now is None else now
+    names = member_names(content(gh, *MEMBERS))
+    return release_relay.relay(registry, db, senders=SENDERS, team_post=team_post(registry), gh=gh, now=now,
+                               quiet=quiet(now), apply=apply, approvers=release_relay.release_approvers(ROOT),
+                               names=names, inbox=inbox)
+
+
 def bot_token_from(env_file: str) -> str:
     """Read DISCORD_BOT_TOKEN from the existing bot's private .env (reused, never copied or printed)."""
     path = Path(env_file).expanduser()
@@ -553,6 +580,9 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--discord-env")
     t.add_argument("--team-channel")
     t.add_argument("--apply", action="store_true")
+    t.add_argument("--no-release", action="store_true", help="skip the Studio release relay (release_relay.py)")
+    t.add_argument("--inbox-config", help="approval-inbox controller config: also put release asks in the inbox")
+    t.add_argument("--inbox-state", help="approval-inbox controller state database")
     args = p.parse_args(argv)
     try:
         registry = with_discord(load_registry(args.registry), args.discord_env, args.team_channel)
@@ -564,7 +594,15 @@ def main(argv: list[str] | None = None) -> int:
                 raise NotifyError("request needs --card")
             out = request(args.repo, args.pr, card, registry, ledger(args.state), only=args.only, apply=args.apply)
         else:
-            out = tick(registry, ledger(args.state), apply=args.apply)
+            db = ledger(args.state)
+            out = tick(registry, db, apply=args.apply)
+            if not args.no_release:
+                hook = (release_relay.inbox_hook(args.inbox_config, args.inbox_state, ROOT)
+                        if args.inbox_config and args.inbox_state else None)
+                try:
+                    out = {"requests": out, "release": release_tick(registry, db, apply=args.apply, inbox=hook)}
+                except (NotifyError, ValueError, OSError) as exc:  # the PR notifier keeps working
+                    out = {"requests": out, "release": {"status": "error", "error": str(exc)[:300]}}
     except (NotifyError, OSError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)[:300]}, ensure_ascii=False))
         return 2
