@@ -4,13 +4,19 @@
 // Earlier release-cut runs on the same commit are not candidate CI either; they are left out by workflow id (#1845).
 // GitHub's dynamic runs (Dependabot updates, which attach to main's head) do not test the candidate's code;
 // a failed Dependabot update stopped the 2026-10-29 cut, so they are left out by event.
+// The release machinery's own workflows judge or ship a candidate; they do not test its code. The scheduled
+// release-auto run attaches to main's head, and its stop on an older release PR turned the next candidate
+// red (v2026.1116.0-rc.4, #4315), so they are left out by workflow file.
 import {execFileSync} from 'node:child_process';
 
 const BAD = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure']);
+export const RELEASE_MACHINERY = new Set(['release-auto.yml', 'release-promote.yml', 'release-cut.yml', 'verify-unified-release.yml']);
+const machinery = path => typeof path === 'string' && RELEASE_MACHINERY.has(path.replace(/@.*$/, '').split('/').pop());
 
 export function judge(all, runId, ownWorkflowId) {
   const own = runId ? `/actions/runs/${runId}/` : null;
-  const eligible = all.filter(r => !(own && r.url.includes(own)) && !(ownWorkflowId && r.workflowId === ownWorkflowId) && r.event !== 'dynamic');
+  const eligible = all.filter(r => !(own && r.url.includes(own)) && !(ownWorkflowId && r.workflowId === ownWorkflowId) && r.event !== 'dynamic' &&
+    !(r.workflowPath && r.workflowPath.startsWith('.github/workflows/') && machinery(r.workflowPath)));
   const latest = new Map();
   for (const run of eligible) {
     // Only supersede with evidence of the same workflow and job. Names alone
@@ -49,7 +55,7 @@ export default {
         if (!metadata.has(match[1])) {
           const action = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/actions/runs/${match[1]}`], {encoding: 'utf8'}));
           if (action.head_sha !== sha || !action.workflow_id || !action.run_number || !action.run_attempt) throw Error('Candidate CI run identity is incomplete or mismatched');
-          metadata.set(match[1], {workflowId: action.workflow_id, runNumber: action.run_number, runAttempt: action.run_attempt, event: action.event});
+          metadata.set(match[1], {workflowId: action.workflow_id, runNumber: action.run_number, runAttempt: action.run_attempt, event: action.event, workflowPath: action.path});
         }
         info = metadata.get(match[1]);
       }

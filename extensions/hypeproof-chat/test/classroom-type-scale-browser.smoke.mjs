@@ -1,6 +1,6 @@
 // CGP-DS-R-008 (REQ-CGP-DS-09, REQ-STUDIO-TYPE-SCALE) — the classroom seat, measured on the CASCADE in headless
 // Chromium. DEC-29 put the 14px floor on the personal chat; Jay extended it to the classroom on 2026-11-03
-// (decisions.md DEC-29b). The real ChatPanel is mounted in the classroom lesson seat (week-3 lesson, mission header,
+// (decisions/DEC-29b.md DEC-29b). The real ChatPanel is mounted in the classroom lesson seat (week-3 lesson, mission header,
 // lesson cards, an answer with code, a learner turn, the error, page, AI and stop notices, the composer) with the
 // shipped stylesheet, dark and light, at 360x1400, 1280x1400 and 360x640 (the compact-height mission layout). Every visible text node in the panel is read with
 // getComputedStyle, never rule text:

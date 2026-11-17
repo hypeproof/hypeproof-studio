@@ -24,10 +24,11 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {isAppPackage, sha256} from '../../e2e/unified-release/artifact.mjs';
-import {CASEBOOK, decide, p0CaseIds} from './publish-gate.mjs';
+import {CASEBOOK, autoSetting, decide, p0CaseIds} from './publish-gate.mjs';
 import {parseYaml} from './casebook.mjs';
 import {pickRelease} from './release-draft.mjs';
 import {MAC_RECEIPT} from './macos-signing-receipt.mjs';
+import {checkBlockers} from './release-blockers.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
 const VERSION = /^v\d+\.\d+\.\d+$/;
@@ -57,7 +58,7 @@ const MERGEABLE_STATES = new Set(['CLEAN', 'UNSTABLE', 'HAS_HOOKS']);
 //   commit:  the PR head commit {sha, parents: [sha], message, files: [path]}
 //   rcTags:  [{name, sha}] for <version>-rc.*; vTagSha: the v tag's commit, or '' when absent
 //   rcRelease: {isDraft, assets: [{name, digest}]} of the recorded rc, or null
-export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), p0, vTagSha = '', rcRelease = null, mergeState = ''}) {
+export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), p0, vTagSha = '', rcRelease = null, mergeState = '', auto}) {
   const refuse = reason => ({allow: false, reasons: [reason]});
   const version = branchVersion(pr.headRef);
   if (!version) return refuse(`#${pr.number}: head ${pr.headRef} is not release/vX.Y.Z`);
@@ -85,9 +86,9 @@ export function promotionDecision({pr, commit, rcTags = [], writers = new Set(),
   // The same rule the publish gate applies later: a writer's approval on the PR's current head, and
   // the casebook run (or a release manager override) on that head (#3429). Without p0, the comments
   // and the head date the gate refuses every approval (#3513), so pass exactly what it reads.
-  const gate = decide({tag: version, tagSha: candidate, rcTags, writers, p0,
+  const gate = decide({tag: version, tagSha: candidate, rcTags, writers, p0, auto,
     releasePrs: [{number: pr.number, labels: pr.labels, head: pr.head, headDate: pr.headDate, comments: pr.comments ?? [], reviews: pr.reviews}]});
-  if (gate.route !== 'approval') return {allow: false, reasons: gate.reasons.filter(r => !r.startsWith('hotfix:'))};
+  if (gate.route !== 'approval' && gate.route !== 'auto') return {allow: false, reasons: gate.reasons.filter(r => !r.startsWith('hotfix:'))};
   if (!rcRelease) return refuse(`${rcTag} has no release: its builds have not uploaded`);
   if (rcRelease.isDraft) return refuse(`${rcTag} is still a draft: its acceptance has not passed yet. Rerun release-promote after it publishes`);
   const assets = rcRelease.assets.filter(a => isAppPackage(a.name) || a.name === ACCEPTANCE || a.name === MAC_RECEIPT);
@@ -173,7 +174,7 @@ export function gatherPromotion(number, repo) {
   // Unreadable leaves p0 undefined, which the gate refuses with "the casebook P0 list was not read".
   let p0;
   try { if (candidate) p0 = p0CaseIds(parseYaml(git('show', `${candidate}:${CASEBOOK}`), CASEBOOK)?.cases ?? []); } catch { p0 = undefined; }
-  return {pr, commit, writers, p0, mergeState, rcTags: version ? rcTagsOf(version) : [], vTagSha: version ? remoteTagSha(version) : '',
+  return {pr, commit, writers, p0, mergeState, auto: autoSetting(), rcTags: version ? rcTagsOf(version) : [], vTagSha: version ? remoteTagSha(version) : '',
     rcRelease: rcTag ? releaseOf(rcTag) : null};
 }
 
@@ -211,6 +212,14 @@ function run({pr: number, out}) {
   if (!verdict.allow) {
     say('Nothing promoted.');
     verdict.reasons.forEach(say);
+    finish(1);
+  }
+  // An open release-blocker issue stops promotion before the v tag, even after an approval (fail closed).
+  const blockers = checkBlockers();
+  if (!blockers.allow) {
+    say('Nothing promoted: the release is blocked.');
+    blockers.reasons.forEach(say);
+    say(`Fix and close each release-blocker issue, then rerun: gh workflow run release-promote.yml -f pr=${number}`);
     finish(1);
   }
   const {version, rcTag, candidate} = verdict;

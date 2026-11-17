@@ -18,6 +18,45 @@ inferred from UI use or passing these tests.
 | MVOICE-T04 | MVOICE-04 | Deny actual OS microphone permission, background capture, change project, stop while waiting/read-aloud, and inject late callback; partial words survive and no capture/transfer resumes. Physical route changes remain a separate hardware check. |
 | MVOICE-T05 | MVOICE-05 | Unsupported recognition/voice returns to text. Observe recognition with network disabled on a supported physical Korean device; reconnection never replays automatically. Fixtures cannot prove offline ASR. |
 
+For #4307, exercise MVOICE-T03/T05 against an adversarial installed-voice catalog:
+basic Korean precedes enhanced Korean, and premium English must not beat Korean.
+Installed premium Korean wins; equal-quality ties remain stable. Default-only,
+unknown-quality and empty catalogs preserve conservative output or text fallback.
+An installed premium novelty or personal voice cannot displace a standard-purpose
+Korean voice; no eligible Korean voice keeps the existing text fallback.
+The original first-match policy is a negative control for basic-before-enhanced.
+
+Extend the existing `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary`
+journey to observe the requested voice quality against the actual available
+inventory, the accessibility-preference option, real OS synthesis start/finish
+and the next capture boundary. Do not skip this journey because premium assets
+are absent, replace synthesis callbacks with a timer, or report requested voice as
+the effective accessibility output. Native execution is required; portable policy
+checks alone do not prove App integration.
+
+Physical listening remains a separate acceptance step: compare the same Korean
+sentences, numbers and proper names before/after on the exact installed build,
+record available voice quality and active accessibility settings locally, then
+exercise five turns using speaker and headset. Report the person's preference,
+unwanted cutoffs, Stop and resumed listening. Source quality selection and simulator
+callbacks do not prove perceived naturalness, acoustic echo cancellation or barge-in.
+
+For #4259, the existing iPhone dictation and empty-recognition journeys first
+require an enabled, hittable, fully onscreen target of at least 44×44pt. They
+record its frame and touch coordinate, then tap once at 15% of each dimension,
+inside the padding outside the old icon. The original draft preservation,
+visible reply, unique submissions, retry budget and Stop assertions remain.
+No second tap, longer answer timeout or direct handler invocation can substitute
+for that input. Synthetic speech verifies the native input/controller path;
+physical Korean recognition remains a separate device check.
+
+The shared iPhone sign-in journey also uses one padded-corner touch on the login
+pill, then retains the original visible account-opening and completed-login
+assertions (#4236). No handler invocation, second touch or extended login wait is
+allowed. The preserved failed center touch did not enter the login action; a
+passing corner-touch check establishes the full-pill interaction contract, not
+the unproved cause of that earlier event loss.
+
 MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
 a confirmation sheet or manual next-turn tap prove only the previous behavior
 and cannot satisfy these revised cases. Android alignment remains open under
@@ -328,6 +367,20 @@ run binds package bytes and app/run identity without claiming availability.
 Existing native-gate controls still reject stale or mismatched CI artifacts.
 These controls perform no signing, Apple call or workflow dispatch.
 
+For Studio #4233 / MENT-05, `ios-verify.sh` also runs
+`check-ios-push-metadata.py` against the actual unsigned device app: its push
+metadata must be present and disabled, with the existing bundle/display/usage
+metadata retained. Three tiny real Xcode C app controls use the tracked input
+plist to distinguish missing custom-key generation from explicit enabled and
+disabled values. Each build has a three-minute bound; any failure stops the
+recipe and preserves `push-metadata.json` and its available probe logs. A host
+without Xcode cannot establish this evidence. The existing signed IPA guard
+still qualifies the actual enabled release before upload. Portable upload tests
+remove the source input/key, inject signature/entitlement/profile failures and
+check fixed phase/check diagnostics without private values. Neither these
+controls nor the tiny native app proves physical delivery or identifies the
+unretained historical failed IPA's exact exception.
+
 For Studio #3866, `test_native_workflow_source.py` adds two-source contract and
 real CLI/shell controls. A candidate containing an obsolete helper must use the
 separate trusted control checkout. Main may advance normally without changing
@@ -423,6 +476,7 @@ separately observed. A prepared runner or green build is not that observation.
 
 - 실제 `ReflectionModel` + 기존 device sign-in protocol 제어: 로그인 전 글의 정확한 저장/재열기, 취소·거절·늦은 완료, 빈 계정 초안으로만 이동, 충돌 후 명시 복원, 계정 저장/게스트 삭제 실패의 원본 보존과 전송 0회를 확인한다 (`GuestDraftTest`).
 - 실제 `QuestionActivity` / `AtomicFile` / Keystore 제어: 첫 화면 입력, 동의 취소, 앱 재실행, 로그인 성공/거절, 충돌·복원과 손상 파일 보존을 확인한다. 음성 입력만 합성하고 실제 Host/model/file 경로에서 로그인 전 받아쓰기·백그라운드 중단·늦은 콜백 거부를 확인한다 (`QuestionJourneyTest`).
+- 충돌 후 명시 복원은 실제 DOWN → 기존 모델 저장·화면 갱신 → UP 한 번으로 확인한다 (Studio #4190). 원래 버튼이 분리되어 탭을 잃는 대조군과, 복원 글·계정/게스트 파일·전송 0회를 확인하는 수정본을 구분한다. 실패 시 synthetic 초안/저장 상태와 버튼 부착 여부를 종료 전에 보존하며 자격 증명은 기록하지 않는다.
 - 실제 소프트웨어 키보드를 연 뒤 다섯 줄의 전체 값, 입력창·로그인 버튼이 화면과 키보드 위에 남는지 확인한다. 별도 소유 에뮬레이터에서 시스템 큰 글자/다크 모드로 같은 화면을 기록한다. 기존 기기 기록은 메뉴에서 접근한다.
 - 원래 `QuestionActivity`를 복원하면 로그인 전 입력창 표시 검증이 실패해야 한다. 에뮬레이터의 합성 로그인/음성은 실제 Galaxy 로그인·마이크·접근성 서비스·배포 증거가 아니다. 실행 결과와 패키지 identity는 별도로 기록한다.
 
@@ -444,6 +498,12 @@ revision barrier reads the actual applied model cache, not a transport completio
 guess. These seams compile out of Release. The existing admission-denied journey
 now models Service persistence before 403 and retains the failed user event, reason
 and identity; its former pre-persistence local-retry shortcut is not evidence.
+The same admission journey arms a real periodic history GET before one explicit
+failed-draft restore. The response releases only after the account-cache write
+succeeds; assertions observe its later application, retained draft on relaunch,
+and unchanged submitted IDs. The original `!syncing` eligibility must fail this
+held-read control. This is a deterministic regression contract, not proof that a
+historical tap failed for that reason; the old run had no handler-entry trace.
 
 New App journeys and changed AX diagnostics require actual hosted Xcode execution.
 Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.
@@ -478,6 +538,17 @@ Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
 `NativeTeamModelTest.java`, `TeamEntryJourneyTest.java`, `AccountPushTests.swift`,
 `NativePushTest.java`. A fixture name or compiled APK alone is not
 an executed native journey. Report the actual run and any missing physical/provider evidence.
+
+For #4236, extend the existing MENT-T01/T02 question-answer journeys through the
+confirmed receipt: observe the visible next-question action, record unchanged GET,
+answer and trigger counts before the tap, tap once, then observe one new card GET
+and either a different card or the empty-inbox choices. Retain before/after screenshots
+and verify the original conversation draft after Close. The bounded fixtures consume
+the answered card rather than returning it forever. Controller controls cover read
+failure, uncertain answer, duplicate in-flight reads and identity invalidation; none
+may retransmit the answer. A successful skip remains distinct from a confirmed answer.
+Desktop render/host controls and native simulator/emulator execution are separate;
+unexecuted native journeys and physical/live-account acceptance remain NOT RUN.
 
 Capability controls must exercise unavailable/error/account-switch metadata as
 well as available-but-declined consent. Both the visible choice and controller

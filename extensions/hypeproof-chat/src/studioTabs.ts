@@ -6,5 +6,7 @@ export const studioTabs = new StudioTabLedger();
 
 export function openStudioTab(url: string, options?: vscode.BrowserTabShowOptions): Thenable<vscode.BrowserTab> {
   studioTabs.note(url);
+  // Its first load is Studio-started (existing-window fix): the new tab's guard takes `firstLoad` once for that tab.
+  studioTabs.noteFirstLoad(url);
   return vscode.window.openBrowserTab(url, options);
 }

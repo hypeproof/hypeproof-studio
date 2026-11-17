@@ -1,0 +1,3 @@
+| DEC | Choice | Why | Default state | Confirmed by Jay |
+|---|---|---|---|---|
+| CGP-CHAT-D53 (conservative UI scope) | Extend the existing personal-workspace numbered-choice card, preserving its classroom/lesson exclusion and draft-first behavior. Enter after selection and an explicit confirmation button call normal Send; selection alone never sends. Recommendation requires a trailing exact `(추천)` or `[추천]` marker. | No question-specific protocol exists; do not invent model confidence, widen minor-seat admission, or bypass existing send guards. The card uses the reading column while prose retains its 40em measure. Skip/spool behavior belongs to a separate product slice. | On only where existing cards were admitted; no new recipient or transport | no |

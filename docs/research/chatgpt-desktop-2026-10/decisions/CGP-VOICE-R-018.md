@@ -1,0 +1,13 @@
+## CGP-VOICE-R-018: optional start and end sounds (2026-11-16, agent-selected)
+
+Confirmed by Jay: no. These are agent choices within REQ-CGPV-22, with the coordinator's decisions on seat and mute.
+
+- **Per seat (agent choice, confirmed by the coordinator).** Sounds are a personal sensory preference, unlike the microphone choice, which is hardware and stays per computer (CGP-VOICE-R-019). Classroom PCs are shared, so the switch uses the 팁 보기 seat (`collapseSeat`) and a bounded globalState list of the seats that turned it on. A seat not on the list is off, so a new learner always starts silent. With no seat known yet, the choice lasts for this window only and nothing is stored.
+- **Window sound off wins (coordinator).** While 소리 끄기 (`voiceOutputMute`) is on, no earcon plays, including an end whose start played before the mute. On main there is no mounted 소리 끄기 control yet (VoicePanel is not mounted), so the rule is tested on the pairing logic and the player source, not in the App.
+- **What counts as a session (agent choice).** Dictation: from the recorder's `recording` state to the moment it leaves it (stop, cancel, hide). The cancel path releases the microphone before the state changes. Conversation: the R-030 live-task store, from a session going live to its stop, which comes after the microphone was released. Turns inside a conversation (each capture, each spoken answer) make no sound; one start and one end per session keeps it from beeping on every turn.
+- **At most one start and one end (agent choice).** An end plays only after a start that played. A start that was silent (switch off, sound off) keeps its end silent, and a session that never reached `recording` makes no sound at all.
+- **Read-aloud is never a source (coordinator).** The coach's speech starting and ending makes no sound, in the conversation or from 읽어 주기.
+- **Sound (agent choice).** Two short sine glides made with WebAudio: rising 660→880 Hz for start, falling 880→587 Hz for end, 120 ms each, at gain 0.08. Rising and falling sounds can be told apart without relying on pitch memory. No asset files, no network, nothing stored or logged. A missing or failing AudioContext stays silent and changes nothing.
+- **Copy (agent-written).** 시작·끝 소리 내기, with the hint "받아쓰기와 음성 대화가 시작하고 끝날 때 짧은 소리를 내요."
+- **Where it is not.** The instructor console, a seat where dictation is not served, and the unmounted VoicePanel. VoiceConversationControl and `voiceConversation.ts` are unchanged; DictationControl gains only the one line that publishes its recording state.
+- **Not covered:** a real installed App, real speakers, a real microphone and a real screen reader.

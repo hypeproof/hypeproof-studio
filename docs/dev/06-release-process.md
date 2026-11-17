@@ -363,7 +363,19 @@ node update-check/run.mjs
 
 The last command copies the installed macOS App into a temporary directory. It injects the
 built extension and checks the update command against the public release API. It never
-installs an update. Platform CI runs the macOS swap and rollback fixtures and the Windows
+installs an update. `verify-unified-release.yml` runs it on macOS against each candidate App with
+`HPS_UPDATE_CHECK_SHIPPED=1` (nothing injected), as a blocking step. The runner's own tokens are
+stripped from the App. The public read carries the job token only through the acceptance-only path:
+the step sets `HPS_UPDATE_CHECK_TOKEN` (the job's `github.token`), and `run.mjs` adds
+`HPS_UPDATE_CHECK_ACCEPTANCE=1`. `updateTransport.ts` `acceptanceCheckToken` honours the token only when
+both are set (the flag exactly `1`), and only for the public latest-release read, never for the mirror or an
+asset download. A normal launch sets neither, so users' public reads stay anonymous (D19).
+`test/update-acceptance-token.smoke.mjs` proves it is ignored otherwise. Without it, a hosted runner's
+shared IP exhausts the 60/h anonymous budget. A rate-limited answer still fails the step, with
+the App's own words.
+That proves the shipped updater runs and reads the public release; it is not previous stable -> rc, which
+cannot be offered before publication (the updater reads only the latest published stable release), so
+BB-022 and BB-028 stay manual. Windows is not covered. Platform CI runs the macOS swap and rollback fixtures and the Windows
 PowerShell wrapper with a mocked installer. These do not replace a real upgrade and restart
 of the packaged App on each OS.
 

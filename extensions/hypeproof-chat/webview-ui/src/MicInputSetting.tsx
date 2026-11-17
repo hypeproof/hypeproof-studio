@@ -66,11 +66,13 @@ function MicInputRow() {
   }, [env, refresh]);
 
   // ---- 마이크 시험 ----
-  const run = useRef<{ stream: StreamLike | null; meter: LevelMeter | null; timer: unknown; end: number; peak: number; generation: number }>({ stream: null, meter: null, timer: null, end: 0, peak: 0, generation: 0 });
+  // `timer` polls the level; `deadline` ends the test at exactly MIC_TEST_MS (Jay: at most 5 s), whatever the poll does.
+  const run = useRef<{ stream: StreamLike | null; meter: LevelMeter | null; timer: unknown; deadline: unknown; peak: number; generation: number }>({ stream: null, meter: null, timer: null, deadline: null, peak: 0, generation: 0 });
   const [level, setLevel] = useState<number | null>(null);
   const release = useCallback(() => {
     const r = run.current;
     if (r.timer !== null) { env.clearTimeout(r.timer); r.timer = null; }
+    if (r.deadline !== null) { env.clearTimeout(r.deadline); r.deadline = null; }
     const meter = r.meter; r.meter = null;
     try { meter?.close(); } catch { /* already closed */ }
     for (const track of r.stream?.getTracks() ?? []) { try { track.stop(); } catch { /* already stopped */ } }
@@ -112,21 +114,21 @@ function MicInputRow() {
       return;
     }
     if (generation !== r.generation || !mounted.current) { for (const track of stream.getTracks()) { try { track.stop(); } catch { /* ignore */ } } return; }
-    r.stream = stream; r.peak = 0; r.end = env.now() + MIC_TEST_MS;
+    r.stream = stream; r.peak = 0;
+    r.deadline = env.setTimeout(() => { r.deadline = null; finish(generation); }, MIC_TEST_MS);
     try { r.meter = env.levelMeter?.(stream) ?? null; } catch { r.meter = null; }
     const poll = () => {
       if (generation !== r.generation) return;
       let value: number | null = null;
       try { value = r.meter ? r.meter.read() : null; } catch { value = null; }
       if (value !== null) { r.peak = Math.max(r.peak, value); setLevel(value); }
-      if (env.now() >= r.end) { finish(generation); return; }
       r.timer = env.setTimeout(poll, MIC_TEST_POLL_MS);
     };
     poll();
   }, [choice, env, finish]);
   // The dialog closing (unmount) or the window hiding ends a test at once.
   useEffect(() => {
-    const hide = () => { if (run.current.stream || run.current.timer !== null) { run.current.generation++; release(); setLevel(null); setTest({ kind: "idle" }); } };
+    const hide = () => { if (run.current.stream || run.current.timer !== null || run.current.deadline !== null) { run.current.generation++; release(); setLevel(null); setTest({ kind: "idle" }); } };
     const onVisibility = () => { if (document.visibilityState === "hidden") hide(); };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", hide);

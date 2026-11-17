@@ -167,6 +167,29 @@ test('S5 leaves out GitHub dynamic runs such as Dependabot updates', () => {
   assert.equal(judge([run('Dependabot', 'success', 303, 'dynamic')]).result, 'NOT_RUN');
 });
 
+test('S5 leaves out the release machinery own workflows (release-auto stopped rc.4, #4315)', () => {
+  const run = (workflowPath, name, conclusion, id, status = 'completed') => ({id, workflowId: id, runNumber: 1, runAttempt: 1, name, status, conclusion,
+    event: 'schedule', workflowPath, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
+  const ci = run('.github/workflows/studio-pr-ci.yml', 'extension / smoke', 'success', 100);
+  // the bug: the scheduled release-auto run on main's head stopped on an older release PR and failed the cut
+  assert.equal(judge([ci, run('.github/workflows/release-auto.yml', 'auto', 'failure', 200)]).result, 'PASS');
+  for (const file of ['release-promote.yml', 'release-cut.yml', 'verify-unified-release.yml']) {
+    assert.equal(judge([ci, run(`.github/workflows/${file}`, 'job', 'failure', 300)]).result, 'PASS', file);
+    assert.equal(judge([ci, run(`.github/workflows/${file}`, 'job', '', 301, 'in_progress')]).result, 'PASS', `${file} running`);
+  }
+  assert.equal(judge([ci, run('.github/workflows/release-auto.yml@refs/heads/main', 'auto', 'failure', 202)]).result, 'PASS');
+  // negative controls: candidate CI still blocks, also when its job is named like a release job, and the
+  // match is by exact workflow file under .github/workflows, never by name or by a look-alike path
+  assert.equal(judge([ci, run('.github/workflows/studio-pr-ci.yml', 'auto', 'failure', 400)]).result, 'FAIL');
+  assert.equal(judge([ci, run('.github/workflows/build-windows.yml', 'release', 'failure', 401)]).result, 'FAIL');
+  assert.equal(judge([ci, run('.github/workflows/release-auto.yml.bak', 'auto', 'failure', 402)]).result, 'FAIL');
+  assert.equal(judge([ci, run('.github/workflows/pre-release-auto.yml', 'auto', 'failure', 403)]).result, 'FAIL');
+  assert.equal(judge([ci, run('elsewhere/release-auto.yml', 'auto', 'failure', 404)]).result, 'FAIL');
+  assert.equal(judge([ci, run(undefined, 'auto', 'failure', 405)]).result, 'FAIL');
+  // only machinery left: nothing tested the candidate
+  assert.equal(judge([run('.github/workflows/release-auto.yml', 'auto', 'success', 500)]).result, 'NOT_RUN');
+});
+
 test('S3 and S4 are NOT_RUN without their scoped credential, even with the admin password', async () => {
   const env = {HPS_ADMIN_PASSWORD: 'x'};
   assert.equal((await s3.run({env})).result, 'NOT_RUN');

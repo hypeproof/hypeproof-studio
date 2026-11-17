@@ -1,0 +1,12 @@
+## DEC-DS-R-011: one radius scale, nested radii computed (CGP-DS-R-011, 2026-10-26; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Scale steps | 4 / 6 / 8 / 12 / 16 / 18 / 20 / 24px and full (999px), primitives in `designTokens.css` | DES-CGP-DS-12's 4/8/12/16/24 plus the three values shipped designs already fix: the 20px composer (DES-CGP-DS-21, D-016), the 18px bubble and its 6px tail (owner decision D-017). Dropping them would overrule a design row and an owner decision | On | no |
+| Global multiplier | `--ds-p-radius-scale` (1), applied with `calc()` in `radiusScale.css`; full is not multiplied | The token tiers only alias (design-tokens smoke), so the first consumer multiplies. One file serves Studio (via `tokens.css`) and Chalk (in the token transport), so there is one scale, not two copies | On | no |
+| Nested radii | Outer radius minus the inset between the two edges: menu items 12 − 4 = 8px (were 6px, REQ-STUDIO-MENU-TOKENS), task menu and "내 질문" items 12 − 6 = 6px (were 5px; their panels 9 → 12px, the menu radius), controls and the field in the composer card 20 − 12 = 8px (every composer button without its own radius, classroom Send/Stop and 다시 굴리기, and the classroom field were 4px) | That is the acceptance's rule; a step that happens to match would drift when either value moves | On | no |
+| Round controls | The personal Send/Stop and tools buttons keep their circle, on `--hp-radius-full` instead of 50% | A circle is a shape, not a concentric corner; turning the Send circle into an 8px square is a visual change the row does not ask for | On | no |
+| Off-scale values on the named surfaces | Classroom bubble 14 → 16px (tail 4px kept; the classroom assistant bubble keeps its 14px, it is not a named surface), personal suggestion chip 10 → 8px, citation chip 9 → 8px, access chip 5 → 4px; pills already at 999px move onto the full step. Overridden rules (composer 22/28px, personal bubble 20px, personal citation 9px, settings card 16px) name the radius that already won | Nearest step inside the design range (DES-CGP-DS-12: bubble 16–20px); a 1–2px change on each | On | no |
+| Scope | Composer, bubble, menus, dialogs and chips in Studio and Chalk. Every other radius keeps its shipped value | As DEC-DS-R-010 kept off-ladder spacing: moving all ~250 radii redraws every surface and needs a design review | On | needed for a full migration |
+| `corner-shape: superellipse` | Not adopted | Chromium-only today and not in the acceptance | n/a | no |
+

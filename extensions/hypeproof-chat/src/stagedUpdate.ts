@@ -87,7 +87,11 @@ export class StagedUpdate {
     try {
       const record = JSON.parse(fs.readFileSync(this.pending, 'utf8')) as PreparedUpdate;
       if (typeof record?.version !== 'string' || !Array.isArray(record.artifacts)) return null;
-      return record.artifacts.every(p => typeof p === 'string' && fs.existsSync(p)) ? record.version : null;
+      if (!record.artifacts.every(p => typeof p === 'string' && fs.existsSync(p))) return null;
+      // A Windows stage whose installer has no .exe name (staged by builds that named it after the
+      // numeric asset id) can never run: treat it as not staged so the next check downloads it again.
+      if (record.platform === 'win32' && !record.artifacts.some(p => /\.exe$/i.test(p))) return null;
+      return record.version;
     } catch { return null; }
   }
 

@@ -301,13 +301,21 @@ private struct SharedCacheFile: Codable {
             && !busy && !syncing && guestDraft.canRestore(into: cache)
     }
     var canRestoreFailedReflectionDraft: Bool {
-        signedIn && accountStorageReady && cacheReadable && isReflection && !busy && !syncing
-            && cache.canRestoreFailedReflectionDraft
+        // A history GET never owns the local draft. Restore from the current
+        // cache while it is pending, just as ordinary typing remains available.
+        signedIn && accountStorageReady && cacheReadable && isReflection && !busy
+            && !loggingOut && !stoppingReflection && cache.canRestoreFailedReflectionDraft
     }
     @discardableResult func restoreFailedReflectionDraft() -> Bool {
+#if DEBUG
+        NativeJourneyFixture.failedDraftRestoreAttempt(eligible: canRestoreFailedReflectionDraft)
+#endif
         guard canRestoreFailedReflectionDraft else { return false }
         do {
             try edit(Self.personalID) { _ = $0.restoreFailedReflectionDraft() }
+#if DEBUG
+            NativeJourneyFixture.failedDraftRestored()
+#endif
             notice = "입력란에 가져왔어요. 내용을 확인한 뒤 보내 주세요."
             return true
         } catch { self.error = error.localizedDescription; return false }
@@ -587,6 +595,9 @@ private struct SharedCacheFile: Codable {
 #endif
             guard epoch == attempt else { return }
             try applyReflection(personal)
+#if DEBUG
+            NativeJourneyFixture.failedDraftHistoryApplied()
+#endif
             personalHistoryNeedsRetry = false
             let personalItem = SharedConversation(id: Self.personalID, title: "나를 알아가는 대화", host_session_id: "", revision: personal.state.revision, updated_at: personal.state.messages.last?.created_at ?? 0)
             // A desktop-list outage must not hide an already available personal conversation.

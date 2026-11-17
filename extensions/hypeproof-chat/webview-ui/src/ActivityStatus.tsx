@@ -6,8 +6,10 @@ import { ACTIVITY_CAUSE_COPY, ACTIVITY_CAUSE_HEADLINE, TAKEAWAY_CAUSES, type Act
  * cause headline, the evidenced sentence, "아직 할 수 있는 것" with one button per local action, and a
  * "다시 쓰려면" contact line. Nothing here buys anything; the solo trial card arrives as children.
  */
-export function ActivityStatus({ status, onOpen, onExport, onRecover, onSupport, onToken, onTakeaway, children }: {
-  status: ActivityUnavailable; onOpen: () => void; onExport: () => void; onRecover: () => void; onSupport: () => void; onToken?: () => void; onTakeaway?: () => void; children?: ReactNode;
+export function ActivityStatus({ status, onOpen, onExport, onRecover, onSupport, onToken, onTakeaway, request, children }: {
+  status: ActivityUnavailable; onOpen: () => void; onExport: () => void; onRecover: () => void; onSupport: () => void; onToken?: () => void; onTakeaway?: () => void;
+  /** CGP-SHELL-R-030 — the request-more card, for any seat, drawn right under the cause when the allowance ran out. */
+  request?: ReactNode; children?: ReactNode;
 }) {
   const headingId = useId();
   const headline = ACTIVITY_CAUSE_HEADLINE[status.cause] ?? ACTIVITY_CAUSE_HEADLINE.unknown;
@@ -31,6 +33,7 @@ export function ActivityStatus({ status, onOpen, onExport, onRecover, onSupport,
     <p className="hps-sr-only" role="status" aria-live="polite" data-testid="activity-status-announcer">{announced}</p>
     <h3 id={headingId} ref={headingRef} tabIndex={-1} className="hps-activity-status-headline">{headline}</h3>
     <p>{ACTIVITY_CAUSE_COPY[status.cause] ?? ACTIVITY_CAUSE_COPY.unknown} 새 AI 요청은 실행되지 않습니다.</p>
+    {status.cause === 'exhausted' && request}
     <h4 className="hps-activity-status-subhead">아직 할 수 있는 것</h4>
     <ul className="hps-activity-status-can">
       <li><span>이 컴퓨터에 저장된 내 파일을 열고 편집·저장할 수 있습니다.</span><button type="button" onClick={onOpen}>내 파일 열기</button></li>

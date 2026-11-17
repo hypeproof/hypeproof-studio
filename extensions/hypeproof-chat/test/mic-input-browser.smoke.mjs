@@ -27,8 +27,8 @@ if(!navigator.mediaDevices)Object.defineProperty(navigator,'mediaDevices',{confi
 navigator.mediaDevices.enumerateDevices=async()=>{window.__enumerated++;return [
  {kind:'audioinput',deviceId:'default',label:'기본값 - USB 헤드셋'},{kind:'audioinput',deviceId:'${A}',label:'USB 헤드셋'},
  {kind:'audioinput',deviceId:'${B}',label:'내장 마이크'},{kind:'videoinput',deviceId:'${'c'.repeat(64)}',label:'카메라'}];};
-navigator.mediaDevices.getUserMedia=async()=>{window.__media++;const ctx=new AudioContext();const osc=ctx.createOscillator();const dest=ctx.createMediaStreamDestination();osc.connect(dest);osc.start();
- const s=dest.stream;for(const t of s.getTracks()){const stop=t.stop.bind(t);t.stop=()=>{window.__stopped++;stop();};}return s;};
+navigator.mediaDevices.getUserMedia=async()=>{window.__media++;window.__openedAt=performance.now();const ctx=new AudioContext();const osc=ctx.createOscillator();const dest=ctx.createMediaStreamDestination();osc.connect(dest);osc.start();
+ const s=dest.stream;for(const t of s.getTracks()){const stop=t.stop.bind(t);t.stop=()=>{window.__stopped++;window.__stoppedAt=performance.now();stop();};}return s;};
 Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:'granted'})}});`;
 const page = (theme) => {
   const vars = Object.entries(theme).filter(([k, v]) => !['kind', 'file'].includes(k) && v !== null).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
@@ -121,6 +121,10 @@ try {
   const heard = await ev(`[document.querySelector('.hps-mic-test-result').textContent, window.__ctxStates.join(',')].join(' | ')`);
   assert.equal(heard.split(' | ')[0], '소리가 들려요.', `a real tone is heard (${heard})`);
   assert.equal(await ev(`[window.__media, window.__stopped >= 1, document.querySelector('.hps-mic-test').textContent].join('|')`), '1|true|마이크 시험', 'ended by itself, tracks stopped');
+  // verify-4197 measured 5,065 ms with the poll-based end; the deadline is a timer now. The microphone was open for at
+  // most 5000 ms plus timer latency (a 30 ms allowance for the headless event loop; the exact 5000 ms is pinned in mic-input.test.tsx).
+  const openMs = await ev(`window.__stoppedAt - window.__openedAt`);
+  assert.ok(openMs <= 5030, `the microphone was open ${openMs} ms (at most 5 s)`);
   await ev(`document.querySelector('.hps-mic-test').click()`); await wait(400);
   const before = await ev(`window.__stopped`);
   await ev(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await wait(300);

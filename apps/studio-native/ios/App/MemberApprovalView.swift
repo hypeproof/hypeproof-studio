@@ -2,6 +2,8 @@ import SwiftUI
 
 @MainActor final class MemberApprovalPresentation: ObservableObject {
     @Published var state = MemberApprovalController.View()
+    /// The card a tapped phone alert points to. Only a scroll target; the inbox read stays authoritative.
+    @Published var focusID: String?
     var controller: MemberApprovalController?
     func refresh() { Task { await controller?.refresh() } }
     func decide(_ card: MemberApprovalCard, _ choice: MemberApprovalChoice) { Task { await controller?.decide(id: card.id, digest: card.request_digest, choice: choice) } }
@@ -10,16 +12,31 @@ import SwiftUI
 }
 struct MemberApprovalView: View {
     @ObservedObject var model: MemberApprovalPresentation
+    @ObservedObject var push: AccountPushPresentation
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             List {
                 if let message = model.state.message ?? status, !message.isEmpty {
                     Text(message).accessibilityIdentifier("approvalInboxStatus")
                 }
+                if focusMissing {
+                    Text("알림의 요청은 이미 처리됐거나 지금은 볼 수 없어요.").accessibilityIdentifier("approvalFocusMissing")
+                }
+                if NativePushCenter.configured && model.state.status == "ready" && push.controller?.enabled == false {
+                    Section {
+                        Text("새 승인 요청이 오면 휴대폰 알림으로 알려드릴까요? 알림을 열어도 승인은 자동으로 전송되지 않아요.")
+                        Button { Task { await push.enable() } } label: { Text("알림 켜기").frame(minHeight: 44) }
+                            .buttonStyle(.borderedProminent).disabled(push.state.busy).accessibilityIdentifier("approvalEnablePush")
+                    }
+                }
                 ForEach(model.state.cards) { card in
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
+                            if card.id == model.focusID {
+                                Text("알림에서 연 요청이에요").font(.caption.bold()).accessibilityIdentifier("approvalFromPush-" + card.id)
+                            }
                             Text(changeSummary(card)).font(.body).lineLimit(3)
                                 .accessibilityIdentifier("approvalChangeSummary-" + card.id)
                             Text("검토 담당자로 지정됐어요. " + card.statusLabel).font(.caption)
@@ -32,7 +49,7 @@ struct MemberApprovalView: View {
                                         Button { model.decide(card, .reject) } label: { Text("보류").frame(minHeight: 44) }.accessibilityIdentifier("approvalHold-" + card.id)
                                         Button { model.decide(card, .question) } label: { Text("설명 요청").frame(minHeight: 44) }.accessibilityIdentifier("approvalQuestion-" + card.id)
                                     }.buttonStyle(.bordered).disabled(!allowed)
-                                    if !allowed && card.decision == nil && card.review == nil { Text("지금은 답할 수 없어요. 새로고침해 주세요.").font(.caption) }
+                                    if !allowed && card.decision == nil && card.review == nil && card.state != "resolved" { Text("지금은 답할 수 없어요. 새로고침해 주세요.").font(.caption) }
                                 }
                             }
                             if let review = card.review, let url = URL(string: review.html_url) { Link("GitHub에 반영된 승인 보기", destination: url) }
@@ -55,20 +72,32 @@ struct MemberApprovalView: View {
                     } header: {
                         Text("\(card.source.repo.split(separator: "/").last.map(String.init) ?? card.source.repo) #\(card.source.pr)")
                             .accessibilityLabel("\(card.source.repo) #\(card.source.pr)")
-                    }
+                    }.id(card.id)
                 }
+            }
+            .onChange(of: model.state.busy) { _, busy in
+                guard !busy, model.state.status == "ready" else { return }
+                let now = Date().timeIntervalSince1970, settled = Set(model.state.cards.filter { !$0.awaitingAnswer(now: now) }.map(\.id))
+                Task { await NativePushCenter.shared.clearSettled(settled) }
+                if let focus = model.focusID, model.state.cards.contains(where: { $0.id == focus }) { withAnimation { proxy.scrollTo(focus, anchor: .top) } }
+            }
             }.navigationTitle("확인 요청").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) { Button("새로고침") { model.refresh() }.disabled(model.state.busy).accessibilityIdentifier("approvalRefresh") }
                     ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() } }
                 }
                 .task { await model.controller?.refresh() }
-                .onDisappear { model.dismiss() }
+                .onChange(of: model.focusID) { _, focus in if focus != nil { model.refresh() } }
+                .onDisappear { model.focusID = nil; model.dismiss() }
         }
     }
     private func changeSummary(_ card: MemberApprovalCard) -> String {
         let authored = card.brief.authored.first ?? ""
         return authored.hasPrefix("summary: ") ? String(authored.dropFirst(9)) : authored
+    }
+    private var focusMissing: Bool {
+        guard let focus = model.focusID, model.state.status == "ready", !model.state.busy else { return false }
+        return !model.state.cards.contains(where: { $0.id == focus })
     }
     private var status: String? {
         switch model.state.status {

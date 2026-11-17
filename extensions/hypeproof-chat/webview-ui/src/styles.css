@@ -2968,6 +2968,21 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-budget-request-notice form small { display: block; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
 .hps-budget-request-notice form button { min-height: var(--hp-control-min); margin: 0; }
 .hps-budget-request-notice input { font-size: var(--hp-font-caption); }
+/* CGP-SHELL-R-030: each fixed reason is a 44px row; the group has no box of its own. */
+.hps-budget-request-reasons { border: 0; margin: 0; padding: 0; min-width: 0; align-self: stretch; }
+.hps-budget-request-reasons legend { padding: 0; margin-block-end: var(--ds-c-studio-styles-space-2); }
+.hps-budget-request-reasons label { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); min-height: var(--hp-control-min); }
+.hps-budget-request-reasons input[type="radio"] { min-height: auto; margin: 0; flex: none; }
+/* CGP-SHELL-R-030 (Jay, 2026-11-16): the request-more card in the chat, where a learner meets an empty allowance. One
+   plain title, one large 요청하기 (the 48px control step), the state in words; no meter figures. */
+.hps-request-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--hp-space-2); min-width: 0; margin-block: var(--hp-space-2); padding: var(--hp-space-3); border: var(--ds-c-focus-width) solid var(--hp-border-divider-default); border-radius: var(--hp-radius-12); }
+.hps-request-card-title { margin: 0; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hps-request-card-state, .hps-request-card-answer { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hps-request-card-state:empty { display: none; }
+.hps-request-card .hps-request-card-open { min-height: var(--hp-control-lg); min-width: calc(var(--hp-control-lg) * 2); font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); }
+.hps-request-card-form { align-self: stretch; min-width: 0; }
+.hps-request-card button { min-height: var(--hp-control-min); font-size: var(--hp-font-caption); }
+@media (forced-colors: active) { .hps-request-card { border-color: CanvasText; } }
 /* REQ-CGP-AGENT-60: purpose and folder remain readable beside long commands.
  * Keyboard focus uses the shared ring in focusGeometry.css; the scrolling <pre> is one of its
  * scroll scopes, so controls are never given a component-level focus rule here. */

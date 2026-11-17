@@ -24,7 +24,9 @@ const rcAssets = [
 const P0 = ['BB-001', 'BB-005'];
 const HEAD_DATE = '2026-10-29T10:00:00Z';
 const comment = (user, body, at = '2026-10-29T11:00:00Z', association = 'MEMBER') => ({user, association, created_at: at, body, url: 'u'});
-const OVERRIDE = comment('jayleekr', 'Release manager override: P0 run by hand on the pre-tester Mac; results in the thread');
+// No run at the head, so the override lists every P0 case as not run (hps-release-override/1).
+const WAIVER = ['```json', JSON.stringify({schema: 'hps-release-override/1', waives: {blocked: [], not_run: P0}}), '```'].join('\n');
+const OVERRIDE = comment('jayleekr', `Release manager override: P0 run by hand on the pre-tester Mac; results in the thread\n\n${WAIVER}`);
 const good = () => ({
   pr: {number: 3159, state: 'open', merged: false, labels: ['release'], base: 'main', headRef: `release/${V}`, head: HEAD,
     headDate: HEAD_DATE, comments: [OVERRIDE], reviews: [{user: 'minhan', state: 'APPROVED', commit: HEAD}]},
@@ -82,7 +84,8 @@ test('negative controls: every way the approval, the branch or the rc can be wro
     // #3513: the casebook gate of #3429 applies at promotion too, not only at publication.
     'casebook P0 list not read': {p0: undefined},
     'casebook neither run nor overridden': {pr: pr => ({...pr, comments: []})},
-    'override without a reason': {pr: pr => ({...pr, comments: [comment('jayleekr', 'Release manager override')]})},
+    'override without the waived-case list': {pr: pr => ({...pr, comments: [comment('jayleekr', 'Release manager override: P0 run by hand on the pre-tester Mac; results in the thread')]})},
+    'override without a reason': {pr: pr => ({...pr, comments: [comment('jayleekr', `Release manager override\n\n${WAIVER}`)]})},
     'override by a non-approving writer': {pr: pr => ({...pr, comments: [comment('otherwriter', OVERRIDE.body)]})},
     'override older than the head commit': {pr: pr => ({...pr, comments: [{...OVERRIDE, created_at: '2026-10-29T09:00:00Z'}]})},
   };

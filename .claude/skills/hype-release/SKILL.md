@@ -100,3 +100,31 @@ proves a write was absent. Legacy UNKNOWN operations keep their original semanti
 `BUILD_RUNS_OBSERVED` means both exact runs exist, not that builds succeeded or
 packages were installed. Collect both successful receipts and immutable package
 bytes, then retain S1/S3/S4/S5, signing, native acceptance and publication gates.
+
+## Release blockers
+
+An open issue labeled `release-blocker` in `hypeproof/hypeproof-studio`,
+`hypeproof/hypeproof-service` or `hypeproof/hypeprooflab` stops the release: Studio's
+release-cut (create) and release-promote fail closed and print each one. A black-box
+failure, a security finding against the candidate, or any check you would not ship
+with becomes such an issue plus a comment on the open release PR:
+`scripts/release/flag-blocker.sh <repo> <title> <body-file> [release-pr-url]`. Close
+the issue when it is fixed; never remove the label to pass the gate. Release PRs
+(head `release/*` or label `release`) are merged only by the release pipeline
+(`hypeproof-org-lab-bot` in Studio's release-auto or release-promote). The agent
+identity refuses `gh pr merge` on them. Details:
+[release blockers](references/workflow.md#release-blockers).
+
+## Automatic release
+
+With the Studio repository variable `RELEASE_AUTO=on`, release-auto promotes the open
+release PR's rc to stable with no human approval, but only when every gate passes on
+that exact candidate. The gates are required CI, acceptance on both platforms,
+notarization, zero blockers, the black-box kit, the casebook, no unresolved PR comment,
+release-deps and the live-class freeze. Your job is to supply the evidence it reads, as
+`hypeproof-agent[bot]`, after the head commit:
+`scripts/release/evidence.py kit ...` (the kit's `remote.sh run-all` posts it) and
+`scripts/release/evidence.py deps --pr <url> --deps-json <release_deps JSON> --apply`.
+Hide a handled PR comment as Resolved; an unhidden comment holds the release. Turning
+the variable off stops automatic promotion, including at the publish gate. Details:
+[automatic release](references/workflow.md#automatic-release).

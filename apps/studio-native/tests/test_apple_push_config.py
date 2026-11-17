@@ -35,7 +35,7 @@ def profile():
 # All external Apple/network programs are synthetic. The actual shell and helper
 # execute; only absolute PlistBuddy and host-profile destinations are redirected.
 TOOLS = r'''#!/usr/bin/env python3
-import json, os, pathlib, plistlib, sys, zipfile
+import json, os, pathlib, plistlib, re, sys, zipfile
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 root = pathlib.Path(os.environ['HPS_TEST_ROOT'])
@@ -69,18 +69,33 @@ elif name == 'xcodebuild':
     else:
         settings = json.loads((root/'archive-settings.json').read_text())
         out = pathlib.Path(args[args.index('-exportPath')+1]); out.mkdir()
-        enabled = settings.get('INFOPLIST_KEY_HPSPushConfigured') == 'YES'
-        info = {'CFBundleIdentifier': 'ai.hypeproof.studio.mobile',
-                'HPSPushConfigured': config.get('app_configured', 'YES' if enabled else 'NO')}
+        info = {'CFBundleIdentifier': 'ai.hypeproof.studio.mobile'}
+        # Only the tracked explicit input supplies custom metadata. This synthetic
+        # expansion does not claim native generation; check-ios-push-metadata.py
+        # separately exercises real Xcode, including the old missing-input control.
+        project = pathlib.Path('HPStudio.xcodeproj/project.pbxproj').read_text()
+        release = next(line for line in project.splitlines()
+                       if 'name = Release;' in line and 'PRODUCT_BUNDLE_IDENTIFIER = ai.hypeproof.studio.mobile;' in line)
+        source = re.search(r'\bINFOPLIST_FILE = ([^;]+);', release)
+        if source:
+            explicit = plistlib.loads(pathlib.Path(source[1].strip('"')).read_bytes())
+            value = settings.get('INFOPLIST_KEY_HPSPushConfigured',
+                                 re.search(r'\bINFOPLIST_KEY_HPSPushConfigured = ([^;]+);', release)[1])
+            for key, entry in explicit.items():
+                info[key] = entry.replace('$(INFOPLIST_KEY_HPSPushConfigured)', value) if isinstance(entry, str) else entry
+        if 'app_configured' in config: info['HPSPushConfigured'] = config['app_configured']
         info.update(config.get('info', {}))
         with zipfile.ZipFile(out/'HPStudio.ipa','w') as archive:
-            archive.writestr('Payload/HPStudio.app/Info.plist', plistlib.dumps(info))
+            archive.writestr('Payload/HPStudio.app/Info.plist',
+                             config['invalid_info'].encode() if 'invalid_info' in config else plistlib.dumps(info))
             archive.writestr('Payload/HPStudio.app/embedded.mobileprovision', b'synthetic-profile')
             archive.writestr('Payload/HPStudio.app/HPStudio', b'synthetic-executable')
 elif name == 'ditto':
     with zipfile.ZipFile(args[-2]) as archive: archive.extractall(args[-1])
 elif name == 'codesign':
-    if '--verify' in args: sys.exit(config.get('signature_exit',0))
+    if '--verify' in args:
+        if config.get('signature_exit'): print('synthetic-private-signing-error', file=sys.stderr)
+        sys.exit(config.get('signature_exit',0))
     entitlements = dict(profile['Entitlements'])
     entitlements.update(config.get('signed', {}))
     sys.stdout.buffer.write(plistlib.dumps(entitlements))
@@ -97,13 +112,20 @@ pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps({'dis
 
 
 class UploadBoundary(unittest.TestCase):
-    def run_upload(self, enabled='true', config=None, profile_data=None, gate_fail=False, platform='ios'):
+    def run_upload(self, enabled='true', config=None, profile_data=None, gate_fail=False, platform='ios', source_mutation=None):
         temporary = tempfile.TemporaryDirectory(prefix='apple-push-test-')
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         control = root/'control'; control.mkdir()
         app = root/'candidate/apps/studio-native/ios'; app.mkdir(parents=True)
         (app/'App').mkdir()
+        (app/'HPStudio.xcodeproj').mkdir()
+        project = (ROOT/'apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj').read_text()
+        info = plistlib.loads((ROOT/'apps/studio-native/ios/App/Info.plist').read_bytes())
+        if source_mutation == 'missing_input': project = project.replace('INFOPLIST_FILE = App/Info.plist; ', '')
+        if source_mutation == 'missing_key': info.pop('HPSPushConfigured')
+        (app/'HPStudio.xcodeproj/project.pbxproj').write_text(project)
+        (app/'App/Info.plist').write_bytes(plistlib.dumps(info))
         (app/'App/HPStudio-Push.entitlements.example').write_bytes(
             (ROOT/'apps/studio-native/ios/App/HPStudio-Push.entitlements.example').read_bytes())
         # Optional exact old script is supplied only to this test process for the
@@ -142,9 +164,9 @@ class UploadBoundary(unittest.TestCase):
         self.assertFalse(any(x['tool']=='candidate-gate' and x['args'][0]=='receipt' for x in calls))
 
     def test_enabled_export_is_verified_before_validation_and_upload(self):
-        for value in ('YES', True):
+        for value in (None, True):
             with self.subTest(plist_value=value):
-                root, result, calls = self.run_upload(config={'app_configured': value})
+                root, result, calls = self.run_upload(config=None if value is None else {'app_configured': value})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 settings = json.loads((root/'archive-settings.json').read_text())
                 self.assertEqual(settings['HPS_APNS_ENVIRONMENT'], 'production')
@@ -173,6 +195,30 @@ class UploadBoundary(unittest.TestCase):
                 self.assertFalse(any(x in settings for x in ('CODE_SIGN_ENTITLEMENTS','HPS_APNS_ENVIRONMENT','INFOPLIST_KEY_HPSPushConfigured')))
                 self.assertFalse(any(x['tool']=='codesign' for x in calls))
                 self.assertEqual(sum(x['tool']=='xcrun' and '--upload-app' in x['args'] for x in calls),1)
+                with zipfile.ZipFile(root/'candidate/apps/studio-native/evidence/apple-ios/HP-Studio-ios.ipa') as archive:
+                    info = plistlib.loads(archive.read('Payload/HPStudio.app/Info.plist'))
+                self.assertEqual(info['HPSPushConfigured'], 'NO')
+
+    def test_missing_source_input_or_key_refuses_before_upload(self):
+        for mutation in ('missing_input', 'missing_key'):
+            with self.subTest(mutation=mutation):
+                _, result, calls = self.run_upload(source_mutation=mutation)
+                self.assert_no_upload(result, calls)
+                self.assertIn('[phase=bundle_metadata check=push_setting_not_enabled]', result.stderr)
+
+    def test_qualification_diagnostics_identify_fixed_checks_without_values(self):
+        for config, phase, check in [
+                ({'signature_exit': 1}, 'signature', 'tool_failed'),
+                ({'signed': {'aps-environment': 'synthetic-private-aps'}}, 'signed_entitlements', 'signed_production_aps_required'),
+                ({'app_configured': 'synthetic-private-setting'}, 'bundle_metadata', 'push_setting_not_enabled'),
+                ({'invalid_info': 'synthetic-private-invalid-plist'}, 'bundle_metadata', 'invalid_data'),
+                ({'invalid_info': '<?xml version="1.0"?><plist><synthetic-private-invalid'}, 'bundle_metadata', 'invalid_data'),
+                ({'embedded_profile': {'UUID': 'synthetic-private-uuid'}}, 'embedded_profile', 'profile_uuid_changed')]:
+            with self.subTest(phase=phase):
+                _, result, calls = self.run_upload(config=config)
+                self.assert_no_upload(result, calls)
+                self.assertIn(f'[phase={phase} check={check}]', result.stderr)
+                self.assertNotIn('synthetic-private', result.stdout + result.stderr)
 
     def test_wrong_profile_stops_before_archive(self):
         for key, value in [('application-identifier', TEAM+'.other.app'),

@@ -56,7 +56,7 @@ public struct AccountQuestion: Decodable, Sendable {
         public var card: AccountQuestion?
         public var busy = false, message = ""
         public var words = "", choice: String?
-        public var canStart = false
+        public var canStart = false, answerConfirmed = false
         public var pendingChoice: String?
         public init() {}
     }
@@ -77,13 +77,13 @@ public struct AccountQuestion: Decodable, Sendable {
         self.startingAvailable = startingAvailable; self.identity = identity; self.load = load; self.act = act; self.start = start; self.loadIntent = loadIntent; self.saveIntent = saveIntent; self.observed = observed; self.changed = changed
     }
     public func invalidate() { generation = UUID(); binding = nil; emptyLoaded = false; draftKey = nil; shownKey = nil; view = View(); changed(view) }
-    public func dismiss() { generation = UUID(); view.card = nil; view.busy = false; emptyLoaded = false; view.canStart = false; changed(view) }
+    public func dismiss() { generation = UUID(); view.card = nil; view.busy = false; emptyLoaded = false; view.canStart = false; view.answerConfirmed = false; changed(view) }
     public func edit(_ words: String) { guard !view.busy, let card = view.card, let input = card.text, words.count <= input.max else { return }; view.words = words; changed(view) }
     public func pick(_ id: String) { guard !view.busy, view.card?.choices.contains(where: { $0.id == id }) == true else { return }; view.choice = id; changed(view) }
     private func current(_ g: UUID, _ expected: MemberApprovalIdentity) async throws -> Bool { guard g == generation else { return false }; let now = try await identity(); return g == generation && now == expected }
     public func refresh() async {
         guard !view.busy else { return }; generation = UUID(); let g = generation
-        view.busy = true; view.card = nil; view.canStart = false; emptyLoaded = false; view.message = "질문을 불러오고 있어요."; changed(view)
+        view.busy = true; view.card = nil; view.canStart = false; view.answerConfirmed = false; emptyLoaded = false; view.message = "질문을 불러오고 있어요."; changed(view)
         do {
             guard let account = try await identity() else { invalidate(); return }
             guard g == generation else { return }
@@ -147,6 +147,7 @@ public struct AccountQuestion: Decodable, Sendable {
             guard try await current(g, binding) else { if g == generation { invalidate() }; return }
             observed(skip ? .questionSkipped : .questionAnswered)
             view.card = nil; view.message = message; view.words = ""; view.choice = nil; draftKey = nil
+            view.answerConfirmed = !skip // A receipt offers a next read; it never starts one automatically.
         } catch {
             if g == generation { view.card = nil; view.message = "처리 결과를 확인하지 못했어요. 작성한 답은 남겨 두었어요. 자동으로 다시 보내지 않아요." }
         }

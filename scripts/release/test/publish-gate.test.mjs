@@ -27,6 +27,10 @@ const runComment = ({head = HEAD, pr = 9, rows = P0.map(id => ({id, result: 'PAS
   }, null, 2), '```', '</details>'].join('\n'),
 });
 const override = (user, body, at = '2026-10-21T12:00:00Z') => ({user, association: 'MEMBER', created_at: at, url: 'u', body});
+// An override comment as the policy requires it: a reason plus the hps-release-override/1 block.
+const block = (blocked = [], notRun = []) => ['```json', JSON.stringify({schema: 'hps-release-override/1', waives: {blocked, not_run: notRun}}), '```'].join('\n');
+const waiver = (user, reason, blocked, notRun, at) => override(user, `Release manager override: ${reason}\n\n${block(blocked, notRun)}`, at);
+const NONE_RUN = waiver('jayleekr', 'P0 run on rc.2; rc.3 only fixes the publish gate', [], P0);
 const releasePr = (reviews, labels = ['release'], comments = [runComment()]) => [{number: 9, labels, head: HEAD, headDate: '2026-10-21T09:00:00Z', comments, reviews: reviews.map(r => ({commit: HEAD, ...r}))}];
 const hotfixPr = (sha, extra = {}) => ({number: 7, labels: ['hotfix'], base: 'hotfix/v2026.1006.0', mergeCommit: sha, ...extra});
 
@@ -44,9 +48,9 @@ test('rc prerelease passes with a notes line; a stable tag without a run or over
   assert.equal(bare.allow, false);
   assert.equal(bare.notesLine, undefined);
   const overridden = decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}], ['release'],
-    [override('jayleekr', 'Release manager override: P0 run on rc.2; rc.3 only fixes the publish gate')])});
+    [NONE_RUN])});
   assert.deepEqual([overridden.allow, overridden.casebook], [true, 'override']);
-  assert.match(overridden.notesLine, /^Release casebook: not run; release manager override by jayleekr on #9/);
+  assert.match(overridden.notesLine, /^Release casebook: release manager override by jayleekr on #9 waived 2 P0 case\(s\) \(0 BLOCKED; 2 not run: BB-001, BB-005\); 0 PASS: P0 run on rc\.2/);
 });
 
 test('CLI: an rc tag writes notes_line to GITHUB_OUTPUT without any GitHub lookup', () => {
@@ -143,17 +147,112 @@ test('casebook positive controls: one full run, or partial runs whose latest row
   assert.equal(gate([split[1], {...split[0], created_at: '2026-10-21T12:00:00Z'}]).allow, false);
 });
 
-test('override: Jay or the approving writer, with a reason, after the head commit', () => {
-  const ok = gate([override('jayleekr', 'Release manager override (Jay 2026-11-03: ship it; P0 run on rc.2, rc.3 only adds #3454)')]);
+test('override: Jay or the approving writer, with a reason and the waived list, after the head commit', () => {
+  const ok = gate([waiver('jayleekr', '(Jay 2026-11-03: ship it; P0 run on rc.2, rc.3 only adds #3454)', [], P0)]);
   assert.deepEqual([ok.allow, ok.casebook], [true, 'override']);
-  assert.match(ok.notesLine, /^Release casebook: not run; release manager override by jayleekr on #9: \(Jay 2026-11-03/);
-  assert.equal(gate([override('minhan', 'Release manager override: pre-tester Mac is down; ran BB-001 by hand')]).allow, true);
+  assert.match(ok.notesLine, /^Release casebook: release manager override by jayleekr on #9 waived 2 P0 case\(s\).*: \(Jay 2026-11-03/);
+  assert.equal(gate([waiver('minhan', 'pre-tester Mac is down; ran BB-001 by hand', [], P0)]).allow, true);
   // negative: no reason, a writer who did not approve, a stranger, a phrase not at the start, before the head commit
-  assert.equal(gate([override('jayleekr', 'Release manager override')]).allow, false);
-  assert.equal(gate([override('otherwriter', 'Release manager override: because I said so, long enough')]).allow, false);
-  assert.equal(gate([override('drive-by', 'Release manager override: trust me, this is fine really')]).allow, false);
-  assert.equal(gate([override('jayleekr', 'Note: Release manager override: reason that is long enough')]).allow, false);
-  assert.match(gate([override('jayleekr', 'Release manager override: an earlier candidate reason', '2026-10-21T08:00:00Z')]).reasons.join('\n'), /predates the head/);
+  assert.equal(gate([override('jayleekr', `Release manager override\n\n${block([], P0)}`)]).allow, false);
+  assert.equal(gate([waiver('otherwriter', 'because I said so, long enough', [], P0)]).allow, false);
+  assert.equal(gate([waiver('drive-by', 'trust me, this is fine really', [], P0)]).allow, false);
+  assert.equal(gate([override('jayleekr', `Note: Release manager override: reason that is long enough\n${block([], P0)}`)]).allow, false);
+  assert.match(gate([waiver('jayleekr', 'an earlier candidate reason', [], P0, '2026-10-21T08:00:00Z')]).reasons.join('\n'), /predates the head/);
+});
+
+// The owner-approved policy (#3462): an override waives BLOCKED or not-run P0 cases, never a P0 FAIL, and
+// must say which ones.
+test('override policy: a P0 FAIL is never waived and the gate names the failing cases', () => {
+  const failing = runComment({rows: [{id: 'BB-001', result: 'PASS'}, {id: 'BB-005', result: 'FAIL'}]});
+  for (const o of [waiver('jayleekr', 'ship it anyway, the failure is cosmetic', [], []), waiver('jayleekr', 'ship it anyway, the failure is cosmetic', [], ['BB-005']),
+    waiver('jayleekr', 'ship it anyway, the failure is cosmetic', ['BB-005'], [])]) {
+    const v = gate([failing, o]);
+    assert.equal(v.allow, false);
+    assert.match(v.reasons.join('\n'), /P0 FAIL at the head: BB-005; a release manager override cannot waive a P0 FAIL/);
+  }
+  // FAIL beside a BLOCKED case: the override still cannot open it, even when it lists the BLOCKED one
+  const mixed = runComment({rows: [{id: 'BB-001', result: 'BLOCKED'}, {id: 'BB-005', result: 'FAIL'}]});
+  const v = gate([mixed, waiver('minhan', 'blocked case waived, fail is not', ['BB-001'], [])]);
+  assert.equal(v.allow, false);
+  assert.match(v.reasons.join('\n'), /BB-005/);
+  assert.doesNotMatch(v.reasons.join('\n'), /BB-001/);
+  // a later run that PASSes the case at the same head replaces the FAIL (existing rule), then no override is needed
+  const fixed = runComment({rows: [{id: 'BB-005', result: 'PASS'}], at: '2026-10-21T11:00:00Z'});
+  assert.equal(gate([failing, fixed, waiver('jayleekr', 'BB-001 only, the rest ran', [], [])]).allow, true);
+});
+
+test('override policy: the waived list must cover every non-PASS P0 case under its status', () => {
+  const blockedRun = runComment({rows: [{id: 'BB-001', result: 'PASS'}, {id: 'BB-005', result: 'BLOCKED'}]});
+  const why = 'Google login blocks BB-005 on the pre-tester Mac';
+  const ok = gate([blockedRun, waiver('jayleekr', why, ['BB-005'], [])]);
+  assert.deepEqual([ok.allow, ok.casebook], [true, 'override']);
+  assert.deepEqual(ok.summary.override, {used: true, by: 'jayleekr', url: 'u', waived_blocked: ['BB-005'], waived_not_run: []});
+  assert.deepEqual(ok.summary.counts, {pass: 1, fail: 0, blocked: 1, not_run: 0});
+  // an override without the block, with an empty list, or under the wrong status does not cover it
+  const refusals = {
+    'no block': override('jayleekr', `Release manager override: ${why}`),
+    'empty list': waiver('jayleekr', why, [], []),
+    'wrong status': waiver('jayleekr', why, [], ['BB-005']),
+    'another case': waiver('jayleekr', why, ['BB-001'], []),
+    'not a P0 case of the casebook': waiver('jayleekr', why, ['BB-005', 'BB-999'], []),
+    'malformed block': override('jayleekr', `Release manager override: ${why}\n\n\`\`\`json\n{"schema": "hps-release-override/1", "waives": ["BB-005"]}\n\`\`\``),
+    'unparseable block': override('jayleekr', `Release manager override: ${why}\n\n\`\`\`json\n{"schema": "hps-release-override/1", \n\`\`\``),
+    'wrong schema': override('jayleekr', `Release manager override: ${why}\n\n${block(['BB-005'], []).replace('override/1', 'override/2')}`),
+  };
+  for (const [name, o] of Object.entries(refusals)) {
+    const v = gate([blockedRun, o]);
+    assert.equal(v.allow, false, name);
+    assert.match(v.reasons.join('\n'), /casebook not run at the head: no hps-blackbox-run\/1 PASS for P0 BB-005.*waiving every one of them/, name);
+  }
+  // the list is the record of what was waived: a PASS case listed as waived is a mismatch, not a waiver
+  const extra = gate([blockedRun, waiver('jayleekr', why, ['BB-005', 'BB-001'], [])]);
+  assert.equal(extra.allow, false);
+  assert.match(extra.reasons.join('\n'), /BB-001 is PASS, not BLOCKED/);
+});
+
+test('override policy: with no run at the head the override must list every P0 case as not run', () => {
+  const why = 'no pre-tester run this week; the P0 cases were walked by hand';
+  assert.equal(gate([waiver('jayleekr', why, [], P0)]).allow, true);
+  assert.equal(gate([waiver('jayleekr', why, [], ['BB-001'])]).allow, false);
+  assert.equal(gate([waiver('jayleekr', why, P0, [])]).allow, false, 'declaring them BLOCKED when no run exists is wrong');
+  // a run of an earlier candidate does not count as a run at this head
+  assert.equal(gate([runComment({head: 'e'.repeat(40)}), waiver('jayleekr', why, [], P0)]).allow, true);
+  // partial run: BB-001 PASS, BB-005 never run
+  const partial = runComment({rows: [{id: 'BB-001', result: 'PASS'}]});
+  assert.equal(gate([partial, waiver('jayleekr', why, [], ['BB-005'])]).allow, true);
+  assert.equal(gate([partial, waiver('jayleekr', why, [], P0)]).allow, false);
+});
+
+test('override policy: the latest valid override wins over an older invalid one', () => {
+  const why = 'Google login blocks BB-005 on the pre-tester Mac';
+  const blockedRun = runComment({rows: [{id: 'BB-001', result: 'PASS'}, {id: 'BB-005', result: 'BLOCKED'}]});
+  const stale = waiver('jayleekr', why, [], [], '2026-10-21T12:00:00Z');
+  const fixed = waiver('jayleekr', why, ['BB-005'], [], '2026-10-21T13:00:00Z');
+  assert.equal(gate([blockedRun, stale, fixed]).allow, true);
+  assert.equal(gate([blockedRun, fixed, stale]).allow, true, 'order of comments in the list does not matter, created_at does');
+});
+
+test('release record: the gate summary carries override use, waived ids and counts', () => {
+  const clean = gate([runComment()]);
+  assert.deepEqual(clean.summary.override, {used: false, by: null, url: null, waived_blocked: [], waived_not_run: []});
+  assert.deepEqual(clean.summary.counts, {pass: 2, fail: 0, blocked: 0, not_run: 0});
+  assert.equal(clean.summary.p0_total, 2);
+  const failed = gate([runComment({rows: [{id: 'BB-001', result: 'PASS'}, {id: 'BB-005', result: 'FAIL'}]})]);
+  assert.equal(failed.allow, false);
+  assert.deepEqual(failed.summary.fail_ids, ['BB-005']);
+  assert.equal(failed.summary.override.used, false);
+});
+
+test('CLI: --summary writes one JSON record and the step summary carries it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-gate-summary-'));
+  const file = path.join(dir, 'nested', 'gate.json');
+  const script = fileURLToPath(new URL('../publish-gate.mjs', import.meta.url));
+  const r = spawnSync(process.execPath, [script, '--tag', 'v2026.1105.0-rc.3', '--summary', file], {env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: '', PATH: dir, GH_TOKEN: ''}, encoding: 'utf8'});
+  assert.equal(r.status, 0, r.stderr);
+  const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepEqual([record.schema, record.tag, record.allow, record.route], ['hps-publish-gate/1', 'v2026.1105.0-rc.3', true, 'prerelease']);
+  assert.match(r.stdout, /```json\n\{"schema":"hps-publish-gate\/1"/);
+  fs.rmSync(dir, {recursive: true, force: true});
 });
 
 test('hotfix route records its path for the release notes', () => {
@@ -191,4 +290,35 @@ test('native P0 cases do not change desktop approval requirements; malformed tar
     assert.throws(() => p0CaseIds([...cases, {id: 'BB-035', priority: 'P1', targets}]), /targets/);
   }
   assert.throws(() => p0CaseIds([], {target: 'watchos'}), /target must/);
+});
+
+// The record carries internal override/waiver data; mirror-release.yml copies every release asset to the
+// public mirror, so the workflow must keep it as an artifact and job summary only.
+test('the gate record is never uploaded as a release asset', () => {
+  const wf = fs.readFileSync(fileURLToPath(new URL('../../../.github/workflows/verify-unified-release.yml', import.meta.url)), 'utf8');
+  assert.match(wf, /publish-gate\.mjs --tag "\$TAG" --summary dist\/publish-gate\.json/);
+  assert.match(wf, /uses: actions\/upload-artifact@v4\n\s+with:\n\s+name: publish-gate/);
+  for (const line of wf.split('\n').filter(l => /gh release (upload|create|edit)/.test(l))) assert.doesNotMatch(line, /publish-gate/);
+});
+
+// Owner decision (#3462): the hotfix route must not pass a release that has a P0 FAIL at its head.
+test('hotfix route: a P0 FAIL on the release PR head blocks it; no run keeps today\'s behaviour', () => {
+  const s1 = '1'.repeat(40);
+  const hotfix = {previous: 'v2026.1006.0', rangePrs: [{sha: s1, prs: [hotfixPr(s1)]}]};
+  const failing = runComment({rows: [{id: 'BB-001', result: 'PASS'}, {id: 'BB-005', result: 'FAIL'}]});
+  // not even approved: the PR still has a P0 FAIL, so the fall-through to hotfix is refused
+  const v = decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([], ['release'], [failing]), ...hotfix});
+  assert.deepEqual([v.allow, v.route], [false, 'none']);
+  assert.match(v.reasons.join('\n'), /hotfix: refused, #9 has a P0 FAIL at its head: BB-005/);
+  assert.deepEqual(v.summary.fail_ids, ['BB-005']);
+  // approved with an override that cannot waive the FAIL, then hotfix range: still refused
+  assert.equal(decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr(approved, ['release'], [failing, waiver('jayleekr', 'ship it anyway, cosmetic', [], [])]), ...hotfix}).allow, false);
+  // a later PASS for the case at the same head clears the FAIL: hotfix route works again
+  const fixed = runComment({rows: [{id: 'BB-005', result: 'PASS'}], at: '2026-10-21T11:00:00Z'});
+  assert.equal(decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([], ['release'], [failing, fixed]), ...hotfix}).route, 'hotfix');
+  // no blackbox run at all, with or without a release PR: today's behaviour
+  assert.equal(decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([], ['release'], []), ...hotfix}).route, 'hotfix');
+  assert.equal(decide({tag: TAG, tagSha: SHA, ...hotfix}).route, 'hotfix');
+  // a run of an earlier candidate is not a run at this head
+  assert.equal(decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([], ['release'], [runComment({head: 'e'.repeat(40), rows: [{id: 'BB-005', result: 'FAIL'}]})]), ...hotfix}).route, 'hotfix');
 });

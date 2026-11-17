@@ -158,6 +158,22 @@ try {
     await b.evaluate(`document.querySelector('.tw-works-body').scrollTop=0`); await settle();
     await shot(`list-${tag}`);
 
+    // CGP-KNOW-R-011: every row is one button that asks the host to open its file; a refusal shows one line and the
+    // drawer stays (focus stays on the row).
+    const rows = await b.evaluate(`[...document.querySelectorAll('.tw-works-item')].map(li=>li.querySelectorAll('button.tw-works-reveal').length)`);
+    assert.ok(rows.length === entries.length && rows.every(n => n === 1), `each row is one open button (${tag})`);
+    const firstPath = await b.evaluate(`(()=>{const x=document.querySelector('.tw-works-reveal');x.focus();return x.closest('.tw-works-item').querySelector('.tw-works-name').getAttribute('data-hp-tooltip')})()`);
+    const opensBefore = (await posted('myWorksOpen')).length;
+    await key('Enter', 'Enter', 13); await settle(150);
+    const opens = await posted('myWorksOpen');
+    assert.equal(opens.length, opensBefore + 1, `Enter on a row asks to open it (${tag})`);
+    assert.equal(opens.at(-1).path, firstPath, `the request names that row's path (${tag})`);
+    await send({ type: 'myWorksOpened', requestId: 'open-forged', ok: true }); await settle(150);
+    assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer')?.open===true`), true, `a forged answer does nothing (${tag})`);
+    await send({ type: 'myWorksOpened', requestId: opens.at(-1).requestId, ok: false, error: '이 파일은 지금 열 수 없어요. 내 작품을 닫았다가 다시 열어 주세요.' }); await settle(150);
+    assert.equal(await b.evaluate(`document.querySelector('[data-testid=my-works-open-line]').textContent`), '이 파일은 지금 열 수 없어요. 내 작품을 닫았다가 다시 열어 주세요.', `a refusal shows the one line (${tag})`);
+    assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer')?.open===true && document.activeElement?.classList.contains('tw-works-reveal')`), true, `the drawer stays and focus stays on the row (${tag})`);
+
     // Focus stays inside: Tab and Shift+Tab around the drawer's controls.
     await b.evaluate(`document.querySelector('.tw-works-close').focus()`);
     for (let i = 0; i < 8; i++) { await key('Tab', 'Tab', 9, i % 3 === 2); assert.equal(await inDrawer(), true, `Tab ${i} stays in the drawer (${tag})`); }
@@ -183,6 +199,12 @@ try {
       await send({ type: 'artifactProvenance', view });
       assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer input[type=search]').value`), '', 'next task starts with an empty file query');
       assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), entries.length, 'previous task search does not hide new task files');
+      // An open the host carried out closes the drawer, so the file it opened is in view.
+      await b.evaluate(`document.querySelector('.tw-works-reveal').click()`); await settle(150);
+      await send({ type: 'myWorksOpened', requestId: (await posted('myWorksOpen')).at(-1).requestId, ok: true }); await settle(400);
+      assert.equal(await b.evaluate(`!!document.querySelector('.tw-works-drawer')`), false, 'an opened file closes the drawer');
+      await b.evaluate(`document.querySelector('.tw-works-open').click()`); await settle(200);
+      await send({ type: 'artifactProvenance', view });
       await key('Escape', 'Escape', 27); await settle(400);
     }
     console.log(`PASS my works drawer ${tag}`);

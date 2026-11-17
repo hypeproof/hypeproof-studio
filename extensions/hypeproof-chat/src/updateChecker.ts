@@ -57,6 +57,7 @@ import {
   pickDarwinAsset,
   pickWindowsInstaller,
   renderWindowsUpdateWrapper,
+  windowsInstallerFileName,
   shouldShowAccessNotice,
   MIN_FREE_DISK_BYTES,
   UPDATE_ACCESS_MANUAL_COPY,
@@ -518,6 +519,22 @@ function windowsAppProcessName(): string {
 }
 
 /**
+ * The installed app's main executable, for the wrapper's "installer could not start" recovery.
+ * The running host's own exe when it is the app (the extension host is a child of it), otherwise
+ * `<install root>/<product>.exe`. The wrapper checks the path exists before using it.
+ */
+function windowsAppExePath(): string {
+  const name = windowsAppProcessName();
+  if (path.basename(process.execPath).toLowerCase() === `${name}.exe`.toLowerCase()) return process.execPath;
+  return path.join(path.resolve(__dirname, "..", "..", "..", "..", ".."), `${name}.exe`);
+}
+
+/** Where wrappers append "update failed" / "relaunched" records (kept across staged folders). */
+function windowsUpdateFailureLog(): string {
+  return path.join(os.tmpdir(), "hps-update-failure.log");
+}
+
+/**
  * Windows update path (#447). Unlike macOS — where we unzip a .app and swap it
  * ourselves — Windows delegates the swap to the Inno Setup installer .exe that
  * `checkForUpdates` already matched. This mirrors VS Code's own win32 updater:
@@ -537,10 +554,10 @@ function windowsAppProcessName(): string {
  */
 async function prepareWindowsUpdate(info: UpdateInfo, context: vscode.ExtensionContext, report: (message: string) => void): Promise<{ stageId: string; workDir: string; exePath: string }> {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hps-update-${info.version}-`));
-  // Preserve the installer's own name (…UserSetup-x64-<ver>.exe) so it's
-  // recognizable if the user runs it manually.
-  const installerName =
-    safeBasename(info.downloadUrl) || `HypeProofStudioSetup-${info.version}.exe`;
+  // Preserve the installer's own name (…UserSetup-x64-<ver>.exe) so it's recognizable if the
+  // user runs it manually. It comes from the release asset's name: downloadUrl is the REST
+  // asset URL (…/assets/<id>), whose basename is a number and has no ".exe" (v2026.1109.0+).
+  const installerName = windowsInstallerFileName(info);
   const exePath = path.join(workDir, installerName);
 
   report("다운로드 중…");
@@ -549,11 +566,13 @@ async function prepareWindowsUpdate(info: UpdateInfo, context: vscode.ExtensionC
   const quitInstaller = path.join(workDir, "install-on-quit.ps1");
   fs.writeFileSync(quitInstaller, renderWindowsUpdateWrapper({
     appProcessName: windowsAppProcessName(), installerPath: exePath,
+    appExePath: windowsAppExePath(), failureLogPath: windowsUpdateFailureLog(),
     installerArgs: ["/silent", "/norestart", "/mergetasks=!runcode", `/LOG="${path.join(workDir, "update.log")}"`],
   }), "utf8");
   const idleInstaller = path.join(workDir, "install-when-idle.ps1");
   fs.writeFileSync(idleInstaller, renderWindowsUpdateWrapper({
     appProcessName: windowsAppProcessName(), installerPath: exePath,
+    appExePath: windowsAppExePath(), failureLogPath: windowsUpdateFailureLog(),
     installerArgs: ["/silent", "/mergetasks=runcode", `/LOG="${path.join(workDir, "update-idle.log")}"`],
   }), "utf8");
   const stageId = stagedUpdate(context).stage("win32", quitInstaller, [exePath], info.version, idleInstaller);
@@ -615,6 +634,8 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
         renderWindowsUpdateWrapper({
           appProcessName: windowsAppProcessName(),
           installerPath: exePath,
+          appExePath: windowsAppExePath(),
+          failureLogPath: windowsUpdateFailureLog(),
           installerArgs: ["/silent", "/mergetasks=runcode", `/LOG="${logPath}"`],
         }),
         "utf8",
@@ -646,18 +667,6 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
       }, 400);
     },
   );
-}
-
-/**
- * Basename of a URL's path (the installer file name), or "" if unparseable.
- * Kept defensive so a malformed download URL can't throw mid-update.
- */
-function safeBasename(url: string): string {
-  try {
-    return path.basename(new URL(url).pathname);
-  } catch {
-    return "";
-  }
 }
 
 /**

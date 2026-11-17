@@ -1,0 +1,3 @@
+| DEC | Choice | Why | Default state | Confirmed by Jay |
+|---|---|---|---|---|
+| DEC-35 | CGP-SHELL-R-029 (remaining count next to the composer) never shows a count on a free seat (profile `studio-open-trial`); it applies to pass and class seats only. Sign-in copy at purchase, where CGP-SHELL-R-022 overlaps, is owned by the conversion register (`docs/research/conversion-2026-10/`, CONV-PURCHASE-R-006); CGP-SHELL-R-022 keeps the generic copy-link fallback | Jay 2026-10-19: a free seat shows no allowance or remaining count while in use, only the end card speaks (TUX-SP-14/13, REQ-STUDIO-FREE-START, CONV-DEC-03) | On (free seats unchanged) | yes (2026-10-19) |

@@ -4,7 +4,7 @@
  * the start page. 44px targets stay as they are. The choice is a device preference (globalState),
  * not part of any lesson or activity; it is set in 대화 설정 (personal chat) or the start page 설정
  * sheet (every seat). The 15/17/20px sizes and the 보통 label in REQ-SHELL-17 are a recorded
- * difference (decisions.md CGP-SHELL-R-017).
+ * difference (decisions/CGP-SHELL-R-017.md CGP-SHELL-R-017).
  */
 export const TEXT_SIZES = ["base", "large", "xlarge"] as const;
 export type TextSize = (typeof TEXT_SIZES)[number];

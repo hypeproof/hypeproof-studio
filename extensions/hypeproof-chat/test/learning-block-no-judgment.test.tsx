@@ -55,7 +55,9 @@ const UX = {
 };
 /** One step per block kind, in the Service's order; the step text is the instructor's and is drawn outside the block. */
 // stage_stepper draws only with its required stages (CGP-LEARN-R-005); box_spacing's params default when absent.
-const PARAMS: Record<string, unknown> = { stage_stepper: { stages: [{ title: "첫 단계", sentence: "무엇이 바뀌는지 봐요." }, { title: "둘째 단계", sentence: "다시 살펴봐요." }] } };
+const PARAMS: Record<string, unknown> = { stage_stepper: { stages: [{ title: "첫 단계", sentence: "무엇이 바뀌는지 봐요." }, { title: "둘째 단계", sentence: "다시 살펴봐요." }] },
+  // CGP-LEARN-R-009: narrated_diagram draws only with exactly three beats.
+  narrated_diagram: { diagram: "page_request", beats: [{ title: "요청 보내기", sentence: "브라우저가 서버에 부탁해요." }, { title: "서버가 찾기", sentence: "서버가 파일을 찾아요." }, { title: "화면에 보이기", sentence: "받은 페이지가 보여요." }] } };
 const STEPS = MATERIAL_KINDS.map((kind, i) => ({ id: `s${i + 1}`, title: `${i + 1}단계`, instructions: "해 보기", hint: "", acceptance: "직접 확인", ui: kind, ...(PARAMS[kind] ? { ui_version: 1, ui_params: PARAMS[kind] } : {}) }));
 const LESSON = {
   course_id: "c1", version: "m2026.10.28-1", sha256: "a".repeat(64),

@@ -155,6 +155,163 @@ try {
  await send({type:'voiceTranscribeResult',requestId:held.requestId,ok:true,text:'늦은 전사'});await drain();assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);assert.equal(await live(),0);await noMarker('scope switch stopped the session');controls.push('scope switch fences stale transcription without send');
  hold=false;held=null;await send({type:'config',config});await drain();refusal=true;
  await click('자동 음성 대화 시작');await speech();await wait(async()=>/한도/.test(await label()),'authoritative refusal');assert.equal(await live(),0);assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);await noMarker('the cap refusal stopped the session');controls.push('Service cap refusal stops with zero automatic retry');
+ // CGP-VOICE-R-019 (verify-4197): the chosen microphone is not connected. The conversation opens nothing, stops with its line
+ // and one action, 기본 마이크로 녹음, which opens the default ({audio:true}) for this session; the stored choice is not touched.
+ refusal=false;
+ await b.evaluate(`window.__constraints=[];{const g=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);navigator.mediaDevices.getUserMedia=c=>{window.__constraints.push(c);return g(c)}};navigator.mediaDevices.enumerateDevices=async()=>[{kind:'audioinput',deviceId:'${'b'.repeat(64)}',label:'내장 마이크'}]`);
+ const chosen={...config,micInput:{id:'a'.repeat(64),label:'USB 헤드셋'}};
+ await send({type:'config',config:chosen});await drain();
+ const postsBefore=await b.evaluate('window.__posts.length');
+ await click('자동 음성 대화 시작');
+ await wait(async()=>/연결되어 있지 않아 멈췄어요/.test(await label()),'missing microphone stop');
+ assert.equal(await live(),0,'nothing opened');assert.deepEqual(await b.evaluate('window.__constraints'),[],'no getUserMedia at all');
+ {const rect=await b.evaluate(`(()=>{const e=[...document.querySelectorAll('[aria-label="자동 음성 대화"] button')].find(x=>x.textContent.trim()==='기본 마이크로 녹음');if(!e||e.disabled)return null;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+  assert(rect,'the stop offers 기본 마이크로 녹음');
+  await b.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...rect});await b.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...rect});await drain();}
+ await wait(async()=>await live()===1,'the default microphone opened');
+ assert.deepEqual(await b.evaluate('window.__constraints'),[{audio:true}],'exactly the default');
+ assert.equal(await b.evaluate(`window.__posts.slice(${postsBefore}).filter(m=>m.type==='setMicInput').length`),0,'the stored choice is kept');
+ await b.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true,cancelable:true}))`);await drain();
+ await wait(async()=>await live()===0,'stopped');
+ await send({type:'config',config});await drain();
+ controls.push('missing microphone: the conversation stops with 기본 마이크로 녹음, which opens only the default');
+ // CGP-VOICE-R-026 / R-027: push-to-talk, chosen on this computer (config.voiceConversationMode), in the real App.
+ refusal=false;
+ const holdBox=()=>b.evaluate(`(()=>{const e=document.querySelector('.hps-voice-hold');if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height,pressed:e.getAttribute('aria-pressed'),text:e.textContent.trim()}})()`);
+ const mouse=async(type,x,y)=>b.send('Input.dispatchMouseEvent',{type,button:'left',clickCount:1,x,y});
+ const key=async(type,extra={})=>b.send('Input.dispatchKeyEvent',{type,key:' ',code:'Space',windowsVirtualKeyCode:32,...extra});
+ const transcribes=()=>calls.filter(c=>c.type==='voiceTranscribe').length;
+ const ptt={...config,voiceConversationMode:'push_to_talk'};
+ // The switch is the one writer of the per-computer choice; automatic is the default.
+ await b.evaluate(`window.__seen2=[];{const q=window.__posts,orig=q.push.bind(q);q.push=m=>{window.__seen2.push(m);return orig(m)}}`);
+ assert.equal(await b.evaluate(`document.querySelector('.hps-voice-mode input').checked`),false,'automatic is the default');
+ await b.evaluate(`document.querySelector('.hps-voice-mode input').click()`);
+ assert.deepEqual(await b.evaluate(`window.__seen2.filter(m=>m.type==='setVoiceConversationMode').map(m=>m.mode)`),['push_to_talk'],'the switch writes the per-computer choice');
+ const startPtt=async()=>{await send({type:'config',config:ptt});await drain();await click('음성 대화 시작');await wait(async()=>!!(await holdBox()),'the hold button');};
+ const stopPtt=async()=>{await click('음성 대화 중지');await wait(async()=>await live()===0,'stopped');};
+ await startPtt();
+ assert.equal(await b.evaluate(`!!document.querySelector('[aria-label="음성 대화"]')`),true,'the push-to-talk group');
+ assert.equal(await live(),0,'the session is live with the microphone closed');
+ {const h=await holdBox();assert(h.w>=63.5&&h.h>=63.5,'the hold button is at least 64px: '+JSON.stringify(h));assert.deepEqual([h.pressed,h.text],['false','누르고 말하기']);}
+ // Hold with the pointer, release outside the button: the turn ends and is sent.
+ const spokenBefore=(await spoken()).length;
+ {const h=await holdBox();const before=transcribes();
+  await mouse('mousePressed',h.x,h.y);await wait(async()=>await live()===1,'the hold opened the microphone');
+  {const p=await holdBox();assert.deepEqual([p.pressed,p.text],['true','듣고 있어요'],'pressed reads 듣고 있어요');}
+  await new Promise(r=>setTimeout(r,900));
+  await mouse('mouseMoved',5,5);await mouse('mouseReleased',5,5);
+  await wait(async()=>await live()===0,'released outside: microphone closed');
+  await wait(async()=>transcribes()===before+1,'released outside the button: the turn was sent; status '+await b.evaluate(`document.querySelector('[aria-label="음성 대화"]')?.textContent??''`));}
+ await wait(async()=>(await spoken()).length>spokenBefore,'the answer is read');
+ await b.evaluate('window.__utterances.at(-1).onend()');await new Promise(r=>setTimeout(r,400));await drain();
+ assert.equal(await live(),0,'after the answer the microphone stays closed until the next hold');
+ // Space holds only on the focused hold button, and never types a space anywhere.
+ {const before=transcribes();const draft=await b.evaluate('document.querySelector(".hps-input textarea").value');
+  await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  await key('keyDown',{text:' '});await wait(async()=>await live()===1,'Space opened the microphone');
+  await key('keyDown',{text:' ',autoRepeat:true});await key('keyDown',{text:' ',autoRepeat:true});
+  await new Promise(r=>setTimeout(r,900));await key('keyUp');
+  await wait(async()=>await live()===0,'Space released');
+  await wait(async()=>transcribes()===before+1,'one turn for one Space hold');await new Promise(r=>setTimeout(r,300));await drain();
+  assert.equal(transcribes(),before+1,'one turn for one Space hold (repeats ignored)');
+  assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),draft,'no space leaked into the text box');}
+ await stopPtt();
+ // Space in the text box is an ordinary space and never a hold.
+ await startPtt();
+ {await b.evaluate('document.querySelector(".hps-input textarea").focus()');const before=await b.evaluate('document.querySelector(".hps-input textarea").value');
+  await key('keyDown',{text:' '});await key('keyUp');await new Promise(r=>setTimeout(r,300));
+  assert.equal(await live(),0,'Space in the text box opens nothing');
+  assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),before+' ','the text box got its space');
+  // A draft is unrelated typing: as before #4197 it stops the loop (no capture, no send). Clear it and start again.
+  await b.evaluate(`(()=>{const t=document.querySelector('.hps-input textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,${JSON.stringify('')});t.dispatchEvent(new Event('input',{bubbles:true}))})()`);await drain();
+  if(!(await holdBox()))await startPtt();}
+ // The window losing focus during a hold ends the turn: no microphone stays open.
+ {const h=await holdBox();await mouse('mousePressed',h.x,h.y);await wait(async()=>await live()===1,'held');await new Promise(r=>setTimeout(r,900));
+  await b.evaluate(`window.dispatchEvent(new Event('blur'))`);await wait(async()=>await live()===0,'blur ended the hold');await mouse('mouseReleased',h.x,h.y);}
+ await stopPtt();
+ // Hiding the window during a hold stops the session and closes the microphone.
+ await startPtt();
+ {const h=await holdBox();await mouse('mousePressed',h.x,h.y);await wait(async()=>await live()===1,'held');
+  await b.evaluate(`Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});document.dispatchEvent(new Event('visibilitychange'))`);
+  await wait(async()=>await live()===0,'hidden ended the session');await mouse('mouseReleased',h.x,h.y);
+  await b.evaluate(`delete document.visibilityState`);await drain();
+  await wait(async()=>await b.evaluate(`!document.querySelector('.hps-voice-hold')`),'the session stopped');}
+ controls.push('push-to-talk: pointer hold and release outside, Space on the button only, blur and hide end the hold, no reopen after the answer');
+ // verify-4244 (1): a Space hold, then focus moves (Tab): the microphone closes, the turn is sent, and Space repeats type
+ // nothing into the next field until Space is released.
+ await startPtt();
+ {const before=transcribes();await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  await key('keyDown',{text:' '});await wait(async()=>await live()===1,'Space hold');await new Promise(r=>setTimeout(r,900));
+  assert.equal(await b.evaluate(`document.querySelector('[aria-label="음성 대화"] [role=status]').textContent`),'듣고 있어요. 손을 떼면 보내요.','a Space hold keeps the release line');
+  for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+  await wait(async()=>await live()===0,'focus moved: microphone closed');
+  await wait(async()=>transcribes()===before+1,'the turn ended by the focus move was sent');
+  await b.evaluate('document.querySelector(".hps-input textarea").focus()');const draft=await b.evaluate('document.querySelector(".hps-input textarea").value');
+  for(let i=0;i<3;i++)await key('keyDown',{text:' ',autoRepeat:true});
+  assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),draft,'Space repeats after the focus move typed nothing');
+  await key('keyUp');await drain();}
+ await stopPtt();
+ // verify-4244 (2, agent choice): Enter or an assistive-tech click toggles: the first press starts, the second sends.
+ await startPtt();
+ {const before=transcribes();await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  const enter=async()=>{for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r'}:{})});};
+  await enter();await wait(async()=>await live()===1,'Enter started');
+  assert.equal((await holdBox()).pressed,'true','aria-pressed while toggled on');
+  const pttStatus=()=>b.evaluate(`document.querySelector('[aria-label="음성 대화"] [role=status]').textContent`);
+  await wait(async()=>(await pttStatus())==='듣고 있어요. 다시 누르면 보내요.','verify-4288: the toggle says a second press sends');
+  await new Promise(r=>setTimeout(r,900));assert.equal(await live(),1,'still listening after Enter was released');
+  await enter();await wait(async()=>await live()===0,'Enter again sent');await wait(async()=>transcribes()===before+1,'the toggled turn was sent');}
+ await stopPtt();
+ await startPtt();
+ {const before=transcribes();
+  await b.evaluate(`document.querySelector('.hps-voice-hold').click()`);await wait(async()=>await live()===1,'an AT click started');
+  assert.equal((await holdBox()).pressed,'true','aria-pressed while toggled on');
+  await new Promise(r=>setTimeout(r,900));
+  await b.evaluate(`document.querySelector('.hps-voice-hold').click()`);await wait(async()=>await live()===0,'a second AT click sent');
+  await wait(async()=>transcribes()===before+1,'the AT-toggled turn was sent');}
+ await stopPtt();
+ // verify-4288: a toggled take that hits the 58 s ceiling leaves no stale toggle: not pressed, and the next Enter starts a
+ // new take (not just clearing the old one).
+ await startPtt();
+ {const before=transcribes();await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  const enter=async()=>{for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r'}:{})});};
+  await enter();await wait(async()=>await live()===1,'toggled on');
+  await wait(async()=>await live()===0,'the 58 s ceiling closed the take',70000);
+  await wait(async()=>/1분 안으로/.test(await b.evaluate(`document.querySelector('[aria-label="음성 대화"] [role=status]').textContent`)),'the too-long line');
+  {const h=await holdBox();assert.deepEqual([h.pressed,h.text],['false','누르고 말하기'],'no stale pressed state after the ceiling');}
+  assert.equal(transcribes(),before,'nothing was sent');
+  await b.evaluate('document.querySelector(".hps-voice-hold").focus()');
+  await enter();await wait(async()=>await live()===1,'the next Enter starts a new take');
+  await new Promise(r=>setTimeout(r,900));await enter();await wait(async()=>transcribes()===before+1,'and the second Enter sends it');}
+ await stopPtt();
+ // verify-4244 (3, agent choice): pointercancel discards the turn: the microphone closes, nothing is sent, no extra line.
+ await startPtt();
+ {const before=transcribes();const h=await holdBox();await mouse('mousePressed',h.x,h.y);await wait(async()=>await live()===1,'held');await new Promise(r=>setTimeout(r,900));
+  await b.evaluate(`document.querySelector('.hps-voice-hold').dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:1,pointerType:'mouse'}))`);
+  await wait(async()=>await live()===0,'pointercancel closed the microphone');await mouse('mouseReleased',h.x,h.y);
+  await new Promise(r=>setTimeout(r,600));await drain();
+  assert.equal(transcribes(),before,'nothing was sent');
+  const after=await holdBox();assert.deepEqual([after.pressed,after.text],['false','누르고 말하기'],'ready for the next hold');
+  assert.equal(await b.evaluate(`document.querySelector('[aria-label="음성 대화"] [role=status]').textContent`),'버튼을 누르고 있는 동안 들어요. 손을 떼면 보내요.','no extra line');}
+ await stopPtt();
+ controls.push('verify-4244: focus move ends a Space hold and swallows repeats; Enter and AT clicks toggle; pointercancel discards');
+ // R-027: the automatic end-of-speech detector cannot start: that session switches to push-to-talk, the stored mode stays.
+ await send({type:'config',config});await drain();
+ {
+  await b.evaluate(`window.__vadFail=1;{const C=AudioContext.prototype,orig=C.createMediaStreamSource;C.createMediaStreamSource=function(s){if(window.__vadFail){window.__vadFail=0;throw new Error('analyser unavailable')}return orig.call(this,s)}}`);
+  // __seen2 (installed above) records every post; it already caught the switch's write, so it is a working recorder.
+  const seenAt=await b.evaluate('window.__seen2.length');
+  await click('자동 음성 대화 시작');
+  await wait(async()=>/자동 말끝 감지를 쓸 수 없어 눌러서 말하기로 바꿨어요/.test(await b.evaluate(`document.querySelector('[aria-label="음성 대화"]')?.textContent??''`)),'the fallback line');
+  assert.equal(await live(),0,'no microphone left open by the failed detector');
+  assert(await holdBox(),'the session now holds to talk');
+  await drain();
+  assert.equal(await b.evaluate(`window.__seen2.slice(${seenAt}).filter(m=>m.type==='setVoiceConversationMode').length`),0,'no write of the stored mode');
+  await click('음성 대화 중지');
+  assert.equal(await b.evaluate(`!!document.querySelector('button[aria-label="자동 음성 대화 시작"]')`),true,'the next start is automatic again (the stored mode is unchanged)');}
+ controls.push('R-027: detector failure switches that session to push-to-talk with its line; the stored mode is unchanged');
+ // The push-to-talk turns above sent messages on purpose; later cases count from here.
+ const afterPtt=calls.filter(c=>c.type==='sendMessage').length;
  const unack={...config,profile:{...config.profile,profile_id:'unacknowledged-internal-profile'}};
  fixture.current.h.cachedProfile=unack.profile;
  await send({type:'config',config:unack});await drain();await click('자동 음성 대화 시작');
@@ -165,7 +322,7 @@ try {
  assert.equal(await live(),0);controls.push('unacknowledged existing policy shows accurate automatic copy; cancel opens no capture');
  await b.evaluate('document.querySelector(".hps-input textarea").focus()');await b.send('Input.insertText',{text:'보관할 초안'});await drain();
  assert.equal(await b.evaluate(`document.querySelector('button[aria-label="자동 음성 대화 시작"]').disabled`),true,'unrelated draft blocks the loop');
- assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),'보관할 초안');assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);controls.push('unrelated manual draft retained with no automatic send');
+ assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),'보관할 초안');assert.equal(calls.filter(c=>c.type==='sendMessage').length,afterPtt);controls.push('unrelated manual draft retained with no automatic send');
  // Voice not served: no conversation control and never a marker, even right after a session was live.
  refusal=false;fixture.current.h.cachedProfile=config.profile;await send({type:'config',config});await drain();
  await b.evaluate(`(()=>{const t=document.querySelector('.hps-input textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'');t.dispatchEvent(new Event('input',{bubbles:true}))})()`);await drain();

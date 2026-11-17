@@ -14,7 +14,7 @@ export function AccountQuestionCard({view, post}: {view: QuestionView; post: (me
     shown.current = view.binding;
     post({type:'questionCardAct',binding:view.binding,key:card.key,action:'shown'});
   }, [card,view.binding,view.busy,post]);
-  if (!card) return view.message ? <section className="studio-question" aria-label="오늘의 질문"><p role="status">{view.message}</p>{view.status === 'error' && <button onClick={() => post({type:'questionCardRefresh'})}>다시 조회</button>}</section> : null;
+  if (!card) return view.message || view.status === 'answered' ? <section className="studio-question" aria-label="오늘의 질문"><p role="status">{view.message}</p>{view.status === 'answered' && <><button className="studio-primary" disabled={view.busy} onClick={() => post({type:'questionCardRefresh'})}>다음 질문 보기</button><p>원래 대화를 계속해도 좋아요.</p></>}{view.status === 'error' && <button disabled={view.busy} onClick={() => post({type:'questionCardRefresh'})}>다시 조회</button>}</section> : null;
   const act = (action: 'answer' | 'skip', selected = choice, selectedAction?: string) => {
     if (!view.binding || view.busy) return;
     post({type:'questionCardAct',binding:view.binding,key:card.key,action,...(action === 'answer' ? {answer:{...(selected ? {choice:selected} : {}),...(selectedAction ? {action:selectedAction} : {}),...(card.text ? {text} : {})}} : {})});

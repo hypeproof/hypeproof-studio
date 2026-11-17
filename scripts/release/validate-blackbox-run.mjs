@@ -13,6 +13,13 @@ export const SCHEMA = 'hps-blackbox-run/1';
 export const RESULTS = ['PASS', 'FAIL', 'BLOCKED'];
 export const HOLD = '승인 보류 권장';
 export const CLEAR = 'P0 실패 없음';
+// The machine-readable block of a "Release manager override" comment (publish-gate.mjs). Policy: an
+// override may waive a P0 case that is BLOCKED or was not run, never a P0 FAIL. It must name every
+// P0 case it waives, under the status the gate finds for that case at the PR head:
+//   {"schema": "hps-release-override/1", "waives": {"blocked": ["BB-007"], "not_run": ["BB-010", "BB-011"]}}
+// "blocked": the latest run at the head has a BLOCKED row. "not_run": no valid run at the head has a
+// row for it (with no run at all, every P0 case is not_run).
+export const OVERRIDE_SCHEMA = 'hps-release-override/1';
 const SHA = /^[0-9a-f]{40}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -24,6 +31,29 @@ export function extractRun(text) {
     if (m[1].includes(SCHEMA)) return JSON.parse(m[1]);
   }
   throw new Error(`no \`\`\`json block declaring ${SCHEMA}`);
+}
+
+// The fenced ```json block that declares OVERRIDE_SCHEMA, or null when the comment has none.
+export function extractOverride(text) {
+  for (const m of String(text ?? '').matchAll(/```json\s*\n([\s\S]*?)\n```/g)) {
+    if (m[1].includes(OVERRIDE_SCHEMA)) return {raw: m[0], value: JSON.parse(m[1])};
+  }
+  return null;
+}
+
+// Problems with a parsed override block; an empty list means well-formed (not that it covers anything).
+export function validateOverride(block) {
+  const p = [];
+  if (!block || typeof block !== 'object') return ['override block is not an object'];
+  if (block.schema !== OVERRIDE_SCHEMA) p.push(`schema must be ${OVERRIDE_SCHEMA}`);
+  const w = block.waives;
+  if (!w || typeof w !== 'object' || Array.isArray(w)) return [...p, 'waives must be {blocked: [...], not_run: [...]}'];
+  for (const key of Object.keys(w)) if (!['blocked', 'not_run'].includes(key)) p.push(`waives.${key} is not a status (blocked or not_run)`);
+  for (const key of ['blocked', 'not_run']) {
+    if (!Array.isArray(w[key])) { p.push(`waives.${key} must be a list of BB-<nnn> ids`); continue; }
+    for (const id of w[key]) if (!/^BB-\d{3}$/.test(id ?? '')) p.push(`waives.${key}: ${JSON.stringify(id)} is not a BB-<nnn> id`);
+  }
+  return p;
 }
 
 export function validateRun(run, {selected} = {}) {
