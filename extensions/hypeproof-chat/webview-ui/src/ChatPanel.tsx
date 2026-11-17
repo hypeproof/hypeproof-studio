@@ -140,7 +140,7 @@ import { MicInputSetting } from "./MicInputSetting";
 import { VoiceEarcons, VoiceSoundsSetting } from "./VoiceEarcons";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
-import { CHECKLIST_EMPTY, CHECKLIST_TITLE, INSERT_BUTTON, NOTE_HINT, ROUTE_TITLE, VERDICT_FITS, VERDICT_FIX, checklistVersion, getChecklistEntry, routeLines, setChecklistNote, setChecklistVerdict, subscribeChecklist } from "./rehearsalChecklist";
+import { CHECKLIST_EMPTY, CHECKLIST_TITLE, INSERT_BUTTON, NOTE_HINT, REHEARSAL_CHECKLIST_NOTE_MAX, ROUTE_TITLE, VERDICT_FITS, VERDICT_FIX, checklistVersion, getChecklistEntry, routeLines, setChecklistNote, setChecklistVerdict, subscribeChecklist } from "./rehearsalChecklist";
 export type RehearsalPanel = NonNullable<import("../../src/protocol").ChatConfig["rehearsalPanel"]>;
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { QuestCard, QuestOfferCard, useQuestIntake } from "./QuestIntake";
@@ -3402,7 +3402,7 @@ function RehearsalCheckRow({ stuck, onInsert }: { stuck: RehearsalPanel["stucks"
       <button type="button" className="hp-cta-quiet" aria-pressed={entry?.verdict === "fix"}
         onClick={() => setChecklistVerdict(stuck.id, entry?.verdict === "fix" ? undefined : "fix")}>{VERDICT_FIX}</button>
       {entry?.verdict === "fix" ? (
-        <textarea aria-label={NOTE_HINT} placeholder={NOTE_HINT} rows={2} value={entry.note ?? ""}
+        <textarea aria-label={NOTE_HINT} placeholder={NOTE_HINT} rows={2} maxLength={REHEARSAL_CHECKLIST_NOTE_MAX} value={entry.note ?? ""}
           onChange={(e) => setChecklistNote(stuck.id, e.target.value)} />
       ) : null}
     </div>

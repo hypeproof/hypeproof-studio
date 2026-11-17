@@ -130,6 +130,13 @@ await t("checklist for the report: nothing marked is no checklist field at all",
   assert.equal(checklistForReport([{ id: "stuck-1", verdict: "bogus" }], STUCKS), undefined);
 });
 
+await t("checklist notes respect the Service's 500-character limit at the host boundary", () => {
+  for (const length of [500, 501, 2001]) {
+    const checklist = checklistForReport([{ id: "stuck-1", verdict: "fix", note: "가".repeat(length) }], STUCKS);
+    assert.equal(checklist.items[0].note, "가".repeat(500));
+  }
+});
+
 await t("report: an old report (no checklist) is unchanged by the new parameter", () => {
   const lesson = { content: { steps: [{ id: "s1" }] } };
   const app = { extension_version: "1", host: "h", runtime: "proxy", os: "darwin", arch: "arm64" };

@@ -52,10 +52,14 @@ async function main() {
   await act(async () => click(fits[0]));
   await act(async () => click(fixes[2]));
   assert.ok(host.findAll((e: any) => e.localName === 'textarea' && e.getAttribute('aria-label') === '무엇을 고칠지 적으세요').length === 1, 'one note box, for the item marked 고칠 것');
+  const noteBox = host.findAll((e: any) => e.localName === 'textarea' && e.getAttribute('aria-label') === '무엇을 고칠지 적으세요')[0];
+  assert.equal(noteBox.getAttribute('maxlength') ?? noteBox.getAttribute('maxLength'), '500', 'the note input follows the Service limit');
   assert.deepEqual(checklistSnapshot(), [
     { id: 'stuck-1', verdict: 'fits' },
     { id: 'stuck-3', verdict: 'fix' },
   ]);
+  await act(async () => setChecklistNote('stuck-3', '가'.repeat(501)));
+  assert.equal(checklistSnapshot().find((item) => item.id === 'stuck-3')?.note, '가'.repeat(500), 'programmatic note updates also respect the limit');
 
   // Empty list: the sentence, and no insert buttons.
   resetChecklist();

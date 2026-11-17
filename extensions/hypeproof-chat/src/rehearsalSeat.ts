@@ -2,6 +2,7 @@
 // learner seat runs (the issuer key is empty), and comes back when the rehearsal ends, after a restart, or after a failed
 // return is retried. Pure: no vscode import. The host (extension.ts) supplies the secrets, folders and dialogs.
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers.ts";
+import { REHEARSAL_CHECKLIST_NOTE_MAX } from "./rehearsalChecklistContract.ts";
 
 export const REHEARSAL_RETURN_KEY = "chalk.rehearsal.returnIssuer";
 export const REHEARSAL_SEAT_KEY = "chalk.rehearsal.seat";
@@ -273,7 +274,7 @@ export function checklistForReport(raw: unknown, stucks: readonly SeatStuck[]): 
     if (typeof id !== "string" || !known.has(id) || seen.has(id)) continue;
     if (verdict !== "fits" && verdict !== "fix") continue;
     seen.add(id);
-    items.push(typeof note === "string" && note.length > 0 ? { id, verdict, note: note.slice(0, 2000) } : { id, verdict });
+    items.push(typeof note === "string" && note.length > 0 ? { id, verdict, note: note.slice(0, REHEARSAL_CHECKLIST_NOTE_MAX) } : { id, verdict });
   }
   return items.length > 0 ? { schema: "hps-rehearsal-checklist/1", items } : undefined;
 }

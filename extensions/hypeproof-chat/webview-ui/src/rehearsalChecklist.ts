@@ -1,5 +1,7 @@
 // #4102 — the rehearsal panel's state and words. The verdicts and notes live here (not in React state) so the send
 // button in the lesson step panel can read the checklist it reports. Only the rehearsal seat draws any of this.
+import { REHEARSAL_CHECKLIST_NOTE_MAX } from "../../src/rehearsalChecklistContract";
+export { REHEARSAL_CHECKLIST_NOTE_MAX };
 
 export type ChecklistVerdict = "fits" | "fix";
 export interface ChecklistEntry { verdict?: ChecklistVerdict; note?: string }
@@ -23,7 +25,7 @@ export function setChecklistVerdict(id: string, verdict: ChecklistVerdict | unde
   emit();
 }
 export function setChecklistNote(id: string, note: string): void {
-  entries.set(id, { ...entries.get(id), note });
+  entries.set(id, { ...entries.get(id), note: note.slice(0, REHEARSAL_CHECKLIST_NOTE_MAX) });
   emit();
 }
 /** The marked items only, for the rehearsal report. */
