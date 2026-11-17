@@ -14,6 +14,10 @@ if [ "$build_status" -ne 0 ]; then
   python3 ../scripts/collect-native-journeys.py --source-sha "${GITHUB_SHA:-$(git rev-parse HEAD)}" --build-log ../evidence/device-build.log --build-exit "$build_status" --simulator-log ../evidence/simulator-test.log --test-exit 125 --output ../evidence/native-journeys.json || true
   exit "$build_status"
 fi
+printf 'native verification: actual app and real Xcode push metadata controls\n'
+python3 ../scripts/check-ios-push-metadata.py \
+  --app-info DerivedData-device/Build/Products/Release-iphoneos/HPStudio.app/Info.plist \
+  --evidence ../evidence/push-metadata.json
 runtime=$(xcrun simctl list runtimes --json | python3 -c 'import json,sys; sdk=sys.argv[1]; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and ".iOS-" in x["identifier"] and x["version"].split(".")[:2]==sdk.split(".")[:2]]; print(r[-1]["identifier"])' "$sdk")
 device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro "$runtime")
 cleanup_simulator() {

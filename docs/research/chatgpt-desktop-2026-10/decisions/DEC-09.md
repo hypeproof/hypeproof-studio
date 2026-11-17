@@ -1,0 +1,3 @@
+| DEC | Choice | Why | Default state | Confirmed by Jay |
+|---|---|---|---|---|
+| DEC-09 | Learner answer verdicts are stored only on this device in the task's verdict file; not in the session log, not uploaded, not collected, not shown to instructors or Chalk (AE-20) | A verdict is the learner judging AI output (JUDGMENT): evidence for the learner, not a grade. The session spool is uploaded and collected for class records, so a verdict written there would reach the Service and instructors; showing raw learner reactions to instructors is what AE-20 rules out. The verdict file keeps the history (time, ids, verdict, reason code, note) and no upload or collection path reads it | On | no |

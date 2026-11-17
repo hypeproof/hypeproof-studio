@@ -23,9 +23,17 @@
  *   - Subframes (#4128, minor seats, `decideFrame`): a document of another origin than the top page it is drawn in is
  *     decided with no dialog on every load and hop: first in its container's session, then in the out-of-process
  *     iframe's own session, which is auto-attached paused and given the same hold (and its own auto-attach). A session
- *     that cannot attach its iframes refuses cross-site frames. Subresources are not held (accepted residual).
- *   - Navigations Studio starts from outside the page (the address bar, a confirmed chat link, the coach's approved
- *     browser actions) are not page-requested and not redirects, so they are not held.
+ *     that cannot attach its iframes refuses cross-site frames. Subresources are not held, except below.
+ *   - Outbound requests (Jay, 2026-11-15, minor seats, `outbound`): on a loopback (AI-made) top page, a cross-site
+ *     `fetch`, XHR, beacon or EventSource off the lesson list is refused. Images, CSS, fonts and scripts are untouched.
+ *   - Every other cross-origin main-frame Document is decided too (existing-window fix): a form a popup submits into
+ *     its opener by name, or the page into an existing popup, fires no `frameRequestedNavigation` in the window it
+ *     moves, and looks exactly like a browser-started load. Only navigations Studio itself started are let go:
+ *     `studioNavigate` records each of its `Page.navigate` calls for that tab, claimed once by the navigation's shape
+ *     (`StudioNavigationLedger`), and a tab `openStudioTab` opened may load its own first page once. A popup has no
+ *     Studio-started navigations, so in a popup nothing is exempt.
+ *     The cost: an address typed in the bar, or back/forward across origins (VS Code core, not Studio), is decided —
+ *     with no dialog for loopback, the lesson list, or an adult without the confirm setting.
  *   - Allowed: `Fetch.continueRequest`. Refused: `Fetch.failRequest` (Aborted); the page stays where it was.
  *
  * Structurally typed against CdpSession (`send`, `sendIn` for a child session, events with their sessionId) so it runs
@@ -67,6 +75,19 @@ export interface GuardOptions {
    * back to `about:blank`, or a frame went out of process where it cannot be watched. The host closes the tab.
    */
   onFrameUnheld?: () => void;
+  /** Did Studio start this paused main-frame request? Default: this tab's records in `studioNavigations`. */
+  studioStarted?: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
+  /**
+   * The address of a tab Studio opened with `openStudioTab`: only this guard's first paused main-frame Document, and
+   * only while the tab has not committed a page yet, may go undecided as that tab's own first load.
+   */
+  studioFirstDocument?: string;
+  /**
+   * Minor seats (Jay, 2026-11-15): on an AI-made loopback page (the top document is loopback), a cross-site `fetch`,
+   * XHR, beacon or EventSource is refused unless `allowed` admits its address (loopback or the lesson list). Pages on
+   * other sites, and images, CDN scripts, styles and fonts everywhere, are unchanged. `onBlocked` reports a refusal.
+   */
+  outbound?: { allowed: (url: string) => Promise<boolean>; onBlocked?: (url: string) => void };
 }
 const BINDING = "__hpsOpenLink";
 /**
@@ -84,8 +105,9 @@ const BINDING = "__hpsOpenLink";
  * (`<template shadowrootmode>`) is made by the parser, not by `attachShadow`; its popups are held by layer 2.
  * The effective target is the element's own (the submitter's `formtarget` first), else the page's `<base target>`;
  * the browsing-context keywords are ASCII case-insensitive, as in the HTML spec (verify-r027 on #4187).
- * A named target is resolved like the browser does, by the child browsing context's name (`frames[i].name`), not the
- * iframe's attribute; a cross-origin frame's name cannot be read, so it is not in-page. An empty `target=""` is no
+ * A named target is resolved like the browser does, by the child browsing context's name, not the iframe's attribute.
+ * The name is read through the `name` getter captured before the page ran, so a same-origin child that redefines its
+ * own `name` cannot lie its way in-page; a cross-origin frame's name cannot be read, so it is never in-page. An empty `target=""` is no
  * target, so `<base target>` applies. A page listener that runs after these checks and changes the page (removes the
  * named frame, adds a base target) is not seen here; layer 2 holds the window that opens (pinned by a test).
  * A same-origin form or link aimed at a named iframe of this page is an in-page pattern, not another window: it goes
@@ -105,7 +127,9 @@ var other=function(t){if(!t)return false;t=low(t);return t!=="_self"&&t!=="_top"
 var baseTarget=function(){var l=qsa.call(document,"base[target]");return l.length?getAttr.call(l[0],"target"):""};
 var own=function(el){var t=hasAttr.call(el,"target")?getAttr.call(el,"target"):"";return t!==""?t:baseTarget()};
 var W=window,wlen=Object.getOwnPropertyDescriptor(W,"length")||Object.getOwnPropertyDescriptor(Window.prototype,"length");
-var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(W[i].name===t)return true}catch(_){}}return false};
+var wname=Object.getOwnPropertyDescriptor(W,"name")||Object.getOwnPropertyDescriptor(Window.prototype,"name");
+var nameOf=function(w){return wname&&wname.get?wname.get.call(w):w.name};
+var namedFrame=function(t){var n=wlen&&wlen.get?wlen.get.call(W):W.length;for(var i=0;i<n;i++){try{if(nameOf(W[i])===t)return true}catch(_){/* a cross-origin frame's name cannot be read: never in-page */}}return false};
 var sameSite=function(u){try{return new URL(u,location.href).origin===location.origin}catch(_){return false}};
 var inPage=function(t,u){return namedFrame(t)&&sameSite(u)};
 var aimsAway=function(f,s){var t=sTarget(s);t=t!==null?t:own(f);return other(t)&&!inPage(t,actionOf(f,s))};
@@ -140,7 +164,43 @@ export function sameOrigin(a: string, b: string): boolean {
 const REQUEST_WINDOW_MS = 10_000;
 /** At most one stopped-form report per this many ms per tab. */
 export const FORM_NOTICE_MS = 3_000;
+/** How long after leaving a loopback page its own last requests (pagehide) are still judged as its. */
+const LEFT_LOOPBACK_MS = 3_000;
+/** At most one outbound-refusal line per tab per this many ms (Jay, 2026-11-15). */
+export const OUTBOUND_NOTICE_MS = 10_000;
 const DOCUMENTS = { patterns: [{ urlPattern: "http*", resourceType: "Document", requestStage: "Request" }] };
+/**
+ * Jay's 2026-11-15 decision — outbound requests held on minor seats: `fetch`, XHR, `sendBeacon` (Ping) and EventSource
+ * (Chromium reports fetch and EventSource as XHR). Images, scripts, styles, fonts and media are not patterned at all.
+ * WebSocket cannot be paused by the Fetch domain (it rejects the type), so it is not in this list.
+ */
+const OUTBOUND_TYPES = new Set(["Fetch", "XHR", "Ping", "EventSource"]);
+const WITH_OUTBOUND = { patterns: [...DOCUMENTS.patterns, ...[...OUTBOUND_TYPES].map((resourceType) => ({ urlPattern: "*", resourceType, requestStage: "Request" }))] };
+/**
+ * Is this host the learner's own machine? One answer for the top-page check and the target check (verify-3928 on
+ * #4214), the same as core's (#4216):
+ * - `localhost` and every `*.localhost` (RFC 6761), with or without a trailing dot;
+ * - IPv4 127.0.0.0/8, in any spelling the URL parser normalises (`2130706433`, `0x7f.1`);
+ * - IPv6 `::1`, and the IPv4-mapped `::ffff:127.x.y.z` (`[::ffff:7f00:1]` after parsing);
+ * - `0.0.0.0` and `::`, decided as loopback: Chromium sends a request to them to this machine.
+ * Anything else is not loopback.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  let h = hostname.toLowerCase();
+  while (h.endsWith(".")) h = h.slice(0, -1);
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(h) || h === "0.0.0.0") return true;
+  if (h.startsWith("[") && h.endsWith("]")) {
+    const v6 = h.slice(1, -1);
+    if (v6 === "::1" || v6 === "::") return true;
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(v6);
+    if (mapped) return parseInt(mapped[1], 16) >> 8 === 127;
+    const dotted = /^::ffff:(\d{1,3})(?:\.\d{1,3}){3}$/.exec(v6);
+    if (dotted) return dotted[1] === "127";
+  }
+  return false;
+}
+export const isLoopbackUrl = (u: string): boolean => { try { const x = new URL(u); return /^(https?|wss?):$/.test(x.protocol) && isLoopbackHost(x.hostname); } catch { return false; } };
 
 /**
  * One session the guard holds requests in: the tab's page, a popup it opened (main-frame rules for its whole life), or
@@ -164,6 +224,8 @@ interface FrameState {
   hops: Map<string, string>;
   /** A popup's first document request is decided against its opener's address; a page's is not held. */
   popupFirst: boolean;
+  /** The loopback page this top just left, and when: requests the old page fires as it goes away are its own. */
+  leftLoopback?: { url: string; at: number };
 }
 const frameState = (kind: FrameState["kind"], current: string, sessionId?: string, targetId?: string, owner?: FrameState): FrameState =>
   ({ kind, owner, framesAttached: false, fetchHeld: false, sessionId, targetId, mainFrame: kind === "page" ? undefined : targetId, current, requested: new Map(), hops: new Map(), popupFirst: kind === "popup" });
@@ -180,7 +242,9 @@ export class LinkNavigationGuard {
   /** The main frame's address when the guard attached (or after the last main-frame navigation). */
   get currentUrl(): string { return this.page.current; }
   /** Paused requests handled (for tests and logs: counts only). */
-  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0 };
+  readonly stats = { held: 0, continued: 0, refused: 0, popups: 0, frames: 0, framesRefused: 0, outboundRefused: 0 };
+  /** The Fetch patterns every held session gets: documents, plus outbound requests on a minor seat. */
+  private get patterns() { return this.options.outbound ? WITH_OUTBOUND : DOCUMENTS; }
   /** The last stopped-form report per action origin (the cap is per origin: one site cannot hide another). */
   private readonly lastFormNotice = new Map<string, number>();
   /**
@@ -193,10 +257,14 @@ export class LinkNavigationGuard {
   private readonly decide: (url: string) => Promise<boolean>;
   private readonly now: () => number;
   private readonly onPopup: (url: string, allowed: boolean) => void;
+  private readonly studioStarted: (request: { url: string; method?: string; headers?: Record<string, unknown> }) => boolean;
+  private firstDocument: string | undefined;
   private readonly options: GuardOptions;
   constructor(cdp: GuardCdp, decide: (url: string) => Promise<boolean>, options: GuardOptions = {}) {
     this.cdp = cdp; this.decide = decide; this.options = options;
     this.now = options.now ?? Date.now; this.onPopup = options.onPopup ?? (() => {});
+    this.studioStarted = options.studioStarted ?? ((r) => studioNavigations.claim(this.cdp.targetId, r));
+    this.firstDocument = options.studioFirstDocument;
   }
 
   async start(): Promise<void> {
@@ -205,7 +273,7 @@ export class LinkNavigationGuard {
     const tree = await this.cdp.send("Page.getFrameTree").catch(() => null);
     this.page.mainFrame = tree?.frameTree?.frame?.id;
     this.page.current = tree?.frameTree?.frame?.url ?? "";
-    this.capabilities.fetch = await this.cdp.send("Fetch.enable", DOCUMENTS).then(() => true, () => false);
+    this.capabilities.fetch = await this.cdp.send("Fetch.enable", this.patterns).then(() => true, () => false);
     this.page.fetchHeld = this.capabilities.fetch;
     if (this.options.interceptPopups) {
       await this.cdp.send("Runtime.enable").catch(() => undefined);
@@ -286,7 +354,7 @@ export class LinkNavigationGuard {
           await Promise.all([
             // Page events too: without the network hold, a commit is the fallback (sent back to about:blank).
             sendIn(sid, "Page.enable"),
-            sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
+            sendIn(sid, "Fetch.enable", this.patterns).then(() => { state.fetchHeld = true; }),
             sendIn(sid, "Target.setAutoAttach", AUTO_ATTACH).then(() => { state.framesAttached = true; }),
             p.waitingForDebugger ? sendIn(sid, "Runtime.runIfWaitingForDebugger") : undefined,
           ].map((r) => Promise.resolve(r).catch(() => undefined)));
@@ -318,7 +386,7 @@ export class LinkNavigationGuard {
         const sendIn = this.cdp.sendIn;
         await Promise.all([
           sendIn(sid, "Page.enable"),
-          sendIn(sid, "Fetch.enable", DOCUMENTS).then(() => { state.fetchHeld = true; }),
+          sendIn(sid, "Fetch.enable", this.patterns).then(() => { state.fetchHeld = true; }),
           // The same popup paths inside the popup, on a minor seat (a popup must not open a further popup unseen).
           this.options.interceptPopups ? sendIn(sid, "Page.addScriptToEvaluateOnNewDocument", { source: POPUP_INTERCEPT_NO_BINDING }) : undefined,
           // A popup's own out-of-process iframes (#4128), on a minor seat.
@@ -340,7 +408,9 @@ export class LinkNavigationGuard {
       return;
     }
     if (event.method === "Page.frameNavigated" && p.frame && !p.frame.parentId) {
-      state.mainFrame = p.frame.id; state.current = p.frame.url ?? state.current;
+      const before = state.current, next = p.frame.url ?? state.current;
+      state.leftLoopback = isLoopbackUrl(before) && !isLoopbackUrl(next) ? { url: before, at: this.now() } : undefined;
+      state.mainFrame = p.frame.id; state.current = next;
       if (state === this.page) this.options.onCommit?.(state.current);
       return;
     }
@@ -361,6 +431,7 @@ export class LinkNavigationGuard {
       // A popup refused before it showed anything is closed.
       if (state !== this.page && state.popupFirst && state.targetId) await this.cdp.send("Target.closeTarget", { targetId: state.targetId }).catch(() => undefined);
     };
+    if (this.options.outbound && OUTBOUND_TYPES.has(p.resourceType)) { await this.outboundRequest(state, requestId, url, p.request?.headers ?? {}); return; }
     if (p.resourceType !== "Document") { this.stats.continued++; await go(); return; }
     // #4128: a subframe document (an iframe in this page or popup, or any document of an out-of-process iframe).
     if (state.kind === "frame" || (state.mainFrame && p.frameId !== state.mainFrame)) { await this.subframeRequest(state, requestId, url, p.frameId); return; }
@@ -373,8 +444,17 @@ export class LinkNavigationGuard {
     const redirect = typeof p.redirectedRequestId === "string";
     const first = state.popupFirst;
     const from = redirect ? (redirectFrom ?? state.current) : state.current;
-    // A popup's first document is judged against its opener, like a page-requested move; after that it is a page.
-    if ((!pageAsked && !redirect && !first) || sameOrigin(url, from)) {
+    // A popup's first document is judged against its opener; after that, like every later move, it is decided when it
+    // leaves the origin. Only the page has Studio-started navigations to exempt (recorded before Studio sends them).
+    // The tab's own first load (openStudioTab), once and only before anything committed; else this tab's record.
+    let studio = false;
+    const firstLoad = state === this.page && !redirect ? this.firstDocument : undefined;
+    if (state === this.page && !redirect) this.firstDocument = undefined;
+    if (state === this.page && !pageAsked && !redirect && !sameOrigin(url, from)) {
+      const blank = !this.page.current || this.page.current === "about:blank";
+      studio = (firstLoad !== undefined && blank && noHash(firstLoad) === noHash(url)) || this.studioStarted({ url, method: p.request?.method, headers: p.request?.headers });
+    }
+    if (studio || sameOrigin(url, from)) {
       if (!redirect) state.popupFirst = false;
       this.stats.continued++; await go(); return;
     }
@@ -389,6 +469,32 @@ export class LinkNavigationGuard {
    * container cannot attach its out-of-process iframes, a cross-site frame's later loads could not be held, so a
    * cross-site subframe is refused there even when the list admits it. Same-origin frames, and adults, load.
    */
+  /**
+   * Jay's 2026-11-15 decision — an outbound request (`fetch`, XHR, beacon, EventSource) from a page whose top document
+   * is loopback (an AI-made page) to another site is refused unless the lesson list (or loopback) admits it; no
+   * dialog, the host shows one quiet line. Same origin, loopback-to-loopback and any non-loopback top go on.
+   */
+  private async outboundRequest(state: FrameState, requestId: string, url: string, headers: Record<string, unknown> = {}): Promise<void> {
+    const go = () => this.sendTo(state, "Fetch.continueRequest", { requestId });
+    const topState = topOf(state);
+    let top = topState.current;
+    // A request the old loopback page fires as it goes away (keepalive fetch, sendBeacon on pagehide) arrives after the
+    // next page committed. Within LEFT_LOOPBACK_MS of leaving a loopback page, a request that names no other initiator
+    // (Origin or Referer of the old page, or neither) is judged as the old page's (verify-3928 on #4214).
+    const left = topState.leftLoopback;
+    if (!isLoopbackUrl(top) && left && this.now() - left.at <= LEFT_LOOPBACK_MS) {
+      const named = [headers["Origin"], headers["origin"], headers["Referer"], headers["referer"]].find((v) => typeof v === "string" && v && v !== "null") as string | undefined;
+      if (!named || isLoopbackUrl(named) || sameOrigin(named, left.url)) top = left.url;
+    }
+    if (!this.options.outbound || !isLoopbackUrl(top) || isLoopbackUrl(url) || sameOrigin(url, top)) { this.stats.continued++; await go(); return; }
+    let allowed = false;
+    try { allowed = await this.options.outbound.allowed(url); } catch { allowed = false; }
+    if (allowed) { this.stats.continued++; await go(); return; }
+    this.stats.outboundRefused++;
+    await this.sendTo(state, "Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => undefined);
+    this.options.outbound.onBlocked?.(url);
+  }
+
   /**
    * #4128 fail closed when this session has no network hold (a minor seat only): a cross-site subframe that committed
    * off the list is sent back to `about:blank` (`Page.navigate` with its frameId; for an out-of-process iframe this is
@@ -428,6 +534,55 @@ export class LinkNavigationGuard {
  * `target=_blank` link): on a minor seat it is closed and its address goes through the confirm dialog instead.
  * Origins are kept too, so a redirect inside the site Studio opened is not mistaken for a page-opened tab.
  */
+/**
+ * Existing-window fix — navigations Studio itself starts in a browser tab with `Page.navigate` (verify-r027 on #4192).
+ * A record is keyed by the tab's target id, never globally. It is made just before the command is sent, because
+ * Chromium may answer `Page.navigate` only after the paused request goes on, so the loaderId cannot be waited for.
+ * A paused request claims it only when it is that navigation's shape: the same tab, the same address (without the
+ * fragment), a GET, and no Referer or Origin header. A page's own request carries one of those (a form POST, a link or
+ * a form with a referrer); the one shape left, a no-referrer GET to the very address Studio is loading in that tab at
+ * that moment, takes the tab exactly where Studio was taking it. A record is claimed once; a failed or thrown
+ * navigation removes it; a short TTL is only a backstop.
+ */
+export class StudioNavigationLedger {
+  private readonly records = new Map<string, Array<{ url: string; at: number }>>();
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+  constructor(ttlMs = 5_000, now: () => number = Date.now) { this.ttlMs = ttlMs; this.now = now; }
+  /** Before sending; `fail()` removes the record (an error or throw). */
+  begin(targetId: string | undefined, url: string): { fail(): void } {
+    if (!targetId) return { fail() {} };
+    const rec = { url: noHash(url), at: this.now() };
+    const list = this.fresh(targetId); list.push(rec); this.records.set(targetId, list.slice(-8));
+    return { fail: () => { const l = this.records.get(targetId); if (!l) return; const k = l.indexOf(rec); if (k >= 0) l.splice(k, 1); if (!l.length) this.records.delete(targetId); } };
+  }
+  /** A paused main-frame request of this tab: true once, only for the shape of a navigation Studio sent there. */
+  claim(targetId: string | undefined, request: { url: string; method?: string; headers?: Record<string, unknown> }): boolean {
+    if (!targetId) return false;
+    if ((request.method ?? "GET").toUpperCase() !== "GET") return false;
+    if (Object.keys(request.headers ?? {}).some((h) => /^(referer|origin)$/i.test(h))) return false;
+    const list = this.fresh(targetId), k = list.findIndex((r) => r.url === noHash(request.url));
+    if (k < 0) return false;
+    list.splice(k, 1); if (!list.length) this.records.delete(targetId);
+    return true;
+  }
+  private fresh(targetId: string): Array<{ url: string; at: number }> {
+    const t = this.now(), list = (this.records.get(targetId) ?? []).filter((r) => t - r.at <= this.ttlMs);
+    if (list.length) this.records.set(targetId, list); else this.records.delete(targetId);
+    return list;
+  }
+}
+export const studioNavigations = new StudioNavigationLedger();
+/** Studio's own `Page.navigate` on a tab's session: recorded before it is sent, keyed by the tab's target id. */
+export async function studioNavigate(cdp: { send(method: string, params?: any, ...rest: any[]): Promise<any>; targetId?: string }, url: string, ...rest: any[]): Promise<any> {
+  const rec = studioNavigations.begin(cdp.targetId, url);
+  try {
+    const r = await cdp.send("Page.navigate", { url }, ...rest);
+    if (r && typeof r.errorText === "string" && r.errorText) rec.fail();
+    return r;
+  } catch (e) { rec.fail(); throw e; }
+}
+
 export class StudioTabLedger {
   private readonly urls = new Map<string, number>();
   private readonly origins = new Map<string, number>();
@@ -439,6 +594,14 @@ export class StudioTabLedger {
     this.urls.set(noHash(url), t);
     try { this.origins.set(new URL(url).origin, t); } catch { /* not a URL */ }
     for (const map of [this.urls, this.origins]) for (const [k, at] of map) if (t - at > this.windowMs) map.delete(k);
+  }
+  /** `openStudioTab` addresses whose new tab has not been seen yet: that tab's guard takes one, once (first load). */
+  private readonly firstLoads = new Map<string, number>();
+  noteFirstLoad(url: string): void { this.firstLoads.set(noHash(url), this.now()); }
+  takeFirstLoad(url: string): boolean {
+    const key = noHash(url), at = this.firstLoads.get(key);
+    this.firstLoads.delete(key);
+    return at !== undefined && this.now() - at <= this.windowMs;
   }
   /** A popup the guard already refused (failed before its first request): its tab is closed with no second dialog. */
   private readonly refusedUrls = new Map<string, number>();

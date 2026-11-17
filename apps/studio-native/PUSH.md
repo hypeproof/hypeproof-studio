@@ -26,6 +26,11 @@ revocation; the Service also checks active sessions before delivery.
   Unsafe/ambiguous/oversized IPA archives are refused before private extraction.
   `push-configuration.json` records sanitized configuration/package digests and
   the completed phase, separately from the unchanged release/upload receipt.
+  `App/Info.plist` explicitly expands the existing push setting; both app build
+  configurations merge that input with Xcode's generated standard metadata.
+  A user-defined `INFOPLIST_KEY_` setting alone does not generate a custom key.
+  Qualification failures name a fixed `phase` and `check`, never profile values,
+  signing-tool output, credentials or arbitrary exception text.
   No App ID, provider credential or entitlement is enabled by default. The actual APNs callback must succeed;
   there is no sample token or permission fallback.
 - Android: `firebase-messaging:26.0.2` is pinned to the official current SDK. Supply
@@ -46,6 +51,25 @@ then reloads the existing question/inbox surface. An old reference, old account,
 missing configuration or rejected registration does not enable an action. These
 client observations are not physical-delivery evidence.
 
+## Approval alerts (iOS, #4169 / Service #522)
+
+- The Service sends approval alerts as `승인 요청이 왔어요` / `<repo>#<number> · <summary>`, right
+  after the relay stores the card (not at the next 15-minute tick). Questions stay generic.
+- Tapping an approval alert opens the approval inbox scrolled to that card, marked
+  `알림에서 연 요청이에요`. The inbox read stays authoritative: if the card is gone or no longer
+  readable the inbox says `알림의 요청은 이미 처리됐거나 지금은 볼 수 없어요.` and no action is enabled.
+- A card another approver settled (`state: resolved`, `resolution: {reason, by, at}`) shows
+  `<login>님이 HH:mm에 처리했어요` or `다른 곳에서 이미 처리됐어요`, has no buttons and counts as finished.
+  Older Service builds without these fields still decode.
+- When a card stops waiting, the Service sends one silent APNs update (`content-available`,
+  `hps.withdraw: true`). `UIBackgroundModes` includes `remote-notification` so the app can remove its
+  own delivered alert for that card. Apple may throttle or drop background updates and never wakes a
+  force-quit app, so every inbox refresh also removes delivered alerts for cards that no longer wait.
+- An enrolled approver without notifications on sees a `알림 켜기` prompt in the inbox. It is the same
+  explicit opt-in as the setting (system permission first, then registration); nothing turns on by itself.
+- Android: alerts show with the same text through FCM; tap routing, withdrawal and an approval view
+  are not built yet.
+
 Primary references: [Apple registration](https://developer.apple.com/documentation/usernotifications/registering-your-app-with-apns),
 [Firebase Android setup](https://firebase.google.com/docs/android/setup),
 [FCM token API](https://firebase.google.com/docs/reference/android/com/google/firebase/messaging/FirebaseMessaging),
@@ -64,3 +88,15 @@ failure fences; they do not establish Apple signing or device delivery. The
 additional local validation makes no provider call or new CI dispatch. Existing
 release request identity, environment protection, package hashing and receipt
 authority remain unchanged.
+
+The existing iOS recipe also runs `check-ios-push-metadata.py` after its unsigned
+device build. It checks that actual app's disabled default and standard metadata,
+then uses the tracked input plist in three tiny unsigned C app builds: missing
+explicit input (custom key absent despite the enabled setting), explicit enabled,
+and explicit disabled. `push-metadata.json` and the three probe logs are native
+metadata evidence; they do not establish signing, APNs or device delivery.
+Portable source-negative controls remove the input setting or custom key and
+require refusal before upload. They remain synthetic Apple-tool tests.
+
+Apple documents the custom-setting limitation and explicit-input merge in
+[Managing information property list values](https://developer.apple.com/documentation/bundleresources/managing-your-app-s-information-property-list).

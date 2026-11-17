@@ -1,0 +1,10 @@
+## CGP-DS-R-012: three named elevation levels (2026-10-26, agent decision within DES-CGP-DS-13)
+
+- Levels: `flat` (none), `raised` (`0 1px 2px`: the composer, the catch-up button, the start card) and `overlay` (`0 4px 8px -2px`: menus, popovers, the preferences dialog, the sources drawer, Chalk's side menu, seat detail drawer and pick-by menu). DES-CGP-DS-13 names no dialog level; dialogs and drawers share `overlay` so the count stays at three.
+- Alpha: both levels are .10 on light themes and .30 on dark ones (DES-CGP-DS-13's menu value; REQ-CGP-DS-13 needs dark >= .2).
+- Tokens: the static token expander refuses a semantic token with different light and dark values, so each level is a `-dark` and a `-light` token (the `modal-dim` pattern). `tokens.css` picks one per host theme through `--hp-elevation-raised` / `--hp-elevation-overlay`: dark on `:root`, light on `body.vscode-light`, dark on the forest-only start and disconnected screens in every theme, flat under `body.vscode-high-contrast` (the HC Light body carries that class too) and under forced colors.
+- High contrast: menus, popovers, the dialog and the drawer draw their 1px border in `--vscode-contrastBorder`. The composer and the catch-up button are controls and keep the fixed control boundary (CGP-DS-R-005); it measures >= 3:1 there. The start card stays forest in HC Light, where the contrastBorder would be 1.75:1, so it uses its own text colour.
+- Chalk is dark only and reads the `-dark` tokens directly; forced colors drops the shadow and the existing 1px edge borders stay.
+- Not elevation, left as they are: inset selection and status bars (`box-shadow: inset ...`), the `hps-breathe` pending glow (a looping status animation, CGP-DS-D-011), the learner deck document (`deckGenerator.ts`, an exported artifact) and the live-follow control injected into preview pages (`liveFollow.ts`, outside the token source).
+- Visible change: the composer shadow in dark themes goes from alpha .05 to .30; menus and the dialog lose their large soft shadows (12-50px blur) for the 8px overlay.
+

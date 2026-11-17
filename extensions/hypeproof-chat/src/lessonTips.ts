@@ -59,7 +59,7 @@ export class LessonTipsPreference {
   }
 }
 
-// Learner-facing copy (agent-written, decisions.md CGP-SHELL-R-019).
+// Learner-facing copy (agent-written, decisions/CGP-SHELL-R-019.md CGP-SHELL-R-019).
 export const LESSON_TIPS_STOP = "팁 그만 보기";
 /** Said once, right after the press. */
 export const LESSON_TIPS_OFF = "팁을 껐어요. 여기 다시 켜기로 언제든 다시 켤 수 있어요.";

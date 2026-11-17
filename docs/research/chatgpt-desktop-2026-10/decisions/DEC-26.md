@@ -1,0 +1,4 @@
+| DEC | Choice | Why | Default state | Confirmed by Jay |
+|---|---|---|---|---|
+| DEC-26 | The header uses only the selected requests:count ledger and Service as_of. No access state, `configured:false` (Service access contracts off) or no chosen source means no line (the host never auto-selects); an unreachable Service or a missing/malformed ledger reads 미확인; no unresolvable 확인 중 is shown. Scope is DEC-35: pass and class seats, never free seats. A selected cohort/organization source is named and shows its own remaining count and no other number; classroom seats show it wherever the class funding data supports it. A selected source that is not available or not in state ready shows the usage panel's state word and no count. Reservations and unresolved counts stay separate. | No conversion from currency or un-timestamped pass limits can establish a confirmed remaining request count. | On, display only; no grant or funding switch | no |
+

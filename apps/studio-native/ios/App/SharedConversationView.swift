@@ -194,7 +194,7 @@ struct SharedConversationView: View {
     var body: some View {
         lifecycleContent
         .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
-        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals) }
+        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals, push: model.push) }
         .sheet(isPresented: $showQuestions) { AccountQuestionView(model: model.questions) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
@@ -258,9 +258,11 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
-                if NativeJourneyFixture.logoutSync {
+                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied {
                     settingsButton("Hold next history read") { leaveSettings(for: .holdHistory) }.accessibilityIdentifier("nativeJourneyHoldHistory")
-                    settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
+                    if NativeJourneyFixture.logoutSync {
+                        settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
+                    }
                 }
 #endif
                 Section("음성") {
@@ -310,7 +312,7 @@ struct SharedConversationView: View {
         pushCenter.consume()
         Task { if let destination = await model.push.controller?.open(reference), model.signedIn && !model.loggingOut {
             voice.stop(); focused = false
-            if destination == "approval" { showApprovals = true } else { showQuestions = true }
+            if destination == "approval" { model.approvals.focusID = reference.id; showApprovals = true } else { showQuestions = true }
         } }
     }
     private func finishSettingsDismissal() {
@@ -336,7 +338,10 @@ struct SharedConversationView: View {
 #if DEBUG
         case .finishPlayback: voice.finishFixturePlayback()
         case .advanceHistory: NativeJourneyFixture.advanceHistory()
-        case .holdHistory: NativeJourneyFixture.holdNextHistory(); model.refresh()
+        case .holdHistory:
+            NativeJourneyFixture.holdNextHistory()
+            // The failed-draft journey observes the ordinary periodic GET.
+            if !NativeJourneyFixture.accessDenied { model.refresh() }
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
         case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
@@ -549,10 +554,14 @@ struct SharedConversationView: View {
                         Spacer()
                         Button("멈춤") { voice.stop() }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("음성 멈춤").accessibilityIdentifier("sharedVoiceStop")
                     } else {
-                        Button { beginVoice(.dictation) } label: { Image(systemName: "mic").font(.system(size: 20)).frame(width: 44, height: 44) }
+                        Button { beginVoice(.dictation) } label: {
+                            Image(systemName: "mic").font(.system(size: 20)).frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
                             .disabled(!model.canEditDraft || model.busy).accessibilityLabel("말로 적기").accessibilityIdentifier("sharedDictate")
                         Button { if model.signedIn { beginVoice(.conversation) } else { startLogin() } } label: {
                             Image(systemName: "waveform").font(.system(size: 20)).frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }.accessibilityLabel(model.signedIn ? "음성 대화" : "로그인하고 음성 대화")
                             .accessibilityIdentifier("sharedVoice")
                             .disabled(model.signedIn ? !model.canSend || !model.draftText.isEmpty : model.busy || !model.accountStorageReady)
@@ -560,6 +569,7 @@ struct SharedConversationView: View {
                         if model.signedIn {
                             Button { focused = false; voice.stop(); model.send() } label: {
                                 Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
                                     .background(model.canSend && !model.draftText.isEmpty ? ConversationStyle.accent : ConversationStyle.surface, in: Circle())
                                     .foregroundStyle(model.canSend && !model.draftText.isEmpty ? ConversationStyle.onAccent : Color.secondary)
                             }.disabled(!model.canSend || (try? SharedRequest.checkedText(model.draftText)) == nil)
@@ -568,8 +578,11 @@ struct SharedConversationView: View {
                             ProgressView().padding(.horizontal, 8)
                             Button("취소") { model.cancelLogin() }.frame(minHeight: 44).accessibilityLabel("로그인 취소").accessibilityIdentifier("accountCancel")
                         } else {
-                            Button("로그인") { startLogin() }.font(.callout.weight(.semibold))
-                                .padding(.horizontal, 16).frame(minHeight: 44)
+                            Button { startLogin() } label: {
+                                Text("로그인").font(.callout.weight(.semibold))
+                                    .padding(.horizontal, 16).frame(minHeight: 44)
+                                    .contentShape(Capsule())
+                            }
                                 .background(ConversationStyle.accent, in: Capsule()).foregroundStyle(ConversationStyle.onAccent)
                                 .disabled(!model.accountStorageReady).accessibilityLabel("로그인하고 대화하기").accessibilityIdentifier("linkDesktop")
                         }
@@ -644,7 +657,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.pendingPush {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

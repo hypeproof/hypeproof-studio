@@ -581,3 +581,50 @@ A real coach shell command and the packaged app are not run here.
   targets (되돌리기 44 × 44), caption type step, wrapping names, the 2px focus ring, forced colours.
 - Native dialog focus, physical IME, installed-app rendering and screen-reader output are
   separate observations; the synthetic tests do not establish them.
+
+## The coach's failed-run observation (CGP-SHELL-R-019)
+
+`test/run-failure-hint.smoke.mjs` has no DOM.
+- **Failed runs.** It pins what a failed run is: the last run-kind result of a learner turn. Retries inside one turn are one run, and a turn whose retries ended in success is a success.
+- **Counting.** It checks the threshold of 3, one observation per step per session, and the resets on success and on a step change. A refused call is not a failure.
+- **Seat gate.** There is no observation with tips off, without `learning`, without a lesson or step, for an instructor or on a local runtime.
+- **The line.** It is pinned verbatim for the prompt review.
+
+`test/run-failure-hint-host.smoke.mjs` uses the real provider with a scripted runtime that records every request, from the memory-use.smoke.mjs harness.
+- **Adult, agent-sdk.** After three turns with failing Bash results, `memoryContext` carries the line on the fourth request only.
+- **Minor, proxy with browser control.** The same holds after three failed preview starts.
+- **Where it never appears.** Not in the learner's text, history, spool or any post, and no error text, path or command.
+- **Limits.** Once per step; a success or a step change starts over. Never with tips off (`setLessonTips(false)`), without `learning`, or without a lesson.
+- **Proxy context.** On the adult proxy runtime the line rides in `contextText` beside the learner's text. A proxy seat without browser control runs no tool and gets nothing.
+
+**Red on main 8586657f9.** With only the pure module present, the host smoke fails because no request carries the line, while its controls pass.
+
+**Mutants.** Nine fail a test: tips ignored, no learning gate, every time, no success reset, retries counted each, SDK and proxy channels dropped, no step reset, and error text in the line.
+
+## Push-to-talk in the voice conversation (CGP-VOICE-R-026 / R-027)
+
+`test/voice-ptt.smoke.mjs` drives the real `VoiceConversation` and `DictationRecorder` with scripted browser objects.
+- **A push-to-talk session.** It starts closed. A hold opens one turn and the release sends it. Silence never ends a hold, and there is no reopen after the answer.
+- **Retries.** A release during opening and a hold past the ceiling are retries.
+- **The automatic default.** It is unchanged.
+- **R-027.** A detector failure gives a session-only switch with its line, no open microphone, and an automatic next start.
+- **Storage and writes.** The mode store reads junk as the default. In source, there is one writer (the switch), and the loop never posts.
+
+`test/voice-conversation-browser.smoke.mjs` runs the real App. It adds checks that:
+- the switch writes `push_to_talk`;
+- the hold button is at least 64px;
+- a pointer hold released outside the button sends one turn;
+- after the answer the microphone stays closed;
+- a Space hold on the button sends one turn, ignores repeats and leaves the text box untouched;
+- Space in the text box types a space and opens nothing;
+- a window blur during a hold closes the microphone;
+- a hide during a hold stops the session;
+- a failing analyser switches that session to push-to-talk with its line and posts no mode write;
+- (verify-4244) a Space hold followed by Tab closes the microphone and sends the turn, and Space repeats typed afterwards reach no field;
+- Enter, and an assistive-technology `click()`, toggle a turn on (`aria-pressed`) and off (sent);
+- a `pointercancel` during a hold discards the turn: the microphone closes, nothing is sent, and the plain ready line stays;
+- (verify-4288) a toggled take says `듣고 있어요. 다시 누르면 보내요.` (a Space hold keeps the release line). A toggled take that runs into the 58 s ceiling ends unpressed with the too-long line and nothing sent, and the next Enter starts a new take; dropping the reset fails this. `voice-ptt.smoke.mjs` pins `discard()` on the loop. Five verify-4244 mutants each fail the real-App smoke: no onBlur end, repeats leaking, pointercancel sending, no assistive-technology toggle, and no Enter toggle.
+
+**Red on the base.** The smoke fails without the mode module, and the App has no switch.
+
+**Mutants.** Five fail a test: a reopen after the answer, a sticky fallback, an uncaught detector failure, silence ending a hold, and no blur release. Release outside the button is guarded twice, by pointer capture and by a window `pointerup` listener. Removing either alone still passes because the other holds; removing both fails the release-outside case.

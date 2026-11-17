@@ -53,6 +53,7 @@ import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { insertAtCaret, PassThrough } from './composerAddon';
 import { CONVERSATION_BLOCKED_BY_DICTATION, DICTATE_BLOCKED_BY_CONVERSATION } from "../../src/voiceCopy";
 import { VoiceConversationControl } from './VoiceConversationControl';
+import { VoiceTip } from './VoiceTip';
 import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
@@ -75,6 +76,7 @@ import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
 import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
 import { LessonSettingsChangeLine, useLessonSettingsAnnouncement } from './LessonSettingsChange';
 import { AccessControl, requiresFundingSelection } from './AccessControl';
+import { BudgetRequestCard } from './BudgetRequestCard';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -135,11 +137,14 @@ import { DataDeletionRequest } from "./DataDeletionRequest";
 import { TaskMemorySwitches } from "./TaskMemorySwitches";
 import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
 import { MicInputSetting } from "./MicInputSetting";
+import { VoiceEarcons, VoiceSoundsSetting } from "./VoiceEarcons";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { CHECKLIST_EMPTY, CHECKLIST_TITLE, INSERT_BUTTON, NOTE_HINT, ROUTE_TITLE, VERDICT_FITS, VERDICT_FIX, checklistVersion, getChecklistEntry, routeLines, setChecklistNote, setChecklistVerdict, subscribeChecklist } from "./rehearsalChecklist";
 export type RehearsalPanel = NonNullable<import("../../src/protocol").ChatConfig["rehearsalPanel"]>;
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
+import { QuestCard, QuestOfferCard, useQuestIntake } from "./QuestIntake";
+import { questChoicesAllowed } from "../../src/questIntake";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -679,6 +684,17 @@ export function ChatPanel(props: Props) {
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
   const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  // REQ-QUEST-* (#4283) — intent → key questions → 퀘스트 생성하기 → quest card.
+  const questIntake = useQuestIntake(JSON.stringify([activityId, taskId]), props.instructor === true);
+  // REQ-QUEST-LIST — the host made the quest: continue on step 1 as the learner's own message, once per quest.
+  // Declared with the other hooks (before any early return); sendWhenOnline is read when the effect runs.
+  const questStartSent = useRef<string | null>(null);
+  useEffect(() => {
+    const start = questIntake.start;
+    if (!start || questStartSent.current === start.id) return;
+    questStartSent.current = start.id;
+    sendWhenOnline(() => props.onSend(start.text), 'press');
+  }, [questIntake.start?.id]);
   const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
@@ -2204,7 +2220,7 @@ export function ChatPanel(props: Props) {
               nextStepsMode={compactLayout && m.role === "assistant" ? (streaming && m.id === streamingId ? "streaming" : nextStepChips && m.id === lastSpoken?.id ? "strip" : undefined) : undefined}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
-              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
+              onPickReply={personalWorkspace && questChoicesAllowed(questIntake) && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
               replyTyping={composing || draft.length > 0}
               replySelectionValid={lastReplyChoice.current?.messageId === m.id}
@@ -2428,6 +2444,9 @@ export function ChatPanel(props: Props) {
       <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
       {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice, get blockedReason() { return dictationBusy || dictationBusyRef.current ? CONVERSATION_BLOCKED_BY_DICTATION : null; } }} onActive={reportVoiceActive} />}
+      {!props.instructor && <VoiceTip config={config} taskEmpty={messages.length === 0} />}
+      {/* CGP-VOICE-R-018 — the optional start and end sounds of dictation and the conversation; draws nothing. */}
+      {!props.instructor && <VoiceEarcons on={config?.voiceSounds === true} />}
 
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -2636,10 +2655,15 @@ export function ChatPanel(props: Props) {
           onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
           onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
-          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
+          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}
+          request={config && <BudgetRequestCard config={config} post={postToHost} />}>
         </ActivityStatus>}
+        {/* CGP-SHELL-R-030 — too low to send but not yet out: the same card above the composer (it draws nothing otherwise). */}
+        {!statusScreen && config && <BudgetRequestCard config={config} post={postToHost} />}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {!streaming && <QuestOfferCard view={questIntake} />}
+        <QuestCard view={questIntake} />
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         {addon && <addon.Notice />}
@@ -2820,6 +2844,8 @@ export function ChatPanel(props: Props) {
         {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
         {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served. */}
         <MicInputSetting />
+        {/* CGP-VOICE-R-018 — this seat's start and end sounds; drawn only where dictation is served. */}
+        {!props.instructor && <VoiceSoundsSetting on={config.voiceSounds === true} onChange={(on) => postToHost({ type: "setVoiceSounds", on })} />}
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -2849,6 +2875,8 @@ export function ChatPanel(props: Props) {
         </fieldset>
         {/* CGP-VOICE-R-019 — which microphone dictation records from; drawn only where dictation is served, while open. */}
         <MicInputSetting open={preferencesOpen} />
+        {/* CGP-VOICE-R-018 — this seat's start and end sounds; drawn only where dictation is served, while open. */}
+        {!props.instructor && <VoiceSoundsSetting open={preferencesOpen} on={config.voiceSounds === true} onChange={(on) => postToHost({ type: "setVoiceSounds", on })} />}
         {/* CGP-KNOW-D-022 — the same read-only state line, with the folder, in the settings dialog. */}
         {config.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="settings" />}
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).

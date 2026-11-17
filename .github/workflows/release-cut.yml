@@ -144,7 +144,7 @@ jobs:
           node-version: "22"
 
       - name: Controls
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs scripts/release/test/select-cases.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs scripts/release/test/select-cases.test.mjs scripts/release/test/release-blockers.test.mjs
 
       - name: Release cut
         id: cut
@@ -241,10 +241,23 @@ jobs:
           app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
           private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
 
+      # Release blockers (scripts/release/release-blockers.mjs) are read in Studio, Service and Lab; the
+      # last two are private, so the org bot App token covers the three repositories. The App needs
+      # Issues: read. Without it the gate cannot read the list and refuses (fail closed).
+      - name: Release blocker read token (hypeproof-org-lab-bot)
+        id: blockers
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          owner: hypeproof
+          repositories: hypeproof-studio,hypeproof-service,hypeprooflab
+
       - name: Create from the plan
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
+          RELEASE_BLOCKER_TOKEN: ${{ steps.blockers.outputs.token }}
           ACCEPT_NOT_RUN: ${{ inputs.accept_not_run }}
           MANAGED_DRAFT: ${{ inputs.managed_draft }}
         run: |

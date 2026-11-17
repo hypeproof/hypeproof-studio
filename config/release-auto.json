@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "_comment": "Automatic release (scripts/release/auto-release.mjs, .github/workflows/release-auto.yml). Kill switch: repository variable RELEASE_AUTO; only the value \"on\" enables it, anything else (or unset) keeps releases manual. Decision: hypeprooflab docs/decisions/2026-11-16-studio-auto-release.md. releaseApprovers mirrors Harness policy/authority.yaml area studio-desktop-release (the canon); team is the whole team asked when a gate does not pass (Harness registry contacts).",
+  "pipeline": [
+    "hypeproof-org-lab-bot[bot]"
+  ],
+  "machinery": [
+    "hypeproof-org-lab-bot[bot]",
+    "github-actions[bot]",
+    "hypeproof-agent[bot]"
+  ],
+  "evidenceReporters": [
+    "hypeproof-agent[bot]"
+  ],
+  "blackboxKit": {
+    "requiredScenarios": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s7",
+      "s8",
+      "s9",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s14",
+      "s15",
+      "s16",
+      "s17"
+    ]
+  },
+  "releaseApprovers": [
+    "JeHyeong2",
+    "ico1036",
+    "jayleekr"
+  ],
+  "team": [
+    "jayleekr",
+    "JinyongShin",
+    "ico1036",
+    "TJ-kr",
+    "xoqhdgh1002",
+    "J3llyBe4n",
+    "rabqatab",
+    "JeHyeong2"
+  ],
+  "askAfterHours": 6
+}

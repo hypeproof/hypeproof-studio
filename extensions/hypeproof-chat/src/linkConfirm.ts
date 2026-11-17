@@ -38,6 +38,8 @@ export const LINK_CONFIRM_COPY = {
   unavailable: "링크를 열기 전에 확인이 필요해요. Studio 대화창을 열고 다시 눌러 주세요.",
   busy: "먼저 열린 링크 확인 창에 답해 주세요.",
   blocked: "이 창에서는 수업 허용 목록 밖의 사이트를 열 수 없어요. 선생님께 알려 주세요.",
+  /** Jay, 2026-11-15: an AI-made (loopback) page tried to send data to another site, on a minor seat. */
+  outbound: "이 페이지가 다른 사이트로 정보를 보내려 해서 막았어요.",
 } as const;
 
 export class LinkConfirmRequest {

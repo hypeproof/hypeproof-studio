@@ -121,7 +121,7 @@ try{
   assert.ok(L.tipBottom<=L.cTop+.5,`${tag}: tip above the composer, no overlap (${L.tipBottom} <= ${L.cTop})`);
   assert.ok(L.cBottom<=L.vh+.5,`${tag}: the composer stays on screen`);
   // At chat-column widths every part of the tip shares one line; the 320px panel may wrap the
-  // two buttons under the text inside the same row element (44px targets win, decisions.md).
+  // two buttons under the text inside the same row element (44px targets win, decisions/README.md).
   if(width>=800){const mid=k=>(k.top+k.bottom)/2,m0=mid(L.kids[0]);for(const k of L.kids)assert.ok(k.top<m0&&k.bottom>m0,`${tag}: badge, text and buttons share one line ${JSON.stringify(L.kids)}`);}
  }
  // Forced colours: the row keeps a system-colour border and the buttons stay system colours.

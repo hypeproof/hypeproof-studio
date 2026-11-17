@@ -28,6 +28,7 @@ import * as os from "os";
 import { StartPage } from "./startPage";
 import { handleJoinLink, type JoinLinkHost } from "./joinLink";
 import { purchaseReturnOrder } from "./purchaseReturnHelpers";
+import { accountHandoffTicket } from "./accountHandoffUri";
 import { ACCOUNTS_ENABLED_DEFAULT, AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -448,6 +449,19 @@ export async function activate(context: vscode.ExtensionContext) {
     ask: async (message, detail, action) => (await vscode.window.showInformationMessage(message, { modal: true, detail }, action)) === action,
     log: line => console.info(line),
   };
+  /** `/account-handoff?ticket=`: exchange once, ask before replacing another signed-in account. */
+  const openAccountHandoff = async (session: AccountSession, uri: vscode.Uri): Promise<boolean> => {
+    const ticket = accountHandoffTicket(uri, vscode.env.uriScheme);
+    if (!ticket) return false;
+    const outcome = await session.handoff(ticket, async (target, current) => {
+      const name = target.display_name || target.email;
+      const detail = current ? `지금은 ${current.display_name || current.email} 계정으로 로그인돼 있어요.` : '지금 이 Studio에 로그인한 계정을 확인하지 못했어요.';
+      return (await vscode.window.showWarningMessage(`${name} 계정으로 바꿀까요?`, { modal: true, detail }, '바꾸기')) === '바꾸기';
+    });
+    if (outcome === 'signedIn') await startPage.accountHandedOff();
+    else await startPage.show();
+    return true;
+  };
   context.subscriptions.push(vscode.window.registerUriHandler({
     handleUri: async uri => {
       if (await handleJoinLink(joinLinkHost, uri)) return;
@@ -456,6 +470,8 @@ export async function activate(context: vscode.ExtensionContext) {
       const returnedOrder = purchaseReturnOrder(uri, vscode.env.uriScheme);
       if (returnedOrder) { await startPage.purchaseReturned(returnedOrder); return; }
       if (!accounts) return;
+      // Web-to-app sign-in handoff: the Lab invite done page's "Studio 열기". Exact shape only.
+      if (await openAccountHandoff(accounts, uri)) return;
       if (uri.scheme !== vscode.env.uriScheme || uri.authority !== 'hypeproof.hypeproof-chat' || uri.path !== '/account-return' || uri.fragment) return;
       const query = new URLSearchParams(uri.query);
       if ([...query.keys()].some(key => key !== 'state' && key !== 'windowId') || query.getAll('state').length !== 1) return;

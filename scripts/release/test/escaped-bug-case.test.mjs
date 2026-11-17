@@ -91,3 +91,21 @@ test('changedCases: new and edited cases, not unchanged ones', () => {
   assert.deepEqual(changedCases([a, b], [a, b2, c]).map(x => x.id), ['BB-002', 'BB-031']);
   assert.deepEqual(changedCases([a, b], [a, b]), []);
 });
+
+test('a case already at the PR head naming the issue passes (#4304: release PR listing the fix as "closes #4298")', () => {
+  const bb040 = kase('BB-040', {origin: {kind: 'escaped-bug', date: '2026-11-16', ref: '#4298'}});
+  const v = decide({pr: 4304, issues: [escapedIssue(4298, ['bug', 'type:bug', 'escaped-bug'])], changed: [], present: [kase('BB-001'), bb040]});
+  assert.deepEqual([v.ok, v.route], [true, 'case']);
+  assert.match(v.reasons[0], /#4298: BB-040 already in/);
+  // an existing case naming another issue, or only this PR's number, does not count
+  const other = kase('BB-031', {origin: {kind: 'escaped-bug', date: '2026-11-03', ref: '#3426'}});
+  assert.equal(decide({pr: 4304, issues: [escapedIssue(4298)], present: [other]}).ok, false);
+  const byPrOnly = kase('BB-041', {origin: {kind: 'escaped-bug', date: '2026-11-16', ref: '#4304'}});
+  assert.equal(decide({pr: 4304, issues: [escapedIssue(4298)], present: [byPrOnly]}).ok, false);
+  const longer = kase('BB-041', {origin: {kind: 'escaped-bug', date: '2026-11-16', ref: '#42980'}});
+  assert.equal(decide({pr: 4304, issues: [escapedIssue(4298)], present: [longer]}).ok, false);
+  // each escaped issue still needs its own case
+  const two = decide({pr: 4304, issues: [escapedIssue(4298), escapedIssue(4299)], present: [bb040]});
+  assert.equal(two.ok, false);
+  assert.match(two.reasons[0], /#4299 is an escaped bug/);
+});

@@ -73,7 +73,15 @@ export class AccountError extends Error {
   code: string;
   constructor(code: string, message: string) { super(message); this.code = code; }
 }
+/** Web-to-app handoff refusal (Service answers every ticket failure with this one code). */
+export const HANDOFF_REFUSED_MESSAGE = '이 연결 링크는 이미 쓰였거나 시간이 지났어요. 웹 페이지에서 Studio 열기를 다시 눌러 주세요.';
+export const HANDOFF_SAME_ACCOUNT_MESSAGE = '이미 이 계정으로 로그인돼 있어요.';
+export const HANDOFF_KEPT_MESSAGE = '지금 로그인한 계정을 그대로 쓸게요.';
+/** Asked once when the handoff names another account than the one signed in. True switches. */
+export type HandoffConfirm = (target: AccountIdentity, current: AccountIdentity | undefined) => PromiseLike<boolean>;
+export type HandoffOutcome = 'signedIn' | 'kept' | 'refused';
 const friendly = (code: string): string => {
+  if (/handoff/.test(code)) return HANDOFF_REFUSED_MESSAGE;
   if (/denied/.test(code)) return '브라우저에서 연결을 거절했어요. 다시 시작할 수 있어요.';
   if (/expired/.test(code)) return '로그인 시간이 지났어요. Google로 시작하기를 다시 눌러 주세요.';
   if (/revoked|suspended|deleted|invalid.*token|unauthorized|refresh.*reuse/.test(code)) return '이 기기의 로그인이 끝났어요. Google로 다시 로그인해 주세요.';
@@ -90,6 +98,7 @@ export class AccountSession {
   private timer?: ReturnType<typeof setTimeout>;
   private browserReturn?: { state: string; uri: string; expiresAt: number; received: boolean };
   private polling?: Promise<void>;
+  private handing?: Promise<HandoffOutcome>;
   private passTokens = new Map<string, { token: string; expiresAt: number; sessionId: string }>();
   private lastSession?: string;
   private state: AccountView = { status: 'signedOut' };
@@ -263,15 +272,7 @@ export class AccountSession {
       if (generation !== this.generation) return;
       // CONV-FUNNEL-R-007: read once, here, so the link follows the seat the sign-in started from.
       // A failed or empty read only means no header; it never blocks or changes the sign-in.
-      let freeCredential: string | undefined;
-      // Bounded: a read that hangs (e.g. an unanswered keychain prompt) gives no header, not a stuck sign-in.
-      if (this.options.freeCredential) {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          const value = await Promise.race([Promise.resolve(this.options.freeCredential()), new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), FREE_CREDENTIAL_READ_MS); })]);
-          if (typeof value === 'string' && value) freeCredential = value;
-        } catch { /* no header */ } finally { if (timer) clearTimeout(timer); }
-      }
+      const freeCredential = await this.readFreeCredential();
       if (generation !== this.generation) return;
       const { body: d } = await this.call('/auth/device/start', { label: this.options.label, ...(returnUri ? { return_uri: returnUri } : {}) });
       if (generation !== this.generation) return;
@@ -285,6 +286,83 @@ export class AccountSession {
       if (!await this.options.openBrowser(url)) { this.state.message = link ? '브라우저를 열지 못했어요. 로그인 창 다시 열기를 누르거나 링크를 복사해 다른 브라우저에서 열어 주세요.' : '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
       this.schedule();
     } catch (e) { if (generation === this.generation) { this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit(); } }
+  }
+  /** Bounded: a read that hangs (e.g. an unanswered keychain prompt) gives no header, not a stuck sign-in. */
+  private async readFreeCredential(): Promise<string | undefined> {
+    if (!this.options.freeCredential) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const value = await Promise.race([Promise.resolve(this.options.freeCredential()), new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), FREE_CREDENTIAL_READ_MS); })]);
+      if (typeof value === 'string' && value) return value;
+    } catch { /* no header */ } finally { if (timer) clearTimeout(timer); }
+  }
+  /**
+   * Web-to-app sign-in handoff: the Lab done page's "Studio 열기" opens
+   * `<scheme>://hypeproof.hypeproof-chat/account-handoff?ticket=<64 hex>`. The single-use ticket is
+   * exchanged for an ordinary Studio session of the web account (same bundle as a device poll).
+   * A different signed-in account is replaced only after `confirm` says yes; otherwise, and when the
+   * same account is already signed in, the new session is revoked and the current one is kept.
+   * The ticket is never stored, logged or shown.
+   */
+  handoff(ticket: string, confirm: HandoffConfirm): Promise<HandoffOutcome> {
+    if (this.handing) return this.handing;
+    const work = this.handoffOnce(ticket, confirm);
+    this.handing = work;
+    return work.finally(() => { if (this.handing === work) this.handing = undefined; });
+  }
+  private async handoffOnce(ticket: string, confirm: HandoffConfirm): Promise<HandoffOutcome> {
+    if (!/^[a-f0-9]{64}$/.test(ticket)) return 'refused';
+    const before = this.state;
+    this.state = { ...before, busy: true, message: undefined }; this.emit();
+    const done = (outcome: HandoffOutcome, message?: string): HandoffOutcome => { this.state = { ...this.state, busy: false, message }; this.emit(); return outcome; };
+    let response: { status: number; body: any };
+    try { response = await this.call('/auth/handoff/exchange', { ticket, label: this.options.label }, undefined, await this.readFreeCredential()); }
+    catch (e) { return done('refused', e instanceof AccountError ? e.message : friendly('unavailable')); }
+    const revokeNew = () => typeof response.body?.access_token === 'string' ? this.call('/auth/logout', {}, response.body.access_token).catch(() => undefined) : Promise.resolve(undefined);
+    const target = identity(response.body?.account);
+    let bundle: Bundle;
+    try { if (!target) throw new AccountError('invalid_response', friendly('invalid_response')); bundle = this.parseBundle(response.body); }
+    catch (e) { await revokeNew(); return done('refused', e instanceof AccountError ? e.message : friendly('invalid_response')); }
+    // Who is signed in now. A credential the Service already refuses is forgotten by accessToken().
+    let current: AccountIdentity | undefined;
+    if (await this.read()) {
+      try { const token = await this.accessToken(); if (token) current = identity((await this.call('/me', undefined, token)).body?.account); }
+      catch { /* unknown: still asked below, never replaced silently */ }
+    }
+    const previous = await this.read();
+    if (previous && current?.id === target.id) { await revokeNew(); await this.refreshView(); return done('kept', HANDOFF_SAME_ACCOUNT_MESSAGE); }
+    if (previous) {
+      let yes = false;
+      try { yes = await confirm(target, current); } catch { yes = false; }
+      if (!yes) { await revokeNew(); return done('kept', HANDOFF_KEPT_MESSAGE); }
+    }
+    this.cancel(false);
+    let replaced: Bundle | undefined;
+    try {
+      await this.exclusive(async () => {
+        replaced = await this.read();
+        await this.save(bundle, replaced);
+        this.passTokens.clear();
+      });
+    } catch (e) { return done('refused', e instanceof AccountError ? e.message : friendly('unavailable')); }
+    if (replaced && replaced.sessionId !== bundle.sessionId) {
+      // Best effort: the replaced device session ends on the server too; its pass binding ends here.
+      await this.call('/auth/logout', {}, replaced.accessToken).catch(() => undefined);
+      await this.options.invalidated?.(replaced.sessionId);
+    }
+    // The session is stored: the view says so with the account the exchange named, before the refresh. A refresh
+    // that fails (offline, 5xx) then only adds its message and the 15-second watch fills in the passes; the view
+    // never reads "signed out" while a working session is stored.
+    this.state = { status: 'signedIn', busy: true, account: target }; this.emit();
+    await this.refreshView();
+    if ((await this.read())?.sessionId !== bundle.sessionId) {
+      // The Service refused the new session at once (refreshView forgot it): not signed in.
+      this.state = { ...this.state, busy: false }; this.emit();
+      return 'refused';
+    }
+    this.state = { ...this.state, busy: false }; this.emit();
+    // The caller continues (start page, invite grant): `signedIn` stays the device-approval hook.
+    return 'signedIn';
   }
   private schedule(): void { if (this.timer) clearTimeout(this.timer); if (this.device) this.timer = setTimeout(() => { void this.poll(); }, this.device.interval); }
   async reopen(): Promise<void> {

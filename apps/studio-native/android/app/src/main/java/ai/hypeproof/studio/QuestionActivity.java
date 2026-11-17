@@ -53,10 +53,10 @@ public final class QuestionActivity extends Activity {
     private AlertDialog teamDialog;
     private boolean approvalDialog;
     private NativeVoice voice;
-    private LinearLayout root,messages,actions,voiceActions,body;
+    private LinearLayout root,messages,actions,guestRestoreActions,voiceActions,body;
     private EditText composer;
     private TextView heading,hint,status,voiceStatus,voiceHint;
-    private Button send,latest;
+    private Button send,latest,guestRestore;
     private ConversationScroll timeline;
     private ImageButton dictate,talk,voiceStop;
     private String shownAccount,transcriptKey="",voicePrefix="",voiceTurn;
@@ -146,6 +146,10 @@ public final class QuestionActivity extends Activity {
         timeline.onPositionChanged(()->latest.setVisibility(timeline.atLatest()?View.GONE:View.VISIBLE));root.addView(history,new LinearLayout.LayoutParams(-1,0,1));
         status=text("",13,false);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
         actions=column();root.addView(actions);
+        // Preserve this touch target across focus/save/poll redraws. Removing a
+        // pressed button before ACTION_UP discards the person's explicit choice.
+        guestRestoreActions=column();guestRestoreActions.addView(text("로그인 전 글도 남아 있어요. 입력창을 비운 뒤 가져올 수 있어요.",13,false));
+        guestRestore=button("로그인 전 글 가져오기",()->{stopVoice();model.restoreGuest();update();});guestRestoreActions.addView(guestRestore);root.addView(guestRestoreActions);
         LinearLayout compose=column();compose.setPadding(dp(12),dp(4),dp(12),dp(8));compose.setBackground(rounded(card,24));
         composer=new EditText(this);composer.setTextColor(ink);composer.setHintTextColor(muted);composer.setHint("정리되지 않은 말도 괜찮아요");composer.setContentDescription("질문 대화 입력");composer.setTextSize(17);composer.setMinHeight(dp(56));composer.setMaxLines(getResources().getConfiguration().fontScale>=1.3f?2:4);composer.setGravity(Gravity.TOP|Gravity.START);composer.setPadding(dp(4),dp(12),dp(4),dp(12));composer.setBackground(null);composer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4000)});
         composer.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void afterTextChanged(Editable e){}public void onTextChanged(CharSequence s,int a,int b,int c){if(!editing){stopVoice();model.edit(s.toString());status.setText(model.error.isEmpty()?model.notice:model.error);send.setEnabled(canActivatePrimary());handler.post(QuestionActivity.this::update);}}});
@@ -214,10 +218,8 @@ public final class QuestionActivity extends Activity {
             restore.setEnabled(model.canRestoreFailedDraft());actions.addView(restore);
             if(!model.draft.isEmpty())actions.addView(text("작성 중인 글을 먼저 확인해 주세요. 보낸 이야기는 그대로 남아 있어요.",13,false));
         }
-        if(s!=null&&!model.guestDraft.isEmpty()){
-            TextView kept=text("로그인 전 글도 남아 있어요. 입력창을 비운 뒤 가져올 수 있어요.",13,false);actions.addView(kept);
-            Button restore=button("로그인 전 글 가져오기",()->{stopVoice();model.restoreGuest();update();});restore.setEnabled(model.canRestoreGuest());actions.addView(restore);
-        }
+        guestRestoreActions.setVisibility(s!=null&&!model.guestDraft.isEmpty()?View.VISIBLE:View.GONE);
+        guestRestore.setEnabled(model.canRestoreGuest());
         // Keep the actual touch targets stable while focus/model updates arrive.
         voiceActions.setVisibility(model.readOnly?View.INVISIBLE:View.VISIBLE);voiceStatus.setVisibility(View.GONE);voiceHint.setVisibility(View.GONE);
         boolean active=voice.session.active();dictate.setVisibility(active?View.GONE:View.VISIBLE);talk.setVisibility(!active&&s!=null?View.VISIBLE:View.GONE);voiceStop.setVisibility(active?View.VISIBLE:View.GONE);
@@ -340,6 +342,10 @@ public final class QuestionActivity extends Activity {
                 if(!j.isNull("note"))teamContent.addView(text(j.getString("note"),13,false));
                 team.presented();
             }catch(JSONException e){teamContent.addView(text("질문을 표시하지 못했어요. 새로고침해 주세요.",14,false));}
+        }
+        if(!approvalDialog&&team.answerConfirmed){
+            Button next=button("다음 질문 보기",()->model.withCurrentAccount(team::questions));next.setEnabled(!team.busy&&!model.busy);teamContent.addView(next);
+            teamContent.addView(text("지금은 닫고 원래 대화로 돌아가도 좋아요.",14,false));
         }
         if(!approvalDialog&&team.canStart){
             String[] labels={"목표를 정리하고 싶어요","방법이 막혔어요","결정을 앞두고 있어요"},values={"goal","method","decision"};

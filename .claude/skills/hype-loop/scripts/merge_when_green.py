@@ -124,6 +124,7 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
             return "policy_blocked"
         monitor.enrich_check_origins(repo, [state])
         monitor.enrich_release_enrollment(repo, [state], rule)
+        monitor.enrich_objection_inputs(repo, [state])  # #679: comments and review threads
         assessment = monitor.build_queue([state])[0]
     except Exception as exc:
         log(repo, pr, "poll", policy_error=type(exc).__name__)
@@ -151,7 +152,8 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
     if merge_state == "DIRTY":
         return "dirty"
     if assessment.status == "blocked" and any(
-        not b.startswith(("checks_pending_or_failed", "merge_state:UNKNOWN", "mergeable:UNKNOWN", "required_check_missing:", "required_check_not_green:", monitor.CONTROL_PLANE_GATE))
+        # A review in progress (#679) ends within its lease window: keep waiting for it.
+        not b.startswith(("checks_pending_or_failed", "merge_state:UNKNOWN", "mergeable:UNKNOWN", "required_check_missing:", "required_check_not_green:", "review_in_progress:", monitor.CONTROL_PLANE_GATE))
         for b in assessment.blockers if not is_review_only_blocker(b)
     ):
         return "policy_blocked"

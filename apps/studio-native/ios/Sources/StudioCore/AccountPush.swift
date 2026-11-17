@@ -4,6 +4,8 @@ import CoreFoundation
 public struct AccountPushReference: Sendable, Equatable {
     public let deliveryID, kind, id: String
     public let revision: Int64
+    /// A silent Service update (#522): the approval card is no longer waiting, so remove its delivered alert.
+    public let withdraw: Bool
     public init(_ value: [String: Any]) throws {
         guard value["schema"] as? String == "hps-push/1", let delivery = value["delivery_id"] as? String,
               UUID(uuidString: delivery)?.uuidString.lowercased() == delivery,
@@ -12,7 +14,24 @@ public struct AccountPushReference: Sendable, Equatable {
               let number = value["revision"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
               number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
               number.doubleValue > 0, number.doubleValue <= 9_007_199_254_740_991 else { throw SyncFailure.invalidResponse }
-        deliveryID = delivery; self.kind = kind; self.id = id; revision = number.int64Value
+        var withdraw = false
+        if let flag = value["withdraw"] {
+            guard let flag = flag as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID(), flag.boolValue, kind == "approval" else { throw SyncFailure.invalidResponse }
+            withdraw = true
+        }
+        deliveryID = delivery; self.kind = kind; self.id = id; revision = number.int64Value; self.withdraw = withdraw
+    }
+}
+/// Which delivered alerts to take off the lock screen. Pure so the app delegate and tests share it.
+public enum AccountPushAlerts {
+    /// The approval card a delivered alert points to, or nil for questions, withdrawals and foreign payloads.
+    public static func approvalCardID(_ userInfo: [AnyHashable: Any]) -> String? {
+        guard let raw = userInfo["hps"] as? [String: Any], let reference = try? AccountPushReference(raw), reference.kind == "approval", !reference.withdraw else { return nil }
+        return reference.id
+    }
+    /// Identifiers of delivered approval alerts whose card no longer waits for this person.
+    public static func stale(_ delivered: [(identifier: String, userInfo: [AnyHashable: Any])], settled: Set<String>) -> [String] {
+        delivered.compactMap { item in approvalCardID(item.userInfo).flatMap { settled.contains($0) ? item.identifier : nil } }
     }
 }
 public struct AccountPushPreference: Codable, Sendable {

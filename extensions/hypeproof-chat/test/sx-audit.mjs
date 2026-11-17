@@ -117,15 +117,26 @@ export const NUMERIC_PATTERNS = [
  * two docs name (6·7·10·100). The general slash ratio is left as harness_undecided (recorded
  * in the report).
  */
+/** Judgment and score words that make a position line a verdict. Multi-character only: a bare 점 or 잘 is part of many plain words. */
+const POSITION_JUDGMENT = "정답률|통과|성공|실패|완료|달성|정답|오답|우수|미달|불합격|합격|맞았|맞혔|틀렸|점수|등급|만점|클리어|성취|잘했|성적|평가|백점";
+/** "N / M <unit>" for a real position only: 1 ≤ N ≤ M, 2 ≤ M ≤ 8, with no judgment word on the same line. */
+function positionAllowance(unit) {
+  const pairs = [];
+  for (let n = 1; n <= 8; n++) for (let m = Math.max(2, n); m <= 8; m++) pairs.push(`${n}\\s*\\/\\s*${m}`);
+  return new RegExp(`(?<![^\\n]*(?:${POSITION_JUDGMENT})[^\\n]*)(?<!\\d|\\d[.,])(?:${pairs.join("|")})\\s*${unit}(?![^\\n]*(?:${POSITION_JUDGMENT}))(?!\\s*(?:점|맞|틀))`, "g");
+}
+
 export const ALLOWED_NUMERIC = [
   { id: "week", label: "\\d+주차", re: /\d+\s*주차/g },
   { id: "steps_left", label: "남은 단계 \\d+", re: /남은\s*단계\s*\d+/g },
-  // CGP-LEARN-R-005 (REQ-CGP-LEARN-05): the stage stepper shows its position as "2 / 4 단계". It is where the learner is in
-  // the instructor's stages, not a score, so only that exact shape is allowed: single digits within the stepper's 2–8
-  // stages (so "90 / 100 단계" is not a position), no score word before it ("정답률 2 / 4 단계") and no judgment word after
-  // 단계 ("3 / 4 단계 통과"). A bare "2 / 4" is still flagged. Anything the allowance does not cover keeps its numbers, so
-  // the ratio is flagged by the rules below.
-  { id: "stage_position", label: "N / M 단계 (M ≤ 8, 판정어 없음)", re: /(?<!(?:률|율|점수|성적|등급|정답|평가)\s*)(?<!\d|\d[.,])[1-8]\s*\/\s*[2-8]\s*단계(?!\s*(?:통과|성공|실패|완료|달성|정답|오답|우수|미달|합격|불합격|맞|틀|점|등급|만점|클리어|성취|잘))/g },
+  // CGP-LEARN-R-005 (REQ-CGP-LEARN-05) and CGP-LEARN-R-007 (REQ-CGP-LEARN-07): the stage stepper's "2 / 4 단계" and an
+  // animated block's "2 / 4 장면". Each is where the learner is in the instructor's stages or frames, not a score, so only
+  // that exact shape is allowed (positionAllowance below): a real position (1 ≤ N ≤ M, 2 ≤ M ≤ 8, so "90 / 100 단계" and
+  // "5 / 4 단계" are not), and no judgment or score word anywhere on the same line ("3 / 4 단계: 통과", "정답률: 2 / 4 단계").
+  // The caption "N / M 단계: <title>" passes. A bare "2 / 4" is still flagged. Anything the allowance does not cover keeps its
+  // numbers, so the ratio is flagged by the rules below.
+  { id: "stage_position", label: "N / M 단계 (1 ≤ N ≤ M ≤ 8, 판정어 없는 줄)", re: positionAllowance("단계") },
+  { id: "scene_position", label: "N / M 장면 (1 ≤ N ≤ M ≤ 8, 판정어 없는 줄)", re: positionAllowance("장면") },
   { id: "date_numeric", label: "날짜(2026-09-20)", re: /\d{4}\s*[-./]\s*\d{1,2}\s*[-./]\s*\d{1,2}\.?/g },
   { id: "date_ko", label: "날짜(9월 20일)", re: /\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*월(?=\s|$)|\d{1,2}\s*일(?=\s|$)/g },
   { id: "time_clock", label: "시각(3:05)", re: /(?:오전|오후)?\s*\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g },

@@ -1,0 +1,1765 @@
+{
+ "schema": "hps-decisions-split/1",
+ "source": "docs/research/chatgpt-desktop-2026-10/decisions.md",
+ "rebuild": "Concatenate, in this order, bytes [start, start+length) of each piece's file. Write table_header exactly once, immediately after the intro piece (that is, before the first row piece). Do not write it again for later row pieces: every row file begins with its own copy of the header, but the ranges never include it. The result equals the former decisions.md byte for byte for the files as of the split commit (git rev of the commit that added this file); later edits to a file change its bytes. `python3 scripts/decisions-index.py --rebuild OUT --rev REV` does this.",
+ "table_header": "| DEC | Choice | Why | Default state | Confirmed by Jay |\n|---|---|---|---|---|\n",
+ "pieces": [
+  {
+   "file": "_intro.md",
+   "kind": "intro",
+   "source_line": 1,
+   "start": 0,
+   "length": 211
+  },
+  {
+   "file": "DEC-14.md",
+   "kind": "row",
+   "source_line": 8,
+   "start": 80,
+   "length": 930
+  },
+  {
+   "file": "DEC-24.md",
+   "kind": "row",
+   "source_line": 9,
+   "start": 80,
+   "length": 781
+  },
+  {
+   "file": "DEC-23.md",
+   "kind": "row",
+   "source_line": 10,
+   "start": 80,
+   "length": 1141
+  },
+  {
+   "file": "DEC-25.md",
+   "kind": "row",
+   "source_line": 11,
+   "start": 80,
+   "length": 332
+  },
+  {
+   "file": "DEC-24.md",
+   "kind": "row",
+   "source_line": 12,
+   "start": 861,
+   "length": 806
+  },
+  {
+   "file": "CGP-VOICE-R-026.md",
+   "kind": "row",
+   "source_line": 13,
+   "start": 80,
+   "length": 700
+  },
+  {
+   "file": "CGP-LEARN-R-005.md",
+   "kind": "row",
+   "source_line": 14,
+   "start": 80,
+   "length": 473
+  },
+  {
+   "file": "CGP-LEARN-R-006.md",
+   "kind": "row",
+   "source_line": 15,
+   "start": 80,
+   "length": 241
+  },
+  {
+   "file": "CGP-SHELL-R-026.md",
+   "kind": "row",
+   "source_line": 16,
+   "start": 80,
+   "length": 475
+  },
+  {
+   "file": "CGP-AGENT-R-020.md",
+   "kind": "row",
+   "source_line": 17,
+   "start": 80,
+   "length": 469
+  },
+  {
+   "file": "DEC-08.md",
+   "kind": "row",
+   "source_line": 18,
+   "start": 80,
+   "length": 348
+  },
+  {
+   "file": "DEC-09.md",
+   "kind": "row",
+   "source_line": 19,
+   "start": 80,
+   "length": 615
+  },
+  {
+   "file": "DEC-27.md",
+   "kind": "row",
+   "source_line": 20,
+   "start": 80,
+   "length": 526
+  },
+  {
+   "file": "DEC-29.md",
+   "kind": "row",
+   "source_line": 21,
+   "start": 80,
+   "length": 914
+  },
+  {
+   "file": "DEC-29b.md",
+   "kind": "row",
+   "source_line": 22,
+   "start": 80,
+   "length": 1502
+  },
+  {
+   "file": "DEC-11.md",
+   "kind": "row",
+   "source_line": 23,
+   "start": 80,
+   "length": 1019
+  },
+  {
+   "file": "DEC-11a.md",
+   "kind": "row",
+   "source_line": 24,
+   "start": 80,
+   "length": 1415
+  },
+  {
+   "file": "DEC-11b.md",
+   "kind": "row",
+   "source_line": 25,
+   "start": 80,
+   "length": 833
+  },
+  {
+   "file": "DEC-11c.md",
+   "kind": "row",
+   "source_line": 26,
+   "start": 80,
+   "length": 327
+  },
+  {
+   "file": "DEC-11d.md",
+   "kind": "row",
+   "source_line": 27,
+   "start": 80,
+   "length": 343
+  },
+  {
+   "file": "DEC-11e.md",
+   "kind": "row",
+   "source_line": 28,
+   "start": 80,
+   "length": 1598
+  },
+  {
+   "file": "DEC-11f.md",
+   "kind": "row",
+   "source_line": 29,
+   "start": 80,
+   "length": 2386
+  },
+  {
+   "file": "DEC-35.md",
+   "kind": "row",
+   "source_line": 30,
+   "start": 80,
+   "length": 587
+  },
+  {
+   "file": "DEC-12.md",
+   "kind": "row",
+   "source_line": 31,
+   "start": 80,
+   "length": 595
+  },
+  {
+   "file": "DEC-D65.md",
+   "kind": "row",
+   "source_line": 32,
+   "start": 80,
+   "length": 468
+  },
+  {
+   "file": "CGP-CHAT-D53.md",
+   "kind": "row",
+   "source_line": 34,
+   "start": 80,
+   "length": 692
+  },
+  {
+   "file": "CGP-CHAT-D-008.md",
+   "kind": "row",
+   "source_line": 35,
+   "start": 80,
+   "length": 502
+  },
+  {
+   "file": "DEC-12.md",
+   "kind": "row",
+   "source_line": 36,
+   "start": 675,
+   "length": 866
+  },
+  {
+   "file": "DEC-13.md",
+   "kind": "row",
+   "source_line": 37,
+   "start": 80,
+   "length": 1274
+  },
+  {
+   "file": "DEC-12.md",
+   "kind": "row",
+   "source_line": 38,
+   "start": 1541,
+   "length": 603
+  },
+  {
+   "file": "DEC-12.md",
+   "kind": "row",
+   "source_line": 39,
+   "start": 2144,
+   "length": 1011
+  },
+  {
+   "file": "DEC-26.md",
+   "kind": "row",
+   "source_line": 41,
+   "start": 80,
+   "length": 880
+  },
+  {
+   "file": "CGP-AGENT-D-004.md",
+   "kind": "section",
+   "source_line": 43,
+   "start": 0,
+   "length": 7562
+  },
+  {
+   "file": "CGP-KNOW-R-020.md",
+   "kind": "section",
+   "source_line": 76,
+   "start": 0,
+   "length": 9700
+  },
+  {
+   "file": "CGP-KNOW-D-006.md",
+   "kind": "section",
+   "source_line": 100,
+   "start": 0,
+   "length": 1389
+  },
+  {
+   "file": "CGP-KNOW-D-033.md",
+   "kind": "section",
+   "source_line": 106,
+   "start": 0,
+   "length": 942
+  },
+  {
+   "file": "CGP-KNOW-D-020.md",
+   "kind": "section",
+   "source_line": 110,
+   "start": 0,
+   "length": 630
+  },
+  {
+   "file": "CGP-DS-R-001.md",
+   "kind": "section",
+   "source_line": 120,
+   "start": 0,
+   "length": 797
+  },
+  {
+   "file": "DEC-DS-D-001.md",
+   "kind": "section",
+   "source_line": 131,
+   "start": 0,
+   "length": 1840
+  },
+  {
+   "file": "DEC-DS-D-002.md",
+   "kind": "section",
+   "source_line": 143,
+   "start": 0,
+   "length": 2977
+  },
+  {
+   "file": "DEC-DS-D-003.md",
+   "kind": "section",
+   "source_line": 156,
+   "start": 0,
+   "length": 2437
+  },
+  {
+   "file": "DEC-DS-D-004.md",
+   "kind": "section",
+   "source_line": 167,
+   "start": 0,
+   "length": 1874
+  },
+  {
+   "file": "DEC-DS-R-005.md",
+   "kind": "section",
+   "source_line": 179,
+   "start": 0,
+   "length": 2104
+  },
+  {
+   "file": "DEC-DS-R-006.md",
+   "kind": "section",
+   "source_line": 190,
+   "start": 0,
+   "length": 2524
+  },
+  {
+   "file": "DEC-DS-R-010.md",
+   "kind": "section",
+   "source_line": 202,
+   "start": 0,
+   "length": 2421
+  },
+  {
+   "file": "DEC-DS-D-005.md",
+   "kind": "section",
+   "source_line": 214,
+   "start": 0,
+   "length": 3164
+  },
+  {
+   "file": "DEC-DS-D-007.md",
+   "kind": "section",
+   "source_line": 229,
+   "start": 0,
+   "length": 1768
+  },
+  {
+   "file": "DEC-DS-R-011.md",
+   "kind": "section",
+   "source_line": 240,
+   "start": 0,
+   "length": 2598
+  },
+  {
+   "file": "DEC-DS-D-008.md",
+   "kind": "section",
+   "source_line": 252,
+   "start": 0,
+   "length": 1576
+  },
+  {
+   "file": "DEC-DS-D-012.md",
+   "kind": "section",
+   "source_line": 261,
+   "start": 0,
+   "length": 571
+  },
+  {
+   "file": "DEC-D028.md",
+   "kind": "section",
+   "source_line": 270,
+   "start": 0,
+   "length": 1512
+  },
+  {
+   "file": "DEC-DS-D-014.md",
+   "kind": "section",
+   "source_line": 276,
+   "start": 0,
+   "length": 2013
+  },
+  {
+   "file": "CGP-DS-D-016.md",
+   "kind": "section",
+   "source_line": 299,
+   "start": 0,
+   "length": 685
+  },
+  {
+   "file": "DEC-DS-D-018.md",
+   "kind": "section",
+   "source_line": 310,
+   "start": 0,
+   "length": 1448
+  },
+  {
+   "file": "DEC-DS-D-024.md",
+   "kind": "section",
+   "source_line": 329,
+   "start": 0,
+   "length": 2216
+  },
+  {
+   "file": "DEC-DS-D-021.md",
+   "kind": "section",
+   "source_line": 341,
+   "start": 0,
+   "length": 958
+  },
+  {
+   "file": "DEC-DS-D-028.md",
+   "kind": "section",
+   "source_line": 356,
+   "start": 0,
+   "length": 4000
+  },
+  {
+   "file": "CGP-CHAT-R-006.md",
+   "kind": "section",
+   "source_line": 378,
+   "start": 0,
+   "length": 803
+  },
+  {
+   "file": "DEC-KNOW-R-003.md",
+   "kind": "section",
+   "source_line": 390,
+   "start": 0,
+   "length": 5515
+  },
+  {
+   "file": "DEC-KNOW-10.md",
+   "kind": "section",
+   "source_line": 409,
+   "start": 0,
+   "length": 1115
+  },
+  {
+   "file": "DEC-AGENT-R-010.md",
+   "kind": "section",
+   "source_line": 425,
+   "start": 0,
+   "length": 975
+  },
+  {
+   "file": "DEC-AGENT-R032.md",
+   "kind": "section",
+   "source_line": 438,
+   "start": 0,
+   "length": 1090
+  },
+  {
+   "file": "DEC-KNOW-33.md",
+   "kind": "section",
+   "source_line": 454,
+   "start": 0,
+   "length": 947
+  },
+  {
+   "file": "DEC-ART-R-011.md",
+   "kind": "section",
+   "source_line": 468,
+   "start": 0,
+   "length": 1114
+  },
+  {
+   "file": "DEC-ART-R-012.md",
+   "kind": "section",
+   "source_line": 482,
+   "start": 0,
+   "length": 3408
+  },
+  {
+   "file": "DEC-SHELL-R-016.md",
+   "kind": "section",
+   "source_line": 526,
+   "start": 0,
+   "length": 2242
+  },
+  {
+   "file": "DEC-ART-R-013.md",
+   "kind": "section",
+   "source_line": 551,
+   "start": 0,
+   "length": 1735
+  },
+  {
+   "file": "DEC-ART-R-005.md",
+   "kind": "section",
+   "source_line": 572,
+   "start": 0,
+   "length": 3321
+  },
+  {
+   "file": "CGP-ART-R-001.md",
+   "kind": "section",
+   "source_line": 611,
+   "start": 0,
+   "length": 1372
+  },
+  {
+   "file": "DEC-KNOW-R035.md",
+   "kind": "section",
+   "source_line": 631,
+   "start": 0,
+   "length": 950
+  },
+  {
+   "file": "DEC-SHELL-R-002.md",
+   "kind": "section",
+   "source_line": 645,
+   "start": 0,
+   "length": 2402
+  },
+  {
+   "file": "CGP-SHELL-R-009.md",
+   "kind": "section",
+   "source_line": 678,
+   "start": 0,
+   "length": 893
+  },
+  {
+   "file": "CGP-SHELL-R-012.md",
+   "kind": "section",
+   "source_line": 691,
+   "start": 0,
+   "length": 1935
+  },
+  {
+   "file": "CGP-SHELL-R-023.md",
+   "kind": "section",
+   "source_line": 712,
+   "start": 0,
+   "length": 1610
+  },
+  {
+   "file": "DEC-VOICE-R010.md",
+   "kind": "section",
+   "source_line": 737,
+   "start": 0,
+   "length": 942
+  },
+  {
+   "file": "DEC-KNOW-63.md",
+   "kind": "section",
+   "source_line": 750,
+   "start": 0,
+   "length": 531
+  },
+  {
+   "file": "DEC-ART-03.md",
+   "kind": "section",
+   "source_line": 759,
+   "start": 0,
+   "length": 705
+  },
+  {
+   "file": "DEC-SHELL-R-006.md",
+   "kind": "section",
+   "source_line": 770,
+   "start": 0,
+   "length": 994
+  },
+  {
+   "file": "CGP-KNOW-D-003.md",
+   "kind": "section",
+   "source_line": 786,
+   "start": 0,
+   "length": 340
+  },
+  {
+   "file": "CGP-AGENT-D-009.md",
+   "kind": "section",
+   "source_line": 790,
+   "start": 0,
+   "length": 326
+  },
+  {
+   "file": "DEC-AGENT-D028.md",
+   "kind": "section",
+   "source_line": 794,
+   "start": 0,
+   "length": 544
+  },
+  {
+   "file": "CGP-DS-D-011.md",
+   "kind": "section",
+   "source_line": 803,
+   "start": 0,
+   "length": 1205
+  },
+  {
+   "file": "CGP-SHELL-D-029.md",
+   "kind": "section",
+   "source_line": 811,
+   "start": 0,
+   "length": 604
+  },
+  {
+   "file": "CGP-DS-D-017.md",
+   "kind": "section",
+   "source_line": 815,
+   "start": 0,
+   "length": 921
+  },
+  {
+   "file": "CGP-CHAT-R-023.md",
+   "kind": "section",
+   "source_line": 822,
+   "start": 0,
+   "length": 1795
+  },
+  {
+   "file": "CGP-CHAT-D-023.md",
+   "kind": "section",
+   "source_line": 832,
+   "start": 0,
+   "length": 762
+  },
+  {
+   "file": "DEC-32.md",
+   "kind": "section",
+   "source_line": 839,
+   "start": 0,
+   "length": 1497
+  },
+  {
+   "file": "CGP-CHAT-D-022.md",
+   "kind": "section",
+   "source_line": 845,
+   "start": 0,
+   "length": 877
+  },
+  {
+   "file": "CGP-AGENT-R-029.md",
+   "kind": "section",
+   "source_line": 852,
+   "start": 0,
+   "length": 1640
+  },
+  {
+   "file": "CGP-AGENT-D-025.md",
+   "kind": "section",
+   "source_line": 865,
+   "start": 0,
+   "length": 2847
+  },
+  {
+   "file": "CGP-CHAT-R-024.md",
+   "kind": "section",
+   "source_line": 877,
+   "start": 0,
+   "length": 1842
+  },
+  {
+   "file": "CGP-CHAT-R-021.md",
+   "kind": "section",
+   "source_line": 885,
+   "start": 0,
+   "length": 1314
+  },
+  {
+   "file": "CGP-CHAT-D-021.md",
+   "kind": "section",
+   "source_line": 893,
+   "start": 0,
+   "length": 1043
+  },
+  {
+   "file": "CGP-CHAT-R-027.md",
+   "kind": "section",
+   "source_line": 901,
+   "start": 0,
+   "length": 1925
+  },
+  {
+   "file": "CGP-KNOW-R-001.md",
+   "kind": "section",
+   "source_line": 911,
+   "start": 0,
+   "length": 1197
+  },
+  {
+   "file": "CGP-KNOW-D-001.md",
+   "kind": "section",
+   "source_line": 919,
+   "start": 0,
+   "length": 1510
+  },
+  {
+   "file": "CGP-CHAT-R-029.md",
+   "kind": "section",
+   "source_line": 928,
+   "start": 0,
+   "length": 2334
+  },
+  {
+   "file": "CGP-CHAT-D-029.md",
+   "kind": "section",
+   "source_line": 939,
+   "start": 0,
+   "length": 1350
+  },
+  {
+   "file": "DEC-KNOW-R-002.md",
+   "kind": "section",
+   "source_line": 947,
+   "start": 0,
+   "length": 2008
+  },
+  {
+   "file": "DEC-KNOW-D-002.md",
+   "kind": "section",
+   "source_line": 959,
+   "start": 0,
+   "length": 1472
+  },
+  {
+   "file": "CGP-CHAT-R-025.md",
+   "kind": "section",
+   "source_line": 969,
+   "start": 0,
+   "length": 1229
+  },
+  {
+   "file": "CGP-CHAT-D-025.md",
+   "kind": "section",
+   "source_line": 978,
+   "start": 0,
+   "length": 764
+  },
+  {
+   "file": "CGP-CHAT-R-028.md",
+   "kind": "section",
+   "source_line": 985,
+   "start": 0,
+   "length": 1895
+  },
+  {
+   "file": "CGP-CHAT-D-028.md",
+   "kind": "section",
+   "source_line": 994,
+   "start": 0,
+   "length": 1055
+  },
+  {
+   "file": "CGP-ART-R-015.md",
+   "kind": "section",
+   "source_line": 1002,
+   "start": 0,
+   "length": 1151
+  },
+  {
+   "file": "CGP-CHAT-R-030.md",
+   "kind": "section",
+   "source_line": 1011,
+   "start": 0,
+   "length": 1386
+  },
+  {
+   "file": "CGP-CHAT-D-030.md",
+   "kind": "section",
+   "source_line": 1019,
+   "start": 0,
+   "length": 1403
+  },
+  {
+   "file": "CGP-CHAT-R-026.md",
+   "kind": "section",
+   "source_line": 1028,
+   "start": 0,
+   "length": 2115
+  },
+  {
+   "file": "CGP-CHAT-R-026.md",
+   "kind": "section",
+   "source_line": 1040,
+   "start": 2115,
+   "length": 1602
+  },
+  {
+   "file": "CGP-CHAT-D-026.md",
+   "kind": "section",
+   "source_line": 1049,
+   "start": 0,
+   "length": 1105
+  },
+  {
+   "file": "CGP-KNOW-R-008.md",
+   "kind": "section",
+   "source_line": 1056,
+   "start": 0,
+   "length": 1168
+  },
+  {
+   "file": "CGP-KNOW-D-008.md",
+   "kind": "section",
+   "source_line": 1073,
+   "start": 0,
+   "length": 833
+  },
+  {
+   "file": "DEC-KNOW-35.md",
+   "kind": "section",
+   "source_line": 1084,
+   "start": 0,
+   "length": 979
+  },
+  {
+   "file": "CGP-KNOW-R-021.md",
+   "kind": "section",
+   "source_line": 1097,
+   "start": 0,
+   "length": 1965
+  },
+  {
+   "file": "CGP-KNOW-D-021.md",
+   "kind": "section",
+   "source_line": 1106,
+   "start": 0,
+   "length": 1880
+  },
+  {
+   "file": "CGP-KNOW-R-032.md",
+   "kind": "section",
+   "source_line": 1115,
+   "start": 0,
+   "length": 4964
+  },
+  {
+   "file": "DEC-KNOW-R009.md",
+   "kind": "section",
+   "source_line": 1128,
+   "start": 0,
+   "length": 1852
+  },
+  {
+   "file": "CGP-AGENT-R-030.md",
+   "kind": "section",
+   "source_line": 1135,
+   "start": 0,
+   "length": 1828
+  },
+  {
+   "file": "CGP-ART-R-016.md",
+   "kind": "section",
+   "source_line": 1144,
+   "start": 0,
+   "length": 3190
+  },
+  {
+   "file": "CGP-ART-D-016.md",
+   "kind": "section",
+   "source_line": 1154,
+   "start": 0,
+   "length": 2095
+  },
+  {
+   "file": "CGP-ART-R-023.md",
+   "kind": "section",
+   "source_line": 1165,
+   "start": 0,
+   "length": 1447
+  },
+  {
+   "file": "CGP-ART-D-023.md",
+   "kind": "section",
+   "source_line": 1174,
+   "start": 0,
+   "length": 1543
+  },
+  {
+   "file": "CGP-AGENT-R-027.md",
+   "kind": "section",
+   "source_line": 1183,
+   "start": 0,
+   "length": 1200
+  },
+  {
+   "file": "CGP-ART-R-020.md",
+   "kind": "section",
+   "source_line": 1192,
+   "start": 0,
+   "length": 1613
+  },
+  {
+   "file": "CGP-ART-D-020.md",
+   "kind": "section",
+   "source_line": 1202,
+   "start": 0,
+   "length": 1125
+  },
+  {
+   "file": "CGP-LEARN-R-017.md",
+   "kind": "section",
+   "source_line": 1209,
+   "start": 0,
+   "length": 1967
+  },
+  {
+   "file": "CGP-ART-R-017.md",
+   "kind": "section",
+   "source_line": 1220,
+   "start": 0,
+   "length": 3215
+  },
+  {
+   "file": "CGP-ART-D-017.md",
+   "kind": "section",
+   "source_line": 1231,
+   "start": 0,
+   "length": 906
+  },
+  {
+   "file": "CGP-ART-R-021.md",
+   "kind": "section",
+   "source_line": 1238,
+   "start": 0,
+   "length": 1658
+  },
+  {
+   "file": "CGP-ART-D-021.md",
+   "kind": "section",
+   "source_line": 1247,
+   "start": 0,
+   "length": 1608
+  },
+  {
+   "file": "CGP-ART-R-006.md",
+   "kind": "section",
+   "source_line": 1254,
+   "start": 0,
+   "length": 2240
+  },
+  {
+   "file": "CGP-ART-D-006.md",
+   "kind": "section",
+   "source_line": 1264,
+   "start": 0,
+   "length": 1321
+  },
+  {
+   "file": "CGP-LEARN-R-015.md",
+   "kind": "section",
+   "source_line": 1273,
+   "start": 0,
+   "length": 1326
+  },
+  {
+   "file": "CGP-LEARN-D-015.md",
+   "kind": "section",
+   "source_line": 1282,
+   "start": 0,
+   "length": 1279
+  },
+  {
+   "file": "CGP-VOICE-R-008.md",
+   "kind": "section",
+   "source_line": 1291,
+   "start": 0,
+   "length": 1613
+  },
+  {
+   "file": "CGP-VOICE-D-007.md",
+   "kind": "section",
+   "source_line": 1302,
+   "start": 0,
+   "length": 985
+  },
+  {
+   "file": "CGP-LEARN-R-016.md",
+   "kind": "section",
+   "source_line": 1309,
+   "start": 0,
+   "length": 2182
+  },
+  {
+   "file": "CGP-LEARN-D-016.md",
+   "kind": "section",
+   "source_line": 1319,
+   "start": 0,
+   "length": 827
+  },
+  {
+   "file": "DEC-VOICE-R009.md",
+   "kind": "section",
+   "source_line": 1324,
+   "start": 0,
+   "length": 2632
+  },
+  {
+   "file": "DEC-SHELL-R014.md",
+   "kind": "section",
+   "source_line": 1334,
+   "start": 0,
+   "length": 1608
+  },
+  {
+   "file": "DEC-SHELL-D013.md",
+   "kind": "section",
+   "source_line": 1342,
+   "start": 0,
+   "length": 1077
+  },
+  {
+   "file": "CGP-SHELL-R-020.md",
+   "kind": "section",
+   "source_line": 1349,
+   "start": 0,
+   "length": 3509
+  },
+  {
+   "file": "CGP-SHELL-R-035.md",
+   "kind": "section",
+   "source_line": 1366,
+   "start": 0,
+   "length": 1957
+  },
+  {
+   "file": "CGP-SHELL-D-034.md",
+   "kind": "section",
+   "source_line": 1375,
+   "start": 0,
+   "length": 1647
+  },
+  {
+   "file": "CGP-DS-R-012.md",
+   "kind": "section",
+   "source_line": 1385,
+   "start": 0,
+   "length": 2068
+  },
+  {
+   "file": "CGP-DS-D-009.md",
+   "kind": "section",
+   "source_line": 1395,
+   "start": 0,
+   "length": 839
+  },
+  {
+   "file": "DEC-DS-R-026.md",
+   "kind": "section",
+   "source_line": 1401,
+   "start": 0,
+   "length": 1718
+  },
+  {
+   "file": "DEC-DS-D-023.md",
+   "kind": "section",
+   "source_line": 1412,
+   "start": 0,
+   "length": 1116
+  },
+  {
+   "file": "CGP-DS-R-030.md",
+   "kind": "section",
+   "source_line": 1421,
+   "start": 0,
+   "length": 846
+  },
+  {
+   "file": "CGP-DS-R-032.md",
+   "kind": "section",
+   "source_line": 1429,
+   "start": 0,
+   "length": 1246
+  },
+  {
+   "file": "DEC-DS-R-033.md",
+   "kind": "section",
+   "source_line": 1437,
+   "start": 0,
+   "length": 1358
+  },
+  {
+   "file": "DEC-SHELL-R028.md",
+   "kind": "section",
+   "source_line": 1447,
+   "start": 0,
+   "length": 2572
+  },
+  {
+   "file": "DEC-SHELL-D027.md",
+   "kind": "section",
+   "source_line": 1457,
+   "start": 0,
+   "length": 1033
+  },
+  {
+   "file": "CGP-CHAT-D-015.md",
+   "kind": "section",
+   "source_line": 1464,
+   "start": 0,
+   "length": 1038
+  },
+  {
+   "file": "CGP-CHAT-D-016.md",
+   "kind": "section",
+   "source_line": 1472,
+   "start": 0,
+   "length": 851
+  },
+  {
+   "file": "CGP-CHAT-D-017.md",
+   "kind": "section",
+   "source_line": 1479,
+   "start": 0,
+   "length": 1464
+  },
+  {
+   "file": "CGP-CHAT-D-020.md",
+   "kind": "section",
+   "source_line": 1489,
+   "start": 0,
+   "length": 1274
+  },
+  {
+   "file": "CGP-CHAT-D-018.md",
+   "kind": "section",
+   "source_line": 1497,
+   "start": 0,
+   "length": 1478
+  },
+  {
+   "file": "CGP-CHAT-D-027.md",
+   "kind": "section",
+   "source_line": 1506,
+   "start": 0,
+   "length": 1111
+  },
+  {
+   "file": "CGP-KNOW-D-009.md",
+   "kind": "section",
+   "source_line": 1514,
+   "start": 0,
+   "length": 1096
+  },
+  {
+   "file": "CGP-KNOW-D-011.md",
+   "kind": "section",
+   "source_line": 1522,
+   "start": 0,
+   "length": 1946
+  },
+  {
+   "file": "CGP-KNOW-D-016.md",
+   "kind": "section",
+   "source_line": 1533,
+   "start": 0,
+   "length": 1982
+  },
+  {
+   "file": "CGP-KNOW-D-019.md",
+   "kind": "section",
+   "source_line": 1543,
+   "start": 0,
+   "length": 1792
+  },
+  {
+   "file": "CGP-KNOW-D-032.md",
+   "kind": "section",
+   "source_line": 1552,
+   "start": 0,
+   "length": 1413
+  },
+  {
+   "file": "CGP-AGENT-D-023.md",
+   "kind": "section",
+   "source_line": 1562,
+   "start": 0,
+   "length": 1199
+  },
+  {
+   "file": "CGP-AGENT-D-026.md",
+   "kind": "section",
+   "source_line": 1570,
+   "start": 0,
+   "length": 1904
+  },
+  {
+   "file": "CGP-ART-D-015.md",
+   "kind": "section",
+   "source_line": 1578,
+   "start": 0,
+   "length": 1661
+  },
+  {
+   "file": "CGP-SHELL-D-019.md",
+   "kind": "section",
+   "source_line": 1588,
+   "start": 0,
+   "length": 2352
+  },
+  {
+   "file": "CGP-LEARN-R-001.md",
+   "kind": "section",
+   "source_line": 1598,
+   "start": 0,
+   "length": 1741
+  },
+  {
+   "file": "CGP-LEARN-R-002.md",
+   "kind": "section",
+   "source_line": 1607,
+   "start": 0,
+   "length": 1660
+  },
+  {
+   "file": "CGP-LEARN-R-003.md",
+   "kind": "section",
+   "source_line": 1616,
+   "start": 0,
+   "length": 1505
+  },
+  {
+   "file": "CGP-LEARN-D-001.md",
+   "kind": "section",
+   "source_line": 1626,
+   "start": 0,
+   "length": 3488
+  },
+  {
+   "file": "CGP-KNOW-R-030.md",
+   "kind": "section",
+   "source_line": 1641,
+   "start": 0,
+   "length": 1768
+  },
+  {
+   "file": "CGP-LEARN-D-003.md",
+   "kind": "section",
+   "source_line": 1653,
+   "start": 0,
+   "length": 1629
+  },
+  {
+   "file": "CGP-KNOW-R-022.md",
+   "kind": "section",
+   "source_line": 1662,
+   "start": 0,
+   "length": 1299
+  },
+  {
+   "file": "CGP-LEARN-D-002.md",
+   "kind": "section",
+   "source_line": 1672,
+   "start": 0,
+   "length": 2035
+  },
+  {
+   "file": "CGP-KNOW-R-025.md",
+   "kind": "section",
+   "source_line": 1682,
+   "start": 0,
+   "length": 2873
+  },
+  {
+   "file": "CGP-KNOW-D-025.md",
+   "kind": "section",
+   "source_line": 1693,
+   "start": 0,
+   "length": 1381
+  },
+  {
+   "file": "CGP-KNOW-D-030.md",
+   "kind": "section",
+   "source_line": 1702,
+   "start": 0,
+   "length": 1976
+  },
+  {
+   "file": "CGP-KNOW-R-005.md",
+   "kind": "section",
+   "source_line": 1714,
+   "start": 0,
+   "length": 2239
+  },
+  {
+   "file": "CGP-KNOW-R-023.md",
+   "kind": "section",
+   "source_line": 1726,
+   "start": 0,
+   "length": 2102
+  },
+  {
+   "file": "CGP-KNOW-R-024.md",
+   "kind": "section",
+   "source_line": 1737,
+   "start": 0,
+   "length": 2073
+  },
+  {
+   "file": "CGP-KNOW-R-029.md",
+   "kind": "section",
+   "source_line": 1747,
+   "start": 0,
+   "length": 2992
+  },
+  {
+   "file": "CGP-KNOW-D-029.md",
+   "kind": "section",
+   "source_line": 1758,
+   "start": 0,
+   "length": 1283
+  },
+  {
+   "file": "CGP-KNOW-R-031.md",
+   "kind": "section",
+   "source_line": 1764,
+   "start": 0,
+   "length": 2048
+  },
+  {
+   "file": "CGP-KNOW-R-026.md",
+   "kind": "section",
+   "source_line": 1776,
+   "start": 0,
+   "length": 5661
+  },
+  {
+   "file": "CGP-KNOW-D-023.md",
+   "kind": "section",
+   "source_line": 1792,
+   "start": 0,
+   "length": 1695
+  },
+  {
+   "file": "CGP-KNOW-D-022.md",
+   "kind": "section",
+   "source_line": 1802,
+   "start": 0,
+   "length": 1818
+  },
+  {
+   "file": "CGP-KNOW-D-005.md",
+   "kind": "section",
+   "source_line": 1812,
+   "start": 0,
+   "length": 2138
+  },
+  {
+   "file": "CGP-KNOW-D-005.md",
+   "kind": "section",
+   "source_line": 1823,
+   "start": 2138,
+   "length": 945
+  },
+  {
+   "file": "CGP-KNOW-D-026.md",
+   "kind": "section",
+   "source_line": 1831,
+   "start": 0,
+   "length": 1474
+  },
+  {
+   "file": "CGP-ART-D-008.md",
+   "kind": "section",
+   "source_line": 1841,
+   "start": 0,
+   "length": 1780
+  },
+  {
+   "file": "CGP-ART-D-008.md",
+   "kind": "section",
+   "source_line": 1853,
+   "start": 1780,
+   "length": 2021
+  },
+  {
+   "file": "CGP-SHELL-R-004.md",
+   "kind": "section",
+   "source_line": 1864,
+   "start": 0,
+   "length": 1729
+  },
+  {
+   "file": "second-core-batch-the-persist-hp-safe-session-as-a-studio-co.md",
+   "kind": "section",
+   "source_line": 1872,
+   "start": 0,
+   "length": 4312
+  },
+  {
+   "file": "hardened-session-the-two-verifier-gaps-closed-2026-11-07.md",
+   "kind": "section",
+   "source_line": 1884,
+   "start": 0,
+   "length": 2431
+  },
+  {
+   "file": "hardened-session-the-three-settings-locked-for-minor-and-saf.md",
+   "kind": "section",
+   "source_line": 1892,
+   "start": 0,
+   "length": 3824
+  },
+  {
+   "file": "CGP-KNOW-R-027.md",
+   "kind": "section",
+   "source_line": 1905,
+   "start": 0,
+   "length": 1732
+  },
+  {
+   "file": "CGP-CHAT-R-004.md",
+   "kind": "section",
+   "source_line": 1915,
+   "start": 0,
+   "length": 2459
+  },
+  {
+   "file": "DEC-10.md",
+   "kind": "section",
+   "source_line": 1927,
+   "start": 0,
+   "length": 1299
+  },
+  {
+   "file": "CGP-VOICE-R-024.md",
+   "kind": "section",
+   "source_line": 1937,
+   "start": 0,
+   "length": 1285
+  },
+  {
+   "file": "CGP-VOICE-R-004.md",
+   "kind": "section",
+   "source_line": 1945,
+   "start": 0,
+   "length": 1208
+  },
+  {
+   "file": "CGP-VOICE-R-012.md",
+   "kind": "section",
+   "source_line": 1952,
+   "start": 0,
+   "length": 2255
+  },
+  {
+   "file": "CGP-VOICE-R-003.md",
+   "kind": "section",
+   "source_line": 1966,
+   "start": 0,
+   "length": 737
+  },
+  {
+   "file": "CGP-VOICE-R-024.md",
+   "kind": "section",
+   "source_line": 1973,
+   "start": 1285,
+   "length": 891
+  },
+  {
+   "file": "CGP-CHAT-D-009.md",
+   "kind": "section",
+   "source_line": 1980,
+   "start": 0,
+   "length": 2901
+  },
+  {
+   "file": "CGP-VOICE-R-002.md",
+   "kind": "section",
+   "source_line": 1991,
+   "start": 0,
+   "length": 3604
+  },
+  {
+   "file": "CGP-VOICE-R-007.md",
+   "kind": "section",
+   "source_line": 2006,
+   "start": 0,
+   "length": 5319
+  },
+  {
+   "file": "CGP-VOICE-R-021.md",
+   "kind": "section",
+   "source_line": 2021,
+   "start": 0,
+   "length": 378
+  },
+  {
+   "file": "workspace-trust-studio-created-folders-open-trusted-2026-11.md",
+   "kind": "section",
+   "source_line": 2026,
+   "start": 0,
+   "length": 1820
+  },
+  {
+   "file": "blocker-fix-before-the-flag-is-turned-on-3658-same-scope-sam.md",
+   "kind": "section",
+   "source_line": 2038,
+   "start": 0,
+   "length": 2595
+  },
+  {
+   "file": "CGP-AGENT-R-015.md",
+   "kind": "section",
+   "source_line": 2051,
+   "start": 0,
+   "length": 2296
+  },
+  {
+   "file": "DEC-30.md",
+   "kind": "section",
+   "source_line": 2064,
+   "start": 0,
+   "length": 1994
+  },
+  {
+   "file": "DEC-30.md",
+   "kind": "section",
+   "source_line": 2077,
+   "start": 1994,
+   "length": 1263
+  },
+  {
+   "file": "CGP-AGENT-R-014.md",
+   "kind": "section",
+   "source_line": 2086,
+   "start": 0,
+   "length": 1749
+  },
+  {
+   "file": "CGP-AGENT-R-024.md",
+   "kind": "section",
+   "source_line": 2096,
+   "start": 0,
+   "length": 2004
+  },
+  {
+   "file": "CGP-SHELL-R-024.md",
+   "kind": "section",
+   "source_line": 2107,
+   "start": 0,
+   "length": 6646
+  },
+  {
+   "file": "CGP-CHAT-D-004.md",
+   "kind": "section",
+   "source_line": 2124,
+   "start": 0,
+   "length": 3277
+  },
+  {
+   "file": "CGP-SHELL-D-004.md",
+   "kind": "section",
+   "source_line": 2137,
+   "start": 0,
+   "length": 3014
+  },
+  {
+   "file": "CGP-SHELL-R-034.md",
+   "kind": "section",
+   "source_line": 2148,
+   "start": 0,
+   "length": 7098
+  },
+  {
+   "file": "CGP-DS-R-004.md",
+   "kind": "section",
+   "source_line": 2165,
+   "start": 0,
+   "length": 2614
+  },
+  {
+   "file": "CGP-SHELL-R-003.md",
+   "kind": "section",
+   "source_line": 2177,
+   "start": 0,
+   "length": 3620
+  },
+  {
+   "file": "CGP-ART-R-004.md",
+   "kind": "section",
+   "source_line": 2193,
+   "start": 0,
+   "length": 6918
+  },
+  {
+   "file": "CGP-LEARN-R-004.md",
+   "kind": "section",
+   "source_line": 2242,
+   "start": 0,
+   "length": 2600
+  },
+  {
+   "file": "CGP-SHELL-R-027.md",
+   "kind": "section",
+   "source_line": 2259,
+   "start": 0,
+   "length": 2650
+  },
+  {
+   "file": "CGP-VOICE-R-028.md",
+   "kind": "section",
+   "source_line": 2272,
+   "start": 0,
+   "length": 2177
+  },
+  {
+   "file": "CGP-LEARN-R-004.md",
+   "kind": "section",
+   "source_line": 2285,
+   "start": 2600,
+   "length": 1254
+  },
+  {
+   "file": "CGP-LEARN-R-010.md",
+   "kind": "section",
+   "source_line": 2293,
+   "start": 0,
+   "length": 1542
+  },
+  {
+   "file": "CGP-LEARN-R-011.md",
+   "kind": "section",
+   "source_line": 2304,
+   "start": 0,
+   "length": 2540
+  },
+  {
+   "file": "CGP-LEARN-R-011.md",
+   "kind": "section",
+   "source_line": 2327,
+   "start": 2540,
+   "length": 4487
+  },
+  {
+   "file": "CGP-ART-R-023.md",
+   "kind": "section",
+   "source_line": 2343,
+   "start": 1447,
+   "length": 2138
+  },
+  {
+   "file": "refused-photo-chip-remove-contrast-2026-11-14-a-4053-follow.md",
+   "kind": "section",
+   "source_line": 2355,
+   "start": 0,
+   "length": 1468
+  },
+  {
+   "file": "CGP-VOICE-R-030.md",
+   "kind": "section",
+   "source_line": 2364,
+   "start": 0,
+   "length": 1996
+  },
+  {
+   "file": "CGP-SHELL-R-014.md",
+   "kind": "section",
+   "source_line": 2374,
+   "start": 0,
+   "length": 1423
+  },
+  {
+   "file": "CGP-DS-R-022.md",
+   "kind": "section",
+   "source_line": 2388,
+   "start": 0,
+   "length": 1067
+  },
+  {
+   "file": "CGP-CHAT-R-030.md",
+   "kind": "section",
+   "source_line": 2394,
+   "start": 1386,
+   "length": 1522
+  },
+  {
+   "file": "CGP-SHELL-R-010.md",
+   "kind": "section",
+   "source_line": 2411,
+   "start": 0,
+   "length": 1926
+  },
+  {
+   "file": "CGP-KNOW-R-028.md",
+   "kind": "section",
+   "source_line": 2425,
+   "start": 0,
+   "length": 2493
+  },
+  {
+   "file": "4014-turn-end-memory-folder-check-for-keep-off-tasks-2026-11.md",
+   "kind": "section",
+   "source_line": 2454,
+   "start": 0,
+   "length": 2879
+  },
+  {
+   "file": "CGP-SHELL-R-017.md",
+   "kind": "section",
+   "source_line": 2489,
+   "start": 0,
+   "length": 2965
+  },
+  {
+   "file": "CGP-SHELL-R-019.md",
+   "kind": "section",
+   "source_line": 2500,
+   "start": 0,
+   "length": 3060
+  },
+  {
+   "file": "CGP-SHELL-R-026.md",
+   "kind": "section",
+   "source_line": 2512,
+   "start": 555,
+   "length": 17271
+  },
+  {
+   "file": "4128-cross-site-subframes-on-minor-seats-2026-11-15-plan-app.md",
+   "kind": "section",
+   "source_line": 2576,
+   "start": 0,
+   "length": 4662
+  },
+  {
+   "file": "CGP-AGENT-R-031.md",
+   "kind": "section",
+   "source_line": 2597,
+   "start": 0,
+   "length": 3184
+  },
+  {
+   "file": "CGP-AGENT-R-020.md",
+   "kind": "section",
+   "source_line": 2612,
+   "start": 549,
+   "length": 1891
+  },
+  {
+   "file": "CGP-VOICE-R-014.md",
+   "kind": "section",
+   "source_line": 2623,
+   "start": 0,
+   "length": 3119
+  },
+  {
+   "file": "CGP-VOICE-R-015.md",
+   "kind": "section",
+   "source_line": 2637,
+   "start": 0,
+   "length": 1567
+  },
+  {
+   "file": "CGP-LEARN-R-005.md",
+   "kind": "section",
+   "source_line": 2648,
+   "start": 553,
+   "length": 1776
+  },
+  {
+   "file": "CGP-LEARN-R-006.md",
+   "kind": "section",
+   "source_line": 2659,
+   "start": 321,
+   "length": 2002
+  },
+  {
+   "file": "CGP-VOICE-R-019.md",
+   "kind": "section",
+   "source_line": 2679,
+   "start": 0,
+   "length": 4194
+  }
+ ]
+}

@@ -6,8 +6,9 @@ import { CopyFeedback } from "./CopyFeedback";
 import { imeComposing } from "./imeGuard";
 import { onHostMessage, patchWebviewState, readWebviewState } from "./vscode";
 import { checklistSnapshot } from "./rehearsalChecklist";
-import { BoxSpacingBlock, StageStepperBlock } from "./ParamBlocks";
+import { BoxSpacingBlock, NarratedDiagramBlock, StageStepperBlock } from "./ParamBlocks";
 import { boxCaption, boxEdit, boxReset, boxUndo, stageLabel, type BoxHistory, type BoxValues } from "../../src/blockParams";
+import { beatLabel } from "../../src/narratedDiagram";
 import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
@@ -26,7 +27,7 @@ const REPORT_FAILED: Partial<Record<string, string>> = {
 const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
   criterion_form: "flag", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
   evidence_note: "book", coach_request: "message", metric_board: "ruler",
-  box_spacing: "square", stage_stepper: "menu",
+  box_spacing: "square", stage_stepper: "menu", narrated_diagram: "image",
 };
 
 /**
@@ -202,6 +203,9 @@ export function LessonStepPanel(props: {
   // CGP-LEARN-R-005 — the stage the learner is on, per lesson version and step; it moves only on the learner's action.
   const [stageState, setStageState] = useState<{ key: string; index: number }>({ key: "", index: 0 });
   const stageIndex = stageState.key === key ? stageState.index : 0;
+  // CGP-LEARN-R-009 — the beat the learner is on (0..2), the same way: per lesson version and step, only on their action.
+  const [beatState, setBeatState] = useState<{ key: string; index: number }>({ key: "", index: 0 });
+  const beatIndex = beatState.key === key ? beatState.index : 0;
   const resetUndo = (
     <div className="hp-block-history" role="group" aria-label="고친 것 되돌리기">
       <button type="button" className="hp-cta-quiet" data-block-reset="" disabled={!text && !reason} onClick={reset}>처음으로</button>
@@ -219,8 +223,10 @@ export function LessonStepPanel(props: {
   // CGP-LEARN-R-005/006 — a parametric block's caption is computed from its own values: the box from the same clamped numbers
   // the preview uses, the stepper from the stage shown (its title is the instructor's text, drawn as text).
   const stagesNow = material?.stages ?? null;
+  const diagramNow = material?.diagram ?? null;
   const state = material?.kind === "box_spacing" && boxNow ? { key: "box", sentence: boxCaption(boxNow) }
     : material?.kind === "stage_stepper" && stagesNow ? { key: `stage-${stageIndex}`, sentence: `${stageLabel(stageIndex, stagesNow.length)}: ${stagesNow[stageIndex].title}` }
+    : material?.kind === "narrated_diagram" && diagramNow ? { key: `beat-${beatIndex}`, sentence: `${beatLabel(beatIndex)}: ${diagramNow.beats[beatIndex].title}. ${diagramNow.beats[beatIndex].sentence}` }
     : materialText?.state({ text: fresh ? text : saved?.text ?? "", reason: fresh ? reason : saved?.reason ?? "", saved: saved ? { text: saved.text, reason: saved.reason } : undefined });
   // CGP-LEARN-D-001 — the block is a collapsible 자료 card under the current step: closed, one row with a 48px thumbnail, the
   // block's title, its live state line and 열어 보기; opening expands it in place. The help and the work surface sit in the body,
@@ -361,6 +367,8 @@ export function LessonStepPanel(props: {
         </div>
       ) : surface === "stage_stepper" && stagesNow ? (
         <StageStepperBlock stages={stagesNow} index={stageIndex} onMove={(index) => setStageState({ key, index })} />
+      ) : surface === "narrated_diagram" && diagramNow ? (
+        <NarratedDiagramBlock diagram={diagramNow.diagram} beats={diagramNow.beats} index={beatIndex} onMove={(index) => setBeatState({ key, index })} />
       ) : surface.startsWith("unsupported:") ? (
         <p className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
       ) : (

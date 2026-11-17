@@ -7,7 +7,7 @@
 //   work surface  the step's `ui`: a form the learner fills in; its saved text travels with the next turn as context
 //   tool grants   untouched here. They come from the served profile only.
 // A header names a teaching pointer; the Service re-resolves both against the frozen steps and refuses anything else.
-import { boxParams, stageParams, type BoxValues, type Stage } from "./blockParams.ts";
+import { boxParams, diagramParams, stageParams, type BoxValues, type DiagramValues, type Stage } from "./blockParams.ts";
 
 export const HELP_MODES = ["demonstrate", "hint", "co_edit", "independent"] as const;
 export type HelpMode = (typeof HELP_MODES)[number];
@@ -19,7 +19,7 @@ export const HELP_MODE_LABELS: Record<HelpMode, string> = {
   independent: "직접 해보기",
 };
 /** Work surfaces this Studio renders. The Service accepts seven `ui` values (MATERIAL_KINDS); the rest are reported as unsupported. */
-export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form", "box_spacing", "stage_stepper"] as const;
+export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form", "box_spacing", "stage_stepper", "narrated_diagram"] as const;
 export const WORK_TEXT_MAX = 1000;
 
 type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string; ui_version?: unknown; ui_params?: unknown };
@@ -35,6 +35,7 @@ export function surfaceOf(step: Step): string {
   // CGP-LEARN-R-005/006 — a parametric block draws only with params that fit its v1 spec here too (fail closed).
   if (kind === "box_spacing" && !boxParams(step.ui_version, step.ui_params)) return "unsupported:" + kind;
   if (kind === "stage_stepper" && !stageParams(step.ui_version, step.ui_params)) return "unsupported:" + kind;
+  if (kind === "narrated_diagram" && !diagramParams(step.ui_version, step.ui_params)) return "unsupported:" + kind;
   return (SUPPORTED_SURFACES as readonly string[]).includes(kind) ? kind : "unsupported:" + kind;
 }
 
@@ -45,7 +46,7 @@ export function surfaceOf(step: Step): string {
  */
 export const RENDERED_UI_VERSIONS: Readonly<Record<string, readonly number[]>> = {
   canvas_editor: [1], canvas_preview: [1], criterion_form: [1], evidence_note: [1], coach_request: [1], decision_form: [1], metric_board: [1],
-  box_spacing: [1], stage_stepper: [1],
+  box_spacing: [1], stage_stepper: [1], narrated_diagram: [1],
 };
 export function rendersPin(kind: string, uiVersion: unknown): boolean {
   const version = uiVersion === undefined ? 1 : uiVersion;
@@ -58,14 +59,26 @@ export function rendersPin(kind: string, uiVersion: unknown): boolean {
  * CGP-LEARN-R-001 (DEC-19) — a step's learning block lives in the step's existing `ui` field: the seven values the Service's
  * learning-design.ts accepts (STEP_UI_KINDS). No other key and no other value is a block.
  */
-export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board", "box_spacing", "stage_stepper"] as const;
+export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board", "box_spacing", "stage_stepper", "narrated_diagram"] as const;
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+/**
+ * CGP-LEARN-R-007 / D-007: whether a kind animates. None does yet. A kind marked "animated" must draw its frames through
+ * webview-ui/src/BlockPlayback.tsx (starts paused, explicit 재생, 한 단계 always there, nothing under reduced motion);
+ * learning-block-motion-browser.smoke checks both sides: every static kind stays unchanged with no input, and every animated
+ * kind starts paused with the playback controls.
+ */
+export const MATERIAL_MOTION: Readonly<Record<MaterialKind, "static" | "animated">> = {
+  canvas_editor: "static", canvas_preview: "static", criterion_form: "static", evidence_note: "static", coach_request: "static",
+  decision_form: "static", metric_board: "static", box_spacing: "static", stage_stepper: "static", narrated_diagram: "static",
+};
 export interface StepMaterial {
   kind: MaterialKind; stepId: string; version: string; sha256: string; uiVersion: number;
   /** CGP-LEARN-R-006 — box_spacing's pinned values, re-validated (the starting state of its controls). */
   box?: BoxValues;
   /** CGP-LEARN-R-005 — stage_stepper's stages, re-validated; untrusted text, drawn as text only. */
   stages?: Stage[];
+  /** CGP-LEARN-R-009 — narrated_diagram's built-in drawing and three beats, re-validated; the beats are untrusted text. */
+  diagram?: DiagramValues;
 }
 
 /**
@@ -82,6 +95,7 @@ export function stepMaterial(lesson: Lesson | null | undefined, stepId: string):
   const base = { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256, uiVersion: (step.ui_version as number | undefined) ?? 1 };
   if (kind === "box_spacing") { const box = boxParams(step.ui_version, step.ui_params); return box ? { ...base, box } : null; }
   if (kind === "stage_stepper") { const stages = stageParams(step.ui_version, step.ui_params); return stages ? { ...base, stages } : null; }
+  if (kind === "narrated_diagram") { const diagram = diagramParams(step.ui_version, step.ui_params); return diagram ? { ...base, diagram } : null; }
   return base;
 }
 
@@ -176,6 +190,11 @@ export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
     title: "단계 넘겨 보기",
     controlsHelp: "'다음'과 '이전'으로 한 단계씩 넘겨 보세요. 이 자료에 포커스가 있을 때는 왼쪽·오른쪽 화살표 키로도 넘길 수 있어요. 저절로 넘어가지 않아요.",
     state: () => ({ key: "stage", sentence: "단계 넘겨 보기를 준비하고 있어요." }),
+  },
+  narrated_diagram: {
+    title: "그림으로 따라가기",
+    controlsHelp: "'다음'과 '이전'으로 시작, 변화, 결과 세 장면을 차례로 넘겨 보세요. 이 자료에 포커스가 있을 때는 왼쪽·오른쪽 화살표 키로도 넘길 수 있어요. 저절로 넘어가지 않아요. 그림 속 글자는 그림 아래 목록에 적혀 있어요.",
+    state: () => ({ key: "beat", sentence: "그림으로 따라가기를 준비하고 있어요." }),
   },
 };
 

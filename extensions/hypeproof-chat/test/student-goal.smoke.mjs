@@ -364,6 +364,7 @@ function makeHost(context, profile, provider = proto) {
     // CGP-SHELL-R-019 — postConfig asks the 팁 보기 choice of this seat; the real provider creates it on first use (a getter
     // on the prototype, which this stand-in object does not inherit). Tips on, nothing stored.
     lessonTips: { forSeat() {}, on: () => true, write: () => undefined, currentSeat: "" },
+    voiceSounds: { forSeat() {}, on: () => false, write: () => undefined, currentSeat: "" },
     post: async (msg) => { posts.push(msg); return true; },
     handleSend: (...args) => effects.push(["runtime-send", ...args]),
     // Everything a completion, a step move or a record would go through. A goal save must reach none of them.

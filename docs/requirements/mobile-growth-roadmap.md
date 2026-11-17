@@ -65,6 +65,13 @@ chosen idea needs files, tools and a software outcome. Quiet cached-history refr
 reconciliation without transient progress in an already ready conversation; initial/manual loading
 and errors remain visible. This does not change send authority, request IDs or polling.
 
+Under #4236, a confirmed question-answer receipt offers an explicit “다음 질문 보기”
+action in the existing iOS, Android and desktop surfaces. It performs one card GET
+only after a tap. An empty result keeps the existing available starting choices and
+the route back to the conversation; Close/Stop remain voluntary. An uncertain answer
+or a failed read must not appear as confirmed success or replay an answer, trigger,
+AI turn or approval. Account/session fences and the original conversation draft remain intact.
+
 The client requires Service `team-product-api` line `1` in the shared release
 dependency ledger. That line proves compatible source, not enabled operation:
 0091/0092 schema, team-event/push flags, verified membership and provider readiness
@@ -176,9 +183,29 @@ acceptance remains open under #3687; source and synthetic controls do not establ
 |---|---|---|
 | MVOICE-01 | Dictation appends a Korean transcript to the selected project's editable draft and never automatically sends or confirms intent. | Native control/persistence regressions; actual Korean ASR separately.  MVOICE-T01. |
 | MVOICE-02 | A deliberate conversation-microphone action starts the foreground interaction after required OS permissions and existing AI/storage consent. Explain auto-send and read-aloud in the interface without a recurring app confirmation sheet. Unsent draft, expired access and changed account/conversation block auto-send. | Native permission/expiry/draft tests and generation-token checks; iPhone also MFR-T03. MVOICE-T02. |
-| MVOICE-03 | Stable speech plus acoustic silence finalizes one transcript through existing Service admission. After its matching reply is read, the still-active foreground conversation resumes listening without an end-speech or next-turn tap. Stop or an invalidated session prevents reopening. | State/duplicate callback and matching-reply regressions; five spoken turns on each physical platform remain required. MVOICE-T03. |
+| MVOICE-03 | Stable speech plus acoustic silence finalizes one transcript through existing Service admission. After its matching reply is read, the still-active foreground conversation resumes listening without an end-speech or next-turn tap. Stop or an invalidated session prevents reopening. iPhone replies request the highest known installed standard-purpose Korean voice quality with stable ties, excluding novelty/personal defaults and respecting active assistive-technology settings. | State/duplicate callback and matching-reply regressions; five spoken turns on each physical platform remain required. MVOICE-T03. |
 | MVOICE-04 | Stop, background, project change, audio interruption and late permission callbacks release/fence microphone, playback and pending client work. Partial words remain recoverable. | Native lifecycle/permission tests plus physical interruption check.  MVOICE-T04. |
 | MVOICE-05 | Require platform on-device recognition; no network recognizer fallback or paid voice API. Missing engine, permission, voice or network keeps text usable. | Capability/error paths and source review; offline physical Korean recognition is not inferred from a simulator.  MVOICE-T05. |
+
+### Installed Korean reply voice — Studio #4307
+
+MVOICE-03/05 refine the existing iPhone playback path: choose among installed
+exact `ko-KR` standard-purpose voices by known quality, premium before enhanced before default,
+preserving catalog order for equal-quality choices. Unknown quality values are
+conservative fallbacks. Exclude novelty/character and personal voices from this
+automatic assistant default; do not request personal-voice authorization. Do not
+assume that enhanced or premium assets are present,
+force a download, change speech rate, or introduce hosted synthesis.
+
+Use the platform option that lets active assistive-technology settings take
+precedence. The app's requested voice and the effective accessibility voice are
+different observations; arbitrary Siri or system voice preferences are not inferred.
+Missing Korean voices retain the existing usable text/error path. Utterance/turn
+identity, Stop, lifecycle/account eligibility and next capture remain governed by
+MVOICE-03/04. This supports minimum necessary intervention while the person
+expresses their thoughts; a higher voice quality enum does not establish easier
+reflection, natural speech or a human growth outcome. Barge-in remains separate
+under #4300 and the parent #898.
 
 Interaction: '말로 적기' keeps text for review and explicit Send. A deliberate
 conversation-microphone action starts automatic listening, finalization and
