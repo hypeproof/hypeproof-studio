@@ -1359,3 +1359,20 @@ guards, target readiness and new-listener identity as a boolean; no credentials 
 utterance text are added to diagnostics. No retry, relaxed count or product change.
 A periodic-read race remains a hypothesis until runtime evidence; new execution is
 NOT RUN while shared compute is blocked. Static integrity checks are not acceptance.
+
+### Intake focus and bounded list navigation candidate — 2026-11-19
+
+Run44391109739 at39745c68 passed178 Core tests and63 of65 UI cases.
+The two Intake cases failed field reveal: intent after successful title entry,
+and title after failed-storage export checks and refresh. Neither reached its
+remaining assertions. Available artifacts do not establish keyboard interception
+as the cause; this is a source-informed candidate, not a confirmed root cause.
+
+Intake fields now have distinct focus identities and a real keyboard completion
+button. The journey dismisses the keyboard through that button, waits at most
+five seconds for disappearance, and scrolls the identified Intake List within
+the existing six-down/eight-up bounds. Real hittability, taps, exact field values
+and submission assertions remain. Exhausted reveal captures a screenshot and
+hierarchy before its final assertion. Persistence and authentication are unchanged.
+This delta has not been built or run locally; shared-resource validation was not
+bypassed. Integrated CI and actual user acceptance remain separate gates.

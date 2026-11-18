@@ -476,10 +476,23 @@ final class TeamEntryUITests: XCTestCase {
         return (try? JSONSerialization.jsonObject(with:Data(value.utf8))) as? [String:Any] ?? [:]
     }
     @MainActor private func intakeReveal(_ app:XCUIApplication,_ item:XCUIElement) {
+        if app.keyboards.firstMatch.exists {
+            let done = app.buttons["teamIntakeKeyboardDone"]
+            XCTAssertTrue(done.waitForExistence(timeout: 5))
+            XCTAssertTrue(done.isHittable); done.tap()
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+        }
+        let form = app.collectionViews["teamIntakeForm"]
+        XCTAssertTrue(form.waitForExistence(timeout: 5))
         if item.exists && item.isHittable { return }
         let top=app.staticTexts["teamIntakeTrace"]
-        for _ in 0..<6 { if top.exists && top.isHittable { break }; app.swipeDown() }
-        for _ in 0..<8 { if item.exists && item.isHittable { return }; app.swipeUp() }
+        for _ in 0..<6 { if top.exists && top.isHittable { break }; form.swipeDown() }
+        for _ in 0..<8 { if item.exists && item.isHittable { return }; form.swipeUp() }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "intake-reveal-failure-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "intake-reveal-failure-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
         XCTAssertTrue(item.isHittable)
     }
     @MainActor private func intakeTrace(_ app: XCUIApplication) throws -> [String:Any] {

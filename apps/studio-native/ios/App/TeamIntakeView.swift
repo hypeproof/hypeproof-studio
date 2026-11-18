@@ -85,13 +85,13 @@ struct TeamIntakeScreen: View {
     @State private var policyToConfirm: String?
     @State private var leave = false
     @State private var association = false
-    @FocusState private var focused: Bool
+    @FocusState private var focused: String?
     @Environment(\.dismiss) private var dismiss
     init(model: TeamIntakePresentation) { _model = StateObject(wrappedValue: model) }
     private var locked: Bool { model.state.busy || !model.storageReady || !model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<IntakeProposal, String>, _ id: String) -> some View {
         TextField(title, text: Binding(get: { model.summary[keyPath: key] }, set: { text in model.edit { $0[keyPath: key] = text } }), axis: .vertical)
-            .focused($focused).accessibilityIdentifier(id)
+            .focused($focused, equals: id).accessibilityIdentifier(id)
     }
     private func summary(_ p: IntakeProposal) -> some View {
         Group { Text(p.title).font(.headline); Text(p.intent); Text(p.requested_change); ForEach(Array(p.acceptance.enumerated()), id: \.offset) { Text($0.element) }; ForEach(Array(p.references.enumerated()), id: \.offset) { Text($0.element) }; Text("공개 위치: \(p.target_repo)") }
@@ -133,7 +133,7 @@ struct TeamIntakeScreen: View {
                 }
                 if op.phase == .preview || op.phase == .confirmed || op.phase == .uncertain {
                     Section { Text("확인 후 전송하면 공개 GitHub 요청이 바로 생성될 수 있어요. 서비스가 검토 안내를 덧붙일 수 있어요.")
-                        Button(op.phase == .uncertain ? "같은 요약과 전송 번호로 다시 확인" : "이 요약으로 공개 요청 제안") { focused = false; confirm = true }.disabled(locked || model.principal == nil || (op.phase != .uncertain && op.proposal != model.summary)).accessibilityIdentifier("teamIntakeSend")
+                        Button(op.phase == .uncertain ? "같은 요약과 전송 번호로 다시 확인" : "이 요약으로 공개 요청 제안") { focused = nil; confirm = true }.disabled(locked || model.principal == nil || (op.phase != .uncertain && op.proposal != model.summary)).accessibilityIdentifier("teamIntakeSend")
                         if op.phase == .confirmed { Button("확인 취소") { model.controller?.cancelConfirmation() }.disabled(locked) }
                     }
                 }
@@ -141,10 +141,10 @@ struct TeamIntakeScreen: View {
             if model.state.operation?.phase != .uncertain, model.state.operation?.receipt.map({ ["reviewed", "held"].contains($0.state) && $0.issueURL == nil }) ?? true {
                 Section("공개할 내용 작성") {
                     field("제목", \.title, "teamIntakeTitle"); field("목적", \.intent, "teamIntakeIntent"); field("요청하는 변경", \.requested_change, "teamIntakeChange")
-                    TextField("확인 기준 (한 줄에 하나)", text: Binding(get: { model.summary.acceptance.joined(separator: "\n") }, set: { text in model.edit { $0.acceptance = text.split(separator: "\n").map(String.init) } }), axis: .vertical).focused($focused).accessibilityIdentifier("teamIntakeAcceptance")
+                    TextField("확인 기준 (한 줄에 하나)", text: Binding(get: { model.summary.acceptance.joined(separator: "\n") }, set: { text in model.edit { $0.acceptance = text.split(separator: "\n").map(String.init) } }), axis: .vertical).focused($focused, equals: "teamIntakeAcceptance").accessibilityIdentifier("teamIntakeAcceptance")
                     if let repo = model.repository { Text("공개 위치: \(repo)") } else { Text("현재 제품의 공개 요청 위치를 확인하지 못했어요.") }
                     ShareLink("작성 내용 내보내기", item: model.exportText).accessibilityIdentifier("teamIntakeSummaryExport")
-                    Button(model.state.operation?.receipt == nil ? "공개 요약 미리 보기" : "수정 요약 미리 보기") { focused = false; Task {
+                    Button(model.state.operation?.receipt == nil ? "공개 요약 미리 보기" : "수정 요약 미리 보기") { focused = nil; Task {
                         if model.state.operation?.receipt == nil { await model.preview() }
                         else { await model.controller?.prepareExisting(proposal: model.summary) }
                     } }.disabled(locked || model.principal == nil || model.repository == nil).accessibilityIdentifier("teamIntakePreview")
@@ -152,11 +152,17 @@ struct TeamIntakeScreen: View {
             }
             Button("새 로그인으로 기존 전송 복구") { Task { await model.controller?.recoverForCurrentSession() } }.disabled(locked || model.principal == nil)
             Button("연결 새로고침") { Task { await model.open() } }.disabled(model.state.busy).accessibilityIdentifier("teamIntakeRefresh")
-        }.navigationTitle("공개 요청 제안").task { await model.open() }
+        }.accessibilityIdentifier("teamIntakeForm").navigationTitle("공개 요청 제안").task { await model.open() }
         .onDisappear { if model.principal == nil { try? model.device?.cancel() } }
         .navigationDestination(isPresented: $association) { if let github = model.github { TeamGitHubScreen(model: github) } }
         .navigationBarBackButtonHidden(locked).interactiveDismissDisabled(locked)
-        .toolbar { if locked { Button("닫기") { leave = true } } }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("입력 완료") { focused = nil }.accessibilityIdentifier("teamIntakeKeyboardDone")
+            }
+            ToolbarItem(placement: .topBarTrailing) { if locked { Button("닫기") { leave = true } } }
+        }
         .alert("현재 정책으로 기존 전송을 확인할까요?", isPresented: $confirmPolicy) { Button("취소", role: .cancel) {}; Button("같은 요약 복구에 동의") { Task { if let revision = policyToConfirm { await model.controller?.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision: revision) } } } } message: { Text("표시된 공개 요약과 위치, 전송 번호를 그대로 유지하며 게시 정책 \(policyToConfirm ?? "")에 동의해요. 동의만으로 전송하지 않으며, 이후 다시 확인 버튼을 눌러 주세요.") }
         .alert("이 내용으로 공개 요청을 제안할까요?", isPresented: $confirm) { Button("취소", role: .cancel) {}; Button("확인하고 전송") { Task { if model.state.operation?.phase == .preview { await model.controller?.confirm() }; await model.controller?.send() } } } message: { Text("표시된 Lab 계정과 공개 위치로 전송해요. GitHub 요청이 즉시 생성될 수 있어요.") }
         .alert("저장하지 못한 내용이 있어요", isPresented: $leave) { Button("계속 작성", role: .cancel) {}; Button("내보낸 뒤 닫기", role: .destructive) { dismiss() } } message: { Text("먼저 작성 내용을 내보내 주세요. 닫으면 저장하지 못한 내용은 사라질 수 있어요.") }
