@@ -1329,3 +1329,16 @@ revealed downwards and retains its hit assertion and tap. The other failure was
 teamOutcomeEntry during read-only setup, before export/storage assertions; it
 remains under investigation. Exact post/event and result-history checks remain.
 No corrected native runtime or installed-device acceptance is claimed.
+
+### Full-suite runtime budget — 2026-11-19
+
+Run44364736519 started at18:02:31UTC. Its62 UI cases used2586.576seconds
+(43.11minutes); test results finished at18:55:57 and TEST FAILED appeared at18:56:33.
+After cleanup, exit65 appeared at18:57:13. Evidence content uploaded at18:57:30;
+artifact finalization at18:57:31 and post-job cleanup crossed the55-minute budget.
+The full iOS job now has a65-minute cap to accommodate the measured larger suite,
+build/setup and evidence collection. Individual test limits, assertions and
+failure exit handling are unchanged. This budget change does not repair or
+reclassify any of the four actual test failures and is not a passing test result.
+No model calls are added; at most ten additional hosted Mac runner minutes are
+permitted per full job. Normal completion still ends the job immediately.
