@@ -258,6 +258,8 @@ jobs:
         env:
           HPS_UPDATE_CHECK_SHIPPED: '1'
           HPS_UPDATE_REPORT_DIR: ${{ runner.temp }}/unified-evidence/update-check
+          # Acceptance-only: the job token gives the App's public release read 1000/h instead of 60/h per shared IP (#4314).
+          HPS_UPDATE_CHECK_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           HPS_UPDATE_APP_PATH="$RUNNER_TEMP/candidate-app/HypeProof Studio.app" node e2e/update-check/run.mjs
@@ -271,6 +273,8 @@ jobs:
         env:
           HPS_UPDATE_CHECK_SHIPPED: '1'
           HPS_UPDATE_REPORT_DIR: ${{ runner.temp }}/unified-evidence/update-check
+          # Acceptance-only: the job token gives the App's public release read 1000/h instead of 60/h per shared IP (#4314).
+          HPS_UPDATE_CHECK_TOKEN: ${{ github.token }}
         run: HPS_UPDATE_APP_PATH="$RUNNER_TEMP/candidate-app" node e2e/update-check/run.mjs
       # Upgrade path, as far as it is truthful: the previous published stable is installed with its own public
       # install command, then brought to the candidate with the candidate's installer (the Windows updater
