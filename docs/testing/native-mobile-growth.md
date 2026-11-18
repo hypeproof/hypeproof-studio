@@ -757,3 +757,18 @@ acceptance. TestFlight and physical accessibility remain separate acceptance.
 `testInternalWorkflowCancelSaveAndHistory` uses DEBUG-only synthetic transport;
 it does not prove deployed API integration or installed-device acceptance.
 Service owns the insert/read revocation and product membership controls.
+
+
+### Durable retry target regression — 2026-11-18
+
+CI run44310462168 at359cb613 failed the single retry after relaunch: one initial
+POST, no second POST, and a visible 20.3pt retry target. The old trace cannot
+distinguish a missed touch from an admission race; it does not prove either.
+The retry now has a >=44pt label hit area. DEBUG-only stage diagnostics contain
+no user text and distinguish actual touch, admission and POST entry. The same
+single normal tap, exact request ID/words and visible reply assertions remain.
+Focused simulator validation passed in `/tmp/ios-release-failure-focused.xcresult`:
+the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitted
+twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
+This is local synthetic evidence; remote CI and physical-device acceptance remain
+separate. The prior failing CI evidence is retained.
