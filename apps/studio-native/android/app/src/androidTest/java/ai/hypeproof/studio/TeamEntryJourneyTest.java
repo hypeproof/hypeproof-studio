@@ -3,6 +3,12 @@ package ai.hypeproof.studio;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
+import android.util.Log;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.base.DefaultFailureHandler;
+import java.nio.charset.StandardCharsets;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -33,9 +39,63 @@ public class TeamEntryJourneyTest {
     private final java.util.List<String> metricTypes=new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AtomicBoolean loseTrigger=new AtomicBoolean(),triggerCommitted=new AtomicBoolean();
     private final java.util.List<String> triggerIDs=new java.util.concurrent.CopyOnWriteArrayList<>();
+    @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    private File failureDirectory;
+    private Throwable firstFailure;
+
+    // Espresso calls this before the exception unwinds into JUnit's @After.
+    // TestWatcher.failed would run too late to observe the original activity.
+    private void captureFailure(Throwable error) {
+        if(firstFailure!=null)return;
+        firstFailure=error;
+        try {
+            failureDirectory=new File(context.getExternalFilesDir(null),"evidence/failures/"+testName.getMethodName()+"-"+SystemClock.elapsedRealtime());
+            if(!failureDirectory.mkdirs())throw new java.io.IOException("Cannot create failure evidence directory");
+            String message=String.valueOf(error.getMessage());
+            JSONObject state=new JSONObject().put("phase","before_teardown").put("test",testName.getMethodName())
+                .put("elapsed_ms",SystemClock.elapsedRealtime()).put("error_class",error.getClass().getName())
+                .put("error_message",message.substring(0,Math.min(message.length(),4096))).put("scenario_state",app==null?"absent":app.getState().name());
+            if(app!=null)try {
+                app.onActivity(activity->{try {
+                    state.put("activity",activity.getClass().getName()).put("activity_destroyed",activity.isDestroyed())
+                        .put("activity_finishing",activity.isFinishing()).put("window_focus",activity.hasWindowFocus())
+                        .put("decor_visible",activity.getWindow().getDecorView().getVisibility());
+                }catch(Exception problem){throw new RuntimeException(problem);}});
+            }catch(Throwable problem){state.put("activity_observation_error",problem.getClass().getName());}
+            writeFailureJson("failure.json",state);
+            try {
+                Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+                if(pixels==null)throw new java.io.IOException("Screenshot unavailable");
+                try(FileOutputStream out=new FileOutputStream(new File(failureDirectory,"screen.png"))){
+                    if(!pixels.compress(Bitmap.CompressFormat.PNG,100,out))throw new java.io.IOException("Screenshot write failed");
+                }finally{pixels.recycle();}
+            }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
+            captureCommand("window.txt","timeout 3 dumpsys window",state);
+            captureCommand("power.txt","timeout 3 dumpsys power",state);
+            captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
+            state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
+        }catch(Throwable problem){Log.e("TeamFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
+    }
+    private void captureCommand(String name,String command,JSONObject state) {
+        try(java.io.InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command));
+            FileOutputStream output=new FileOutputStream(new File(failureDirectory,name))) {
+            byte[] buffer=new byte[8192];int count,total=0;
+            while(total<512*1024&&(count=input.read(buffer,0,Math.min(buffer.length,512*1024-total)))!=-1){output.write(buffer,0,count);total+=count;}
+            state.put(name+"_bytes",total).put(name+"_at_byte_limit",total==512*1024);
+        }catch(Throwable problem){try{state.put(name+"_error",problem.getClass().getName());}catch(Exception ignored){/* Keep the original Espresso failure. */}}
+    }
+    private void writeFailureJson(String name,JSONObject value) throws Exception {
+        Files.write(new File(failureDirectory,name).toPath(),value.toString(2).getBytes(StandardCharsets.UTF_8));
+    }
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowOriginal(Throwable error) throws T { throw (T)error; }
+
+
     @Before public void setup()throws Exception {
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Espresso.setFailureHandler((error,matcher)->{ captureFailure(error); TeamEntryJourneyTest.<RuntimeException>rethrowOriginal(error); });
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("team-account","team-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         ReflectionState state=new ReflectionState("team-account");state.draft="아직 보내지 않은 내 생각";store.save(state);
@@ -61,7 +121,11 @@ public class TeamEntryJourneyTest {
             throw new IOException("No other Service effects in this fixture");
         };
     }
-    @After public void cleanup(){if(app!=null)app.close();QuestionActivity.testTransport=null;QuestionActivity.testMenuObservation=null;}
+    @After public void cleanup(){
+        try { if(app!=null)app.close(); }
+        finally { QuestionActivity.testTransport=null;QuestionActivity.testMenuObservation=null;
+            if(context!=null)Espresso.setFailureHandler(new DefaultFailureHandler(context)); }
+    }
     private static NativeTeamModel team(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("team");f.setAccessible(true);return(NativeTeamModel)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private void settled(java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
         AtomicBoolean ready=new AtomicBoolean();for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}assertTrue("actual team model completion",ready.get());
