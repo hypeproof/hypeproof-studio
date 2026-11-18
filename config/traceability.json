@@ -19072,6 +19072,9 @@
         },
         {
           "path": "apps/studio-native/scripts/apple-push-config.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-testflight-observation.py"
         }
       ]
     },
@@ -19102,6 +19105,9 @@
         },
         {
           "path": "apps/studio-native/scripts/check-ios-push-metadata.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_apple_testflight_observation.py"
         }
       ]
     },

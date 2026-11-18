@@ -10236,6 +10236,14 @@ failed-job-only reruns must not reuse an older successful gate. Successful comma
 does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
 and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).
 
+Studio #4362 adds a separate read-only Apple observation adapter. Group build
+availability requires exact app/version/build/group identity, completed processing,
+internal testing, explicit group association and an unexpired build. Reconcile
+the existing source/IPA evidence before and after provider reads. Upload receipts
+remain unchanged; group availability cannot establish reporter membership,
+invitation acceptance, installation or resolution. Protected workflow publication
+and Service consumption are pending until their actual evidence is verified.
+
 ## Show what I made (#3794 slice 1)
 
 `REQ-STUDIO-SHOW-WHAT-I-MADE` follows `ST-INT-NATIVE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12). It

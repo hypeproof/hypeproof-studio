@@ -367,6 +367,16 @@ run binds package bytes and app/run identity without claiming availability.
 Existing native-gate controls still reject stale or mismatched CI artifacts.
 These controls perform no signing, Apple call or workflow dispatch.
 
+Studio #4362: `test_apple_testflight_observation.py` exercises the separate
+read-only observer with synthetic provider responses: exact identity mismatches,
+processing/expiry/group state, complete bounded pagination, state changes during
+reads, changed upload attempts, safe transport errors and the distinction between
+group availability and tester/device evidence. `collect` invokes the existing
+native release reconciler instead of trusting caller-supplied receipt JSON.
+This suite does not verify live Apple permissions, workflow artifact provenance,
+the reporter's Apple identity or installation. Those remain required integration
+work; this module alone must not enable a user-facing resolved action.
+
 For Studio #4233 / MENT-05, `ios-verify.sh` also runs
 `check-ios-push-metadata.py` against the actual unsigned device app: its push
 metadata must be present and disabled, with the existing bundle/display/usage
