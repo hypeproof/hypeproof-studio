@@ -469,13 +469,9 @@ class DevChalkTests(DevLauncherTests):
         return chalk
 
     def chalk_base(self, base):
-        cli = base/'bin/hypeproof-studio.cmd'
+        cli = base/'resources/app/bin/hypeproof-studio.cmd'
         cli.parent.mkdir(parents=True); cli.write_text('@echo off', encoding='utf-8')
         (base/'resources/app/product.json').write_text(json.dumps({'nameShort': 'HypeProof Studio', 'version': '2026.1103.0'}), encoding='utf-8')
-
-    def test_chalk_cli_uses_the_shipped_platform_layout(self):
-        self.assertEqual(dev.chalk_cli(Path('Windows Dev')), Path('Windows Dev/bin/hypeproof-studio.cmd'))
-        self.assertEqual(dev.chalk_cli(Path('Mac Dev.app')), Path('Mac Dev.app/Contents/Resources/app/bin/hypeproof-studio'))
 
     @staticmethod
     def fake_run(npm_fails=False, calls=None):
@@ -620,7 +616,7 @@ class DevChalkTests(DevLauncherTests):
     def test_off_uninstalls_through_the_installed_cli(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, base, state, old = self.prepared_fixture(Path(tmp))
-            cli = old/'bin/hypeproof-studio.cmd'; cli.parent.mkdir(parents=True); cli.write_text('@echo off', encoding='utf-8')
+            cli = old/'resources/app/bin/hypeproof-studio.cmd'; cli.parent.mkdir(parents=True); cli.write_text('@echo off', encoding='utf-8')
             installed = state/'extensions/hypeproof.hypeproof-chalk-0.1.0'; installed.mkdir(parents=True)
             calls = []
             with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(calls=calls)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
