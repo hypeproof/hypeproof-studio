@@ -101,6 +101,8 @@ private struct SharedCacheFile: Codable {
     @Published var error: String?
     @Published var notice = ""
     @Published private var editing: [String: [String: [String: String]]] = [:]
+    var visibleAccountID: String? { signedIn ? account?.accountID : nil }
+    var feedbackScope: String { signedIn ? "account-" + (account?.accountID ?? "unavailable") : "guest" }
     private var account: StoredAccount?
     private let tokenFlight = AccountTokenRefreshFlight()
     private lazy var teamService: ConversationService = {
@@ -157,6 +159,71 @@ private struct SharedCacheFile: Codable {
         try value.validate(); try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         var folder = directory; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
         try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("push-device-v1.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    lazy var teamRequests: TeamRequestPresentation = {
+        let presentation = TeamRequestPresentation()
+        presentation.controller = TeamRequestController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] identity in
+            guard let self else { throw CancellationError() }
+            return try await self.teamService.teamRequestAccess(token: self.approvalToken(identity))
+        }, list: { [weak self] identity, product, before in
+            guard let self else { throw CancellationError() }
+            return try await self.teamService.teamRequestList(product: product, before: before, token: self.approvalToken(identity))
+        }, send: { [weak self] identity, draft in
+            guard let self else { throw CancellationError() }
+            return try await self.teamService.sendTeamRequest(draft, token: self.approvalToken(identity))
+        }, recover: { [weak self] identity, draft in
+            guard let self else { throw CancellationError() }
+            return try await self.teamService.recoverTeamRequest(draft, token: self.approvalToken(identity))
+        }, load: { [weak self] account in
+            guard let self else { throw CancellationError() }
+            return try self.readTeamDraft(TeamRequestDraft.self, account: account, name: "request.json")
+        }, save: { [weak self] draft in
+            guard let self else { throw CancellationError() }
+            try draft.validate(account: draft.accountID); try self.writeTeamDraft(draft, account: draft.accountID, name: "request.json")
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        presentation.detail = { [weak self] id, after in
+            guard let self, let binding = try await self.approvalIdentity() else { throw CancellationError() }
+            let result = try await self.teamService.teamRequestDetail(id: id, after: after, token: self.approvalToken(binding))
+            guard try await self.approvalIdentity() == binding else { throw CancellationError() }
+            return result
+        }
+        presentation.comment = { [weak self] draft in
+            guard let self, let binding = try await self.approvalIdentity(), binding.accountID == draft.accountID else { throw CancellationError() }
+            try draft.validate(account: binding.accountID, request: draft.requestID)
+            let receipt = try await self.teamService.teamRequestComment(id: draft.requestID, key: draft.key, body: draft.body, token: self.approvalToken(binding))
+            guard try await self.approvalIdentity() == binding else { throw CancellationError() }
+            return receipt
+        }
+        presentation.loadComment = { [weak self] request in
+            guard let self, self.signedIn, !self.loggingOut, let account = self.account?.accountID, TeamRequestRecord.validID(request) else { throw CancellationError() }
+            let draft = try self.readTeamDraft(TeamCommentDraft.self, account: account, name: request + ".json") ?? TeamCommentDraft(accountID: account, requestID: request)
+            try draft.validate(account: account, request: request); return draft
+        }
+        presentation.saveComment = { [weak self] draft in
+            guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+            try draft.validate(account: draft.accountID, request: draft.requestID)
+            try self.writeTeamDraft(draft, account: draft.accountID, name: draft.requestID + ".json")
+        }
+        return presentation
+    }()
+    private func teamDraftFile(account: String, name: String) throws -> URL {
+        let key = try approvalDirectory(account).lastPathComponent
+        return directory.appendingPathComponent("team-requests", isDirectory: true).appendingPathComponent(key, isDirectory: true).appendingPathComponent(name)
+    }
+    private func readTeamDraft<T: Decodable>(_ type: T.Type, account: String, name: String) throws -> T? {
+        let file = try teamDraftFile(account: account, name: name)
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        let data = try Data(contentsOf: file); guard data.count <= 65_536 else { throw SyncFailure.invalidResponse }
+        return try JSONDecoder().decode(type, from: data)
+    }
+    private func writeTeamDraft<T: Encodable>(_ value: T, account: String, name: String) throws {
+#if DEBUG
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "comment" && name.hasPrefix("trq_") { throw CocoaError(.fileWriteOutOfSpace) }
+#endif
+        let file = try teamDraftFile(account: account, name: name)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+        try JSONEncoder().encode(value).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
     private var observedReflectionID: String?
     lazy var questions: AccountQuestionPresentation = {
@@ -497,7 +564,7 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -549,7 +616,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -834,7 +901,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -872,7 +939,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

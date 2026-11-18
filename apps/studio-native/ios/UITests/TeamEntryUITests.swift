@@ -2,6 +2,135 @@ import XCTest
 
 /// Existing synthetic member fixture; actual account adoption and sheet entry.
 final class TeamEntryUITests: XCTestCase {
+    @MainActor func testFeedbackDraftIsolationCancelAndReceiptSurviveReopen() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launch()
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<4 {
+                if element.exists && element.isHittable { return }
+                app.swipeUp()
+            }
+            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
+        }
+        func openFeedback() {
+            let settings = app.buttons["conversationSettings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
+            let entry = app.buttons["productFeedbackEntry"]
+            reveal(entry); entry.tap()
+            XCTAssertTrue(app.textViews["feedbackText"].waitForExistence(timeout: 5))
+        }
+        openFeedback()
+        let text = app.textViews["feedbackText"]
+        text.tap(); text.typeText("Guest draft 4337")
+        app.buttons["feedbackClose"].tap()
+        app.terminate(); app.launch(); openFeedback()
+        XCTAssertEqual(text.value as? String, "Guest draft 4337")
+        let send = app.buttons["feedbackSend"]
+        reveal(send); send.tap()
+        XCTAssertTrue(app.buttons["취소"].waitForExistence(timeout: 5)); app.buttons["취소"].tap()
+        XCTAssertTrue(send.isEnabled)
+        app.swipeDown()
+        XCTAssertEqual(app.staticTexts["feedbackRequestCount"].label, "Synthetic requests: 0")
+        app.buttons["feedbackClose"].tap()
+        let login = app.buttons["linkDesktop"]
+        XCTAssertTrue(login.waitForExistence(timeout: 5)); login.tap()
+        XCTAssertTrue(app.staticTexts["accountGreeting"].waitForExistence(timeout: 10))
+        openFeedback()
+        XCTAssertEqual(text.value as? String, "")
+        text.tap(); text.typeText("Account draft 4337")
+        app.buttons["feedbackClose"].tap()
+        app.buttons["conversationSettings"].tap()
+        let logout = app.buttons["로그아웃"]; reveal(logout); logout.tap()
+        XCTAssertTrue(login.waitForExistence(timeout: 10)); openFeedback()
+        XCTAssertEqual(text.value as? String, "Guest draft 4337")
+        reveal(send); send.tap(); app.buttons["보내기"].tap()
+        let receipt = app.staticTexts["feedbackReceipt"]
+        XCTAssertTrue(receipt.waitForExistence(timeout: 5))
+        XCTAssertEqual(receipt.label, "접수 번호: synthetic-feedback-4337")
+        XCTAssertFalse(send.exists)
+        app.swipeDown()
+        XCTAssertEqual(app.staticTexts["feedbackRequestCount"].label, "Synthetic requests: 1")
+        app.buttons["feedbackClose"].tap()
+        app.terminate(); app.launch(); openFeedback()
+        reveal(receipt)
+        XCTAssertEqual(receipt.label, "접수 번호: synthetic-feedback-4337")
+        XCTAssertFalse(send.exists)
+        app.swipeDown()
+        XCTAssertEqual(app.staticTexts["feedbackRequestCount"].label, "Synthetic requests: 0")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "native-feedback-synthetic-receipt-no-replay"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["feedbackClose"].tap()
+        login.tap()
+        XCTAssertTrue(app.staticTexts["accountGreeting"].waitForExistence(timeout: 10)); openFeedback()
+        XCTAssertEqual(text.value as? String, "Account draft 4337")
+    }
+
+    @MainActor func testUncertainFeedbackRestartsWithoutResending() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_FEEDBACK_RESULT"] = "uncertain"
+        func openFeedback() {
+            app.buttons["conversationSettings"].tap()
+            let entry = app.buttons["productFeedbackEntry"]
+            XCTAssertTrue(entry.waitForExistence(timeout: 5)); entry.tap()
+            XCTAssertTrue(app.textViews["feedbackText"].waitForExistence(timeout: 5))
+        }
+        app.launch(); openFeedback()
+        app.textViews["feedbackText"].tap(); app.textViews["feedbackText"].typeText("Uncertain draft")
+        let send = app.buttons["feedbackSend"]
+        for _ in 0..<4 { if send.exists && send.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(send.isHittable); send.tap(); app.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["접수 여부 확인 필요"].waitForExistence(timeout: 5))
+        XCTAssertFalse(send.exists)
+        app.swipeDown()
+        XCTAssertEqual(app.staticTexts["feedbackRequestCount"].label, "Synthetic requests: 1")
+        app.terminate(); app.launch(); openFeedback()
+        XCTAssertEqual(app.textViews["feedbackText"].value as? String, "Uncertain draft")
+        XCTAssertEqual(app.staticTexts["feedbackRequestCount"].label, "Synthetic requests: 0")
+        XCTAssertFalse(send.exists)
+        XCTAssertFalse(app.staticTexts["feedbackReceipt"].exists)
+    }
+
+    @MainActor func testSettingsLoginShowsActualAccountAndLogoutClearsIdentity() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launch()
+        let settings = app.buttons["conversationSettings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
+        let status = app.staticTexts["accountSignInStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "로그인하지 않음")
+        XCTAssertFalse(app.staticTexts["currentAccountID"].exists)
+        let login = app.buttons["settingsLogin"]
+        XCTAssertTrue(login.waitForExistence(timeout: 5)); XCTAssertTrue(login.isEnabled)
+        login.tap()
+        XCTAssertTrue(app.staticTexts["accountGreeting"].waitForExistence(timeout: 10))
+        settings.tap()
+        let account = app.staticTexts["currentAccountID"]
+        XCTAssertTrue(account.waitForExistence(timeout: 5))
+        XCTAssertEqual(account.label, "계정 ID: journey-account")
+        XCTAssertEqual(status.label, "로그인됨")
+        XCTAssertFalse(login.exists)
+        let logout = app.buttons["로그아웃"]
+        if !logout.isHittable { app.swipeUp() }
+        XCTAssertTrue(logout.isHittable); logout.tap()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
+        settings.tap()
+        XCTAssertTrue(login.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "로그인하지 않음")
+        XCTAssertFalse(account.exists)
+    }
+
     @MainActor func testNotificationReceivedDuringRegistrationOpensOnceWhenRegistrationFinishes() throws {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
@@ -138,12 +267,109 @@ final class TeamEntryUITests: XCTestCase {
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
         app.launch(); let login = app.buttons["linkDesktop"]; XCTAssertTrue(login.waitForExistence(timeout: 10)); login.tap()
         let settings = app.buttons["conversationSettings"]; XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
-        let experience = app.buttons["사용 경험 공유 설정"]; XCTAssertTrue(experience.waitForExistence(timeout: 5)); experience.tap()
+        let experience = app.buttons["productExperienceSettings"]
+        // The settings list grows with account and feedback rows. Reveal the
+        // real control before tapping; never substitute a direct action.
+        for _ in 0..<3 {
+            if experience.exists && experience.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(experience.exists); XCTAssertTrue(experience.isHittable)
+        XCTAssertEqual(experience.label, "사용 경험 공유 설정"); experience.tap()
         let allow = app.buttons["productExperienceAllow"]; XCTAssertTrue(allow.waitForExistence(timeout: 10)); allow.tap(); waitTeam(app) { ($0["granted"] as? Bool) == true }
         app.buttons["productExperienceDecline"].tap(); waitTeam(app) { ($0["granted"] as? Bool) == false }
         XCTAssertEqual(try teamTrace(app)["events"] as? [String], [])
         app.buttons["닫기"].tap(); let entry = app.buttons["accountQuestionsEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 5)); entry.tap()
         XCTAssertTrue(app.buttons["방법이 막혔어요"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor func testInternalRequestCancelReceiptAndDiscussion() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<5 { if element.exists && element.isHittable { return }; app.swipeUp() }
+            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
+        }
+        let text = app.textViews["teamRequestBody"]
+        XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Internal request 4340")
+        let send = app.buttons["teamRequestSend"]; reveal(send); send.tap()
+        XCTAssertTrue(app.alerts.buttons["취소"].waitForExistence(timeout: 5)); app.alerts.buttons["취소"].tap()
+        XCTAssertTrue(send.isEnabled); XCTAssertEqual(text.value as? String, "Internal request 4340")
+        send.tap(); app.alerts.buttons["보내기"].tap()
+        let receipt = app.staticTexts["teamRequestReceipt"]
+        XCTAssertTrue(receipt.waitForExistence(timeout: 10)); XCTAssertTrue(receipt.label.contains("trq_"))
+        app.buttons["teamRequestClose"].tap(); entry.tap()
+        let trace = app.staticTexts["teamRequestTrace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 10)); XCTAssertTrue((trace.value as? String ?? "").contains("\"requestPosts\":1"))
+        let discussion = app.buttons["요청과 논의 보기"]; reveal(discussion); discussion.tap()
+        XCTAssertTrue(app.staticTexts["Internal request 4340"].waitForExistence(timeout: 10))
+        let comment = app.textViews["teamCommentBody"]; reveal(comment); comment.tap(); comment.typeText("Follow up question")
+        let sendComment = app.buttons["teamCommentSend"]; reveal(sendComment); sendComment.tap()
+        app.alerts.buttons["취소"].tap(); XCTAssertTrue(sendComment.isEnabled)
+        sendComment.tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["댓글이 접수됐어요."].waitForExistence(timeout: 10))
+        app.buttons["새로고침"].tap()
+        XCTAssertTrue(app.staticTexts["Follow up question"].waitForExistence(timeout: 10))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    @MainActor func testInternalRequestUnknownResultRecoversWithoutReplay() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launchEnvironment["HP_TEAM_REQUEST_RESULT"] = "uncertain"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        let text = app.textViews["teamRequestBody"]; XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Response lost 4340")
+        let send = app.buttons["teamRequestSend"]
+        for _ in 0..<5 { if send.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(send.isHittable); send.tap(); app.alerts.buttons["보내기"].tap()
+        let recover = app.buttons["teamRequestRecover"]
+        XCTAssertTrue(recover.waitForExistence(timeout: 10)); XCTAssertFalse(app.staticTexts["teamRequestReceipt"].exists)
+        recover.tap(); XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        app.buttons["teamRequestClose"].tap(); entry.tap()
+        let trace = app.staticTexts["teamRequestTrace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 10)); XCTAssertTrue((trace.value as? String ?? "").contains("\"requestPosts\":1"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-recovery-no-post"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    @MainActor func testInternalCommentSaveFailureKeepsExportAndGuardsLeaving() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launchEnvironment["HP_TEAM_DRAFT_SAVE_FAILURE"] = "comment"
+        app.launchEnvironment["HP_TEAM_DETAIL_FAILURE"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        func reveal(_ element: XCUIElement) { for _ in 0..<5 { if element.exists && element.isHittable { return }; app.swipeUp() }; XCTAssertTrue(element.isHittable) }
+        let text = app.textViews["teamRequestBody"]; XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Storage request")
+        let send = app.buttons["teamRequestSend"]; reveal(send); send.tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        let discussion = app.buttons["요청과 논의 보기"]; reveal(discussion); discussion.tap()
+        let comment = app.textViews["teamCommentBody"]; XCTAssertTrue(comment.waitForExistence(timeout: 10)); comment.tap(); comment.typeText("X")
+        XCTAssertEqual(comment.value as? String, "X")
+        let export = app.buttons["댓글 내용 내보내기"]; reveal(export); XCTAssertTrue(export.isEnabled)
+        XCTAssertFalse(app.buttons["teamCommentSend"].isEnabled)
+        app.buttons["teamCommentBack"].tap()
+        XCTAssertTrue(app.alerts["저장되지 않은 댓글이 있어요"].waitForExistence(timeout: 5)); app.alerts.buttons["계속 작성"].tap()
+        XCTAssertEqual(comment.value as? String, "X"); XCTAssertTrue(export.exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-comment-unsaved-export-and-exit-guard"; shot.lifetime = .keepAlways; add(shot)
     }
 
 }

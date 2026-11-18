@@ -544,3 +544,47 @@ Hide a handled warning comment as Resolved. Never edit a record by hand. Never p
 record for a run that did not happen.
 
 Kill switch: `gh variable set RELEASE_AUTO --body off --repo hypeproof/hypeproof-studio`.
+
+### When the release is not automatic: ask everyone
+
+Owner decision 2026-11-16: all gates pass, release with no human; otherwise ask the whole team.
+Studio's release-auto posts an `hps-release-ask/1` comment on the release PR, once per head, when:
+- a gate failed;
+- evidence is still missing six hours after the head commit;
+- `RELEASE_AUTO` is off.
+
+The comment @mentions all eight members, so GitHub emails each one. It also requests reviews from the release
+approvers (`policy/authority.yaml`, area `studio-desktop-release`).
+
+`scripts/notify/stakeholders.py tick` (launchd `xyz.hypeproof.notify-tick`, every 15 minutes) runs
+`release_relay.py`, which adds the other channels:
+
+| When | Channel |
+|---|---|
+| ask, at once | one #team card by the existing bot mentioning every registry contact; a DM to each; email when the registry enables it; approval-inbox cards for the release approvers when `--inbox-config` / `--inbox-state` point at the controller |
+| ask, after 4 h unanswered | DM reminder to the release approvers |
+| ask, after 24 h | one #team reminder mentioning the release approvers |
+| published | one #team card mentioning everyone: "출시됨 vX" |
+
+Only a release approver's review on the PR's current head counts:
+- Approve releases through release-promote.
+- Request changes holds.
+- The first such answer wins for everyone, and the publish gate enforces it.
+- A new head voids every older answer; Studio asks again for that head.
+
+Quiet hours, 22:00 to 09:00 KST, hold every send.
+
+Email transport: `scripts/notify/transports/email_cloudflare.py` exists, but it is off until the private
+registry has an `email` block of `enabled: true`, `token`, `account_id` and `from`. Turning it on needs three things:
+- a Cloudflare API token with Email Sending permission for the account that owns `hypeproof-ai.xyz`;
+- a verified sending address on that domain;
+- on the Workers Free plan, every recipient's address verified once as an Email Routing destination. Arbitrary
+  recipients need Workers Paid.
+
+No new credential exists for it today.
+
+Phone push: the approval inbox fans one card out per release approver (hypeproof-harness#670, merged as #675).
+Delivery to the Studio inbox with iPhone push is hypeproof-service#522 and hypeproof-studio#4169. Neither had a PR
+on 2026-11-16, so those cards reach the desktop and iPhone inbox only on open or refresh, and nothing pushes. The
+inbox also decides whether a release PR is requestable (`prepare_all` returns `not_requested` with a reason). The
+relay records that reason in the ledger and never works around it.

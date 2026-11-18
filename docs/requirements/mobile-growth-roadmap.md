@@ -511,3 +511,39 @@ only a matching terminal server snapshot confirms the outcome. A completed reply
 winning the race remains completed, and an uncertain cancel leaves the outbox
 recoverable without replay. Already dispatched AI work may still incur cost.
 Source, synthetic native acceptance and installed/live acceptance remain distinct.
+
+### iOS internal product-feedback slice
+
+The settings feedback entry is available without authentication. Device-local
+storage separates guest and signed-in account scopes, excludes backups and uses
+iOS file protection. Confirm the disclosed payload before anonymous support
+submission. A support receipt is not a GitHub issue. Persist before sending and
+never automatically retry uncertain submissions. Explicit local deletion must
+explain that it does not cancel a submitted report and can permit duplicates.
+
+| ID | Internal iOS feedback requirement |
+|---|---|
+| MFB-01 | Settings shows current login state and account identity; logout clears identity and preserves isolated guest/account drafts. |
+| MFB-02 | A feedback draft survives reopening; explicit confirmation discloses the anonymous payload, and cancellation sends nothing. |
+| MFB-03 | Persist uncertain state before sending; unknown results never replay, and only a valid support receipt marks received. |
+| MFB-04 | Preserve unsaved text/receipts for export, explain UTF-16 input limits, and keep optional experience consent reachable through the settings list. |
+
+### Authenticated internal iOS intake and discussion
+
+Service owns the private request contract (hypeproof/hypeproof-service#561,
+PR #562). Jay confirmed Lab internal membership plus separate product grants,
+product-wide internal readership, unresolved retention and 90 days after reporter
+confirmation for resolved threads. Existing anonymous reports remain separate.
+No deployment, real-account or physical-iPhone acceptance is implied by this source.
+
+| ID | Internal request requirement |
+|---|---|
+| MTR-01 | Verify the current account/session and server product grants before loading private requests; discard delayed responses across logout/account changes. |
+| MTR-02 | Keep account-isolated durable request/comment drafts; explicitly disclose product-wide sharing; cancel sends nothing; preserve unsaved text for export. |
+| MTR-03 | Save uncertain state and a stable request key before POST; unknown sends never retry automatically; recover the account-owned result or explicitly resend the same key. |
+| MTR-04 | Browse product-shared requests and append-only discussion with bounded pagination; accept only validated server receipts bound to the submitted content. |
+| MTR-05 | Expose team requests from the signed-in home and settings with keyboard, Dynamic Type and accessible controls; distinguish submitted from resolved or delivered. |
+
+Assignment/status history, GitHub/build links, notifications, reporter confirmation
+and server resolved-retention execution remain subsequent slices. Until their
+rollout, the source API is disabled and current records stay submitted/unresolved.

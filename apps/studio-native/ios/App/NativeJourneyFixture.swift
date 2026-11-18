@@ -5,6 +5,7 @@ import CryptoKit
 /// Simulator journeys replace external transports, never the app's account,
 /// outbox, persistence or voice state machines. This file has no Release code.
 @MainActor enum NativeJourneyFixture {
+    static var feedbackRequests = 0
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String {

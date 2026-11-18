@@ -14,13 +14,51 @@ import Foundation
 private final class TeamEntryState: @unchecked Sendable {
     private let lock = NSLock()
     private var started = false, granted = false, triggers = 0, reads = 0, shown = 0, answers = 0, events: [String] = []
+    private var teamRequest: [String: Any]?
+    private var teamComments: [[String: Any]] = []
+    private var requestPosts = 0, commentPosts = 0
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func response(_ request: URLRequest, _ body: [String: Any]) throws -> (Int, [String: Any]) {
         lock.lock(); defer { lock.unlock() }
         guard request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true, request.value(forHTTPHeaderField: "Origin") == nil else { return (401, ["error": "unauthorized"]) }
+        if request.url?.path.hasPrefix("/v1/me/team-requests") == true {
+            if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_DENIED"] == "1" { return (403, ["error": "team_product_denied"]) }
+            let id = "trq_" + String(repeating: "a", count: 32)
+            let path = request.url?.path ?? ""
+            switch (request.httpMethod ?? "GET", path) {
+            case ("GET", "/v1/me/team-requests/access"):
+                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"]])
+            case ("POST", "/v1/me/team-requests"):
+                requestPosts += 1
+                guard body["schema"] as? String == "hps-team-request/1", body["notice_version"] as? String == "synthetic/1", let key = body["client_request_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_request"]) }
+                if let old = teamRequest {
+                    guard old["client_request_id"] as? String == key, old["body"] as? String == words else { return (409, ["error": "team_request_conflict"]) }
+                    return (200, ["request": old, "already": true])
+                }
+                let row: [String: Any] = ["id": id, "account_id": "journey-account", "client_request_id": key, "product": body["product"] ?? "studio", "category": body["category"] ?? "bug", "body": words, "notice_version": "synthetic/1", "status": "submitted", "revision": 1, "created_at": 1000, "updated_at": 1000]
+                teamRequest = row
+                if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_RESULT"] == "uncertain" { throw URLError(.timedOut) }
+                return (200, ["request": row, "already": false])
+            case ("GET", "/v1/me/team-requests"):
+                let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                if let key = query.first(where: { $0.name == "client_request_id" })?.value, teamRequest?["client_request_id"] as? String != key { return (404, ["error": "team_request_not_found"]) }
+                return (200, ["requests": teamRequest.map { [$0] } ?? [], "next_cursor": NSNull()])
+            default:
+                if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", ProcessInfo.processInfo.environment["HP_TEAM_DETAIL_FAILURE"] == "1" { return (503, ["error": "synthetic_detail_unavailable"]) }
+                if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", let teamRequest { return (200, ["request": teamRequest, "comments": teamComments, "next_comments_cursor": NSNull()]) }
+                if path == "/v1/me/team-requests/" + id + "/comments", request.httpMethod == "POST" {
+                    commentPosts += 1
+                    guard let key = body["client_comment_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_comment"]) }
+                    let commentID = "tcm_" + String(repeating: "b", count: 32)
+                    if !teamComments.contains(where: { $0["client_comment_id"] as? String == key }) { teamComments.append(["id": commentID, "request_id": id, "account_id": "journey-account", "client_comment_id": key, "body": words, "created_at": 1001]) }
+                    return (200, ["comment_id": commentID, "already": commentPosts > 1])
+                }
+                return (404, ["error": "synthetic_team_request_route"])
+            }
+        }
         switch (request.httpMethod ?? "GET", request.url?.path ?? "") {
         case ("GET", "/v1/me/cards"):
             guard request.url?.query == "surface=mobile" else { return (400, ["error": "invalid_surface"]) }
