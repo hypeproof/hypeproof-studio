@@ -38,7 +38,7 @@ struct TeamGitHubObservationScreen: View {
                             record(current)
                             if let observed = page.observed_at { Text("확인한 시각: \(date(observed))").font(.caption) }
                             if let expiry = page.valid_until, page.isFresh(at: context.date.timeIntervalSince1970 * 1000) { Text("유효: \(date(expiry))까지").font(.caption) }
-                        } else { Text("아직 확인된 GitHub 상태 기록이 없어요.").accessibilityIdentifier("teamObservationEmpty") }
+                        } else { Text(page.retention?.hidden == true ? page.retention!.marker : "아직 확인된 GitHub 상태 기록이 없어요.").accessibilityIdentifier("teamObservationEmpty") }
                         if page.last_error != nil { Text("최근 GitHub 확인에 실패했어요. 이전 기록을 보여 드려요.").accessibilityIdentifier("teamObservationProviderError") }
                         if let checked = page.last_checked_at { Text("마지막 확인 시도: \(date(checked))").font(.caption) }
                         Text("빌드 제공·이 기기의 설치·요청 해결 여부는 이 기록으로 확인할 수 없어요.").font(.footnote).foregroundStyle(.secondary)

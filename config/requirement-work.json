@@ -1019,12 +1019,15 @@
         "MTR-27",
         "MTR-28",
         "MTR-29",
-        "MTR-30"
+        "MTR-30",
+        "MTR-31",
+        "MTR-32",
+        "MTR-33"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "7375aef2f976477af1b9fa7d09e38ee863ab68b43ddfb8335950305137700644",
+      "sha256": "9d94936ade724462f1cbaf382fa837da78311085188d5ccd5e9e6d57335d659f",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5674,6 +5677,42 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/TeamRelationTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
+      ]
+    },
+    {
+      "id": "ios-internal-retention-m3",
+      "title": "iOS hidden retained content and acknowledged cache safety",
+      "issue": 4377,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-31",
+            "MTR-32",
+            "MTR-33"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-related-m3"
+      ],
+      "next_action": "Obtain exact-source CI, separately deploy the matching Service contract, and verify the installed iPhone flow before claiming acceptance.",
+      "design_delta": "Use validated existing retention metadata and protected account drafts; distinguish hiding from physical deletion and preserve explicit reopening.",
+      "positive_control": "Actual authenticated logical-hidden and post-sweep response fixtures, acknowledged scrubbing and minimal build-bound navigation.",
+      "negative_control": "Malformed masking, stale automatic retry, account switches and failed persistence cannot reveal acknowledged private content; uncertain words remain unchanged.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift",
+        "apps/studio-native/ios/Sources/StudioCore/TeamOutcomes.swift",
+        "apps/studio-native/ios/Sources/StudioCore/TeamGitHubObservations.swift",
+        "apps/studio-native/ios/App/TeamRequestsView.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamHiddenContentTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]

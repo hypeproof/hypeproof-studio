@@ -1,0 +1,13 @@
+{
+  "committed_source": "d31bb4021a2b0dbe633d6e300de82fcfee69642b",
+  "original_receipt": "/tmp/service593-native-contract-fixtures-receipt.json",
+  "fixture_sha256": "9e9b0abc4eef966793d46e0b29221200106ddb8fecb57ace05af2d5a356470db",
+  "runtime_and_migration_matches": {
+    "worker/src/lib/team-request-retention.ts": true,
+    "worker/src/lib/team-requests.ts": true,
+    "worker/src/routes/team-requests.ts": true,
+    "worker/migrations/0111-team-text-revisions.sql": true,
+    "worker/src/lib/team-text-revisions.ts": true
+  },
+  "test_delta": "account-push-d1 adds separate text-edit scenario after existing retention fixture; prior fixture generator unchanged. No regeneration claimed."
+}

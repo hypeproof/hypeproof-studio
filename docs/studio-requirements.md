@@ -10527,3 +10527,12 @@ Related-request navigation and explicit operator link/unlink use existing produc
 membership and account drafts. Every change previews target/action/reason; unknown
 outcomes retain the same mutation. Related originals remain independent. See
 MTR-28–30 in [mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone hidden retained content (#4377)
+
+Expired server content remains navigable through minimal request and build
+identity. Logical hiding and completed physical cleanup have different labels.
+Fresh authoritative receipts scrub acknowledged copies; unknown sends keep their
+words and stable keys. See MTR-31–33 in
+[mobile growth requirements](requirements/mobile-growth-roadmap.md).

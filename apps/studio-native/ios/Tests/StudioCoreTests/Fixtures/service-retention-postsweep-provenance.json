@@ -1,0 +1,20 @@
+{
+  "schema": "hps-native-contract-source-receipt/1",
+  "source_commit": "04c22b03af826c2726133ea5628884abb5bff85b",
+  "runtime_base_commit": "d31bb4021a2b0dbe633d6e300de82fcfee69642b",
+  "test_sha256": "8831ce29108fe3a148609b8e71e5a9f79397baba390ee8f9868f7e26244af7fe",
+  "artifacts": {
+    "/tmp/service593-native-workflow-contract-fixtures-v2.json": "ba41dbd5c1afc8d5b71009c80a73c84aecee08471628b86fdd194b84d1c426e2",
+    "/tmp/service593-native-postsweep-contract-fixtures.json": "3bb49b437c9f3ec52be2481376a02cbebb0f41ba32fbcff0e4ab68f63a762980",
+    "/tmp/service593-postsweep-contract-d1.log": "fc8c40fc8c367daac469e3219cb611b4237ef72bb41ab9bf34d61638fd0d3af7"
+  },
+  "node": "22.22.1",
+  "command": "node --test worker/test/account-push-d1.test.mjs",
+  "resource_job": "ios4377-postsweep-contract-d1",
+  "exit_code": 0,
+  "tests_passed": 23,
+  "scope": "actual local D1 authenticated HTTP synthetic fixture; preserved actor/key verified after physical retention; account deletion contrast source-reviewed, not added as runtime fixture",
+  "runtime_inventory_sha256": "224477fa7d3f1db1f2dd5ca9627ae99bfac808b937a936d04a63c3d127ffb8e2",
+  "runtime_inventory_files": 557,
+  "runtime_inventory_encoding": "UTF-8 JSON with sorted keys, no whitespace, and unescaped Unicode; map from private Service-relative paths to SHA-256 values. Original full inventory retained in private evidence; public receipt intentionally omits private paths."
+}

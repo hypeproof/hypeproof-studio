@@ -1,0 +1,397 @@
+{
+  "schema": "hps-team-retention-native-fixtures/1",
+  "provenance": "Actual local D1 and authenticated HTTP route synthetic responses; no production/provider calls",
+  "fixtures": {
+    "detail": {
+      "status": 200,
+      "json": {
+        "request": {
+          "id": "trq_00000000000000000000000000000000",
+          "account_id": "acc_00000000000000000000000000000029",
+          "client_request_id": "cutoff-request-0",
+          "product": "studio",
+          "category": "bug",
+          "body": "보관 기한이 지나 내용을 숨겼어요.",
+          "notice_version": "synthetic/1",
+          "status": "submitted",
+          "revision": 1,
+          "created_at": 1795021539015,
+          "updated_at": 1795021539015,
+          "retention": {
+            "policy": "90_days_after_reporter_confirmation",
+            "purge_implemented": true,
+            "content_hidden": true,
+            "hidden_outcome_revision": 1,
+            "content_hidden_since": 1794935139015,
+            "content_purged_at": null,
+            "purged_outcome_revision": null
+          }
+        },
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_purged_at": null,
+          "purged_outcome_revision": null,
+          "content_hidden": true,
+          "hidden_outcome_revision": 1,
+          "content_hidden_since": 1794935139015
+        },
+        "latest_question": null,
+        "comments": [
+          {
+            "id": "tcm_00000000000000000000000000000000",
+            "request_id": "trq_00000000000000000000000000000000",
+            "account_id": "acc_00000000000000000000000000000029",
+            "client_comment_id": "cutoff-comment-0",
+            "body": "보관 기한이 지나 내용을 숨겼어요.",
+            "created_at": 1795021539015,
+            "intent": "discussion",
+            "reply_to": null,
+            "retention": {
+              "policy": "90_days_after_reporter_confirmation",
+              "purge_implemented": true,
+              "content_hidden": true,
+              "hidden_outcome_revision": 1,
+              "content_hidden_since": 1794935139015,
+              "content_purged_at": null,
+              "purged_outcome_revision": null
+            }
+          }
+        ],
+        "next_comments_cursor": null
+      }
+    },
+    "workflow": {
+      "status": 200,
+      "json": {
+        "schema": "hps-team-workflow/1",
+        "request_id": "trq_00000000000000000000000000000000",
+        "can_manage": true,
+        "current": {
+          "id": "twe_00000000000000000000000000000000",
+          "request_id": "trq_00000000000000000000000000000000",
+          "actor_account_id": "acc_00000000000000000000000000000029",
+          "client_mutation_id": "cutoff-workflow",
+          "revision": 1,
+          "status": "discussing",
+          "assignee_account_id": null,
+          "priority": "normal",
+          "next_action": null,
+          "reason": null,
+          "duplicate_request_id": null,
+          "created_at": 1795021539015,
+          "redacted_at": null,
+          "retention": {
+            "policy": "90_days_after_reporter_confirmation",
+            "purge_implemented": true,
+            "content_hidden": true,
+            "hidden_outcome_revision": 1,
+            "content_hidden_since": 1794935139015,
+            "content_purged_at": null,
+            "purged_outcome_revision": null
+          }
+        },
+        "events": [
+          {
+            "id": "twe_00000000000000000000000000000000",
+            "request_id": "trq_00000000000000000000000000000000",
+            "actor_account_id": "acc_00000000000000000000000000000029",
+            "client_mutation_id": "cutoff-workflow",
+            "revision": 1,
+            "status": "discussing",
+            "assignee_account_id": null,
+            "priority": "normal",
+            "next_action": null,
+            "reason": null,
+            "duplicate_request_id": null,
+            "created_at": 1795021539015,
+            "redacted_at": null,
+            "retention": {
+              "policy": "90_days_after_reporter_confirmation",
+              "purge_implemented": true,
+              "content_hidden": true,
+              "hidden_outcome_revision": 1,
+              "content_hidden_since": 1794935139015,
+              "content_purged_at": null,
+              "purged_outcome_revision": null
+            }
+          }
+        ],
+        "next_cursor": null,
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_hidden": true,
+          "hidden_outcome_revision": 1,
+          "content_hidden_since": 1794935139015,
+          "content_purged_at": null,
+          "purged_outcome_revision": null
+        }
+      }
+    },
+    "github_links": {
+      "status": 200,
+      "json": {
+        "schema": "hps-team-github-links/1",
+        "request_id": "trq_00000000000000000000000000000000",
+        "can_manage": true,
+        "current": {
+          "id": "tgl_00000000000000000000000000000000",
+          "request_id": "trq_00000000000000000000000000000000",
+          "actor_account_id": "acc_00000000000000000000000000000029",
+          "client_mutation_id": "cutoff-link-0",
+          "revision": 1,
+          "repo": "hypeproof/hypeproof-studio",
+          "issue_number": 1,
+          "reason": null,
+          "verified_at": 1795021539015,
+          "redacted_at": null,
+          "evidence": null,
+          "association": "operator_asserted",
+          "testflight": "not_observed",
+          "reporter_confirmation": "not_observed",
+          "retention": {
+            "policy": "90_days_after_reporter_confirmation",
+            "purge_implemented": true,
+            "content_hidden": true,
+            "hidden_outcome_revision": 1,
+            "content_hidden_since": 1794935139015,
+            "content_purged_at": null,
+            "purged_outcome_revision": null
+          }
+        },
+        "events": [
+          {
+            "id": "tgl_00000000000000000000000000000000",
+            "request_id": "trq_00000000000000000000000000000000",
+            "actor_account_id": "acc_00000000000000000000000000000029",
+            "client_mutation_id": "cutoff-link-0",
+            "revision": 1,
+            "repo": "hypeproof/hypeproof-studio",
+            "issue_number": 1,
+            "reason": null,
+            "verified_at": 1795021539015,
+            "redacted_at": null,
+            "evidence": null,
+            "association": "operator_asserted",
+            "testflight": "not_observed",
+            "reporter_confirmation": "not_observed",
+            "retention": {
+              "policy": "90_days_after_reporter_confirmation",
+              "purge_implemented": true,
+              "content_hidden": true,
+              "hidden_outcome_revision": 1,
+              "content_hidden_since": 1794935139015,
+              "content_purged_at": null,
+              "purged_outcome_revision": null
+            }
+          }
+        ],
+        "next_cursor": null,
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_hidden": true,
+          "hidden_outcome_revision": 1,
+          "content_hidden_since": 1794935139015,
+          "content_purged_at": null,
+          "purged_outcome_revision": null
+        }
+      }
+    },
+    "deliveries": {
+      "status": 200,
+      "json": {
+        "schema": "hps-team-deliveries/1",
+        "request_id": "trq_00000000000000000000000000000000",
+        "can_manage": true,
+        "current": {
+          "id": "tdl_00000000000000000000000000000000",
+          "request_id": "trq_00000000000000000000000000000000",
+          "actor_account_id": "acc_00000000000000000000000000000029",
+          "client_mutation_id": "cutoff-delivery-0",
+          "revision": 1,
+          "github_link_id": "tgl_00000000000000000000000000000000",
+          "instructions": null,
+          "created_at": 1795021539015,
+          "redacted_at": null,
+          "evidence": null,
+          "availability": "not_established",
+          "reporter_confirmation": "not_observed",
+          "retention": {
+            "policy": "90_days_after_reporter_confirmation",
+            "purge_implemented": true,
+            "content_hidden": true,
+            "hidden_outcome_revision": 1,
+            "content_hidden_since": 1794935139015,
+            "content_purged_at": null,
+            "purged_outcome_revision": null
+          }
+        },
+        "events": [
+          {
+            "id": "tdl_00000000000000000000000000000000",
+            "request_id": "trq_00000000000000000000000000000000",
+            "actor_account_id": "acc_00000000000000000000000000000029",
+            "client_mutation_id": "cutoff-delivery-0",
+            "revision": 1,
+            "github_link_id": "tgl_00000000000000000000000000000000",
+            "instructions": null,
+            "created_at": 1795021539015,
+            "redacted_at": null,
+            "evidence": null,
+            "availability": "not_established",
+            "reporter_confirmation": "not_observed",
+            "retention": {
+              "policy": "90_days_after_reporter_confirmation",
+              "purge_implemented": true,
+              "content_hidden": true,
+              "hidden_outcome_revision": 1,
+              "content_hidden_since": 1794935139015,
+              "content_purged_at": null,
+              "purged_outcome_revision": null
+            }
+          }
+        ],
+        "next_cursor": null,
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_hidden": true,
+          "hidden_outcome_revision": 1,
+          "content_hidden_since": 1794935139015,
+          "content_purged_at": null,
+          "purged_outcome_revision": null
+        }
+      }
+    },
+    "outcomes": {
+      "status": 200,
+      "json": {
+        "schema": "hps-team-outcomes/1",
+        "request_id": "trq_00000000000000000000000000000000",
+        "can_respond": true,
+        "current": {
+          "id": "tor_00000000000000000000000000000000",
+          "request_id": "trq_00000000000000000000000000000000",
+          "actor_account_id": "acc_00000000000000000000000000000029",
+          "client_mutation_id": "cutoff-outcome-0",
+          "revision": 1,
+          "delivery_id": "tdl_00000000000000000000000000000000",
+          "delivery_revision": 1,
+          "version": "0.2.0",
+          "build": "18.1",
+          "action": "resolved",
+          "result": "보관 기한이 지나 내용을 숨겼어요.",
+          "created_at": 1787159139015,
+          "resolved_at": 1787159139015,
+          "purge_eligible_at": 1794935139015,
+          "evidence_kind": "reporter_self_reported",
+          "device_installed": "not_observed",
+          "tester_eligibility": "not_observed",
+          "retention": {
+            "policy": "90_days_after_reporter_confirmation",
+            "purge_implemented": true,
+            "content_hidden": true,
+            "hidden_outcome_revision": 1,
+            "content_hidden_since": 1794935139015,
+            "content_purged_at": null,
+            "purged_outcome_revision": null
+          }
+        },
+        "events": [
+          {
+            "id": "tor_00000000000000000000000000000000",
+            "request_id": "trq_00000000000000000000000000000000",
+            "actor_account_id": "acc_00000000000000000000000000000029",
+            "client_mutation_id": "cutoff-outcome-0",
+            "revision": 1,
+            "delivery_id": "tdl_00000000000000000000000000000000",
+            "delivery_revision": 1,
+            "version": "0.2.0",
+            "build": "18.1",
+            "action": "resolved",
+            "result": "보관 기한이 지나 내용을 숨겼어요.",
+            "created_at": 1787159139015,
+            "resolved_at": 1787159139015,
+            "purge_eligible_at": 1794935139015,
+            "evidence_kind": "reporter_self_reported",
+            "device_installed": "not_observed",
+            "tester_eligibility": "not_observed",
+            "retention": {
+              "policy": "90_days_after_reporter_confirmation",
+              "purge_implemented": true,
+              "content_hidden": true,
+              "hidden_outcome_revision": 1,
+              "content_hidden_since": 1794935139015,
+              "content_purged_at": null,
+              "purged_outcome_revision": null
+            }
+          }
+        ],
+        "next_cursor": null,
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_purged_at": null,
+          "purged_outcome_revision": null,
+          "purge_eligible_at": 1794935139015,
+          "content_hidden": true,
+          "hidden_outcome_revision": 1,
+          "content_hidden_since": 1794935139015
+        }
+      }
+    },
+    "observations": {
+      "status": 200,
+      "json": {
+        "schema": "hps-team-github-observations/1",
+        "request_id": "trq_00000000000000000000000000000000",
+        "association_id": "tgl_00000000000000000000000000000000",
+        "association_revision": 1,
+        "current": null,
+        "observed_at": null,
+        "valid_until": null,
+        "fresh": false,
+        "last_checked_at": null,
+        "last_error": null,
+        "events": [],
+        "next_cursor": null,
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_hidden": true,
+          "hidden_outcome_revision": 1,
+          "content_hidden_since": 1794935139015,
+          "content_purged_at": null,
+          "purged_outcome_revision": null
+        }
+      }
+    },
+    "related": {
+      "status": 409,
+      "json": {
+        "error": "team_content_expired"
+      }
+    },
+    "related_visible": {
+      "status": 200,
+      "json": {
+        "schema": "hps-team-related-requests/1",
+        "request_id": "trq_00000000000000000000000000000018",
+        "can_manage": true,
+        "items": [],
+        "next_cursor": null,
+        "retention": {
+          "policy": "90_days_after_reporter_confirmation",
+          "purge_implemented": true,
+          "content_hidden": false,
+          "hidden_outcome_revision": null,
+          "content_hidden_since": null,
+          "content_purged_at": null,
+          "purged_outcome_revision": null
+        }
+      }
+    }
+  }
+}

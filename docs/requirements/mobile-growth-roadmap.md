@@ -662,3 +662,17 @@ request storage. Ordinary link triangles do not imply a duplicate representative
 No provider write, notification or workflow transition is triggered. The broader
 Service #590 hidden-content contract and native cache adoption remain separate
 integration before deployment, not implicit in this source slice.
+
+
+### Hidden retained content — Studio #4377
+
+| ID | Requirement |
+|---|---|
+| MTR-31 | Accept authenticated logical-hidden and physical-purge response metadata without inventing missing private fields. Preserve request, receipt and exact build identity, distinguish deadline hiding from deletion, and keep explicit reporter reopening available. |
+| MTR-32 | Scrub only matching acknowledged local content after validated server evidence, clearing the visible copy before persistence. Failed saves and restarted offline views must not reveal acknowledged content without fresh matching evidence; uncertain and unsent words and keys remain exportable. |
+| MTR-33 | Discard accumulated private pages on a retention-generation change and fence the automatic first-page retry to the observed generation. Explicit fresh reads may observe genuine reopening or a new delivery; this is not a universal cross-refresh watermark. Preserve account/session boundaries and block authoring known-expired content. |
+
+Consumes Service #590 logical hiding and existing retention cleanup. Actual D1
+route fixtures include the additive #593 response metadata, which this slice
+ignores; text revisions remain separate. No server feature activation, deletion
+job execution, TestFlight delivery or installed-phone acceptance is implied.

@@ -1109,3 +1109,61 @@ The link/unlink screenshot from passing v3 was also inspected:
 `/tmp/ios4375-link-3-attachments/DD9767A4-503D-4D1C-917A-33B914864F5B.png`.
 Final targeted focus/navigation source review PASS. Requirement integrity PASS746.
 No product source changed after v6; only this evidence record was completed.
+
+
+### Hidden retained content — Studio #4377
+
+Actual authenticated D1 fixtures are checked in under StudioCoreTests/Fixtures.
+The original Service590 fixture used nonproduction seed IDs and is preserved in
+/tmp; native ID validators were not weakened. Service593 test-only fixture
+extensions use production-shaped IDs and unchanged runtime d31bb402. Workflow
+fixture 1e37b40f SHA256 0dd10ca9825ff9a16617b6d2d6b8cd5c6d2b936e7f36af037eb3b018c327efb7
+and post-sweep fixture04c22b03 SHA256
+3bb49b437c9f3ec52be2481376a02cbebb0f41ba32fbcff0e4ab68f63a762980
+retain provenance receipts. No postprocessing is applied to the decoder inputs.
+The DEBUG native journey separately adapts account/request identity for existing
+app login and draft paths; it is synthetic app evidence, not deployed Service.
+
+Core53 PASS /tmp/ios4377-hidden-core5.log, wrapper exit0, covers actual logical
+hiding and physical purge, nullable private fields, retained actor/key identities,
+older purge-cycle timestamps, failed-save visible scrubbing, uncertain word/key
+preservation, pagination reset and rejection of stale unhidden automatic retry.
+Explicit refresh may observe genuine reopening; no cross-refresh enforcement
+epoch or universal monotonic server watermark is claimed.
+
+Preserved failures: core2 over-broad workflow constructor edit, core3 incorrect
+comment test initializer; both compilation failures corrected. Native v1 failed
+build due to a missing await for MainActor reconciliation; no journey ran.
+Native v2 failed36.084s because the synthetic adapter used `github-links`
+while the actual client route is `/github`; corrected fixture routing without
+changing assertions. Core53 passed again in `/tmp/ios4377-hidden-core6.log`,
+wrapper exit0, including a fresh-history/offline restart with the old acknowledged
+disk copy after failed scrubbing: it stays hidden until a matching server record
+is fetched. Explicit new-comment creation remains available without locating the
+old receipt, subject to current storage/hidden-content guards. Independent final
+source review PASS for pagination, physical-retention versus account-deletion,
+pre-refetch acknowledged scrubbing and offline restart boundaries.
+
+Native v3 PASS42.712s, Executed1, `/tmp/ios4377-hidden-ui-3.xcresult`, wrapper and
+owned-simulator cleanup exit0. The journey opens a hidden request, GitHub and
+delivery evidence, then explicitly reopens its exact0.2.0/18.1 outcome with words.
+Inspected screenshot:
+`/tmp/ios4377-hidden-ui-3-attachments/85DB8026-0FFC-4268-99A6-F937420F5C24.png`.
+It shows the retained build identity, hidden old result and new reopened result.
+The synthetic transport retains its existing purge_implemented=false after
+reopening; its capability footer is not a statement about deployed retention.
+Requirement integrity PASS749; no runtime source changed after v3.
+No deployment, deletion job, provider push, TestFlight or phone acceptance claim.
+
+### Full-suite runtime budget — 2026-11-19
+
+Run44364736519 started at18:02:31UTC. Its62 UI cases used2586.576seconds
+(43.11minutes); test results finished at18:55:57 and TEST FAILED appeared at18:56:33.
+After cleanup, exit65 appeared at18:57:13. Evidence content uploaded at18:57:30;
+artifact finalization at18:57:31 and post-job cleanup crossed the55-minute budget.
+The full iOS job now has a65-minute cap to accommodate the measured larger suite,
+build/setup and evidence collection. Individual test limits, assertions and
+failure exit handling are unchanged. This budget change does not repair or
+reclassify any of the four actual test failures and is not a passing test result.
+No model calls are added; at most ten additional hosted Mac runner minutes are
+permitted per full job. Normal completion still ends the job immediately.

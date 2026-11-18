@@ -315,7 +315,21 @@ final class TeamEntryUITests: XCTestCase {
         let sendComment = app.buttons["teamCommentSend"]; reveal(sendComment); sendComment.tap()
         app.alerts.buttons["취소"].tap(); XCTAssertTrue(sendComment.isEnabled)
         sendComment.tap(); app.alerts.buttons["보내기"].tap()
-        XCTAssertTrue(app.staticTexts["댓글이 접수됐어요."].waitForExistence(timeout: 10))
+        // A received local body stays withheld until fresh matching history. Assert the
+        // actual receipt status, then retain the fresh-read/exact-comment check below.
+        let commentReceipt = app.staticTexts["teamCommentStatus"]
+        for _ in 0..<8 {
+            if commentReceipt.exists {
+                let frame = commentReceipt.frame
+                if !frame.isEmpty && !frame.isInfinite && !frame.isNull && app.windows.firstMatch.frame.contains(frame) { break }
+            }
+            app.swipeDown()
+        }
+        XCTAssertTrue(commentReceipt.waitForExistence(timeout: 10))
+        XCTAssertEqual(commentReceipt.label,"댓글이 접수됐어요. 새로고침하면 논의에서 확인할 수 있어요.")
+        let receiptFrame = commentReceipt.frame
+        XCTAssertFalse(receiptFrame.isEmpty || receiptFrame.isInfinite || receiptFrame.isNull)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(receiptFrame))
         app.buttons["새로고침"].tap()
         XCTAssertTrue(app.staticTexts["Follow up question"].waitForExistence(timeout: 10))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
@@ -443,9 +457,30 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor private func relatedTrace(_ app:XCUIApplication)->String{
         let trace=app.staticTexts["teamRelatedTrace"]
-        for _ in 0..<8{if trace.exists && trace.isHittable{return trace.value as? String ?? ""};app.swipeDown()}
+        for _ in 0..<8{if trace.exists{return trace.value as? String ?? ""};app.swipeDown()}
         XCTFail("Related trace must remain in the open screen");return ""
     }
+    @MainActor func testHiddenRequestEvidenceAndExplicitReporterReopen() throws {
+        let app = githubApp(["HP_TEAM_HIDDEN":"1","HP_TEAM_RELATED":"1"])
+        XCTAssertTrue(app.staticTexts["teamHiddenContentNotice"].waitForExistence(timeout:10))
+        XCTAssertFalse(app.staticTexts["GitHub fixture request"].exists)
+        for (entry,title) in [("teamGitHubEntry","GitHub 연결 근거"),("teamDeliveryEntry","배포 버전과 안내")] {
+            githubReveal(app,app.buttons[entry]);app.buttons[entry].tap()
+            XCTAssertTrue(app.staticTexts["보관 기한이 지나 내용을 숨겼어요."].firstMatch.waitForExistence(timeout:10))
+            XCTAssertFalse(app.staticTexts["작성자 삭제로 배포 근거가 제거됐어요."].exists)
+            app.navigationBars.buttons.element(boundBy:0).tap()
+            XCTAssertTrue(app.buttons["teamOutcomeEntry"].waitForExistence(timeout:10),title)
+        }
+        githubReveal(app,app.buttons["teamOutcomeEntry"]);app.buttons["teamOutcomeEntry"].tap()
+        XCTAssertTrue(app.buttons["teamOutcomeReopened"].waitForExistence(timeout:10));app.buttons["teamOutcomeReopened"].tap()
+        githubReveal(app,app.staticTexts["teamOutcomeBuild"]);XCTAssertTrue(app.staticTexts["teamOutcomeBuild"].label.contains("18.1"))
+        let words=app.textViews["teamOutcomeResult"];githubReveal(app,words);words.tap();words.typeText("Still reproducible in this build")
+        githubReveal(app,app.buttons["teamOutcomeSend"]);app.buttons["teamOutcomeSend"].tap()
+        app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamOutcomeReceipt"].waitForExistence(timeout:10))
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="hidden-request-explicit-reopen";shot.lifetime = .keepAlways;add(shot)
+    }
+
     @MainActor func testRelatedCancelUnknownRecoveryOriginalAndUnlink() throws{
         let app=githubApp(["HP_TEAM_RELATED":"1","HP_TEAM_RELATED_UNKNOWN":"1"]),target="trq_"+String(repeating:"b",count:32)
         let entry=app.buttons["teamRelationsEntry"];githubReveal(app,entry);entry.tap()

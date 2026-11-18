@@ -40,10 +40,12 @@ struct TeamOutcomeView: View {
                         }
                         if let target = draft.target { Text("확인할 버전 \(target.version) · 빌드 \(target.build)").accessibilityIdentifier("teamOutcomeBuild") }
                         else { Text("결과와 연결할 배포 버전을 아직 확인하지 못했어요.") }
+                        if draft.phase != .received {
                         TextEditor(text: Binding(get: { model.state.draft?.result ?? "" }, set: { model.controller?.edit(result: $0) }))
                             .frame(minHeight: 100).disabled(!editable).accessibilityLabel("확인 결과 설명").accessibilityIdentifier("teamOutcomeResult")
                         Text(draft.action == "reopened" ? "아직 남은 문제를 적어 주세요. (필수)" : "확인한 내용을 덧붙일 수 있어요. (선택)").font(.caption)
                         ShareLink("결과 초안 내보내기", item: draft.exportText)
+                        }
                         if let receipt = draft.receipt, draft.phase == .received {
                             Text("버전 \(receipt.version) · 빌드 \(receipt.build)의 결과를 저장했어요.").accessibilityIdentifier("teamOutcomeReceipt")
                             if model.state.historyNeedsRefresh || (page.current?.revision ?? 0) < receipt.revision { Text("새로고침한 뒤 다른 결과를 작성할 수 있어요.").font(.caption) }
@@ -59,8 +61,8 @@ struct TeamOutcomeView: View {
                 if !model.state.events.isEmpty {
                     Section("확인 이력") { ForEach(model.state.events) { event($0) }; if page.next_cursor != nil { Button("확인 이력 더 보기") { Task { await model.controller?.more() } }.disabled(model.state.busy) } }
                 }
-                Section("보관 안내") { Text("서버에서는 해결 확인 후 90일, 미해결 요청은 유지하는 정책이에요."); if !page.retention.purge_implemented { Text("자동 삭제는 아직 적용되지 않았어요.").font(.caption).foregroundStyle(.secondary) } }
-            } else if let draft = model.state.draft { ShareLink("결과 초안 내보내기", item: draft.exportText) }
+                Section("보관 안내") { if page.retention.hidden { Text(page.retention.marker).accessibilityIdentifier("teamOutcomeHiddenNotice") }; Text("서버에서는 해결 확인 후 90일, 미해결 요청은 유지하는 정책이에요."); if !page.retention.purge_implemented { Text("자동 삭제는 아직 적용되지 않았어요.").font(.caption).foregroundStyle(.secondary) } }
+            } else if let draft = model.state.draft, draft.phase != .received { ShareLink("결과 초안 내보내기", item: draft.exportText) }
         }.navigationTitle("해결 여부 확인").navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(model.state.busy || !model.state.storageReady)
             .toolbar {

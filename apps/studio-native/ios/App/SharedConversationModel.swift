@@ -264,6 +264,8 @@ private struct SharedCacheFile: Codable {
             guard let self, let binding = try await self.approvalIdentity() else { throw CancellationError() }
             let result = try await self.teamService.teamRequestDetail(id: id, after: after, token: self.approvalToken(binding))
             guard try await self.approvalIdentity() == binding else { throw CancellationError() }
+            try result.validate(id: id)
+            await self.teamRequests.controller?.observeHidden(result.request, account: binding)
             return result
         }
         presentation.commentSchemas = { [weak self] product in
