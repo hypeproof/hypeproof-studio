@@ -174,3 +174,18 @@ test('policy, workflow and blocker title', () => {
   const t = blockerTitle('v2026.1116.0', [{id: 'holds', status: 'FAIL'}, {id: 'freeze', status: 'WAIT'}]);
   assert.equal(t, 'Auto-release stopped: v2026.1116.0 (holds)');
 });
+
+test('post-publish finds the new stable release behind a first page of drafts', async () => {
+  const {latestStableRelease} = await import('../auto-release.mjs');
+  const now = Date.parse('2026-11-18T11:00:00Z');
+  const drafts = Array.from({length: 20}, (_, i) => ({tag_name: `v2026.11${String(i).padStart(2, '0')}.0-rc.1`, draft: true, prerelease: true, published_at: null}));
+  const list = [...drafts,
+    {tag_name: 'v2026.1118.0-rc.1', draft: false, prerelease: true, published_at: '2026-11-18T08:47:40Z'},
+    {tag_name: 'measurement-v0.3.1', draft: false, prerelease: false, published_at: '2026-11-18T10:50:00Z'},
+    {tag_name: 'v2026.1118.0', draft: false, prerelease: false, published_at: '2026-11-18T10:37:35Z'},
+    {tag_name: 'v2026.1115.0', draft: false, prerelease: false, published_at: '2026-11-14T23:48:50Z'}];
+  assert.equal(latestStableRelease(list, now)?.tag_name, 'v2026.1118.0');
+  // negative controls: only the first page (the old lookup), and a stable release older than 72 h
+  assert.equal(latestStableRelease(list.slice(0, 20), now), null);
+  assert.equal(latestStableRelease(list, Date.parse('2026-11-22T11:00:00Z')), null);
+});

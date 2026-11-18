@@ -223,11 +223,20 @@ function alert(text) {
 }
 
 // The latest public stable release, when it is recent and its release PR has no published record yet.
-function unpublishedRelease(repo, policy, now) {
-  const list = JSON.parse(gh(['api', `repos/${repo}/releases?per_page=20`]));
-  const r = list.filter(x => !x.draft && !x.prerelease && /^v\d+\.\d+\.\d+$/.test(x.tag_name))
+// The latest public stable app release when it is at most 72 h old, or null. Pure.
+// GitHub lists draft releases first, so a short first page can hold only drafts: the caller passes every page.
+export function latestStableRelease(list, now) {
+  const r = list.filter(x => !x.draft && !x.prerelease && x.published_at && /^v\d+\.\d+\.\d+$/.test(x.tag_name))
     .sort((a, b) => b.published_at.localeCompare(a.published_at))[0];
-  if (!r || now - Date.parse(r.published_at) > 72 * 3600 * 1000) return null;
+  return r && now - Date.parse(r.published_at) <= 72 * 3600 * 1000 ? r : null;
+}
+
+function unpublishedRelease(repo, policy, now) {
+  // Every page (#4344 follow-up): with 20 drafts the old first page of 20 never reached v2026.1118.0, so the
+  // post-publish step (seed check, 출시됨, checklist) silently did nothing.
+  const list = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`])).flat();
+  const r = latestStableRelease(list, now);
+  if (!r) return null;
   const prs = JSON.parse(gh(['pr', 'list', '--repo', repo, '--state', 'merged', '--head', `release/${r.tag_name}`, '--json', 'number']));
   if (prs.length !== 1) return null;
   const number = prs[0].number;
