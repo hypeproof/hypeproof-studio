@@ -978,3 +978,26 @@ and the existing Discussion controls passed together (Core6) in
 build passed in `/tmp/ios4370-retention-app-build.log`, exit0. Native v4 evidence
 above predates this pagination correction; it was not relabeled as a final-head
 UI rerun.
+
+### Stopped voice response draft input boundary — CI #4361
+
+Run44326288656 on0ea2078b restored `Keep my separate` after the stop-response
+journey immediately terminated following `typeText("Keep my separate draft")`.
+The original recording at
+`/tmp/ios4361-stop-full/A9397026-6036-45C3-9082-4E3D51828601.mp4` does not establish
+complete input before termination: sampled frames show `Ke`, then termination,
+then the partial restored text. This is not proof of a persistence defect.
+
+The journey now requires exact full input before terminating and exact full
+restoration afterwards, each using the existing10s wait. It keeps one typeText,
+no retyping, original cancellation/send-once/no-restart assertions, and records
+each boundary. An incomplete precondition fails the test before termination.
+Independent source review accepted the stronger assertion and failure guard.
+
+Focused native PASS31.469s (Executed1), runner and owned-simulator cleanup exit0:
+`/tmp/ios4361-stop-input-boundary-2.xcresult`. Both equality predicates passed.
+The earlier `/tmp/ios4361-stop-input-boundary.xcresult` selected the wrong class
+and executed0 tests despite exit0; it is NOT validation. Captured AX descriptions
+truncate long values, so the final diagnostic attachment additionally records raw
+`input.value`; that diagnostic-only addition followed the passing run and was not
+claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
