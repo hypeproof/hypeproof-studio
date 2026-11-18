@@ -10389,3 +10389,25 @@ composer and normal user/assistant hierarchy support system theme, font scaling
 and the software keyboard. This follows **Human judgment stays visible** and
 **Minimum necessary intervention**: writing is available first and sending remains
 the person's choice. See the existing [mobile checks](testing/native-mobile-growth.md).
+
+### iOS product feedback — internal team first
+
+ST-REQ-NATIVE-MOBILE: settings must expose a feedback form before and after login.
+Keep guest and account drafts separate on the device. Send only explicitly entered
+text, optional contact and disclosed app/OS versions after confirmation to the
+existing support endpoint. Show an actual `report_id` as an operations receipt,
+never as proof of a GitHub issue or completed fix. Persist uncertain state before
+sending; interrupted requests must not replay on reopen. Preserve text and allow
+export, including when receipt persistence fails. Do not overwrite unreadable
+storage. This is the first internal feedback slice; issue synchronization, push
+updates and reporter verification remain follow-up work.
+The input limit is 5,000 UTF-16 units for text and 200 for contact; show the
+current counts and explain that emoji can consume multiple units. Input rejection
+and failure to persist the pre-send state must have distinct guidance.
+
+### Visible iOS account entry
+
+ST-REQ-NATIVE-MOBILE: settings must show signed-in or guest state and the
+locally authenticated account ID when available. Guest settings offer Login using
+the existing device sign-in flow after settings dismissal. Never send the account
+ID to the conversational model just to answer an account question.

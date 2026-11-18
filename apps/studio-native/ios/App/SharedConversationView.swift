@@ -45,7 +45,7 @@ private struct ConversationTimelinePreference: PreferenceKey {
 
 struct SharedConversationView: View {
     private enum SettingsDestination {
-        case push, experience, approvals, context, exportCache, clearCache, notebook, privacy
+        case push, experience, approvals, context, exportCache, clearCache, notebook, privacy, feedback, login
 #if DEBUG
         case finishPlayback, advanceHistory, holdHistory, releaseHistory, finishSecondSpeech
 #endif
@@ -74,6 +74,7 @@ struct SharedConversationView: View {
     @State private var notebookAfterHistory = false
     @State private var showPrivacy = false
     @State private var showSettings = false
+    @State private var showFeedback = false
     @State private var settingsDestination: SettingsDestination?
     @State private var timelineGeneration = UUID()
     @State private var timelineLayout: ConversationTimelineLayout?
@@ -199,6 +200,8 @@ struct SharedConversationView: View {
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
+        .sheet(isPresented: $showFeedback) { ProductFeedbackView(scope: model.feedbackScope).id(model.feedbackScope) }
+        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false }
         .sheet(isPresented: $showSettings, onDismiss: finishSettingsDismissal) { settingsSheet }
         .sheet(isPresented: $showContext) { contextSheet }
         .sheet(isPresented: $showHistory, onDismiss: {
@@ -225,6 +228,19 @@ struct SharedConversationView: View {
     private var settingsSheet: some View {
         NavigationStack {
             List {
+                Section("계정") {
+                    Text(model.signedIn ? "로그인됨" : "로그인하지 않음")
+                        .accessibilityIdentifier("accountSignInStatus")
+                    if let accountID = model.visibleAccountID {
+                        Text("계정 ID: " + accountID).textSelection(.enabled)
+                            .accessibilityIdentifier("currentAccountID")
+                    }
+                    if !model.signedIn {
+                        settingsButton("로그인") { leaveSettings(for: .login) }
+                            .disabled(model.busy || !model.accountStorageReady)
+                            .accessibilityIdentifier("settingsLogin")
+                    }
+                }
                 if model.signedIn {
                     Section {
                         if model.approvalEntryVisible {
@@ -245,6 +261,7 @@ struct SharedConversationView: View {
                     }
                 }
                 Section {
+                    settingsButton("의견·문제 보내기") { leaveSettings(for: .feedback) }.accessibilityIdentifier("productFeedbackEntry")
                     settingsButton("이 기기의 기록") { leaveSettings(for: .notebook) }.accessibilityIdentifier("localNotebook")
                     settingsButton("대화와 개인정보") { leaveSettings(for: .privacy) }
                 }
@@ -299,7 +316,7 @@ struct SharedConversationView: View {
     }
     private func leaveSettings(for destination: SettingsDestination) {
         switch destination {
-        case .push, .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
+        case .push, .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy, .feedback, .login: voice.stop(); focused = false
 #if DEBUG
         case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory, .finishSecondSpeech: break
 #endif
@@ -335,6 +352,9 @@ struct SharedConversationView: View {
             if model.signedIn && !model.loggingOut { clearCache = true }
         case .notebook: showNotebook = true
         case .privacy: showPrivacy = true
+        case .feedback: showFeedback = true
+        case .login:
+            if !model.signedIn && !model.busy && model.accountStorageReady { startLogin() }
 #if DEBUG
         case .finishPlayback: voice.finishFixturePlayback()
         case .advanceHistory: NativeJourneyFixture.advanceHistory()

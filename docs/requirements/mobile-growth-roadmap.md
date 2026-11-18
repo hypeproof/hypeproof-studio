@@ -511,3 +511,19 @@ only a matching terminal server snapshot confirms the outcome. A completed reply
 winning the race remains completed, and an uncertain cancel leaves the outbox
 recoverable without replay. Already dispatched AI work may still incur cost.
 Source, synthetic native acceptance and installed/live acceptance remain distinct.
+
+### iOS internal product-feedback slice
+
+The settings feedback entry is available without authentication. Device-local
+storage separates guest and signed-in account scopes, excludes backups and uses
+iOS file protection. Confirm the disclosed payload before anonymous support
+submission. A support receipt is not a GitHub issue. Persist before sending and
+never automatically retry uncertain submissions. Explicit local deletion must
+explain that it does not cancel a submitted report and can permit duplicates.
+
+| ID | Internal iOS feedback requirement |
+|---|---|
+| MFB-01 | Settings shows current login state and account identity; logout clears identity and preserves isolated guest/account drafts. |
+| MFB-02 | A feedback draft survives reopening; explicit confirmation discloses the anonymous payload, and cancellation sends nothing. |
+| MFB-03 | Persist uncertain state before sending; unknown results never replay, and only a valid support receipt marks received. |
+| MFB-04 | Preserve unsaved text/receipts for export, explain UTF-16 input limits, and keep optional experience consent reachable through the settings list. |
