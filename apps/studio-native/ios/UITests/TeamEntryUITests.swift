@@ -283,4 +283,93 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["방법이 막혔어요"].waitForExistence(timeout: 10))
     }
 
+    @MainActor func testInternalRequestCancelReceiptAndDiscussion() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<5 { if element.exists && element.isHittable { return }; app.swipeUp() }
+            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
+        }
+        let text = app.textViews["teamRequestBody"]
+        XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Internal request 4340")
+        let send = app.buttons["teamRequestSend"]; reveal(send); send.tap()
+        XCTAssertTrue(app.alerts.buttons["취소"].waitForExistence(timeout: 5)); app.alerts.buttons["취소"].tap()
+        XCTAssertTrue(send.isEnabled); XCTAssertEqual(text.value as? String, "Internal request 4340")
+        send.tap(); app.alerts.buttons["보내기"].tap()
+        let receipt = app.staticTexts["teamRequestReceipt"]
+        XCTAssertTrue(receipt.waitForExistence(timeout: 10)); XCTAssertTrue(receipt.label.contains("trq_"))
+        app.buttons["teamRequestClose"].tap(); entry.tap()
+        let trace = app.staticTexts["teamRequestTrace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 10)); XCTAssertTrue((trace.value as? String ?? "").contains("\"requestPosts\":1"))
+        let discussion = app.buttons["요청과 논의 보기"]; reveal(discussion); discussion.tap()
+        XCTAssertTrue(app.staticTexts["Internal request 4340"].waitForExistence(timeout: 10))
+        let comment = app.textViews["teamCommentBody"]; reveal(comment); comment.tap(); comment.typeText("Follow up question")
+        let sendComment = app.buttons["teamCommentSend"]; reveal(sendComment); sendComment.tap()
+        app.alerts.buttons["취소"].tap(); XCTAssertTrue(sendComment.isEnabled)
+        sendComment.tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["댓글이 접수됐어요."].waitForExistence(timeout: 10))
+        app.buttons["새로고침"].tap()
+        XCTAssertTrue(app.staticTexts["Follow up question"].waitForExistence(timeout: 10))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    @MainActor func testInternalRequestUnknownResultRecoversWithoutReplay() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launchEnvironment["HP_TEAM_REQUEST_RESULT"] = "uncertain"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        let text = app.textViews["teamRequestBody"]; XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Response lost 4340")
+        let send = app.buttons["teamRequestSend"]
+        for _ in 0..<5 { if send.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(send.isHittable); send.tap(); app.alerts.buttons["보내기"].tap()
+        let recover = app.buttons["teamRequestRecover"]
+        XCTAssertTrue(recover.waitForExistence(timeout: 10)); XCTAssertFalse(app.staticTexts["teamRequestReceipt"].exists)
+        recover.tap(); XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        app.buttons["teamRequestClose"].tap(); entry.tap()
+        let trace = app.staticTexts["teamRequestTrace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 10)); XCTAssertTrue((trace.value as? String ?? "").contains("\"requestPosts\":1"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-recovery-no-post"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    @MainActor func testInternalCommentSaveFailureKeepsExportAndGuardsLeaving() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launchEnvironment["HP_TEAM_DRAFT_SAVE_FAILURE"] = "comment"
+        app.launchEnvironment["HP_TEAM_DETAIL_FAILURE"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        func reveal(_ element: XCUIElement) { for _ in 0..<5 { if element.exists && element.isHittable { return }; app.swipeUp() }; XCTAssertTrue(element.isHittable) }
+        let text = app.textViews["teamRequestBody"]; XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Storage request")
+        let send = app.buttons["teamRequestSend"]; reveal(send); send.tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        let discussion = app.buttons["요청과 논의 보기"]; reveal(discussion); discussion.tap()
+        let comment = app.textViews["teamCommentBody"]; XCTAssertTrue(comment.waitForExistence(timeout: 10)); comment.tap(); comment.typeText("X")
+        XCTAssertEqual(comment.value as? String, "X")
+        let export = app.buttons["댓글 내용 내보내기"]; reveal(export); XCTAssertTrue(export.isEnabled)
+        XCTAssertFalse(app.buttons["teamCommentSend"].isEnabled)
+        app.buttons["teamCommentBack"].tap()
+        XCTAssertTrue(app.alerts["저장되지 않은 댓글이 있어요"].waitForExistence(timeout: 5)); app.alerts.buttons["계속 작성"].tap()
+        XCTAssertEqual(comment.value as? String, "X"); XCTAssertTrue(export.exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-comment-unsaved-export-and-exit-guard"; shot.lifetime = .keepAlways; add(shot)
+    }
+
 }
