@@ -76,6 +76,8 @@ struct SharedConversationView: View {
     @State private var showSettings = false
     @State private var showFeedback = false
     @State private var showTeamRequests = false
+    @State private var showTeamInbox = false
+    @State private var pendingTeamRequest: String?
     @State private var settingsDestination: SettingsDestination?
     @State private var timelineGeneration = UUID()
     @State private var timelineLayout: ConversationTimelineLayout?
@@ -120,7 +122,8 @@ struct SharedConversationView: View {
                         Image(systemName: "sidebar.left").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel("대화 기록").accessibilityIdentifier("conversationHistory")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if model.signedIn { Button("팀 알림") { voice.stop(); focused = false; pendingTeamRequest = nil; showTeamInbox = true }.disabled(model.loggingOut).accessibilityIdentifier("teamInboxHomeEntry") }
                     if model.signedIn { Button("팀 요청") { voice.stop(); focused = false; showTeamRequests = true }.disabled(model.loggingOut).accessibilityIdentifier("teamRequestHomeEntry") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -174,9 +177,14 @@ struct SharedConversationView: View {
             // on the next MainActor turn, retaining all current-session guards.
             Task { @MainActor in openPendingNotification() }
         }
-        .task { openPendingNotification() }
-        .sheet(isPresented: $showPush) { AccountPushView(model: model.push) }
-        .sheet(isPresented: $showExperience) { ProductExperienceView(model: model.experience) }
+        .task {
+#if DEBUG
+            TeamEntryFixture.deliverColdPush()
+#endif
+            openPendingNotification()
+        }
+        .sheet(isPresented: $showPush, onDismiss: drainTeamNotifications) { AccountPushView(model: model.push) }
+        .sheet(isPresented: $showExperience, onDismiss: drainTeamNotifications) { ProductExperienceView(model: model.experience) }
         .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
         .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false; showPush = false } else { openPendingNotification() } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
@@ -199,23 +207,25 @@ struct SharedConversationView: View {
     var body: some View {
         lifecycleContent
         .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
-        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals, push: model.push) }
-        .sheet(isPresented: $showQuestions) { AccountQuestionView(model: model.questions) }
+        .sheet(isPresented: $showApprovals, onDismiss: drainTeamNotifications) { MemberApprovalView(model: model.approvals, push: model.push) }
+        .sheet(isPresented: $showQuestions, onDismiss: drainTeamNotifications) { AccountQuestionView(model: model.questions) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
-        .sheet(isPresented: $showTeamRequests) { TeamRequestsView(model: model.teamRequests).id(model.feedbackScope) }
-        .sheet(isPresented: $showFeedback) { ProductFeedbackView(scope: model.feedbackScope).id(model.feedbackScope) }
-        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false; showTeamRequests = false }
+        .sheet(isPresented: $showTeamInbox, onDismiss: { pendingTeamRequest = nil; openPendingNotification() }) { TeamInboxView(model: model.teamInbox, requests: model.teamRequests, initialRequest: pendingTeamRequest).id(model.feedbackScope) }
+        .sheet(isPresented: $showTeamRequests, onDismiss: drainTeamNotifications) { TeamRequestsView(model: model.teamRequests).id(model.feedbackScope) }
+        .sheet(isPresented: $showFeedback, onDismiss: drainTeamNotifications) { ProductFeedbackView(scope: model.feedbackScope).id(model.feedbackScope) }
+        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false; showTeamRequests = false; showTeamInbox = false; pendingTeamRequest = nil }
         .sheet(isPresented: $showSettings, onDismiss: finishSettingsDismissal) { settingsSheet }
-        .sheet(isPresented: $showContext) { contextSheet }
+        .sheet(isPresented: $showContext, onDismiss: drainTeamNotifications) { contextSheet }
         .sheet(isPresented: $showHistory, onDismiss: {
             if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
+            drainTeamNotifications()
         }) { historySheet }
-        .sheet(isPresented: $showNotebook) {
+        .sheet(isPresented: $showNotebook, onDismiss: drainTeamNotifications) {
             StudioHome(onReturnToConversation: { showNotebook = false })
         }
-        .sheet(isPresented: $showPrivacy) {
+        .sheet(isPresented: $showPrivacy, onDismiss: drainTeamNotifications) {
             NavigationStack {
                 List {
                     Text("보내기 전의 글은 이 기기에 보관해요. 로그인만으로 AI에 보내지 않아요.")
@@ -225,7 +235,10 @@ struct SharedConversationView: View {
                     .toolbar { Button("닫기") { showPrivacy = false } }
             }
         }
-        .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
+        .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } }), onDismiss: drainTeamNotifications) { if let exportURL { ShareSheet(url: exportURL) } }
+        .onChange(of: clearCache) { _, shown in
+            if !shown { Task { @MainActor in await Task.yield(); drainTeamNotifications() } }
+        }
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {
             Button("이 기기의 사본 삭제", role: .destructive) { voice.stop(); model.clearCache() }
         } message: { Text("서버의 계정 대화와 데스크톱의 기록은 남아요. 서버 기록은 계정의 데이터 관리 대상입니다.") }
@@ -329,19 +342,31 @@ struct SharedConversationView: View {
         }
         settingsDestination = destination; showSettings = false
     }
+    private var teamNotificationModalOccupied: Bool { showSettings || settingsDestination != nil || showTeamRequests || showTeamInbox || showFeedback || showQuestions || showApprovals || showExperience || showPush || showContext || showHistory || showNotebook || showPrivacy || exportURL != nil || notebookAfterHistory || clearCache }
+    private func drainTeamNotifications() { showPendingTeamDestination(); openPendingNotification() }
+    private func showPendingTeamDestination() {
+        guard pendingTeamRequest != nil, model.signedIn, !model.loggingOut, !teamNotificationModalOccupied else { return }
+        voice.stop(); focused = false; showTeamInbox = true
+    }
     private func openPendingNotification() {
         guard model.signedIn, !model.loggingOut, model.push.controller?.enabled == true,
               !model.push.state.busy, let reference = pushCenter.reference else { return }
+        if reference.kind == "team_request", teamNotificationModalOccupied { return }
+        let scope = model.feedbackScope
         pushCenter.consume()
-        Task { if let destination = await model.push.controller?.open(reference), model.signedIn && !model.loggingOut {
+        Task { if let destination = await model.push.controller?.openDestination(reference), model.signedIn && !model.loggingOut {
             voice.stop(); focused = false
-            if destination == "approval" { model.approvals.focusID = reference.id; showApprovals = true } else { showQuestions = true }
+            if destination.kind == "team_request" {
+                guard let target = destination.team, target.requestID == reference.id, target.eventSequence == reference.revision,
+                      let request = await model.authorizedTeamPushRequest(target), model.feedbackScope == scope else { return }
+                pendingTeamRequest = request; showPendingTeamDestination()
+            } else if destination.kind == "approval" { model.approvals.focusID = reference.id; showApprovals = true } else { showQuestions = true }
         } }
     }
     private func finishSettingsDismissal() {
         // Dismiss the first presentation before opening another one. Consume
         // the destination first; swipe/Close without a choice has no effect.
-        guard let destination = settingsDestination else { return }
+        guard let destination = settingsDestination else { drainTeamNotifications(); return }
         settingsDestination = nil
         switch destination {
         case .push:
@@ -373,6 +398,7 @@ struct SharedConversationView: View {
         case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
         }
+        drainTeamNotifications()
     }
     private var welcome: some View {
         ScrollView {
@@ -665,11 +691,14 @@ struct SharedConversationView: View {
                 }
                 status
             }.navigationTitle("내 상황과 의도").navigationBarTitleDisplayMode(.inline).toolbar { Button("닫기") { showContext = false } }
+#if DEBUG
+            .onAppear { TeamEntryFixture.deliverContextPush() }
+#endif
         }
     }
     private func contextField(_ key: String, title: String) -> some View {
         Section(title) {
-            TextField("비워 두어도 괜찮아요", text: Binding(get: { model.cache.context?[key] ?? "" }, set: { model.editContext(key, value: $0) }), axis: .vertical).lineLimit(2...5)
+            TextField("비워 두어도 괜찮아요", text: Binding(get: { model.cache.context?[key] ?? "" }, set: { model.editContext(key, value: $0) }), axis: .vertical).lineLimit(2...5).accessibilityIdentifier("context-" + key)
         }
     }
     @ViewBuilder private var status: some View {
@@ -691,6 +720,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
+                if model.signedIn && TeamEntryFixture.pushEnabled { Button("검증 알림") { TeamEntryFixture.deliverPush() }.font(.caption2).accessibilityIdentifier("teamPushFixtureOpen") }
                 if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.

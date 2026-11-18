@@ -1006,12 +1006,16 @@
         "MVOICE-05",
         "MTR-15",
         "MTR-16",
-        "MTR-17"
+        "MTR-17",
+        "MTR-18",
+        "MTR-19",
+        "MTR-20",
+        "MTR-21"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "64f7d4cdb228877521673fe4c2994cc2b0dd218d11f303e4bf06f6944a0b7cde",
+      "sha256": "47d72d59ffef89cc0b04cd398c0623b7347d4d48135dc3ac3be0ef80210edfe2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5516,6 +5520,43 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/TeamOutcomeTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
+      ]
+    },
+    {
+      "id": "ios-internal-inbox-m3",
+      "title": "iOS explicit team subscriptions and authorized inbox navigation",
+      "issue": 4368,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-18",
+            "MTR-19",
+            "MTR-20",
+            "MTR-21"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-outcomes-m2"
+      ],
+      "next_action": "Obtain exact-source CI, separately deploy the matching Service contract, and verify the installed iPhone flow before claiming acceptance.",
+      "design_delta": "Reuse existing account/session and protected durable drafts; explicit user actions bind immutable mutations to the authenticated scope.",
+      "positive_control": "Explicit subscriptions recover the same mutation, inbox rows authorize current detail before acknowledgement, and warm/cold push preserves drafts.",
+      "negative_control": "Unknown writes stay recoverable; definitive revision conflict requires fresh explicit choice; permission denial retains in-app access; capped pages preserve read entries; occupied sheets defer navigation.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamInbox.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamInboxTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]

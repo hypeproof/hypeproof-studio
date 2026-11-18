@@ -7,6 +7,7 @@ import SwiftUI
     var makeGitHub: (String) -> TeamGitHubPresentation = { _ in TeamGitHubPresentation() }
     var makeWorkflow: (String, String) -> TeamWorkflowPresentation = { _, _ in TeamWorkflowPresentation() }
     var controller: TeamRequestController?
+    var inbox: TeamInboxPresentation?
     var detail: (String, String?) async throws -> TeamRequestDetail = { _, _ in throw CancellationError() }
     var comment: (TeamCommentDraft) async throws -> String = { _ in throw CancellationError() }
     var loadComment: (String) throws -> TeamCommentDraft = { _ in throw CancellationError() }
@@ -85,7 +86,7 @@ struct TeamRequestsView: View {
     }
 }
 
-private struct TeamRequestDetailView: View {
+struct TeamRequestDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmLeave = false
     @ObservedObject var model: TeamRequestPresentation
@@ -107,6 +108,7 @@ private struct TeamRequestDetailView: View {
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry") }
+                if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamSubscriptionScreen(model: inbox, product: detail.request.product, request: requestID) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
                     ForEach(comments) { comment in VStack(alignment: .leading, spacing: 6) { Text(comment.body).textSelection(.enabled); Text(comment.account_id).font(.caption).foregroundStyle(.secondary) } }
                     if detail.next_comments_cursor != nil { Button("댓글 더 보기") { Task { await refresh(more: true) } }.disabled(busy) }

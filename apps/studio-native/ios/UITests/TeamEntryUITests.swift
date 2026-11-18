@@ -548,4 +548,66 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["결과 초안 내보내기"].isEnabled); XCTAssertFalse(app.buttons["teamOutcomeSend"].isEnabled)
     }
 
+    @MainActor private func closeInboxDetail(_ app: XCUIApplication) {
+        let detailBar = app.navigationBars["요청과 논의"]
+        XCTAssertTrue(detailBar.waitForExistence(timeout: 10))
+        detailBar.buttons.element(boundBy: 0).tap()
+        let inboxBar = app.navigationBars["팀 알림함"]
+        XCTAssertTrue(inboxBar.waitForExistence(timeout: 10)); inboxBar.buttons["닫기"].tap()
+    }
+    @MainActor private func inboxApp(_ permission: String) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"; app.launchEnvironment["HP_TEAM_INBOX"] = "1"; app.launchEnvironment["HP_TEAM_PUSH"] = permission
+        if permission == "warm" { app.launchEnvironment["HP_TEAM_PUSH_CONTEXT"] = "1" }
+        app.launch(); XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        XCTAssertTrue(app.buttons["teamInboxHomeEntry"].waitForExistence(timeout: 10)); return app
+    }
+    @MainActor private func enableInboxPush(_ app: XCUIApplication) {
+        app.buttons["conversationSettings"].tap(); let entry = app.buttons["openAccountPush"]
+        XCTAssertTrue(app.navigationBars["대화 설정"].waitForExistence(timeout: 10)); githubReveal(app, entry); entry.tap()
+        let enable = app.buttons["enableAccountPush"]; XCTAssertTrue(enable.waitForExistence(timeout: 10)); enable.tap()
+    }
+    @MainActor func testTeamInboxExplicitOptInWorksWithDeniedSystemPermissionAndPreservesDraft() throws {
+        let app = inboxApp("denied")
+        let draft = app.textFields["sharedInput"]; draft.tap(); draft.typeText("Keep my inbox draft")
+        enableInboxPush(app)
+        let denied = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "허용하지"), object: app.staticTexts["pushStatus"])
+        XCTAssertEqual(XCTWaiter.wait(for: [denied], timeout: 10), .completed)
+        app.buttons["닫기"].tap(); app.buttons["teamInboxHomeEntry"].tap()
+        let subscribe = app.buttons["teamSubscribe"]; XCTAssertTrue(subscribe.waitForExistence(timeout: 10)); githubReveal(app, subscribe); subscribe.tap(); app.alerts.buttons["저장"].tap()
+        let state = app.staticTexts["teamSubscriptionState"]
+        let optedIn = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "알림 받는 중"), object: state)
+        XCTAssertEqual(XCTWaiter.wait(for: [optedIn], timeout: 10), .completed)
+        app.buttons["새로고침"].tap(); let item = app.buttons["teamInboxItem12"]; githubReveal(app, item); item.tap()
+        XCTAssertTrue(app.staticTexts["알림에서 확인한 요청이에요."].waitForExistence(timeout: 10))
+        githubReveal(app, app.buttons["teamRequestSubscription"]); XCTAssertTrue(app.buttons["teamRequestSubscription"].isHittable)
+        closeInboxDetail(app)
+        XCTAssertEqual(draft.value as? String, "Keep my inbox draft")
+    }
+    @MainActor func testTeamPushWarmAndColdOpenUseAuthorizedRequestAndPreserveDraft() throws {
+        let app = inboxApp("warm"); enableInboxPush(app)
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "이 계정의 알림을 켰어요."), object: app.staticTexts["pushStatus"])
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed); app.buttons["닫기"].tap()
+        let draft = app.textFields["sharedInput"]; draft.tap(); draft.typeText("Keep my push draft")
+        app.buttons["teamPushFixtureOpen"].tap()
+        XCTAssertTrue(app.staticTexts["알림에서 확인한 요청이에요."].waitForExistence(timeout: 10))
+        closeInboxDetail(app); XCTAssertEqual(draft.value as? String, "Keep my push draft")
+        app.buttons["conversationSettings"].tap(); app.buttons["내 상황과 의도"].tap()
+        let context = app.textFields["context-goal"]
+        XCTAssertTrue(context.waitForExistence(timeout: 10)); context.tap(); context.typeText("Keep my context")
+        XCTAssertFalse(app.staticTexts["알림에서 확인한 요청이에요."].exists, "Notification must wait for the occupied context sheet.")
+        app.buttons["닫기"].tap()
+        XCTAssertTrue(app.staticTexts["알림에서 확인한 요청이에요."].waitForExistence(timeout: 10))
+        closeInboxDetail(app)
+        app.buttons["conversationSettings"].tap(); app.buttons["내 상황과 의도"].tap()
+        XCTAssertTrue(context.waitForExistence(timeout: 10)); XCTAssertEqual(context.value as? String, "Keep my context")
+        app.buttons["닫기"].tap()
+        app.terminate(); app.launchEnvironment["HP_TEAM_PUSH"] = "cold"; app.launch()
+        XCTAssertTrue(app.staticTexts["알림에서 확인한 요청이에요."].waitForExistence(timeout: 15))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "team-push-authorized-detail-synthetic"; shot.lifetime = .keepAlways; add(shot)
+        closeInboxDetail(app); XCTAssertEqual(draft.value as? String, "Keep my push draft")
+    }
+
 }

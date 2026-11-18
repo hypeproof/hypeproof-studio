@@ -148,9 +148,46 @@ private struct SharedCacheFile: Codable {
         }, call: { [weak self] binding, method, id, body in
             guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
             try await self.service.accountPush(id, method: method, body: body, token: token)
-        }, changed: { [weak presentation] in presentation?.state = $0 })
+        }, changed: { [weak presentation] in presentation?.state = $0 }, teamCapabilities: { [weak self] binding in
+            guard let self else { throw CancellationError() }
+            let attempt = await self.epoch
+            do {
+                let access = try await self.teamService.teamRequestAccess(token: self.approvalToken(binding)); try access.validate(account: binding.accountID)
+                return access.products.isEmpty ? [] : try TeamPushCapabilities.supported(access.supported_push_capabilities)
+            } catch SyncFailure.http(let status, let code) {
+                if status == 404 || (status == 403 && code == "team_product_denied") { return [] }
+                if status == 401 { await self.teamPushDiscoveryDenied(binding, attempt: attempt, status: status, code: code) }
+                throw SyncFailure.http(status, code)
+            }
+        }, registerTeam: { [weak self] binding, id, body, capabilities in
+            guard let self else { throw CancellationError() }
+            try await self.teamService.accountPush(id, method: "PUT", body: body, token: self.approvalToken(binding), capabilities: capabilities)
+        }, openTeam: { [weak self] binding, id, reference in
+            guard let self else { throw CancellationError() }
+            return try await self.teamService.openedTeamPush(installation: id, reference: reference, token: self.approvalToken(binding))
+        })
         return presentation
     }()
+    private func teamPushDiscoveryDenied(_ binding: MemberApprovalIdentity, attempt: UUID, status: Int, code: String) {
+        guard epoch == attempt, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { return }
+        failure(SyncFailure.http(status, code))
+    }
+    func authorizedTeamPushRequest(_ destination: TeamPushDestination) async -> String? {
+        let attempt = epoch
+        var captured: MemberApprovalIdentity?
+        do {
+            guard let binding = try await approvalIdentity(), epoch == attempt else { return nil }
+            captured = binding
+            let detail = try await teamService.teamRequestDetail(id: destination.requestID, token: approvalToken(binding)); try detail.validate(id: destination.requestID)
+            guard try await approvalIdentity() == binding, epoch == attempt else { return nil }
+            return destination.requestID
+        } catch {
+            if let captured, epoch == attempt, signedIn, !loggingOut, account?.accountID == captured.accountID, account?.tokens.session_id == captured.sessionID {
+                push.controller?.unavailable("이 요청을 열 수 없어요. 팀 알림함에서 권한과 최신 상태를 확인해 주세요.")
+            }
+            return nil
+        }
+    }
     private func loadPushPreference() throws -> AccountPushPreference {
         let file = directory.appendingPathComponent("push-device-v1.json")
         guard FileManager.default.fileExists(atPath: file.path) else { let value = AccountPushPreference(); try savePushPreference(value); return value }
@@ -162,8 +199,31 @@ private struct SharedCacheFile: Codable {
         var folder = directory; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
         try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("push-device-v1.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
+    lazy var teamInbox: TeamInboxPresentation = {
+        let presentation = TeamInboxPresentation()
+        presentation.controller = TeamInboxController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] account in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamRequestAccess(token: self.approvalToken(account))
+        }, subscriptions: { [weak self] account in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamSubscriptions(token: self.approvalToken(account))
+        }, inbox: { [weak self] account, after in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamInbox(after: after, token: self.approvalToken(account))
+        }, mutate: { [weak self] account, mutation in
+            guard let self else { throw CancellationError() }; return try await self.teamService.setTeamSubscription(mutation, token: self.approvalToken(account))
+        }, detail: { [weak self] account, request in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamRequestDetail(id: request, token: self.approvalToken(account))
+        }, read: { [weak self] account, sequence in
+            guard let self else { throw CancellationError() }; return try await self.teamService.readTeamNotification(sequence: sequence, token: self.approvalToken(account))
+        }, load: { [weak self] account in
+            guard let self else { throw CancellationError() }; return try self.readTeamDraft(TeamSubscriptionMutation.self, account: account, name: "subscription.json")
+        }, save: { [weak self] mutation in
+            guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == mutation.accountID else { throw CancellationError() }
+            try mutation.validate(account: mutation.accountID); try self.writeTeamDraft(mutation, account: mutation.accountID, name: "subscription.json")
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
     lazy var teamRequests: TeamRequestPresentation = {
         let presentation = TeamRequestPresentation()
+        presentation.inbox = teamInbox
         presentation.controller = TeamRequestController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] identity in
             guard let self else { throw CancellationError() }
             return try await self.teamService.teamRequestAccess(token: self.approvalToken(identity))
@@ -635,7 +695,7 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -687,7 +747,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -986,7 +1046,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -1024,7 +1084,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

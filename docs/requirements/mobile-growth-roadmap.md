@@ -602,3 +602,20 @@ provider verification. Retention eligibility is 90 days after resolution;
 the client accepts either purge capability and never claims deletion happened.
 No production activation, upload, push notification or installed-device acceptance
 is established by this implementation.
+
+
+### Team inbox and explicit subscriptions — Studio #4368
+
+| ID | Requirement |
+|---|---|
+| MTR-18 | Team notification subscriptions are explicit product or request opt-ins; request mute overrides product settings. Ambiguous writes retain the exact durable mutation and recover only on explicit action. Conflicts require a fresh revision and explicit choice. |
+| MTR-19 | An authenticated in-app unread/read inbox works without OS notification permission, with bounded explicit pagination/catch-up. Opening a row re-fetches current authorized detail before read acknowledgement and navigation. Preserve unsent drafts across navigation. |
+| MTR-20 | Team push capability advertisement intersects implemented formats with freshly admitted server discovery. Missing/unknown support and definitive unsupported responses preserve separately authorized legacy registration; transient discovery failure never falls through to another PUT. Authenticated opened destinations must match request/event identity and re-fetch detail before display. |
+| MTR-21 | New question, reply and discussion labels describe explicit events, never inferred unanswered/resolved state. Discussion inbox reads/acks opt in with include_discussion=true; team_discussion/1 requires team_request/1. Provider acceptance, installed receipt and reporter results remain distinct. |
+
+This source slice consumes Service #573/#576 and the explicitly negotiated #579
+compatibility extension. OS permission/token/envelope fixtures do not establish
+real provider delivery. Comment intent authoring is a separate follow-up; no
+production subscription or feature-flag change is authorized by client tests.
+The product intent remains explicit human notification choice and authorized
+continuation, using the existing account/session and protected local storage.

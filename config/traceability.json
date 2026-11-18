@@ -20672,6 +20672,48 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-INBOX",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Team inbox and explicit subscriptions — Studio #4368"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone team notification inbox (#4368)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-INBOX",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-INBOX",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Team inbox and explicit subscriptions — Studio #4368"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamInboxTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }

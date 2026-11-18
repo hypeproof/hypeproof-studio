@@ -8,7 +8,11 @@ import UIKit
     @Published private(set) var token: String?
     @Published private(set) var reference: AccountPushReference?
     @Published private(set) var registrationFailed = false
-    static var configured: Bool { (Bundle.main.object(forInfoDictionaryKey: "HPSPushConfigured") as? Bool == true) || (Bundle.main.object(forInfoDictionaryKey: "HPSPushConfigured") as? String == "YES") }
+    static var configured: Bool {
+#if DEBUG
+        if TeamEntryFixture.pushEnabled { return true }
+#endif
+        return (Bundle.main.object(forInfoDictionaryKey: "HPSPushConfigured") as? Bool == true) || (Bundle.main.object(forInfoDictionaryKey: "HPSPushConfigured") as? String == "YES") }
     func registered(_ data: Data) {
         let g = generation
         guard accepting else { return }
@@ -71,6 +75,13 @@ final class NativePushDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         guard controller?.enable() == true else { return }
         guard let ticket = controller?.permissionTicket else { return }
         do {
+#if DEBUG
+            if TeamEntryFixture.pushEnabled {
+                if TeamEntryFixture.permissionGranted { await controller?.register(String(repeating:"d",count:64)) }
+                else { await controller?.disable(); controller?.unavailable("알림을 허용하지 않았어요. 팀 알림함에서 확인할 수 있어요.") }
+                return
+            }
+#endif
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
             guard controller?.acceptsPermission(ticket) == true else { return }
             if granted { await NativePushCenter.shared.register() }

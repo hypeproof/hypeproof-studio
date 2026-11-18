@@ -10,6 +10,23 @@ import Foundation
         return ConversationService(session: URLSession(configuration: config), base: URL(string: "https://team-entry.invalid")!)
     }
     static var trace: String { TeamEntryTransport.state.trace() }
+    static var inboxEnabled: Bool { enabled && ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" }
+    static var pushEnabled: Bool { inboxEnabled && ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] != nil }
+    static var permissionGranted: Bool { ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] != "denied" }
+    private static var coldDelivered = false
+    private static var contextDelivered = false
+    static func deliverContextPush() {
+        guard pushEnabled, ProcessInfo.processInfo.environment["HP_TEAM_PUSH_CONTEXT"] == "1", !contextDelivered else { return }
+        contextDelivered = true; deliverPush()
+    }
+    static func deliverColdPush() {
+        guard pushEnabled, ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] == "cold", !coldDelivered else { return }
+        coldDelivered = true; deliverPush()
+    }
+    static func deliverPush() {
+        guard pushEnabled else { return }
+        NativePushCenter.shared.received(["hps":["schema":"hps-push/1", "delivery_id":"11111111-1111-4111-8111-111111111111", "kind":"team_request", "id":"trq_" + String(repeating:"a",count:32), "revision":12]])
+    }
 }
 private final class TeamEntryState: @unchecked Sendable {
     private let lock = NSLock()
@@ -20,13 +37,55 @@ private final class TeamEntryState: @unchecked Sendable {
     private var githubEvents: [[String: Any]] = [], githubPosts = 0
     private var outcomeEvents: [[String: Any]] = [], outcomePosts = 0
     private var workflowEvents: [[String: Any]] = []
+    private var subscriptionRows: [[String:Any]] = [], subscriptionReceipts: [String:[String:Any]] = [:]
+    private var subscriptionPosts = 0, inboxReads = 0, readAcks = 0, pushOpens = 0
+    private var notificationReadAt: Double?
+    private var acceptedCapabilities: [String] = []
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count, "subscriptionPosts":subscriptionPosts, "inboxReads":inboxReads, "readAcks":readAcks, "pushOpens":pushOpens, "capabilities":acceptedCapabilities], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func response(_ request: URLRequest, _ body: [String: Any]) throws -> (Int, [String: Any]) {
         lock.lock(); defer { lock.unlock() }
         guard request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true, request.value(forHTTPHeaderField: "Origin") == nil else { return (401, ["error": "unauthorized"]) }
+        if ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" {
+            let id = "trq_" + String(repeating:"a",count:32), path = request.url?.path ?? ""
+            if teamRequest == nil { teamRequest = ["id":id,"account_id":"journey-account","client_request_id":UUID().uuidString.lowercased(),"product":"studio","category":"bug","body":"알림에서 확인한 요청이에요.","notice_version":"synthetic/1","status":"submitted","revision":1,"created_at":1000,"updated_at":1000] }
+            if path.hasPrefix("/v1/me/push-devices/") {
+                let installation = String(path.split(separator:"/")[3])
+                if request.httpMethod == "PUT" { acceptedCapabilities = body["capabilities"] as? [String] ?? []; return (200,["schema":"hps-push-device/1","id":installation,"active":true,"generation":1,"capabilities":acceptedCapabilities]) }
+                if request.httpMethod == "POST" {
+                    pushOpens += 1
+                    let destination = ProcessInfo.processInfo.environment["HP_TEAM_PUSH_FOREIGN"] == "1" ? "trq_" + String(repeating:"b",count:32) : id
+                    return (200,["recorded":true,"evidence_kind":"client_observed","destination":["kind":"team_request","request_id":destination,"event_sequence":12]])
+                }
+            }
+            if path == "/v1/me/team-requests/subscriptions" {
+                if request.httpMethod == "POST" {
+                    subscriptionPosts += 1
+                    guard let key = body["client_mutation_id"] as? String, let product = body["product"] as? String, let revision = body["expected_revision"] as? Int, let enabled = body["enabled"] as? Bool else { return (400,["error":"invalid_team_subscription"]) }
+                    if let old = subscriptionReceipts[key] { return (200,["subscription":old,"already":true]) }
+                    let requestID = body["request_id"] as? String, scope = requestID.map { "r:" + $0 } ?? "p:" + product
+                    guard revision == (subscriptionRows.first { $0["scope_key"] as? String == scope }?["revision"] as? Int ?? 0) else { return (409,["error":"team_subscription_conflict"]) }
+                    let row: [String:Any] = ["scope_key":scope,"product":product,"request_id":requestID as Any? ?? NSNull(),"revision":revision+1,"enabled":enabled,"start_after_sequence":10,"created_at":1000]
+                    subscriptionRows.removeAll { $0["scope_key"] as? String == scope }; subscriptionRows.append(row); subscriptionReceipts[key] = row
+                    if ProcessInfo.processInfo.environment["HP_TEAM_SUBSCRIPTION_UNKNOWN"] == "1", subscriptionPosts == 1 { return (503,["error":"synthetic_unknown"]) }
+                    return (200,["subscription":row,"already":false])
+                }
+                return (200,["schema":"hps-team-subscriptions/1","default_enabled":false,"subscriptions":subscriptionRows])
+            }
+            if path == "/v1/me/team-requests/notifications" {
+                inboxReads += 1
+                let enabled = subscriptionRows.first { $0["scope_key"] as? String == "r:" + id }?["enabled"] as? Bool ?? subscriptionRows.first { $0["scope_key"] as? String == "p:studio" }?["enabled"] as? Bool ?? false
+                let item: [String:Any] = ["sequence":12,"product":"studio","request_id":id,"kind":"delivery","source_id":"tdl_" + String(repeating:"c",count:32),"source_revision":1,"created_at":1001,"read_at":notificationReadAt as Any? ?? NSNull(),"label":"build_linked","version":"0.2.0","build":"18.1","valid_until":Date().timeIntervalSince1970*1000+900000,"availability":"group_available","device_installed":"not_observed"]
+                return (200,["schema":"hps-team-inbox/1","items":enabled ? [item] : [],"next_cursor":NSNull(),"catchup_pending":false,"scan_limit":100])
+            }
+            if path == "/v1/me/team-requests/notifications/read" {
+                guard body["event_sequence"] as? Int == 12 else { return (404,["error":"team_notification_not_found"]) }
+                readAcks += 1; notificationReadAt = 2000
+                return (200,["schema":"hps-team-notification-read/1","event_sequence":12,"read_at":2000])
+            }
+        }
         if request.url?.path.hasPrefix("/v1/me/team-requests") == true {
             if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_DENIED"] == "1" { return (403, ["error": "team_product_denied"]) }
             let id = "trq_" + String(repeating: "a", count: 32)
@@ -103,7 +162,7 @@ private final class TeamEntryState: @unchecked Sendable {
             }
             switch (request.httpMethod ?? "GET", path) {
             case ("GET", "/v1/me/team-requests/access"):
-                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"]])
+                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"], "supported_push_capabilities":ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" ? ["team_request/1","team_discussion/1"] : []])
             case ("POST", "/v1/me/team-requests"):
                 requestPosts += 1
                 guard body["schema"] as? String == "hps-team-request/1", body["notice_version"] as? String == "synthetic/1", let key = body["client_request_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_request"]) }

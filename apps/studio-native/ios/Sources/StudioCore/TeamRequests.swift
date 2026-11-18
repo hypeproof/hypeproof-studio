@@ -3,6 +3,7 @@ import Foundation
 public struct TeamRequestAccess: Codable, Sendable {
     public let schema, account_id, notice_version: String
     public let products: [String]
+    public var supported_push_capabilities: [String]? = nil
     public func validate(account: String) throws {
         guard schema == "hps-team-request-access/1", account_id == account,
               !notice_version.isEmpty, notice_version.utf16.count <= 128,
