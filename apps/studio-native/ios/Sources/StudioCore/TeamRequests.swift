@@ -26,6 +26,10 @@ public struct TeamRequestDraft: Codable, Equatable, Sendable {
               phase == .draft || !noticeVersion.isEmpty,
               phase != .received || receipt.map(TeamRequestRecord.validID) == true else { throw SyncFailure.invalidResponse }
     }
+    public mutating func observeHidden(_ row: TeamRequestRecord) -> Bool {
+        guard phase == .received, row.retention?.hidden == true, row.id == receipt, row.account_id == accountID, row.client_request_id == key, row.product == product, row.category == category else { return false }
+        body = ""; return true
+    }
     public func payload() throws -> [String: String] {
         try validate(account: accountID)
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !noticeVersion.isEmpty else { throw SyncFailure.invalidResponse }
@@ -36,15 +40,18 @@ public struct TeamRequestRecord: Codable, Identifiable, Sendable {
     public let id, account_id, client_request_id, product, category, body, notice_version, status: String
     public let revision: Int
     public let created_at, updated_at: Double
+    public var retention: TeamContentRetention? = nil
     public static func validID(_ value: String) -> Bool { value.range(of: "^trq_[a-f0-9]{32}$", options: .regularExpression) != nil && value.count == 36 }
     public func validate() throws {
+        try retention?.validate()
+        if let retention, retention.hidden { guard body == retention.marker else { throw SyncFailure.invalidResponse } }
         guard Self.validID(id), StoredAccount.validID(account_id), client_request_id.utf16.count <= 64,
               TeamRequestDraft.products.contains(product), ["bug", "improvement", "question"].contains(category),
               !body.isEmpty, body.utf16.count <= 5000, !body.contains("\0"), notice_version.utf16.count <= 128,
               status == "submitted", revision > 0, created_at.isFinite, updated_at.isFinite, created_at > 0, updated_at >= created_at else { throw SyncFailure.invalidResponse }
     }
     public func matches(_ draft: TeamRequestDraft) -> Bool {
-        account_id == draft.accountID && client_request_id == draft.key && product == draft.product && category == draft.category && body == draft.body && notice_version == draft.noticeVersion
+        account_id == draft.accountID && client_request_id == draft.key && product == draft.product && category == draft.category && (body == draft.body || retention?.hidden == true) && notice_version == draft.noticeVersion
     }
 }
 public struct TeamRequestPage: Decodable, Sendable {
@@ -62,10 +69,13 @@ public struct TeamRequestPage: Decodable, Sendable {
 public struct TeamRequestComment: Decodable, Identifiable, Sendable {
     public let id, request_id, account_id, client_comment_id, body: String
     public let created_at: Double
+    public var retention: TeamContentRetention? = nil
     public var intent: String? = nil
     public var reply_to: String? = nil
     public var discussionIntent: String { intent ?? "discussion" }
     public func validate(request: String) throws {
+        try retention?.validate()
+        if let retention, retention.hidden { guard body == retention.marker else { throw SyncFailure.invalidResponse } }
         guard id.count == 36, id.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil,
               request_id == request, StoredAccount.validID(account_id), !body.isEmpty, body.utf16.count <= 5000,
               !body.contains("\0"), created_at.isFinite, created_at > 0,
@@ -80,17 +90,38 @@ public struct TeamCommentSupport {
         return values.filter { ["hps-team-comment/1", "hps-team-comment/2"].contains($0) }
     }
 }
-public struct TeamCommentRetention: Decodable, Sendable {
+public struct TeamCommentRetention: Codable, Equatable, Sendable {
     public let policy: String
     public let purge_implemented: Bool
     public let content_purged_at: Double?
     public let purged_outcome_revision: Int?
+    public var content_hidden: Bool? = nil
+    public var hidden_outcome_revision: Int? = nil
+    public var content_hidden_since: Double? = nil
+    public var purge_eligible_at: Double? = nil
+    public static let hiddenMarker = "보관 기한이 지나 내용을 숨겼어요."
+    public static let purgedMarker = "보관 기간이 지나 내용이 삭제됐어요."
+    public var hidden: Bool { content_hidden == true }
+    public var currentCyclePurged: Bool { hidden && content_purged_at != nil && purged_outcome_revision == hidden_outcome_revision }
+    public var marker: String { currentCyclePurged ? Self.purgedMarker : Self.hiddenMarker }
+    // Historical rows retain their first redaction timestamp across later purge cycles.
+    public func confirmsPurge(at date: Double?) -> Bool { date != nil && content_purged_at != nil && purged_outcome_revision != nil }
+    public var generationKey: String { "\(purged_outcome_revision ?? 0):\(hidden_outcome_revision ?? 0):\(hidden)" }
     public func validate() throws {
         guard policy == "90_days_after_reporter_confirmation", (content_purged_at == nil) == (purged_outcome_revision == nil),
-              content_purged_at.map({ $0.isFinite && $0 > 0 }) ?? true,
-              purged_outcome_revision.map({ $0 > 0 && $0 <= 9_007_199_254_740_991 }) ?? true else { throw SyncFailure.invalidResponse }
+              [content_purged_at,content_hidden_since,purge_eligible_at].allSatisfy({ $0.map { $0.isFinite && $0 > 0 } ?? true }),
+              [purged_outcome_revision,hidden_outcome_revision].allSatisfy({ $0.map { $0 > 0 && $0 <= 9_007_199_254_740_991 } ?? true }) else { throw SyncFailure.invalidResponse }
+        if hidden {
+            guard let hidden_outcome_revision, let content_hidden_since, hidden_outcome_revision >= (purged_outcome_revision ?? 0) else { throw SyncFailure.invalidResponse }
+            if currentCyclePurged { guard content_purged_at! >= content_hidden_since else { throw SyncFailure.invalidResponse } }
+        } else { guard hidden_outcome_revision == nil, content_hidden_since == nil else { throw SyncFailure.invalidResponse } }
+    }
+    public func validateScope(_ child: Self?) throws {
+        try validate(); try child?.validate()
+        if content_hidden != nil { guard child?.generationKey == generationKey, child?.content_hidden_since == content_hidden_since, child?.content_purged_at == content_purged_at else { throw SyncFailure.invalidResponse } }
     }
 }
+public typealias TeamContentRetention = TeamCommentRetention
 public struct TeamRequestDetail: Decodable, Sendable {
     public let request: TeamRequestRecord
     public let comments: [TeamRequestComment]
@@ -100,7 +131,8 @@ public struct TeamRequestDetail: Decodable, Sendable {
         try request.validate(); try retention?.validate()
         guard request.id == id, comments.count <= 100, Set(comments.map(\.id)).count == comments.count,
               next_comments_cursor.map({ TeamRequestPage.validCursor($0, prefix: "tcm_") }) ?? true else { throw SyncFailure.invalidResponse }
-        for comment in comments { try comment.validate(request: id) }
+        try retention?.validateScope(request.retention)
+        for comment in comments { try comment.validate(request: id); try retention?.validateScope(comment.retention) }
     }
 }
 
@@ -109,6 +141,8 @@ public struct TeamCommentHistory: Sendable {
     public private(set) var detail: TeamRequestDetail?
     public private(set) var comments: [TeamRequestComment] = []
     private var minimumPurgedRevision = 0
+    private var pendingGeneration: String?
+    public mutating func beginRefresh() { pendingGeneration = nil }
     public init() {}
     public mutating func clear() { detail = nil; comments = [] }
     /// False requests a fresh first page after old content has already been hidden.
@@ -116,10 +150,13 @@ public struct TeamCommentHistory: Sendable {
         try page.validate(id: page.request.id)
         let incoming = page.retention?.purged_outcome_revision ?? 0
         let previous = detail?.retention?.purged_outcome_revision ?? 0
-        if more, previous != incoming {
+        if more, previous != incoming || detail?.retention?.generationKey != page.retention?.generationKey {
             minimumPurgedRevision = max(minimumPurgedRevision, previous, incoming)
+            pendingGeneration = page.retention?.generationKey ?? "legacy"
             clear(); return false
         }
+        guard pendingGeneration == nil || pendingGeneration == (page.retention?.generationKey ?? "legacy") else { clear(); throw SyncFailure.invalidResponse }
+        pendingGeneration = nil
         guard incoming >= minimumPurgedRevision, detail == nil || detail?.request.id == page.request.id else { clear(); throw SyncFailure.invalidResponse }
         minimumPurgedRevision = max(minimumPurgedRevision, incoming)
         if more { let known = Set(comments.map(\.id)); comments += page.comments.filter { !known.contains($0.id) } }
@@ -127,7 +164,8 @@ public struct TeamCommentHistory: Sendable {
         detail = page; return true
     }
     public func canDisplay(_ draft: TeamCommentDraft) -> Bool {
-        guard draft.phase == .received, !draft.body.isEmpty, minimumPurgedRevision > 0 else { return true }
+        guard draft.phase == .received, !draft.body.isEmpty else { return true }
+        if detail?.retention?.hidden == true { return false }
         return comments.contains { $0.id == draft.receipt && $0.account_id == draft.accountID && $0.client_comment_id == draft.key && $0.body == draft.body }
     }
 }
@@ -183,7 +221,21 @@ public struct TeamCommentHistory: Sendable {
             let page = try await list(account, product, nil); try page.validate(product: product)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
             view.requests = page.requests; view.nextCursor = page.next_cursor; view.message = ""
+            if var draft = view.draft, page.requests.contains(where: { draft.observeHidden($0) }) {
+                view.draft = draft
+                do { try save(draft) } catch { view.storageReady = false; view.message = "숨겨진 내용의 기기 사본을 정리하지 못했어요. 내용은 표시하지 않아요." }
+            }
         } catch { if g == generation { view.message = "팀 요청을 불러오지 못했어요. 로그인과 제품 권한을 확인해 주세요." } }
+    }
+    /// A validated, freshly authorized detail may reconcile an acknowledged receipt beyond the list's current page.
+    public func observeHidden(_ row: TeamRequestRecord, account: MemberApprovalIdentity) {
+        guard binding == account, (try? row.validate()) != nil else { return }
+        if let index = view.requests.firstIndex(where: { $0.id == row.id }) { view.requests[index] = row }
+        if var draft = view.draft, draft.observeHidden(row) {
+            view.draft = draft
+            do { try save(draft) } catch { view.storageReady = false; view.message = "숨겨진 내용의 기기 사본을 정리하지 못했어요. 내용은 표시하지 않아요." }
+        }
+        changed(view)
     }
     public func edit(body: String, product: String, category: String) {
         guard !view.busy, view.storageReady, var draft = view.draft, draft.phase == .draft,
@@ -214,7 +266,7 @@ public struct TeamCommentHistory: Sendable {
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
             guard let result else { view.message = "아직 접수 내역을 찾지 못했어요. 잠시 후 다시 확인해 주세요."; return }
             try result.validate(); guard result.matches(draft) else { throw SyncFailure.invalidResponse }
-            draft.phase = .received; draft.receipt = result.id; view.draft = draft
+            draft.phase = .received; draft.receipt = result.id; _ = draft.observeHidden(result); view.draft = draft
             do { try save(draft); view.message = "접수됐어요. 같은 제품의 내부 멤버가 내용을 볼 수 있어요." }
             catch { view.storageReady = false; view.message = "접수됐지만 기기에 저장하지 못했어요. 접수 번호를 복사해 주세요." }
         } catch {
@@ -241,7 +293,11 @@ public struct TeamCommentHistory: Sendable {
         do {
             let page = try await list(account, product, cursor); try page.validate(product: product)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
-            let known = Set(view.requests.map(\.id)); view.requests += page.requests.filter { !known.contains($0.id) }; view.nextCursor = page.next_cursor
+            for row in page.requests {
+                if let index = view.requests.firstIndex(where: { $0.id == row.id }) { view.requests[index] = row } else { view.requests.append(row) }
+                observeHidden(row, account: account)
+            }
+            view.nextCursor = page.next_cursor
         } catch { if g == generation { view.message = "이전 요청을 불러오지 못했어요." } }
     }
 }
@@ -290,8 +346,8 @@ public struct TeamCommentDraft: Codable, Sendable {
         return value
     }
     public mutating func observeTombstone(_ detail: TeamRequestDetail) -> Bool {
-        guard phase == .received, detail.request.id == requestID, detail.retention?.content_purged_at != nil,
-              detail.comments.contains(where: { $0.id == receipt && $0.account_id == accountID && $0.client_comment_id == key && $0.body == "보관 기간이 지나 내용이 삭제됐어요." }) else { return false }
+        guard phase == .received, detail.request.id == requestID, (detail.retention?.content_purged_at != nil || detail.retention?.hidden == true),
+              detail.comments.contains(where: { $0.id == receipt && $0.account_id == accountID && $0.client_comment_id == key && ($0.body == TeamContentRetention.purgedMarker || ($0.retention?.hidden == true && $0.body == $0.retention?.marker)) }) else { return false }
         body = ""; return true
     }
     public func validate(account: String, request: String) throws {
@@ -313,7 +369,10 @@ public struct TeamWorkflowSnapshot: Codable, Sendable {
     public let revision: Int
     public let id, actor_account_id, client_mutation_id, assignee_account_id, next_action, reason, duplicate_request_id: String?
     public let created_at, redacted_at: Double?
+    public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
+        try retention?.validate()
+        if retention?.hidden == true { guard reason == nil, next_action == nil else { throw SyncFailure.invalidResponse } }
         guard request_id == request, TeamRequestRecord.validID(request), revision >= 0, revision < 1_000_000_000,
               Self.statuses.contains(status), Self.priorities.contains(priority),
               assignee_account_id.map(StoredAccount.validID) ?? true,
@@ -333,7 +392,7 @@ public struct TeamWorkflowSnapshot: Codable, Sendable {
     public func matches(_ draft: TeamWorkflowDraft) -> Bool {
         request_id == draft.requestID && actor_account_id == draft.accountID && client_mutation_id == draft.key && revision == draft.expectedRevision + 1 &&
         status == draft.status && priority == draft.priority && assignee_account_id == draft.assignee &&
-        next_action == (draft.nextAction.isEmpty ? nil : draft.nextAction) && reason == draft.reason && duplicate_request_id == draft.duplicateID && redacted_at == nil
+        (retention?.hidden == true || retention?.confirmsPurge(at: redacted_at) == true || (next_action == (draft.nextAction.isEmpty ? nil : draft.nextAction) && reason == draft.reason)) && duplicate_request_id == draft.duplicateID && (redacted_at == nil || retention?.confirmsPurge(at: redacted_at) == true)
     }
 }
 public struct TeamWorkflowPage: Decodable, Sendable {
@@ -342,11 +401,13 @@ public struct TeamWorkflowPage: Decodable, Sendable {
     public let current: TeamWorkflowSnapshot
     public let events: [TeamWorkflowSnapshot]
     public let next_cursor: String?
+    public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
         guard schema == "hps-team-workflow/1", request_id == request, events.count <= 50 else { throw SyncFailure.invalidResponse }
+        try retention?.validate(); try retention?.validateScope(current.retention)
         try current.validate(request: request)
         var previous = 0
-        for event in events { try event.validate(request: request); guard event.revision > previous, event.revision <= current.revision else { throw SyncFailure.invalidResponse }; previous = event.revision }
+        for event in events { try event.validate(request: request); try retention?.validateScope(event.retention); guard event.revision > previous, event.revision <= current.revision else { throw SyncFailure.invalidResponse }; previous = event.revision }
         if let next_cursor { guard Int(next_cursor) == events.last?.revision, !events.isEmpty, previous < current.revision else { throw SyncFailure.invalidResponse } }
     }
 }
@@ -383,6 +444,10 @@ public struct TeamWorkflowDraft: Codable, Sendable {
               expectedRevision >= 0, expectedRevision < 999_999_999, TeamWorkflowSnapshot.statuses.contains(status), TeamWorkflowSnapshot.priorities.contains(priority),
               assignee.map(StoredAccount.validID) ?? true, duplicateID.map(TeamRequestRecord.validID) ?? true,
               nextAction.utf16.count <= 2000, reason.utf16.count <= 2000, !nextAction.contains("\0"), !reason.contains("\0") else { throw SyncFailure.invalidResponse }
+    }
+    public mutating func observeHidden(_ event: TeamWorkflowSnapshot) -> Bool {
+        guard phase == .received, (event.retention?.hidden == true || event.retention?.confirmsPurge(at: event.redacted_at) == true), event.id == receipt, event.matches(self) else { return false }
+        reason = ""; nextAction = ""; return true
     }
     public func payload() throws -> [String: Any] {
         try validate(account: accountID, request: requestID)
@@ -424,6 +489,10 @@ public struct TeamWorkflowDraft: Codable, Sendable {
         self.send = send; self.load = load; self.save = save; self.changed = changed
     }
     private func persist(_ draft: TeamWorkflowDraft) throws { do { try save(draft) } catch { view.storageReady = false; throw error } }
+    private func reconcileHidden(_ page: TeamWorkflowPage) throws {
+        guard var draft = view.draft, ([page.current] + page.events).contains(where: { draft.observeHidden($0) }) else { return }
+        view.draft = draft; try persist(draft)
+    }
     public func invalidate() { generation = UUID(); binding = nil; view = View(); changed(view) }
     private func current(_ g: UUID, _ account: MemberApprovalIdentity) async throws -> Bool { guard g == generation else { return false }; let now = try await identity(); return g == generation && now == account }
     public func open() async {
@@ -437,7 +506,8 @@ public struct TeamWorkflowDraft: Codable, Sendable {
             catch { view.storageReady = false; view.message = "저장된 변경 초안을 읽지 못했어요. 원본을 덮어쓰지 않았어요."; return }
             let page = try await fetch(account, nil); try page.validate(request: requestID)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }; view.page = page; view.events = page.events
-            if page.can_manage {
+            try reconcileHidden(page)
+            if page.can_manage && page.retention?.hidden != true {
                 let people = try await members(account); try people.validate(account: account.accountID, product: product)
                 guard try await current(g, account) else { if g == generation { invalidate() }; return }; view.members = people.members
                 let choices = try await targets(account, nil); try choices.validate(product: product)
@@ -448,7 +518,7 @@ public struct TeamWorkflowDraft: Codable, Sendable {
         } catch { if g == generation { view.page = nil; view.events = []; view.members = []; view.targets = []; view.message = view.storageReady ? "상태를 불러오지 못했어요. 로그인과 제품 권한을 확인해 주세요." : "초안을 기기에 저장하지 못했어요. 내용을 내보내 주세요." } }
     }
     public func edit(_ update: (inout TeamWorkflowDraft) -> Void) {
-        guard !view.busy, view.storageReady, view.page?.can_manage == true, var draft = view.draft, draft.phase == .draft else { return }
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, view.page?.retention?.hidden != true, var draft = view.draft, draft.phase == .draft else { return }
         update(&draft)
         do { try draft.validate(account: draft.accountID, request: requestID) } catch { return }
         view.draft = draft
@@ -456,17 +526,17 @@ public struct TeamWorkflowDraft: Codable, Sendable {
         changed(view)
     }
     public func rebase() {
-        guard !view.busy, view.storageReady, view.page?.can_manage == true, let page = view.page, var draft = view.draft, draft.phase == .conflict else { return }
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, view.page?.retention?.hidden != true, let page = view.page, var draft = view.draft, draft.phase == .conflict else { return }
         draft.expectedRevision = page.current.revision; draft.key = UUID().uuidString.lowercased(); draft.phase = .draft
         do { try persist(draft); view.draft = draft; view.message = "제안한 내용은 유지했어요. 다시 확인한 뒤 저장해 주세요." } catch { view.storageReady = false; view.message = "초안을 저장하지 못했어요." }; changed(view)
     }
     public func newChange() {
-        guard !view.busy, view.storageReady, view.page?.can_manage == true, let account = binding, let page = view.page, view.draft?.phase == .received else { return }
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, view.page?.retention?.hidden != true, let account = binding, let page = view.page, view.draft?.phase == .received else { return }
         let draft = TeamWorkflowDraft(accountID: account.accountID, product: product, current: page.current)
         do { try persist(draft); view.draft = draft; view.message = "" } catch { view.storageReady = false; view.message = "새 변경 초안을 저장하지 못했어요." }; changed(view)
     }
     public func submit() async {
-        guard !view.busy, view.storageReady, view.page?.can_manage == true, let account = binding, var draft = view.draft, draft.phase == .draft || draft.phase == .uncertain else { return }
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, view.page?.retention?.hidden != true, let account = binding, var draft = view.draft, draft.phase == .draft || draft.phase == .uncertain else { return }
         let g = generation, first = draft.phase == .draft; view.busy = true; changed(view)
         defer { if g == generation { view.busy = false; changed(view) } }
         do {
@@ -477,8 +547,8 @@ public struct TeamWorkflowDraft: Codable, Sendable {
             let event = try await send(account, draft); try event.validate(request: requestID)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
             guard event.matches(draft) else { throw SyncFailure.invalidResponse }
-            draft.phase = .received; draft.receipt = event.id; view.draft = draft
-            if let previous = view.page { view.page = TeamWorkflowPage(schema: previous.schema, request_id: requestID, can_manage: previous.can_manage, current: event, events: previous.events, next_cursor: previous.next_cursor) }
+            draft.phase = .received; draft.receipt = event.id; _ = draft.observeHidden(event); view.draft = draft
+            if let previous = view.page { view.page = TeamWorkflowPage(schema: previous.schema, request_id: requestID, can_manage: previous.can_manage, current: event, events: previous.events, next_cursor: previous.next_cursor, retention: event.retention ?? previous.retention) }
             do { try persist(draft); view.message = "변경이 저장됐어요. 새로고침하면 최신 상태를 확인할 수 있어요." }
             catch { view.storageReady = false; view.message = "서버에 저장됐지만 기기 저장은 실패했어요. 내용을 내보내 주세요." }
         } catch SyncFailure.http(409, "team_workflow_conflict") {
@@ -496,12 +566,20 @@ public struct TeamWorkflowDraft: Codable, Sendable {
     public func moreHistory() async {
         guard !view.busy, let account = binding, let after = view.page?.next_cursor else { return }; let g = generation; view.busy = true; changed(view)
         defer { if g == generation { view.busy = false; changed(view) } }
-        do { let page = try await fetch(account, after); try page.validate(request: requestID); guard try await current(g, account) else { if g == generation { invalidate() }; return }
+        do { var page = try await fetch(account, after); try page.validate(request: requestID); guard try await current(g, account) else { if g == generation { invalidate() }; return }
+            try reconcileHidden(page)
+            if view.page?.retention?.generationKey != page.retention?.generationKey {
+                let observed = page.retention?.generationKey
+                view.page = nil; view.events = []; changed(view)
+                page = try await fetch(account, nil); try page.validate(request: requestID)
+                guard page.retention?.generationKey == observed, try await current(g, account) else { throw SyncFailure.invalidResponse }
+            }
+            try reconcileHidden(page)
             let known = Set(view.events.map(\.revision)); view.events += page.events.filter { !known.contains($0.revision) }; view.events.sort { $0.revision < $1.revision }; view.page = page
         } catch { if g == generation { view.page = nil; view.events = []; view.message = "이력을 더 불러오지 못했어요." } }
     }
     public func moreTargets() async {
-        guard !view.busy, view.page?.can_manage == true, let account = binding, let after = view.targetCursor else { return }
+        guard !view.busy, view.page?.can_manage == true, view.page?.retention?.hidden != true, let account = binding, let after = view.targetCursor else { return }
         let g = generation; view.busy = true; changed(view)
         defer { if g == generation { view.busy = false; changed(view) } }
         do {
@@ -546,14 +624,21 @@ public struct TeamGitHubEvent: Codable, Sendable, Identifiable {
     public let verified_at: Double
     public let redacted_at: Double?
     public let evidence: TeamGitHubEvidence?
+    public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
+        try retention?.validate()
         guard request_id == request, TeamRequestRecord.validID(request), id.count == 36, id.range(of: "^tgl_[a-f0-9]{32}$", options: .regularExpression) != nil,
               revision > 0, revision < 1_000_000_000, TeamGitHubDraft.number(issue_number),
               repo.range(of: "^hypeproof/[a-z0-9][a-z0-9-]*$", options: .regularExpression) != nil, !repo.contains("\n"),
               association == "operator_asserted", testflight == "not_observed", reporter_confirmation == "not_observed",
               verified_at.isFinite, verified_at > 0 else { throw SyncFailure.invalidResponse }
         if let redacted_at {
-            guard redacted_at.isFinite, redacted_at >= verified_at, actor_account_id == nil, reason == nil, evidence == nil, client_mutation_id.isEmpty else { throw SyncFailure.invalidResponse }
+            guard redacted_at.isFinite, redacted_at >= verified_at, reason == nil, evidence == nil else { throw SyncFailure.invalidResponse }
+            if retention?.confirmsPurge(at: redacted_at) == true, actor_account_id != nil {
+                guard actor_account_id.map(StoredAccount.validID) == true, !client_mutation_id.isEmpty, client_mutation_id.count <= 64 else { throw SyncFailure.invalidResponse }
+            } else { guard actor_account_id == nil, client_mutation_id.isEmpty else { throw SyncFailure.invalidResponse } }
+        } else if retention?.hidden == true {
+            guard let actor_account_id, StoredAccount.validID(actor_account_id), !client_mutation_id.isEmpty, client_mutation_id.count <= 64, reason == nil, evidence == nil else { throw SyncFailure.invalidResponse }
         } else {
             guard let actor_account_id, StoredAccount.validID(actor_account_id), let reason, !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   reason.utf16.count <= 2000, !reason.contains("\0"), !client_mutation_id.isEmpty, client_mutation_id.count <= 64, let evidence else { throw SyncFailure.invalidResponse }
@@ -561,10 +646,9 @@ public struct TeamGitHubEvent: Codable, Sendable, Identifiable {
         }
     }
     public func matches(_ draft: TeamGitHubDraft) -> Bool {
-        actor_account_id == draft.accountID && request_id == draft.requestID && client_mutation_id == draft.key && revision == draft.expectedRevision + 1 &&
-        issue_number == Int(draft.issue) && reason == draft.reason && redacted_at == nil &&
-        evidence?.pull?.number == (draft.lineage ? Int(draft.pull) : nil) && evidence?.source_sha == (draft.lineage ? draft.sourceSHA : nil) &&
-        evidence?.ci?.run_id == (draft.lineage ? Int(draft.run) : nil) && evidence?.ci?.attempt == (draft.lineage ? Int(draft.attempt) : nil)
+        guard actor_account_id == draft.accountID, request_id == draft.requestID, client_mutation_id == draft.key, revision == draft.expectedRevision + 1, issue_number == Int(draft.issue), redacted_at == nil || retention?.confirmsPurge(at: redacted_at) == true else { return false }
+        if retention?.hidden == true || retention?.confirmsPurge(at: redacted_at) == true { return true }
+        return reason == draft.reason && evidence?.pull?.number == (draft.lineage ? Int(draft.pull) : nil) && evidence?.source_sha == (draft.lineage ? draft.sourceSHA : nil) && evidence?.ci?.run_id == (draft.lineage ? Int(draft.run) : nil) && evidence?.ci?.attempt == (draft.lineage ? Int(draft.attempt) : nil)
     }
 }
 public struct TeamGitHubPage: Decodable, Sendable {
@@ -573,11 +657,13 @@ public struct TeamGitHubPage: Decodable, Sendable {
     public let current: TeamGitHubEvent?
     public let events: [TeamGitHubEvent]
     public let next_cursor: String?
+    public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
         guard schema == "hps-team-github-links/1", request_id == request, events.count <= 50 else { throw SyncFailure.invalidResponse }
-        try current?.validate(request: request)
+        try retention?.validate()
+        if let current { try current.validate(request: request); try retention?.validateScope(current.retention) }
         var previous = 0
-        for event in events { try event.validate(request: request); guard event.revision > previous, event.revision <= (current?.revision ?? 0) else { throw SyncFailure.invalidResponse }; previous = event.revision }
+        for event in events { try event.validate(request: request); try retention?.validateScope(event.retention); guard event.revision > previous, event.revision <= (current?.revision ?? 0) else { throw SyncFailure.invalidResponse }; previous = event.revision }
         if let next_cursor { guard Int(next_cursor) == events.last?.revision, previous > 0, previous < (current?.revision ?? 0) else { throw SyncFailure.invalidResponse } }
     }
 }
@@ -588,6 +674,10 @@ public struct TeamGitHubDraft: Codable, Sendable {
     public var lineage = false
     public var phase: TeamWorkflowDraft.Phase = .draft
     public init(accountID: String, requestID: String, revision: Int) { self.accountID = accountID; self.requestID = requestID; expectedRevision = revision }
+    public mutating func observeHidden(_ event: TeamGitHubEvent) -> Bool {
+        guard phase == .received, (event.retention?.hidden == true || event.retention?.confirmsPurge(at: event.redacted_at) == true), event.matches(self) else { return false }
+        reason = ""; pull = ""; sourceSHA = ""; run = ""; attempt = ""; lineage = false; return true
+    }
     public static func number(_ n: Int) -> Bool { n > 0 && n <= 9_007_199_254_740_991 }
     public static func sha(_ s: String) -> Bool { s.count == 40 && s.range(of: "^[a-f0-9]{40}$", options: .regularExpression) != nil }
     public func validate(account: String, request: String) throws {
@@ -642,6 +732,10 @@ public struct TeamGitHubDraft: Codable, Sendable {
         catch { guard g == generation else { return false }; view.page = nil; view.events = [] }
         return true
     }
+    private func reconcileHidden(_ page: TeamGitHubPage) throws {
+        guard var draft = view.draft, (page.events + (page.current.map { [$0] } ?? [])).contains(where: { draft.observeHidden($0) }) else { return }
+        view.draft = draft; try persist(draft)
+    }
     private func persist(_ draft: TeamGitHubDraft) throws { do { try save(draft) } catch { view.storageReady = false; throw error } }
     public func open() async {
         guard !view.busy, view.storageReady else { return }; generation = UUID(); let g = generation
@@ -654,28 +748,28 @@ public struct TeamGitHubDraft: Codable, Sendable {
             catch { view.storageReady = false; view.message = "저장된 연결 초안을 읽지 못했어요. 원본을 유지했어요."; return }
             let page = try await fetch(account, nil); try page.validate(request: requestID)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
-            view.page = page; view.events = page.events
+            view.page = page; view.events = page.events; try reconcileHidden(page)
             if page.can_manage, view.draft == nil { let draft = TeamGitHubDraft(accountID: account.accountID, requestID: requestID, revision: page.current?.revision ?? 0); try persist(draft); view.draft = draft }
             if var draft = view.draft, draft.phase == .draft, draft.expectedRevision != (page.current?.revision ?? 0) { draft.phase = .conflict; try persist(draft); view.draft = draft }
         } catch { if await admitFailure(g) { view.page = nil; view.events = []; view.message = view.storageReady ? "연결 근거를 불러오지 못했어요. 로그인과 권한을 확인해 주세요." : "기기에 저장하지 못했어요. 초안을 내보내 주세요." } }
     }
     public func edit(_ update: (inout TeamGitHubDraft) -> Void) {
-        guard !view.busy, view.storageReady, view.page?.can_manage == true, var draft = view.draft, draft.phase == .draft else { return }
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, view.page?.retention?.hidden != true, var draft = view.draft, draft.phase == .draft else { return }
         update(&draft); guard (try? draft.validate(account: draft.accountID, request: requestID)) != nil else { return }; view.draft = draft
         do { try persist(draft); view.message = "" } catch { view.message = "기기에 저장하지 못했어요. 초안을 내보내 주세요." }; changed(view)
     }
     public func rebase() {
-        guard !view.busy, view.storageReady, let page = view.page, page.can_manage, var draft = view.draft, draft.phase == .conflict else { return }
+        guard !view.busy, view.storageReady, let page = view.page, page.can_manage, page.retention?.hidden != true, var draft = view.draft, draft.phase == .conflict else { return }
         draft.expectedRevision = page.current?.revision ?? 0; draft.key = UUID().uuidString.lowercased(); draft.phase = .draft
         do { try persist(draft); view.draft = draft; view.message = "제안을 유지했어요. 다시 확인한 뒤 저장해 주세요." } catch { view.message = "초안을 저장하지 못했어요." }; changed(view)
     }
     public func newChange() {
-        guard !view.busy, view.storageReady, let page = view.page, page.can_manage, let account = binding, view.draft?.phase == .received else { return }
+        guard !view.busy, view.storageReady, let page = view.page, page.can_manage, page.retention?.hidden != true, let account = binding, view.draft?.phase == .received else { return }
         let draft = TeamGitHubDraft(accountID: account.accountID, requestID: requestID, revision: page.current?.revision ?? 0)
         do { try persist(draft); view.draft = draft } catch { view.message = "초안을 저장하지 못했어요." }; changed(view)
     }
     public func submit() async {
-        guard !view.busy, view.storageReady, view.page?.can_manage == true, let account = binding, var draft = view.draft, draft.phase == .draft || draft.phase == .uncertain else { return }
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, view.page?.retention?.hidden != true, let account = binding, var draft = view.draft, draft.phase == .draft || draft.phase == .uncertain else { return }
         let g = generation, first = draft.phase == .draft; view.busy = true; changed(view)
         defer { if g == generation { view.busy = false; changed(view) } }
         do {
@@ -683,7 +777,7 @@ public struct TeamGitHubDraft: Codable, Sendable {
             draft.phase = .uncertain; try persist(draft); view.draft = draft; changed(view)
             let event = try await send(account, draft); try event.validate(request: requestID)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }; guard event.matches(draft) else { throw SyncFailure.invalidResponse }
-            draft.phase = .received; view.draft = draft
+            draft.phase = .received; _ = draft.observeHidden(event); view.draft = draft
             if let previous = view.page { view.page = TeamGitHubPage(schema: previous.schema, request_id: requestID, can_manage: previous.can_manage, current: event, events: previous.events, next_cursor: previous.next_cursor) }
             try persist(draft); view.message = "연결이 저장됐어요. 배포·설치·사용자 확인을 뜻하지 않아요."
         } catch SyncFailure.http(503, "team_github_unverified") {
@@ -700,7 +794,15 @@ public struct TeamGitHubDraft: Codable, Sendable {
     public func more() async {
         guard !view.busy, let account = binding, let after = view.page?.next_cursor else { return }; let g = generation; view.busy = true; changed(view)
         defer { if g == generation { view.busy = false; changed(view) } }
-        do { let page = try await fetch(account, after); try page.validate(request: requestID); guard try await current(g, account) else { if g == generation { invalidate() }; return }
+        do { var page = try await fetch(account, after); try page.validate(request: requestID); guard try await current(g, account) else { if g == generation { invalidate() }; return }
+            try reconcileHidden(page)
+            if view.page?.retention?.generationKey != page.retention?.generationKey {
+                let observed = page.retention?.generationKey
+                view.page = nil; view.events = []; changed(view)
+                page = try await fetch(account, nil); try page.validate(request: requestID)
+                guard page.retention?.generationKey == observed, try await current(g, account) else { throw SyncFailure.invalidResponse }
+            }
+            try reconcileHidden(page)
             let known = Set(view.events.map(\.revision)); view.events += page.events.filter { !known.contains($0.revision) }; view.events.sort { $0.revision < $1.revision }; view.page = page
         } catch { if await admitFailure(g) { view.page = nil; view.events = []; view.message = "연결 이력을 불러오지 못했어요." } }
     }
@@ -756,13 +858,16 @@ public struct TeamDeliveryEvent: Codable, Sendable, Equatable, Identifiable {
     public let evidence: TeamDeliveryEvidence?
     public let created_at: Double
     public let redacted_at: Double?
+    public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
+        try retention?.validate()
         guard TeamRequestRecord.validID(request), request_id == request,
               id.range(of: "^tdl_[a-f0-9]{32}$", options: .regularExpression) != nil,
               github_link_id.range(of: "^tgl_[a-f0-9]{32}$", options: .regularExpression) != nil,
               revision > 0, revision < 1_000_000_000, created_at.isFinite, created_at > 0,
               ["group_available","not_established"].contains(availability), reporter_confirmation == "not_observed" else { throw SyncFailure.invalidResponse }
         if let redacted_at { guard redacted_at.isFinite, redacted_at >= created_at, instructions == nil, evidence == nil, availability == "not_established" else { throw SyncFailure.invalidResponse } }
+        else if retention?.hidden == true { guard instructions == nil, evidence == nil, availability == "not_established" else { throw SyncFailure.invalidResponse } }
         else { guard let instructions, !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, instructions.utf16.count <= 2000, !instructions.contains("\0"), let evidence else { throw SyncFailure.invalidResponse }; try evidence.validate(); if availability == "group_available" && !evidence.group_build_available { throw SyncFailure.invalidResponse } }
     }
 }
@@ -772,11 +877,13 @@ public struct TeamDeliveryPage: Codable, Sendable {
     public let current: TeamDeliveryEvent?
     public let events: [TeamDeliveryEvent]
     public let next_cursor: String?
+    public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
         guard schema == "hps-team-deliveries/1", request_id == request, TeamRequestRecord.validID(request), events.count <= 50 else { throw SyncFailure.invalidResponse }
-        try current?.validate(request: request)
+        try retention?.validate()
+        if let current { try current.validate(request: request); try retention?.validateScope(current.retention) }
         var previous = 0; var ids = Set<String>()
-        for event in events { try event.validate(request: request); guard event.revision > previous, event.revision <= (current?.revision ?? 0), ids.insert(event.id).inserted else { throw SyncFailure.invalidResponse }; if event.revision == current?.revision && event != current { throw SyncFailure.invalidResponse }; previous = event.revision }
+        for event in events { try event.validate(request: request); try retention?.validateScope(event.retention); guard event.revision > previous, event.revision <= (current?.revision ?? 0), ids.insert(event.id).inserted else { throw SyncFailure.invalidResponse }; if event.revision == current?.revision && event != current { throw SyncFailure.invalidResponse }; previous = event.revision }
         if let next_cursor { guard next_cursor == String(previous), previous > 0, previous < (current?.revision ?? 0) else { throw SyncFailure.invalidResponse } }
     }
 }
@@ -801,10 +908,17 @@ public struct TeamDeliveryPage: Codable, Sendable {
         do {
             guard let account = try await identity(), g == generation else { if g == generation { invalidate() }; return }
             if more && binding != account { invalidate(); return }; binding = account
-            let page = try await fetch(account, after); try page.validate(request: requestID)
+            var page = try await fetch(account, after); try page.validate(request: requestID)
             guard g == generation else { return }
             guard try await identity() == account, g == generation else { if g == generation { invalidate() }; return }
-            if more { guard page.events.allSatisfy({ $0.revision > (Int(after ?? "") ?? 0) }), (page.current?.revision ?? 0) >= (view.page?.current?.revision ?? 0) else { throw SyncFailure.invalidResponse }; view.events += page.events }
+            var reset = false
+            if more, view.page?.retention?.generationKey != page.retention?.generationKey {
+                let observed = page.retention?.generationKey
+                view.page = nil; view.events = []; reset = true; changed(view)
+                page = try await fetch(account, nil); try page.validate(request: requestID)
+                guard page.retention?.generationKey == observed, g == generation, try await identity() == account, g == generation else { throw SyncFailure.invalidResponse }
+            }
+            if more && !reset { guard page.events.allSatisfy({ $0.revision > (Int(after ?? "") ?? 0) }), (page.current?.revision ?? 0) >= (view.page?.current?.revision ?? 0) else { throw SyncFailure.invalidResponse }; view.events += page.events }
             else { view.events = page.events }
             view.page = page
         } catch {

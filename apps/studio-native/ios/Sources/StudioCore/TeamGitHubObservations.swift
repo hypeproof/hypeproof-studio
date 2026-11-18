@@ -43,6 +43,7 @@ public struct TeamGitHubObservationPage: Decodable, Sendable {
     public let last_error: String?
     public let events: [TeamGitHubObservationEvent]
     public let next_cursor: String?
+    public var retention: TeamContentRetention? = nil
     public static func cursor(_ value: String) -> (String, Int)? {
         let parts = value.split(separator:":",omittingEmptySubsequences:false)
         guard parts.count == 2, parts[0].range(of:"^tgl_[a-f0-9]{32}$",options:.regularExpression) != nil,
@@ -51,6 +52,8 @@ public struct TeamGitHubObservationPage: Decodable, Sendable {
     }
     public func isFresh(at milliseconds: Double) -> Bool { fresh && last_error == nil && current != nil && observed_at.map { $0 <= milliseconds } == true && valid_until.map { $0 > milliseconds } == true }
     public func validate(request: String, after: String?) throws {
+        try retention?.validate()
+        if retention?.hidden == true { guard current == nil, observed_at == nil, valid_until == nil, !fresh, events.isEmpty, next_cursor == nil else { throw SyncFailure.invalidResponse } }
         guard schema == "hps-team-github-observations/1", request_id == request, TeamRequestRecord.validID(request), events.count <= 50,
               [observed_at,valid_until,last_checked_at].allSatisfy({ $0.map { $0.isFinite && $0 > 0 } ?? true }),
               last_error.map({ ["provider_timeout","provider_unavailable"].contains($0) }) ?? true else { throw SyncFailure.invalidResponse }
@@ -105,13 +108,16 @@ public struct TeamGitHubObservationPage: Decodable, Sendable {
             if loadedAccount != account { previous=nil;after=nil;view.page=nil;view.events=[];changed(view) }
             loadedAccount=account
             var page: TeamGitHubObservationPage
+            var changedRetention: String?
             do {
                 page=try await fetch(account,after)
-                if after != nil, page.association_id != previous?.association_id || page.association_revision != previous?.association_revision { throw SyncFailure.http(409,"team_github_observation_cursor_changed") }
+                if after != nil, page.retention?.generationKey != previous?.retention?.generationKey { try page.validate(request:requestID,after:nil); changedRetention = page.retention?.generationKey ?? "legacy" }
+                if after != nil, page.association_id != previous?.association_id || page.association_revision != previous?.association_revision || page.retention?.generationKey != previous?.retention?.generationKey { throw SyncFailure.http(409,"team_github_observation_cursor_changed") }
                 try page.validate(request:requestID,after:after)
             } catch SyncFailure.http(409,"team_github_observation_cursor_changed") {
                 guard await current(g,account) else { return };view.page=nil;view.events=[];changed(view)
                 page=try await fetch(account,nil);try page.validate(request:requestID,after:nil)
+                guard changedRetention == nil || changedRetention == (page.retention?.generationKey ?? "legacy") else { throw SyncFailure.invalidResponse }
             }
             guard await current(g,account) else { return }
             if !more || view.page == nil { view.events=[] }

@@ -20831,6 +20831,45 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-RETENTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Hidden retained content — Studio #4377"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone hidden retained content (#4377)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-RETENTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-RETENTION",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Hidden retained content — Studio #4377"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamHiddenContentTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }
