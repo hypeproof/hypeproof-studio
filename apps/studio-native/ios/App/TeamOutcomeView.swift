@@ -26,7 +26,7 @@ struct TeamOutcomeView: View {
 #endif
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamOutcomeMessage") }
             if let page = model.state.page {
-                if let current = page.current { Section("최근 확인 결과") { event(current) } }
+                if let current = page.current { Section(model.state.historyNeedsRefresh ? "이전에 불러온 결과 · 새로고침 필요" : "최근 확인 결과") { event(current) } }
                 if !page.can_respond { Text("이 요청을 작성한 멤버만 해결 여부를 남길 수 있어요.").accessibilityIdentifier("teamOutcomeReadOnly") }
                 if let draft = model.state.draft, page.can_respond {
                     Section {
@@ -46,8 +46,8 @@ struct TeamOutcomeView: View {
                         ShareLink("결과 초안 내보내기", item: draft.exportText)
                         if let receipt = draft.receipt, draft.phase == .received {
                             Text("버전 \(receipt.version) · 빌드 \(receipt.build)의 결과를 저장했어요.").accessibilityIdentifier("teamOutcomeReceipt")
-                            if (page.current?.revision ?? 0) < receipt.revision { Text("새로고침한 뒤 다른 결과를 작성할 수 있어요.").font(.caption) }
-                            Button("다른 결과 작성") { model.controller?.newResponse() }.disabled(model.state.busy || !model.state.storageReady || (page.current?.revision ?? 0) < receipt.revision)
+                            if model.state.historyNeedsRefresh || (page.current?.revision ?? 0) < receipt.revision { Text("새로고침한 뒤 다른 결과를 작성할 수 있어요.").font(.caption) }
+                            Button("다른 결과 작성") { model.controller?.newResponse() }.disabled(model.state.busy || !model.state.storageReady || model.state.historyNeedsRefresh || (page.current?.revision ?? 0) < receipt.revision)
                         } else if draft.phase == .conflict {
                             Button("최신 버전과 결과 다시 선택") { model.controller?.rebase() }.disabled(model.state.busy || !model.state.storageReady)
                         } else {

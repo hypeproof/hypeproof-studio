@@ -10477,4 +10477,7 @@ MTR-15–17 adds an explicit reporter-only result flow from request detail,
 separate from read-only delivery evidence. Exact build choice, required reopen
 reason, cancel-before-send, protected drafts, uncertain same-key recovery,
 and refreshed revisions preserve human judgment and prevent duplicate results.
+After a saved receipt, an automatic read updates current history. Failed reads
+preserve the receipt and label the older snapshot instead of presenting it as
+the latest result; they never resend the result.
 History is explicitly self-reported; server capability failures remain visible.

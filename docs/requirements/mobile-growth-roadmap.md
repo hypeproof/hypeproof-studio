@@ -592,7 +592,7 @@ acceptance are separate evidence.
 | ID | Requirement |
 |---|---|
 | MTR-15 | Only the original reporter can explicitly choose resolved or still failing for an exact delivery version/build. Reopening requires a reason. Default to latest; allow explicit prior-result build selection for reopening, including unavailable delivery evidence. |
-| MTR-16 | Persist account-bound draft and mutation key before POST. An ambiguous result remains uncertain across navigation/restart; only explicit same-key recovery resends. Never change an uncertain target or treat an old replay receipt as latest history. Refresh current revision before starting another response. |
+| MTR-16 | Persist account-bound draft and mutation key before POST. An ambiguous result remains uncertain across navigation/restart; only explicit same-key recovery resends. Never change an uncertain target or treat an old replay receipt as latest history. After acknowledgement, automatically read current history without resending. Require coherent refreshed current revision before starting another response; label prior snapshots explicitly if reading fails. |
 | MTR-17 | Preserve exportable words on storage failure and block sending; invalidate visible state and discard late replies across account/session boundaries. Read-only members cannot submit. Reporter statements do not prove installation or tester eligibility. |
 
 This child of the read-only delivery slice consumes Service #571 / PR #572.

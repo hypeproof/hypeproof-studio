@@ -81,7 +81,7 @@ public struct TeamOutcomeDraft: Codable, Sendable {
         public var page: TeamOutcomePage?, draft: TeamOutcomeDraft?
         public var events: [TeamOutcomeEvent] = []
         public var latestDelivery: TeamOutcomeBuild?
-        public var busy = false, storageReady = true
+        public var busy = false, storageReady = true, historyNeedsRefresh = false
         public var message = ""
         public init() {}
     }
@@ -131,6 +131,7 @@ public struct TeamOutcomeDraft: Codable, Sendable {
             catch { /* Existing reporter outcome still permits reopening its exact build. */ }
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
             view.page = page; view.events = page.events; view.latestDelivery = latest
+            view.historyNeedsRefresh = (page.current?.revision ?? 0) < (view.draft?.receipt?.revision ?? 0)
             if page.can_respond, view.draft == nil { let draft = TeamOutcomeDraft(accountID: account.accountID, requestID: requestID, revision: page.current?.revision ?? 0); try persist(draft); view.draft = draft }
             if var draft = view.draft, draft.phase == .draft, draft.expectedRevision != (page.current?.revision ?? 0) || (!draft.action.isEmpty && !eligibleTargets(for: draft.action).contains(where: { $0 == draft.target })) { draft.phase = .conflict; try persist(draft); view.draft = draft }
         } catch { if await admitFailure(g) { view.page = nil; view.events = []; view.latestDelivery = nil; view.message = view.storageReady ? "결과 확인 기능을 불러오지 못했어요. 로그인과 권한을 확인해 주세요." : "기기에 저장하지 못했어요. 초안을 내보내 주세요." } }
@@ -148,7 +149,7 @@ public struct TeamOutcomeDraft: Codable, Sendable {
     }
     public func newResponse() {
         guard !view.busy, view.storageReady, let page = view.page, page.can_respond, let binding, view.draft?.phase == .received else { return }
-        guard (page.current?.revision ?? 0) >= (view.draft?.receipt?.revision ?? 0) else { view.message = "새로고침으로 최신 결과를 확인한 뒤 다시 작성해 주세요."; changed(view); return }
+        guard !view.historyNeedsRefresh, (page.current?.revision ?? 0) >= (view.draft?.receipt?.revision ?? 0) else { view.message = "새로고침으로 최신 결과를 확인한 뒤 다시 작성해 주세요."; changed(view); return }
         let draft = TeamOutcomeDraft(accountID: binding.accountID, requestID: requestID, revision: page.current?.revision ?? 0)
         do { try persist(draft); view.draft = draft; view.message = "" } catch { view.message = "결과 초안을 저장하지 못했어요." }; changed(view)
     }
@@ -162,8 +163,18 @@ public struct TeamOutcomeDraft: Codable, Sendable {
             let event = try await send(account, draft); try event.validate(request: requestID)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }; guard event.matches(draft) else { throw SyncFailure.invalidResponse }
             draft.phase = .received; draft.receipt = event; view.draft = draft; try persist(draft)
-            // A replay can return an older receipt. Never replace the current server history with it.
-            view.message = "이 버전에 대한 확인 결과를 저장했어요. 새로고침하면 최신 이력을 볼 수 있어요."
+            // Read after a receipt; never resend a POST or replace newer history with an old replay.
+            view.historyNeedsRefresh = true
+            do {
+                let page = try await fetch(account, nil); try page.validate(request: requestID)
+                guard try await current(g, account) else { if g == generation { invalidate() }; return }
+                guard let latest = page.current, latest.revision >= max(event.revision, view.page?.current?.revision ?? 0),
+                      latest.revision != event.revision || latest == event else { throw SyncFailure.invalidResponse }
+                view.page = page; view.events = page.events; view.historyNeedsRefresh = false
+                view.message = "확인 결과를 저장하고 최신 이력을 불러왔어요."
+            } catch {
+                if await admitFailure(g) { view.message = "결과는 저장했지만 최신 이력을 불러오지 못했어요. 새로고침해 주세요." }
+            }
         } catch SyncFailure.http(409, _) {
             guard await admitFailure(g) else { return }
             if first { draft.phase = .conflict; view.draft = draft; view.page = nil; do { try persist(draft) } catch {} }

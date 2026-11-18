@@ -122,4 +122,30 @@ final class TeamOutcomeTests: XCTestCase {
         XCTAssertEqual(disk?.key, sent?.key); XCTAssertEqual(disk?.target, sent?.target)
     }
 
+    @MainActor func testReceiptRefreshUpdatesCurrentAndAllowsImmediateNextResponse() async throws {
+        let delivery = try delivery(); var page = try page(), disk: TeamOutcomeDraft?, sends = 0
+        let c = TeamOutcomeController(requestID: request, identity: { self.account }, fetch: { _,_ in page }, deliveries: { _ in delivery }, send: { _,d in sends += 1; let event = try self.receipt(d); page = try self.page([event]); return event }, load: { _ in disk }, save: { disk = $0 }, changed: { _ in })
+        await c.open(); c.edit(action: "resolved"); await c.submit()
+        XCTAssertFalse(c.view.historyNeedsRefresh); XCTAssertEqual(c.view.page?.current?.action, "resolved")
+        c.newResponse(); c.edit(action: "reopened", result: "Problem returned"); await c.submit()
+        XCTAssertEqual(sends, 2); XCTAssertEqual(c.view.page?.current?.action, "reopened"); XCTAssertEqual(c.view.page?.current?.revision, 2)
+    }
+    @MainActor func testReceiptRefreshFailureLagAndAccountSwitchPreserveAcknowledgementWithoutClaimingFreshness() async throws {
+        let delivery = try delivery(), empty = try page()
+        for mode in ["failure", "lag", "account"] {
+            var identity = account, disk: TeamOutcomeDraft?, sends = 0
+            let c = TeamOutcomeController(requestID: request, identity: { identity }, fetch: { _,_ in
+                if sends > 0 {
+                    if mode == "failure" { throw URLError(.timedOut) }
+                    if mode == "account" { identity = MemberApprovalIdentity(accountID: "B", sessionID: "S2") }
+                }
+                return empty
+            }, deliveries: { _ in delivery }, send: { _,d in sends += 1; return try self.receipt(d) }, load: { _ in disk }, save: { disk = $0 }, changed: { _ in })
+            await c.open(); c.edit(action: "resolved"); await c.submit()
+            XCTAssertEqual(sends, 1); XCTAssertEqual(disk?.phase, .received); XCTAssertNotNil(disk?.receipt)
+            if mode == "account" { XCTAssertNil(c.view.page); XCTAssertNil(c.view.draft) }
+            else { XCTAssertTrue(c.view.historyNeedsRefresh); c.newResponse(); XCTAssertEqual(c.view.draft?.phase, .received) }
+        }
+    }
+
 }

@@ -515,13 +515,14 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(outcomeTrace(app).contains("\"outcomePosts\":0"))
         githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
         let receipt = app.staticTexts["teamOutcomeReceipt"]; githubReveal(app,receipt); XCTAssertTrue(receipt.label.contains("18.1"))
-        githubReveal(app, app.buttons["다른 결과 작성"]); XCTAssertFalse(app.buttons["다른 결과 작성"].isEnabled)
-        app.buttons["새로고침"].tap(); githubReveal(app,app.buttons["다른 결과 작성"]); app.buttons["다른 결과 작성"].tap()
+        githubReveal(app, app.buttons["다른 결과 작성"]); XCTAssertTrue(app.buttons["다른 결과 작성"].isEnabled)
+        app.buttons["다른 결과 작성"].tap()
         _ = outcomeTrace(app); githubReveal(app,app.buttons["teamOutcomeReopened"]); app.buttons["teamOutcomeReopened"].tap()
         githubReveal(app,send); XCTAssertFalse(send.isEnabled)
         let reason = app.textViews["teamOutcomeResult"]; githubReveal(app,reason); reason.tap(); reason.typeText("Still happens after updating")
         githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
         githubReveal(app,receipt); XCTAssertTrue(outcomeTrace(app).contains("\"outcomeEvents\":2"))
+        XCTAssertTrue(app.staticTexts["teamOutcomeHistory2"].exists)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "reporter-outcome-exact-build-not-installed-proof"; shot.lifetime = .keepAlways; add(shot)
     }
     @MainActor func testInternalOutcomeUnknownReopenDoesNotResendAndExplicitRecoveryDeduplicates() throws {
