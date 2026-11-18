@@ -128,7 +128,25 @@ public class TeamEntryJourneyTest {
     }
     private static NativeTeamModel team(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("team");f.setAccessible(true);return(NativeTeamModel)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private void settled(java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
-        AtomicBoolean ready=new AtomicBoolean();for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}assertTrue("actual team model completion",ready.get());
+        settled("team model completion",predicate);
+    }
+    private void settled(String stage,java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
+        AtomicBoolean ready=new AtomicBoolean();
+        for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}
+        if(ready.get())return;
+        AtomicReference<String> snapshot=new AtomicReference<>("unavailable");
+        try { app.onActivity(a->{
+            NativeTeamModel t=team(a);NativeProductExperience e=experience(a);
+            String accountState;try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);ReflectionModel m=(ReflectionModel)field.get(a);accountState=",accountBusy="+m.busy+",accountReadOnly="+m.readOnly+",hasCredentials="+(m.credentials!=null);}catch(Exception problem){accountState=",accountObservationError="+problem.getClass().getName();}
+            snapshot.set("teamBusy="+t.busy+",canStart="+t.canStart+",hasQuestion="+(t.question!=null)
+                +",answerConfirmed="+t.answerConfirmed+",hasWords="+!t.words.isEmpty()+",hasPendingChoice="+(t.pendingChoice!=null)
+                +",answerMessage="+t.message.equals("다음 생각을 남겼어요")
+                +",experienceAvailable="+e.available+",experienceBusy="+e.busy+",experienceGranted="+e.granted
+                +",reads="+reads.get()+",triggers="+triggers.get()+",answers="+answers.get()
+                +",shown="+shown.get()+",consentWrites="+consentWrites.get()+",metricCount="+metricTypes.size()+accountState);
+        }); } catch(Throwable observation) { snapshot.set("observation_error="+observation.getClass().getName()); }
+        AssertionError failure=new AssertionError("Actual team model completion: "+stage+"; "+snapshot.get());
+        captureFailure(failure);throw failure;
     }
     private void screenshot(String name)throws Exception{Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}image.recycle();}
     @Test public void signedInGreetingOpensRealCardsAndKeepsConversationDraft()throws Exception{
@@ -175,11 +193,11 @@ public class TeamEntryJourneyTest {
         app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));experienceSettled(e->e.available&&!e.busy);assertTrue(metricTypes.isEmpty());
         selectMenu("사용 경험 공유 설정");experienceSettled(e->e.available&&!e.busy);
         onView(withText("동의하고 공유하기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->e.granted&&!e.busy);assertEquals(1,consentWrites.get());screenshot("android-team-experience-consent");onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        onView(withText("도착한 질문")).perform(click());settled("consent-granted/starting-choice",t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled("consent-granted/question-loaded",t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled("consent-granted/answer-received",t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));onView(withText("닫기")).inRoot(isDialog()).perform(click());
         // Explicitly reopening settings flushes the already-persisted answer, without a product replay.
         selectMenu("사용 경험 공유 설정");experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
         onView(withText("공유하지 않기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->!e.busy&&!e.granted);int before=metricTypes.size();onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+        onView(withText("도착한 질문")).perform(click());settled("consent-declined/starting-choice",t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled("consent-declined/question-loaded",t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled("consent-declined/answer-received",t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private void selectMenu(String title)throws Exception {
         boolean observe=Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("observeTeamMenu","false"));
