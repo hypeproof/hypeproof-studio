@@ -101,6 +101,8 @@ private struct SharedCacheFile: Codable {
     @Published var error: String?
     @Published var notice = ""
     @Published private var editing: [String: [String: [String: String]]] = [:]
+    var visibleAccountID: String? { signedIn ? account?.accountID : nil }
+    var feedbackScope: String { signedIn ? "account-" + (account?.accountID ?? "unavailable") : "guest" }
     private var account: StoredAccount?
     private let tokenFlight = AccountTokenRefreshFlight()
     private lazy var teamService: ConversationService = {

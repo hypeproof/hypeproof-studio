@@ -17930,6 +17930,12 @@
       ],
       "sources": [
         {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ProductFeedback.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/ProductFeedbackView.swift"
+        },
+        {
           "path": "apps/studio-native/ios/Sources/StudioCore/FailedReflectionDraft.swift"
         },
         {
@@ -18084,6 +18090,12 @@
         "ST-IMP-NATIVE-MOBILE"
       ],
       "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ProductFeedbackTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        },
         {
           "path": "apps/studio-native/ios/Tests/StudioCoreTests/FailedReflectionDraftTests.swift"
         },

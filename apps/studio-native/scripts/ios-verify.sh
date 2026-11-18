@@ -18,8 +18,20 @@ printf 'native verification: actual app and real Xcode push metadata controls\n'
 python3 ../scripts/check-ios-push-metadata.py \
   --app-info DerivedData-device/Build/Products/Release-iphoneos/HPStudio.app/Info.plist \
   --evidence ../evidence/push-metadata.json
-runtime=$(xcrun simctl list runtimes --json | python3 -c 'import json,sys; sdk=sys.argv[1]; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and ".iOS-" in x["identifier"] and x["version"].split(".")[:2]==sdk.split(".")[:2]]; print(r[-1]["identifier"])' "$sdk")
-device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro "$runtime")
+device_type=com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
+# Same-version runtimes can be restricted to other hardware (for example iPhone Duo).
+runtime=$(xcrun simctl list runtimes --json | python3 -c '
+import json, sys
+sdk, device_type = sys.argv[1:]
+runtimes = [r for r in json.load(sys.stdin)["runtimes"]
+            if r["isAvailable"] and ".iOS-" in r["identifier"]
+            and r["version"].split(".")[:2] == sdk.split(".")[:2]
+            and any(d["identifier"] == device_type for d in r.get("supportedDeviceTypes", []))]
+if not runtimes:
+    sys.exit(f"No available iOS {sdk} runtime supports {device_type}")
+print(runtimes[-1]["identifier"])
+' "$sdk" "$device_type")
+device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" "$device_type" "$runtime")
 cleanup_simulator() {
   local original_status=$1 cleanup_status=0
   trap - EXIT
