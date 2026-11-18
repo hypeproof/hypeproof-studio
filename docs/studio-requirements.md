@@ -10428,3 +10428,10 @@ ST-REQ-NATIVE-MOBILE: settings must show signed-in or guest state and the
 locally authenticated account ID when available. Guest settings offer Login using
 the existing device sign-in flow after settings dismissal. Never send the account
 ID to the conversational model just to answer an account question.
+
+### Durable retry touch target — 2026-11-18
+
+A saved local request's explicit retry action must expose at least a 44pt touch
+area. A single activation retries the preserved request identity and words;
+restart and background history reads must not create an automatic replay.
+This applies the existing native touch-target contract to the outbox action.

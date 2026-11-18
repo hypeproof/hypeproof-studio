@@ -4,7 +4,7 @@ cd "$(dirname "$0")/../ios"
 mkdir -p ../evidence
 xcodebuild -version | tee ../evidence/xcode-version.txt
 sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
-if [ "${sdk%%.*}" -lt 26 ]; then echo "Xcode 26+ / iOS 26+ SDK is required for App Store Connect" >&2; exit 2; fi
+if [ "${sdk%%.*}" -lt 27 ]; then echo "Xcode 27+ / iOS 27+ SDK is required for App Store Connect" >&2; exit 2; fi
 printf 'native verification: Swift core tests\n'
 swift test 2>&1 | tee ../evidence/swift-tests.log
 build_status=0
@@ -18,19 +18,10 @@ printf 'native verification: actual app and real Xcode push metadata controls\n'
 python3 ../scripts/check-ios-push-metadata.py \
   --app-info DerivedData-device/Build/Products/Release-iphoneos/HPStudio.app/Info.plist \
   --evidence ../evidence/push-metadata.json
-device_type=com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
-# Same-version runtimes can be restricted to other hardware (for example iPhone Duo).
-runtime=$(xcrun simctl list runtimes --json | python3 -c '
-import json, sys
-sdk, device_type = sys.argv[1:]
-runtimes = [r for r in json.load(sys.stdin)["runtimes"]
-            if r["isAvailable"] and ".iOS-" in r["identifier"]
-            and r["version"].split(".")[:2] == sdk.split(".")[:2]
-            and any(d["identifier"] == device_type for d in r.get("supportedDeviceTypes", []))]
-if not runtimes:
-    sys.exit(f"No available iOS {sdk} runtime supports {device_type}")
-print(runtimes[-1]["identifier"])
-' "$sdk" "$device_type")
+# Use only a phone advertised by an installed matching runtime.
+selection=$(xcrun simctl list runtimes --json | python3 ../scripts/select-ios-simulator.py "$sdk")
+read -r device_type runtime <<< "$selection"
+
 device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" "$device_type" "$runtime")
 cleanup_simulator() {
   local original_status=$1 cleanup_status=0
