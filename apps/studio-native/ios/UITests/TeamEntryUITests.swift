@@ -445,8 +445,37 @@ final class TeamEntryUITests: XCTestCase {
         githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
         if flags["HP_TEAM_DISCUSSION"] == "1" || flags["HP_TEAM_RELATED"] == "1" { return app }
         let entry = app.buttons[outcome ? "teamOutcomeEntry" : delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
-        githubReveal(app, entry); entry.tap()
+        XCTAssertTrue(app.buttons["teamRequestTextHistory"].waitForExistence(timeout: 10))
+        detailReveal(app, entry); entry.tap()
         return app
+    }
+    @MainActor private func detailReveal(_ app: XCUIApplication, _ item: XCUIElement) {
+        let list = app.collectionViews["teamRequestDetailList"]
+        XCTAssertTrue(list.waitForExistence(timeout: 10))
+        func visibleFrame() -> Bool {
+            guard item.exists else { return false }
+            let frame = item.frame, viewport = list.frame
+            return !frame.isEmpty && !frame.isNull && !frame.isInfinite
+                && !viewport.isEmpty && !viewport.isNull && !viewport.isInfinite
+                && viewport.contains(frame) && app.windows.firstMatch.frame.contains(frame)
+        }
+        // A loaded but offscreen row may have no activation point. Reveal it in
+        // its owning List before requesting actual hittability; never replace tap.
+        for _ in 0..<8 {
+            if visibleFrame() && item.isHittable { return }
+            let frame = item.exists ? item.frame : .zero
+            if !frame.isEmpty && !frame.isNull && !frame.isInfinite && frame.minY < list.frame.minY {
+                list.swipeDown()
+            } else {
+                list.swipeUp()
+            }
+        }
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "detail-reveal-failure-" + item.identifier; shot.lifetime = .keepAlways; add(shot)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "detail-reveal-hierarchy-" + item.identifier; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        XCTAssertTrue(visibleFrame(), "The real detail control must be inside its List viewport.")
+        XCTAssertTrue(item.isHittable)
     }
     @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement) {
         for _ in 0..<8 { if item.exists && item.isHittable { return }; app.swipeUp() }; XCTAssertTrue(item.isHittable)
@@ -846,7 +875,7 @@ final class TeamEntryUITests: XCTestCase {
         }
         captureRootReplyBeforeHitTest("final-assertion")
         XCTAssertTrue(rootReply.isHittable); rootReply.tap()
-        githubReveal(app,send); XCTAssertTrue(send.isEnabled); send.tap(); app.alerts.buttons["보내기"].tap(); githubReveal(app,next)
+        detailReveal(app,send); XCTAssertTrue(send.isEnabled); send.tap(); app.alerts.buttons["보내기"].tap(); githubReveal(app,next)
         app.navigationBars["요청과 논의"].buttons["새로고침"].tap()
         let reply = app.staticTexts["teamCommentIntent-tcm_" + String(repeating:"c",count:32)]
         for _ in 0..<8 {

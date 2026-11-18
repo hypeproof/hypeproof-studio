@@ -199,7 +199,7 @@ struct TeamRequestDetailView: View {
                         }
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
-        }.navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
+        }.accessibilityIdentifier("teamRequestDetailList").navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: $showIntake) { TeamIntakeScreen(model: model.makeIntake(requestID, intakeProduct)) }
             .navigationDestination(isPresented: $showTextHistory) { TeamTextRevisionScreen(model: model.makeTextHistory(requestID, textTarget, textProduct)) }
             .navigationDestination(isPresented: $showRelated) { TeamRelationScreen(model: model.makeRelations(requestID, relatedProduct), requests: model) }

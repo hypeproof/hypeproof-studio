@@ -1378,3 +1378,21 @@ This delta has not been built or run locally; shared-resource validation was not
 bypassed. Integrated CI and actual user acceptance remain separate gates.
 
 The Intake diagnostic top anchor uses a finite frame contained in the List, not a touch activation-point query. The same six-scroll positioning bound and all real-control hittability assertions remain. Root and independent source review passed; corrected runtime remains pending.
+
+
+### 2026-11-19 final intake candidate recovery (run 44403446430)
+
+At 28681ec1, 178 Core tests and both new Intake UI cases passed (140.771s and
+87.289s). The complete UI suite did not finish: the 65-minute outer job cap
+cancelled execution during text-history coverage. Preserve NOT RUN for unfinished
+cases. Two earlier failures were real-control reveal failures: final root-reply
+comment send activation-point lookup, and delivery entry before any stale-data
+assertion. They are not evidence that live API/APNs or TestFlight works.
+
+The recovery waits for loaded detail content, identifies the owning detail List,
+and uses bounded frame-directed scrolling before real hittability/tap. It affects
+the two failing entry paths only; assertions, request identities, confirmation and
+authorization remain unchanged. Containment is a prerequisite, not proof of
+hittability. The outer job budget is 75 minutes to allow suite and evidence
+completion; individual 180/240-second test limits remain unchanged. Runtime
+verification of this correction is pending. Earlier failure evidence is retained.

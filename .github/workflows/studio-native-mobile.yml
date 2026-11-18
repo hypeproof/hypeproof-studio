@@ -90,7 +90,7 @@ jobs:
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    timeout-minutes: 65 # 62 UI cases measured 43m; retain build/setup and failure-evidence time
+    timeout-minutes: 75 # 65 UI cases reached the 65m outer cap; retain build/setup and failure evidence
     steps:
       - uses: actions/checkout@v4
         with:
