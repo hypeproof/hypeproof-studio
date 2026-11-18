@@ -892,3 +892,39 @@ listening checks remain. Both this case and durable retry passed together in
 `/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
 All remaining references to the removed saved/account/sync labels in native
 journeys were checked; they assert absence, not stale positive visibility.
+
+
+### Team inbox and explicit subscriptions — Studio #4368
+
+Core controls cover explicit stable-key subscription recovery, request mute,
+late account replies, fresh detail plus read acknowledgement, bounded/malformed
+pages and revisions, source freshness, typed opened destination identity, and
+legacy versus transient capability discovery. Final Core15 PASS (Inbox9 plus
+existing Push6), runner exit0: `/tmp/ios4368-core-final.log`. A recognized
+`team_subscription_conflict` during recovery becomes a durable conflict requiring
+fresh read and explicit new choice; unknown409 remains uncertain. Valid480+50
+filtered rows retain the first500 with read state and stop further pagination.
+Independent source re-review accepted both corrections.
+
+Native evidence is deliberately separate from those final Core-only changes:
+- Denied OS permission, explicit opt-in, inbox/request detail, per-request
+  settings link and original draft preservation PASS30.254s in
+  `/tmp/ios4368-inbox-ui-4.xcresult`.
+- Warm/cold authorized push, occupied context-sheet deferral, retained context
+  text and main draft, and detail back-to-inbox closure PASS51.328s in
+  `/tmp/ios4368-inbox-ui-6.xcresult`, runner and owned-simulator cleanup exit0.
+  This verified the one-shot initial push route correction: returning from detail
+  must not replay initial navigation. Screenshot inspected at
+  `/tmp/ios4368-inbox-ui-6-attachments/FC3530F9-3676-4BF8-B86A-71622E05A46D.png`.
+
+Earlier native attempts remain failed evidence: v1 lacked the fixture launch
+argument, v2 exposed an actor-isolation compile error, v3 awaited an offscreen
+lazy settings row, v4 selected an underlying navigation bar, and v5 exposed the
+initial-route replay. Each was corrected; only affected flows were repeated.
+The denied-permission pass precedes the route-only fix; both native passes
+precede the final conflict/cumulative-cap Core fixes, which passed focused Core
+regressions. No blanket exact-final native-suite pass is claimed.
+
+Fixture transport, OS permission result and notification envelope are synthetic;
+the actual account, model, protected preferences, navigation and screens remain.
+No production subscription, provider send or installed-device receipt is claimed.

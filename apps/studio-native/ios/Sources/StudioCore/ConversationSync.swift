@@ -299,13 +299,18 @@ public final class ConversationService: @unchecked Sendable {
               let reentry = result["reentry"] as? [String: String], reentry["method"] == "GET", reentry["path"] == "/v1/me/cards",
               result["model_calls"] as? Int == 0 else { throw SyncFailure.invalidResponse }
     }
-    public func accountPush(_ id: String, method: String, body: [String: String]?, token: String) async throws {
+    public func accountPush(_ id: String, method: String, body: [String: String]?, token: String, capabilities: [String]? = nil) async throws {
         let parts = id.split(separator: "/", omittingEmptySubsequences: false)
         guard let first = parts.first, UUID(uuidString: String(first))?.uuidString.lowercased() == String(first),
               ["PUT", "DELETE", "POST"].contains(method),
               (method == "POST" ? parts.count == 2 && parts[1] == "opened" : parts.count == 1),
               (method == "DELETE") == (body == nil) else { throw SyncFailure.invalidResponse }
-        let (data, _) = try await request("/v1/me/push-devices/" + id, method: method, body: body, token: token, timeout: 12)
+        var payload: [String: Any]? = body
+        if let capabilities {
+            guard method == "PUT", !capabilities.isEmpty, try TeamPushCapabilities.supported(capabilities) == capabilities else { throw SyncFailure.invalidResponse }
+            payload?["capabilities"] = capabilities
+        }
+        let (data, _) = try await request("/v1/me/push-devices/" + id, method: method, body: payload, token: token, timeout: 12)
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SyncFailure.invalidResponse }
         if method == "POST" {
             guard let recorded = result["recorded"] as? NSNumber, CFGetTypeID(recorded) == CFBooleanGetTypeID(), recorded.boolValue,
@@ -313,6 +318,7 @@ public final class ConversationService: @unchecked Sendable {
         } else {
             guard result["schema"] as? String == "hps-push-device/1", result["id"] as? String == id,
                   let active = result["active"] as? NSNumber, CFGetTypeID(active) == CFBooleanGetTypeID(), active.boolValue == (method == "PUT") else { throw SyncFailure.invalidResponse }
+            if let capabilities { guard result["capabilities"] as? [String] == capabilities else { throw SyncFailure.invalidResponse } }
             if method == "PUT" { guard let generation = result["generation"] as? NSNumber, CFGetTypeID(generation) != CFBooleanGetTypeID(), generation.doubleValue.isFinite, generation.doubleValue.rounded() == generation.doubleValue, generation.doubleValue >= 1 else { throw SyncFailure.invalidResponse } }
         }
     }
@@ -498,5 +504,42 @@ extension ConversationService {
         let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/outcomes", method: "POST", body: draft.payload(), token: token)
         let event = try JSONDecoder().decode(Receipt.self, from: data).event
         try event.validate(request: draft.requestID); guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
+    }
+}
+
+
+extension ConversationService {
+    public func teamSubscriptions(token: String) async throws -> TeamSubscriptionPage {
+        let (data, _) = try await request("/v1/me/team-requests/subscriptions", token: token)
+        let page = try JSONDecoder().decode(TeamSubscriptionPage.self, from: data); try page.validate(); return page
+    }
+    public func setTeamSubscription(_ mutation: TeamSubscriptionMutation, token: String) async throws -> TeamSubscription {
+        let (data, _) = try await request("/v1/me/team-requests/subscriptions", method: "POST", body: mutation.payload(), token: token)
+        struct Response: Decodable { let subscription: TeamSubscription; let already: Bool }
+        let response = try JSONDecoder().decode(Response.self, from: data); try response.subscription.validate()
+        guard mutation.matches(response.subscription) else { throw SyncFailure.invalidResponse }; return response.subscription
+    }
+    public func teamInbox(after: String?, token: String) async throws -> TeamInboxPage {
+        if let after { guard let value = Int(after), value > 0, String(value) == after else { throw SyncFailure.invalidResponse } }
+        let path = "/v1/me/team-requests/notifications?include_discussion=true" + (after.map { "&after=" + $0 } ?? "")
+        let (data, _) = try await request(path, token: token)
+        let page = try JSONDecoder().decode(TeamInboxPage.self, from: data); try page.validate(after: after); return page
+    }
+    public func readTeamNotification(sequence: Int, token: String) async throws -> Double {
+        guard sequence > 0, sequence <= 9_007_199_254_740_991 else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/notifications/read?include_discussion=true", method: "POST", body: ["schema":"hps-team-notification-read/1", "event_sequence":sequence], token: token)
+        struct Response: Decodable { let schema: String; let event_sequence: Int; let read_at: Double }
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        guard response.schema == "hps-team-notification-read/1", response.event_sequence == sequence, response.read_at.isFinite, response.read_at > 0 else { throw SyncFailure.invalidResponse }
+        return response.read_at
+    }
+}
+
+extension ConversationService {
+    public func openedTeamPush(installation: String, reference: AccountPushReference, token: String) async throws -> TeamPushDestination {
+        guard UUID(uuidString: installation)?.uuidString.lowercased() == installation, reference.kind == "team_request" else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/push-devices/" + installation + "/opened", method: "POST", body: ["schema":"hps-push-open/1", "delivery_id":reference.deliveryID], token: token)
+        guard let response = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SyncFailure.invalidResponse }
+        return try TeamPushDestination(response, reference: reference)
     }
 }

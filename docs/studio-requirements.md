@@ -10489,3 +10489,13 @@ A saved local request's explicit retry action must expose at least a 44pt touch
 area. A single activation retries the preserved request identity and words;
 restart and background history reads must not create an automatic replay.
 This applies the existing native touch-target contract to the outbox action.
+
+
+## iPhone team notification inbox (#4368)
+
+MTR-18–21 adds a permission-independent team inbox, explicit product/request
+notification preferences, and server-authorized cold/warm push destinations.
+Uncertain subscription outcomes never replay automatically. Existing question
+and approval registration remains independent of internal-product entitlement.
+Notification entry preserves current drafts and does not switch accounts or
+replace an occupied composition screen. Discussion labels are descriptive.
