@@ -424,19 +424,28 @@ final class TeamEntryUITests: XCTestCase {
     @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement) {
         for _ in 0..<8 { if item.exists && item.isHittable { return }; app.swipeUp() }; XCTAssertTrue(item.isHittable)
     }
+    @MainActor private func githubTrace(_ app: XCUIApplication) -> String {
+        let trace = app.staticTexts["teamGitHubTrace"]
+        // Stop at the first row. Further downward swipes dismiss the containing sheet.
+        for _ in 0..<8 {
+            if trace.exists && trace.isHittable { return trace.value as? String ?? "" }
+            app.swipeDown()
+        }
+        XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")
+        return trace.value as? String ?? ""
+    }
     @MainActor func testInternalGitHubCancelSaveAndHistory() throws {
         let app = githubApp(), issue = app.textFields["teamGitHubIssue"], reason = app.textViews["teamGitHubReason"]
         XCTAssertTrue(issue.waitForExistence(timeout: 10)); issue.tap(); issue.typeText("123")
         githubReveal(app,reason); reason.tap(); reason.typeText("Verified issue rationale")
         let send = app.buttons["teamGitHubSend"]; githubReveal(app,send); send.tap(); app.alerts.buttons["취소"].tap()
         XCTAssertEqual(reason.value as? String,"Verified issue rationale")
-        for _ in 0..<8 { if app.staticTexts["teamGitHubTrace"].isHittable { break }; app.swipeDown() }
-        XCTAssertTrue((app.staticTexts["teamGitHubTrace"].value as? String ?? "").contains("\"githubPosts\":0"))
+        XCTAssertTrue(githubTrace(app).contains("\"githubPosts\":0"))
         githubReveal(app,send); send.tap(); app.alerts.buttons["저장"].tap()
         githubReveal(app, app.staticTexts["teamGitHubReceipt"]); app.buttons["새로고침"].tap()
-        for _ in 0..<8 { app.swipeDown() }
-        XCTAssertTrue((app.staticTexts["teamGitHubTrace"].value as? String ?? "").contains("\"githubEvents\":1"))
-        XCTAssertTrue((app.staticTexts["teamGitHubTrace"].value as? String ?? "").contains("\"githubPosts\":1"))
+        let savedTrace = githubTrace(app)
+        XCTAssertTrue(savedTrace.contains("\"githubEvents\":1"))
+        XCTAssertTrue(savedTrace.contains("\"githubPosts\":1"))
         let history = app.staticTexts["teamGitHubHistoryEntry1"]
         githubReveal(app,history)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "github-association-verified-metadata-not-delivery"; shot.lifetime = .keepAlways; add(shot)
@@ -466,8 +475,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue((app.staticTexts["teamGitHubTrace"].value as? String ?? "").contains("\"githubPosts\":1"))
         githubReveal(app,retry); retry.tap(); app.alerts.buttons["저장"].tap()
         githubReveal(app,app.staticTexts["teamGitHubReceipt"])
-        for _ in 0..<8 { if app.staticTexts["teamGitHubTrace"].isHittable { break }; app.swipeDown() }
-        let trace = app.staticTexts["teamGitHubTrace"].value as? String ?? ""
+        let trace = githubTrace(app)
         XCTAssertTrue(trace.contains("\"githubPosts\":2")); XCTAssertTrue(trace.contains("\"githubEvents\":1"))
     }
 

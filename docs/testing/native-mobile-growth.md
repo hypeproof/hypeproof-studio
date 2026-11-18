@@ -777,3 +777,19 @@ use bounded real scrolling and confirm one stored event, cancellation with
 zero POSTs, and two explicit same-key POSTs with one event after an unknown result. These fixtures do not prove deployed Service #567 integration,
 actual operator grants, Apple processing, TestFlight availability, installation
 or reporter confirmation. Those gates remain NOT RUN.
+
+
+CI run `44298015149` at `558498e3` completed 47 UI cases with one failure:
+repeated downward swipes dismissed the GitHub association sheet before reading
+its counters. The regression now stops scrolling when that row is reachable;
+cancel/save/history and unknown-result recovery retain their original assertions.
+The same job hit its 45-minute execution limit after approximately 34 minutes of
+UI tests plus build/setup overhead. Its bounded limit is now 55 minutes to allow
+result finalization, cleanup and artifact upload. This raises the worst-case
+runner allocation by ten minutes per iOS job, with no added jobs or automatic
+retry; individual case limits remain unchanged. Neither change makes the failed
+run passing. A new exact-source remote run is required.
+
+Both affected simulator journeys passed on 2026-11-18 (2 tests, 0 failures;
+`/tmp/ios-4361-github-regression.xcresult`, log of the same basename).
+This is focused synthetic verification, not a full-suite or installed-device pass.
