@@ -759,3 +759,20 @@ failure was not reproduced in that single baseline run. Android sources are
 unchanged. This is not a passing full-suite result or proof of provider CI.
 Logs: `/tmp/ios-sdk27-contracts.log`, `/tmp/ios-sdk27-upload-contracts-2.log`,
 `/tmp/ios-sdk27-all-contracts.log`, `/tmp/ios-sdk27-baseline-4346.log`.
+
+
+SDK27 remote run `44297615009` retained a failed logout-during-sync case at the
+180-second default and hit the iOS job's 45-minute execution cap. The logout case
+now explicitly uses the existing 240-second maximum; transport barriers, no-send
+assertions and logout completion checks remain unchanged. The job cap is 55 minutes
+for measured build/UI duration plus evidence finalization, adding at most ten runner
+minutes with no automatic retry or extra jobs. The prior run remains failed; these
+limits alone do not establish a passing run.
+
+The focused logout simulator journey passed on 2026-11-18 (1 test, 0 failures,
+51.487 seconds; `/tmp/ios-4360-logout-regression.xcresult`), with runner and owned
+simulator cleanup exit 0. The Android consent-decline failure had three predicates
+on one source line and no failure-time state, so its cause remains unproven. Its
+waits now have distinct stage names and synthetic model/counter diagnostics with
+the original wait budgets and assertions. Android compilation/instrumentation is
+pending remote CI; no speculative runtime change was made.

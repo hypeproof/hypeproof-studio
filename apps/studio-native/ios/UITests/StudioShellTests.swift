@@ -887,6 +887,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 10), .completed)
     }
     @MainActor func testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords() throws {
+        // Hosted accessibility traversal exceeded the 180s default; keep the existing 240s hard cap.
+        executionTimeAllowance = 240
         let app = launch("logout-sync"); signIn(app)
         let words = "Keep my queued thought"
         field(app).tap(); field(app).typeText(words)
