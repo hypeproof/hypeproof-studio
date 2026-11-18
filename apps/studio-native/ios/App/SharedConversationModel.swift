@@ -74,6 +74,7 @@ private struct SharedCacheFile: Codable {
     private let outcomeControllers = TeamOutcomeControllers()
     private let githubObservationControllers = TeamGitHubObservationControllers()
     private let relationControllers = TeamRelationControllers()
+    private let textRevisionControllers = TeamTextRevisionControllers()
     static let personalID = "personal-reflection"
     @Published private(set) var opening = "요즘 어떤 일에 시간을 많이 쓰세요?"
     @Published private(set) var openingHint = "일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요."
@@ -309,6 +310,25 @@ private struct SharedCacheFile: Codable {
             delivery.controller = controller; self?.deliveryControllers.register(controller)
             return delivery
         }
+        presentation.makeTextHistory = { [weak self] request, target, product in
+            let text = TeamTextRevisionPresentation()
+            let controller = TeamTextRevisionController(requestID: request, targetID: target, identity: { [weak self] in try await self?.approvalIdentity() }, discover: { [weak self] binding in
+                guard let self else { throw CancellationError() }
+                let access = try await self.teamService.teamRequestAccess(token: self.approvalToken(binding)); try access.validate(account: binding.accountID)
+                guard access.products.contains(product) else { throw SyncFailure.http(403, "team_product_denied") }
+                return access.supported_text_revision_schemas ?? []
+            }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }; return try await self.teamService.teamTextHistory(id: request, target: target, after: after, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }; return try await self.teamService.reviseTeamText(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }; return try self.readTeamDraft(TeamTextRevisionDraft.self, account: account, name: target + "-text.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request, target: target); try self.writeTeamDraft(draft, account: draft.accountID, name: target + "-text.json")
+            }, changed: { [weak text] in text?.state = $0 })
+            text.controller = controller; self?.textRevisionControllers.register(controller); return text
+        }
         presentation.makeRelations = { [weak self] request, product in
             let related = TeamRelationPresentation()
             let controller = TeamRelationController(requestID: request, product: product, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, target, after in
@@ -390,6 +410,7 @@ private struct SharedCacheFile: Codable {
     }
     private func writeTeamDraft<T: Encodable>(_ value: T, account: String, name: String) throws {
 #if DEBUG
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "text", name.hasSuffix("-text.json"), let draft = value as? TeamTextRevisionDraft, draft.body.contains("Unstored") { throw CocoaError(.fileWriteOutOfSpace) }
         if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "related", name.hasSuffix("-related.json"), let draft = value as? TeamRelationDraft, !draft.reason.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
         if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "outcome", name.hasSuffix("-outcome.json"), let draft = value as? TeamOutcomeDraft, !draft.result.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
         if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "github", name.hasSuffix("-github.json"), let draft = value as? TeamGitHubDraft, !draft.reason.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
@@ -739,7 +760,7 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -791,7 +812,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -930,6 +951,19 @@ private struct SharedCacheFile: Codable {
         do { try edit(id) { try $0.enqueue(reflection: id == Self.personalID) } } catch { self.error = error.localizedDescription; return }
         if syncing, let request = entries[id]?.request {
             queuedSend = (id, request.id); notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
+        } else { retry() }
+    }
+    var canRetryLocalRequest: Bool {
+        signedIn && accountStorageReady && cacheReadable && !loggingOut
+            && !stoppingReflection && !sendingCurrentRequest && cache.request?.status == "local"
+    }
+    // An explicit user Retry can wait behind a read just like explicit Send.
+    // Reads/restarts/uncertain results themselves never create a retry intent.
+    func retryFromUser() {
+        guard canRetryLocalRequest, let id = selected, let request = entries[id]?.request else { return }
+        if syncing {
+            queuedSend = (id, request.id)
+            notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
         } else { retry() }
     }
     func retry() {
@@ -1090,7 +1124,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -1128,7 +1162,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

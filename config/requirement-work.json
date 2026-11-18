@@ -1022,12 +1022,15 @@
         "MTR-30",
         "MTR-31",
         "MTR-32",
-        "MTR-33"
+        "MTR-33",
+        "MTR-34",
+        "MTR-35",
+        "MTR-36"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "9d94936ade724462f1cbaf382fa837da78311085188d5ccd5e9e6d57335d659f",
+      "sha256": "26bf27e8a6bfaac6bf019e4df518f942a88c36ed1ac99f38ffae7f91fa2abe37",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5713,6 +5716,42 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/TeamHiddenContentTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
+      ]
+    },
+    {
+      "id": "ios-internal-text-revisions-m3",
+      "title": "iOS author text revisions and latest explicit question",
+      "issue": 4379,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-34",
+            "MTR-35",
+            "MTR-36"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-retention-m3"
+      ],
+      "next_action": "Obtain exact-source CI, separately deploy the matching Service contract, and verify the installed iPhone flow before claiming acceptance.",
+      "design_delta": "Reuse fresh author-only Service admission, schema discovery and protected account drafts; preserve original text, explicit intent and reply targets.",
+      "positive_control": "Author confirms edit, reads unchanged original and current/history, discovers latest question beyond loaded comments, and recovers unknown exact-key writes.",
+      "negative_control": "Readonly users cannot edit; stale revisions require explicit fresh decision; storage failure preserves export; account/retention boundaries withhold private acknowledged copies.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamTextRevisions.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/TeamTextRevisionView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamTextRevisionTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]

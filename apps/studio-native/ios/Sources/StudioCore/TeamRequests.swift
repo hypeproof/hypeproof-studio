@@ -5,6 +5,7 @@ public struct TeamRequestAccess: Codable, Sendable {
     public let products: [String]
     public var supported_push_capabilities: [String]? = nil
     public var supported_comment_schemas: [String]? = nil
+    public var supported_text_revision_schemas: [String]? = nil
     public func validate(account: String) throws {
         guard schema == "hps-team-request-access/1", account_id == account,
               !notice_version.isEmpty, notice_version.utf16.count <= 128,
@@ -127,8 +128,10 @@ public struct TeamRequestDetail: Decodable, Sendable {
     public let comments: [TeamRequestComment]
     public let next_comments_cursor: String?
     public var retention: TeamCommentRetention? = nil
+    public var latest_question: TeamLatestQuestion? = nil
     public func validate(id: String) throws {
-        try request.validate(); try retention?.validate()
+        try request.validate(); try retention?.validate(); try latest_question?.validate(request: id)
+        if let latest_question { try retention?.validateScope(latest_question.retention) }
         guard request.id == id, comments.count <= 100, Set(comments.map(\.id)).count == comments.count,
               next_comments_cursor.map({ TeamRequestPage.validCursor($0, prefix: "tcm_") }) ?? true else { throw SyncFailure.invalidResponse }
         try retention?.validateScope(request.retention)

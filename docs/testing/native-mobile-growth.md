@@ -287,6 +287,7 @@ the new fixtures as a successful physical retest.
 | MFR-T03-stop-denial | Stop races a recorded admission failure; the original POST delivers its typed403 after the snapshot already says failed. Relaunch. | Preserve the exact refusal reason and human words; no fake cancellation, extra POST or voice continuation. |
 | MFR-T03-response-stop | A real native voice turn leaves its POST pending while a Service-shaped running row exists. Explicitly stop; the original POST returns its late error before cancel acknowledgment, then relaunch with a separate draft. | The >=44pt action is usable during POST; only exact terminal acknowledgment shows stopped. Same human words/ID remain; no automatic replay, extra capture, reply or draft loss. Synthetic transport; physical/live voice remains separate. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T05-held-read | After the failed POST and relaunch, hold an ordinary periodic history read. Release it without tapping Retry and require no replay. Hold another read, tap Retry exactly once, then release. | The explicit action remains enabled during the read, queues once without an early POST, and sends the same ID/text after reconciliation. Require one accepted turn, no fixture timeout, and the original answer assertion. |
 | MFR-T05-recorded | A Service-shaped failed turn leaves its user event and terminal ID after the first POST. Relaunch, explicitly restore into an empty composer, relaunch again, then explicitly Send. | Restore/relaunch creates no POST; only Send creates a distinct ID at the reconciled revision. The original failed event remains. |
 | MFR-T05-collision | After a recorded failure, write a different draft and relaunch. | Restore stays disabled and preserves the draft. Pure controls also cover unsaved overlays, whitespace and all non-failed states. |
 | MPER-T03-history | Reopen an 80-message cached conversation, switch away while reading an equal-count cached conversation, and change synthetic account. | The correct latest answer is inside the actual viewport; history navigation creates no AI request and cannot retain the other account's messages. |
@@ -1154,6 +1155,106 @@ The synthetic transport retains its existing purge_implemented=false after
 reopening; its capability footer is not a statement about deployed retention.
 Requirement integrity PASS749; no runtime source changed after v3.
 No deployment, deletion job, provider push, TestFlight or phone acceptance claim.
+
+
+### Author text revisions — Studio #4379
+
+Core parser/controller slice35cea1d3 was independently reviewed and passed8
+focused controls in the root checkout before UI integration. The API/UI slice
+uses authenticated /:id/text/:target and supported_text_revision_schemas, the
+existing protected account draft store and a weak live-controller registry.
+Detail navigation clears comment focus before a generation-checked transition.
+Original/current labels and author/server timestamps are explicit; latest
+question metadata can point outside the loaded comment page.
+
+Core21 PASS `/tmp/ios4379-wire-core1.log`, wrapper exit0, includes9 text controls
+plus existing hidden-content/discussion controls. An explicit fresh edit can
+start from current authoritative text even when an acknowledged older receipt
+lies outside the loaded history; that withheld local body is not displayed.
+Native v3 `/tmp/ios4379-text-ui-3.xcresult` passed both focused journeys
+(59.709s and43.998s), with wrapper cleanup exit0. These exercise latest-question
+navigation beyond page1, immutable original, exact captured edited words,
+unknown same-key recovery, explicit conflict choice, author-only access and
+failed local-save export/cancel with zero POST. The existing explicit-question
+and selected-comment reply journey passed64.743s in v2 with identical app source.
+The v1/v2 failures remain preserved: test caret-position assumptions were replaced
+by exact single-insertion preservation; the v2 save-failure assertion failed on
+an offscreen diagnostic lookup after actionable export and disabled-send checks
+had passed. Bounded reveal fixed that diagnostic lookup without changing export.
+
+Viewed screenshot
+`/tmp/ios4379-text-ui-3-attachments/DE9EC64D-1E39-4FAD-9697-369323F1B66F.png`
+shows readable current/original text, author/server timestamps and history.
+The DEBUG trace and synthetic fixture dates are not production observations.
+Independent API/UI source review and targeted parent review passed.
+
+After native v3, a bounded Core correction accepts validated physically purged
+history after reopening and scrubs only an exact acknowledged receipt. Final
+`/tmp/ios4379-final-core2.log` passed10 controls, wrapper exit0, including hidden
+and readable physical-purge cases, one persistence per matching acknowledgment,
+private-body rejection and unchanged uncertain words/keys. Targeted source review
+passed; native v3 predates this Core-only correction (UI source unchanged).
+Requirement inventory check passed752 entries; `git diff --check` passed.
+Local release-check body contract passed via
+`/tmp/ios4379-release-check-validation.json`; the proposed section is
+`/tmp/ios4379-release-check.md`. This is not a remote release-check result.
+Synthetic transports are not real Service deployment, TestFlight readiness,
+phone installation or full integrated CI acceptance.
+
+### Native failure recovery — 2026-11-19
+
+Run44364736519 at3f854ffd executed62 UI journeys with four failures; its job also
+reached the55-minute limit after tests failed. The original retry trace contains
+no button-action entry or second POST, despite an unobscured44pt-plus target.
+Ordinary synchronization disabled that action; an explicit-intent queue and
+MFR-T05-held-read now cover that race. This is a source-grounded fix pending
+execution, not proof that synchronization caused the observed missed tap.
+
+The comment receipt check now reads the visible full receipt status before
+refreshing and checking the exact received comment. Received-body withholding
+still requires fresh matching history. Noninteractive related-trace inspection
+no longer asks XCTest for an activation point. The real original-request reply
+button still requires a hittable target and a native tap; its activation-point
+failure remains unresolved. These changes have source review and diff checks,
+but focused native execution and full acceptance have not yet passed.
+
+
+Run44378435132 at `41fa5285` passed the original retry journey, the new held-history
+single-retry control, Korean speech completion and the real original-request reply
+journey (127.845 seconds). The comment journey passed its exact receipt check but
+failed the subsequent fresh-comment existence assertion. It had scrolled to the
+top receipt and then waited in place, while the discussion row sits below the
+navigation sections of a lazy list. The test now uses its existing bounded reveal
+helper after the single refresh, retaining the exact comment body assertion and
+checking the resulting frame lies in the viewport. This geometry diagnosis is
+not proof of the original cause: cancellation left an incomplete xcresult without
+Info.plist, so the failure screenshot could not be extracted.
+The run was cancelled at the outer 55-minute limit; partial passes do not establish
+full-suite acceptance. The separately reviewed `2df4fcf1` outer 65-minute budget is
+propagated for the measured approximately 43-minute 62-case suite plus setup/build
+and evidence collection. Per-test limits, the five-scroll reveal bound and real
+interaction assertions are unchanged. New changes are locally runtime NOT RUN:
+shared-resource ownership remains blocked; no queue bypass or duplicate run.
+
+
+### Real-playback synthetic capture boundary — 2026-11-19
+
+Run44385991373 at `2d93` passed153 Core tests but failed3 of60 UI journeys. The
+real Korean playback case reached playback completion and capture2, then observed
+2 accepted turns instead of1 after Stop. Its finite synthetic partial producer
+ended after about20 seconds; the unchanged real endpoint can then finish on
+silence (or at30 seconds). Exact causality remains unconfirmed: the failure lacked
+its final trace and supplied only shallow snapshots plus video.
+Only DEBUG `voice-playback-real` capture2 now freezes endpoint time consistently
+for initialization, recognition and decisions, and holds its synthetic partial
+until actual Stop/background/teardown cancellation. Real OS synthesis/callback,
+first capture, other scenarios and production clocks stay unchanged. The actual
+Stop tap, accepted1/captures2 assertions and existing bounded test deadlines remain.
+This verifies playback-to-capture/Stop behavior, not real microphone endpointing.
+A fixture trace flag explicitly identifies the frozen synthetic endpoint; trace,
+submitted words and playback timeline are attached before count assertions.
+Static review and diff checks are not runtime evidence; new execution is NOT RUN
+while the shared resource slot remains blocked. No heavy work was requeued.
 
 ### Full-suite runtime budget — 2026-11-19
 

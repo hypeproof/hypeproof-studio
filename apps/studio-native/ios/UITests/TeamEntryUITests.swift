@@ -331,7 +331,13 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertFalse(receiptFrame.isEmpty || receiptFrame.isInfinite || receiptFrame.isNull)
         XCTAssertTrue(app.windows.firstMatch.frame.contains(receiptFrame))
         app.buttons["새로고침"].tap()
-        XCTAssertTrue(app.staticTexts["Follow up question"].waitForExistence(timeout: 10))
+        let receivedComment = app.staticTexts["Follow up question"]
+        reveal(receivedComment)
+        XCTAssertTrue(receivedComment.waitForExistence(timeout: 10))
+        XCTAssertEqual(receivedComment.label, "Follow up question")
+        let commentFrame = receivedComment.frame
+        XCTAssertFalse(commentFrame.isEmpty || commentFrame.isInfinite || commentFrame.isNull)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(commentFrame))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
     }
 
@@ -460,6 +466,51 @@ final class TeamEntryUITests: XCTestCase {
         for _ in 0..<8{if trace.exists{return trace.value as? String ?? ""};app.swipeDown()}
         XCTFail("Related trace must remain in the open screen");return ""
     }
+    @MainActor private func textTrace(_ app: XCUIApplication) -> [String:Any] {
+        let trace=app.staticTexts["teamTextTrace"]
+        for _ in 0..<5 { if trace.exists { break }; app.swipeDown() }
+        XCTAssertTrue(trace.exists,"The diagnostic row must be revealed before reading its value.")
+        let value=trace.value as? String ?? "{}"
+        return (try? JSONSerialization.jsonObject(with:Data(value.utf8))) as? [String:Any] ?? [:]
+    }
+    @MainActor func testTextHistoryLatestQuestionUnknownRecoveryAndConflictChoice() throws {
+        let app=githubApp(["HP_TEAM_TEXT":"1","HP_TEAM_TEXT_RECOVERY":"1","HP_TEAM_RELATED":"1"])
+        let latest=app.buttons["teamLatestQuestion"];githubReveal(app,latest);latest.tap()
+        XCTAssertTrue(app.staticTexts["teamTextCurrent"].waitForExistence(timeout:10));XCTAssertEqual(app.staticTexts["teamTextCurrent"].label,"Latest explicit question beyond first page")
+        app.navigationBars["내용과 수정 이력"].buttons.element(boundBy:0).tap()
+        let entry=app.buttons["teamRequestTextHistory"];XCTAssertTrue(entry.waitForExistence(timeout:10));githubReveal(app,entry);entry.tap()
+        XCTAssertTrue(app.staticTexts["teamTextOriginal"].waitForExistence(timeout:10));XCTAssertEqual(app.staticTexts["teamTextOriginal"].label,"GitHub fixture request")
+        githubReveal(app,app.buttons["teamTextBeginEdit"]);app.buttons["teamTextBeginEdit"].tap()
+        let editor=app.textViews["teamTextBody"];githubReveal(app,editor);XCTAssertEqual(editor.value as? String,"GitHub fixture request");editor.tap();editor.typeText(" corrected")
+        let firstWords=try XCTUnwrap(editor.value as? String);XCTAssertEqual(firstWords.components(separatedBy:" corrected").count,2);XCTAssertEqual(firstWords.replacingOccurrences(of:" corrected",with:""),"GitHub fixture request")
+        githubReveal(app,app.buttons["teamTextSend"]);app.buttons["teamTextSend"].tap();app.alerts.buttons["취소"].tap()
+        XCTAssertEqual(textTrace(app)["textPosts"] as? Int,0)
+        githubReveal(app,app.buttons["teamTextSend"]);app.buttons["teamTextSend"].tap();app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamTextPreservedBody"].waitForExistence(timeout:10));XCTAssertEqual(app.staticTexts["teamTextPreservedBody"].label,firstWords)
+        app.buttons["teamTextRefresh"].tap();githubReveal(app,app.buttons["teamTextSend"]);app.buttons["teamTextSend"].tap();app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamTextReceipt"].waitForExistence(timeout:10));var keys=textTrace(app)["textKeys"] as? [String] ?? [];XCTAssertEqual(keys.count,2);XCTAssertEqual(keys.first,keys.last)
+        app.buttons["teamTextRefresh"].tap();githubReveal(app,app.buttons["teamTextBeginEdit"]);app.buttons["teamTextBeginEdit"].tap()
+        githubReveal(app,editor);XCTAssertEqual(editor.value as? String,firstWords);editor.tap();editor.typeText(" again")
+        let secondWords=try XCTUnwrap(editor.value as? String);XCTAssertEqual(secondWords.components(separatedBy:" again").count,2);XCTAssertEqual(secondWords.replacingOccurrences(of:" again",with:""),firstWords)
+        githubReveal(app,app.buttons["teamTextSend"]);app.buttons["teamTextSend"].tap();app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamTextConflict"].waitForExistence(timeout:10))
+        app.buttons["teamTextRefresh"].tap();githubReveal(app,app.buttons["teamTextBeginEdit"]);app.buttons["teamTextBeginEdit"].tap()
+        githubReveal(app,app.buttons["teamTextSend"]);app.buttons["teamTextSend"].tap();app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamTextReceipt"].waitForExistence(timeout:10));keys=textTrace(app)["textKeys"] as? [String] ?? [];XCTAssertEqual(keys.count,4);XCTAssertNotEqual(keys[2],keys[3])
+        app.buttons["teamTextRefresh"].tap();XCTAssertTrue(app.staticTexts["teamTextCurrent"].waitForExistence(timeout:10));XCTAssertEqual(app.staticTexts["teamTextCurrent"].label,secondWords);XCTAssertEqual(app.staticTexts["teamTextOriginal"].label,"GitHub fixture request")
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="text-revision-original-current-confirmed-history";shot.lifetime = .keepAlways;add(shot)
+    }
+    @MainActor func testTextHistoryReadonlyAndFailedSavePreservesExport() throws {
+        let readonly=githubApp(["HP_TEAM_TEXT":"1","HP_TEAM_TEXT_READONLY":"1","HP_TEAM_RELATED":"1"])
+        githubReveal(readonly,readonly.buttons["teamRequestTextHistory"]);readonly.buttons["teamRequestTextHistory"].tap()
+        XCTAssertTrue(readonly.staticTexts["teamTextReadOnly"].waitForExistence(timeout:10));XCTAssertFalse(readonly.buttons["teamTextBeginEdit"].exists);XCTAssertEqual(textTrace(readonly)["textPosts"] as? Int,0);readonly.terminate()
+        let app=githubApp(["HP_TEAM_TEXT":"1","HP_TEAM_DRAFT_SAVE_FAILURE":"text","HP_TEAM_RELATED":"1"])
+        githubReveal(app,app.buttons["teamRequestTextHistory"]);app.buttons["teamRequestTextHistory"].tap();githubReveal(app,app.buttons["teamTextBeginEdit"]);app.buttons["teamTextBeginEdit"].tap()
+        let editor=app.textViews["teamTextBody"];githubReveal(app,editor);XCTAssertEqual(editor.value as? String,"GitHub fixture request");editor.tap();editor.typeText(" Unstored")
+        let unsaved=try XCTUnwrap(editor.value as? String);XCTAssertEqual(unsaved.components(separatedBy:" Unstored").count,2);XCTAssertEqual(unsaved.replacingOccurrences(of:" Unstored",with:""),"GitHub fixture request");githubReveal(app,app.buttons["teamTextExport"]);XCTAssertTrue(app.buttons["teamTextExport"].isHittable);XCTAssertFalse(app.buttons["teamTextSend"].isEnabled);XCTAssertEqual(textTrace(app)["textPosts"] as? Int,0)
+        app.buttons["뒤로"].tap();XCTAssertTrue(app.alerts.buttons["계속 작성"].waitForExistence(timeout:5));app.alerts.buttons["계속 작성"].tap();githubReveal(app,editor);XCTAssertEqual(editor.value as? String,unsaved)
+    }
+
     @MainActor func testHiddenRequestEvidenceAndExplicitReporterReopen() throws {
         let app = githubApp(["HP_TEAM_HIDDEN":"1","HP_TEAM_RELATED":"1"])
         XCTAssertTrue(app.staticTexts["teamHiddenContentNotice"].waitForExistence(timeout:10))
