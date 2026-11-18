@@ -1,0 +1,6 @@
+# Exact transitive versions from the retained Linux SDK environment; Python >=3.12.
+aiofiles==25.1.0
+livekit==1.2.1
+numpy==2.5.5
+protobuf==7.36.2
+types-protobuf==7.35.1.20260906

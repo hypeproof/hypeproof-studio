@@ -86,7 +86,7 @@ class GitFixture:
         document = identity.identity_document(identity.source_identity(self.repo), self.head, 123, 2)
         self.candidate.write_text(json.dumps(document)); return document
     def workflow(self, name, **values):
-        env = self.env(); env.update(NATIVE_SELECTED='true', NATIVE_RESULTS=json.dumps(self.states())); env.update(values)
+        env = self.env(); env.update(NATIVE_SELECTED='true', NATIVE_VOICE_RESULT='success', NATIVE_RESULTS=json.dumps(self.states())); env.update(values)
         return subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', shell_step(name)], cwd=self.repo, env=env, capture_output=True, text=True)
     def download(self, selected=True):
         d = self.temp / 'native-merge-scope'; d.mkdir(exist_ok=True); shutil.copyfile(self.receipt, d / self.receipt.name)
@@ -116,13 +116,23 @@ class NativeMergeGate(unittest.TestCase):
         run = self.r.workflow('Classify native scope from trusted base'); self.assertEqual(run.returncode, 0, run.stderr)
         self.assertIn('run_native=false', (self.r.temp / 'output').read_text()); self.r.download(False)
         states = dict(scope='success', contract='skipped', ios='skipped', android='skipped')
-        run = self.r.workflow('Verify exact native scope and existing job results', NATIVE_SELECTED='false', NATIVE_RESULTS=json.dumps(states))
+        run = self.r.workflow('Verify exact native scope and existing job results', NATIVE_SELECTED='false', NATIVE_VOICE_RESULT='skipped', NATIVE_RESULTS=json.dumps(states))
         self.assertEqual(run.returncode, 0, run.stderr)
         result = json.loads((self.r.temp / 'native-merge-acceptance.json').read_text()); self.assertEqual(result['native_execution'], 'NOT_RUN')
         spec = importlib.util.spec_from_file_location('release_gate', ROOT / IDENTITY)
         gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
         with self.assertRaises(gate.Refused): gate.verify_identity(result, gate.source_identity(self.r.repo), dict(head_sha=self.r.head, id=123, run_attempt=2))
         with self.assertRaises(gate.Refused): gate.select_artifact({'artifacts': []}, dict(id=123, run_attempt=2, head_sha=self.r.head))
+
+    def test_actual_workflow_refuses_missing_or_failed_voice_before_writing_acceptance(self):
+        self.r.merge({NATIVE: 'native change\n'})
+        self.r.scope(); self.r.candidate_identity(); self.r.download()
+        for state in ('', 'queued', 'in_progress', 'failure', 'cancelled', 'skipped'):
+            with self.subTest(state=state):
+                run = self.r.workflow('Verify exact native scope and existing job results',
+                                      NATIVE_VOICE_RESULT=state)
+                self.assertNotEqual(run.returncode, 0)
+                self.assertFalse((self.r.temp / 'native-merge-acceptance.json').exists())
 
     def test_native_pending_failure_cancellation_skipped_or_missing_never_pass(self):
         self.r.merge({NATIVE: 'change\n'}); self.r.scope(); self.r.candidate_identity()

@@ -208,3 +208,47 @@ This infrastructure change must be committed/reviewed before the existing
 Foundry recipe consumes it. The reviewed-patch path for app features does not
 admit changed recipe, verification script or workflow files. A standalone
 collector invocation still does not prove actual Foundry execution.
+
+
+## Real media interruption evaluation — Studio #4300
+
+The development-only LiveKit path has a reusable local media recipe in
+`voice-evaluation/README.md` and a shared wire fixture consumed by Python and
+Swift controls. It does not replace the account journeys above. The recipe
+records exact server/SDK/source revisions, actual decoded synthetic PCM, source
+queue cancellation, publication removal, admission and session fences, and owned
+process cleanup. It retains failed attempts and refuses to label transport
+receipt or queue drain as acoustic playback.
+
+Keep source controls, actual transport, native SDK compilation, simulator UI and
+physical iPhone/Korean voice acceptance as separate results. `Room.connect` is
+not remote participant admission: the sender must wait for the exact evaluator's
+SID-bound readiness before opening its microphone or sending Start. Original
+failures, including unresolved sender identity, remain evidence.
+
+This recipe is a development evaluation, not an installed release gate or a
+production provider. Public ingress, account authorization, continuous audio
+metering and paid voice activation remain Service integration work. The existing
+mobile recipe and its failing-journey gate remain authoritative for releases.
+
+The native counterpart is `scripts/ios-livekit-verify.py`: a separate bounded
+Mac job builds the existing Debug app, owns one simulator and calls the pinned
+local server recipe. It runs in parallel with the unchanged ordinary UI suite.
+`native / acceptance` refuses a non-successful selected voice job. Private room
+credentials stay in temporary files/app storage; only allowlisted observations
+are uploaded. Raw callback counts remain independent of the session fence so
+cancellation cannot manufacture a passing observation. Nested preparation and
+server cancellation must reap every owned child before an execution is accepted.
+
+When preparation or receipt helpers change, run the complete affected native
+contract recipe before pushing, not just the newly added test module:
+`python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v`
+from the repository root, under the shared resource allocation. Use semantic
+ordering assertions: preparation must finish before credential issuance, failure
+must not start a scenario, and a failed attempt must not be replayed. An exact
+prefix of internal command names can reject a harmless additional preflight
+step without detecting a product defect. Command doubles must still reject
+unknown commands; checking for absent files after cleanup is not evidence that
+credentials were never issued. Preserve failed source/run evidence and bind the
+full contract result to the tested inputs. Contract success does not replace the
+actual native SDK and media recipe.

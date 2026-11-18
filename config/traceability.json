@@ -20489,6 +20489,115 @@
           "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
+    },
+    {
+      "id": "ST-DES-VOICE-EVALUATION",
+      "stage": "design",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-VOICE-CONVERSATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/livekit-evaluation-protocol.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-EVALUATION",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-DES-VOICE-EVALUATION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/VoiceEvaluationSession.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/LiveKitEvaluationController.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/LiveKitEvaluationView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/LiveKitEvaluationAudio.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/LiveKitEvaluationPermission.swift"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/runtime.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/pins.json"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/requirements.txt"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/prepare-host.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/host-requirements.txt"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-EVALUATION",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-VOICE-CONVERSATION",
+        "ST-IMP-VOICE-EVALUATION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEvaluationSessionTests.swift"
+        },
+        {
+          "path": "apps/studio-native/tests/voice-evaluation-permission.swift"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/lab.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_contract.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/wire-fixture.json"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_cleanup.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_publication.py"
+        },
+        {
+          "path": "apps/studio-native/ios/App/LiveKitEvaluationCI.swift"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-livekit-evaluation.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-livekit-verify.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_livekit_evaluation.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_host.py"
+        },
+        {
+          "path": "apps/studio-native/voice-evaluation/test_prepare_host.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_livekit_cancellation.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_livekit_failure.py"
+        }
+      ]
     }
   ]
 }

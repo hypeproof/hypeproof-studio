@@ -1,0 +1,2 @@
+# Official RTC SDK only: no Agents, external model plugins or provider clients.
+livekit==1.2.1
