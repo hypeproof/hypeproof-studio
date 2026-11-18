@@ -261,6 +261,22 @@ test('saved activity selects complete workspace identity, never another folder w
  assert.equal(pressed.length,1,'missing or ambiguous identity cannot click');
 });
 
+test('saved activity match reads the complete path from the row title, not the shortened visible line',async()=>{
+ // Mirrors StartPage.tsx (#2776): visible <small> shows the last two segments; title carries the full path.
+ const {createRequire}=await import('node:module');const require=createRequire(new URL('../package.json',import.meta.url));const {chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.setContent(`<nav class="studio-saved-activities"><h3>저장된 활동</h3>
+   <button class="studio-text-button" title="/owned/root/feedback-B" aria-label="x, /owned/root/feedback-B"><span>x</span><small>…/root/feedback-B</small></button>
+   <button class="studio-text-button" title="/owned/other/feedback-A" aria-label="x, /owned/other/feedback-A"><span>x</span><small>…/other/feedback-A</small></button></nav>`);
+  const pressed=[];const ui=new NativeUI('http://127.0.0.1:9777');ui.press=async(_view,selector)=>pressed.push(selector);
+  const view={evaluate:expression=>page.evaluate(expression)};
+  await ui.savedActivity(view,'/owned/root/feedback-B',1000);assert.deepEqual(pressed,['.studio-saved-activities button:nth-of-type(1)']);
+  await assert.rejects(ui.savedActivity(view,'/owned/root/feedback-B/child',200),/unique saved activity/);
+  await assert.rejects(ui.savedActivity(view,'…/root/feedback-B',200),/unique saved activity/);
+  assert.equal(pressed.length,1,'a shortened visible path cannot identify a row');
+ }finally{await browser.close();}
+});
+
 // Uses the real App mapping against the actual Service-shaped denial; no native acceptance implied.
 test('session refusal observes exact mapped App message, preservation and no candidate; raw/wrong/hidden states refuse',async()=>{
  const {classifyProfileFailure}=await import('../../extensions/hypeproof-chat/src/proxyClientHelpers.ts');
