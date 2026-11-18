@@ -665,9 +665,20 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(after["held_response_returns"] as? Int, 1, "The original POST transport delivers its error before cancel acknowledgement; actor callback order must not overwrite confirmation.")
         XCTAssertEqual(after["speech_captures"] as? Int, 1); XCTAssertEqual(after["accepted_turns"] as? Int, 0)
         XCTAssertTrue(app.staticTexts["내 메시지. I want to understand my next step"].exists)
-        field(app).tap(); field(app).typeText("Keep my separate draft")
+        let expectedDraft = "Keep my separate draft"
+        func exactDraft(_ stage: String) -> Bool {
+            let input = field(app)
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expectedDraft), object: input)
+            let result = XCTWaiter.wait(for: [expectation], timeout: 10)
+            let observation = XCTAttachment(string: "Observed value: " + (input.value as? String ?? "<non-string>") + "\n" + input.debugDescription)
+            observation.name = "stop-voice-draft-" + stage; observation.lifetime = .keepAlways; add(observation)
+            XCTAssertEqual(result, .completed, "Exact draft must be observed at " + stage + "; incomplete input must not be attributed to persistence.")
+            return result == .completed
+        }
+        field(app).tap(); field(app).typeText(expectedDraft)
+        guard exactDraft("before-termination") else { return }
         app.terminate(); app.launch(); _ = field(app)
-        valueContains(field(app), "Keep my separate draft")
+        guard exactDraft("after-relaunch") else { return }
         XCTAssertTrue(cancelled.waitForExistence(timeout: 5))
         let reopened = try trace(app)
         XCTAssertEqual(reopened["submitted_ids"] as? [String], ids)

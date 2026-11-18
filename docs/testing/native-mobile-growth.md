@@ -832,3 +832,26 @@ listening checks remain. Both this case and durable retry passed together in
 `/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
 All remaining references to the removed saved/account/sync labels in native
 journeys were checked; they assert absence, not stale positive visibility.
+
+### Stopped voice response draft input boundary — CI #4361
+
+Run44326288656 on0ea2078b restored `Keep my separate` after the stop-response
+journey immediately terminated following `typeText("Keep my separate draft")`.
+The original recording at
+`/tmp/ios4361-stop-full/A9397026-6036-45C3-9082-4E3D51828601.mp4` does not establish
+complete input before termination: sampled frames show `Ke`, then termination,
+then the partial restored text. This is not proof of a persistence defect.
+
+The journey now requires exact full input before terminating and exact full
+restoration afterwards, each using the existing10s wait. It keeps one typeText,
+no retyping, original cancellation/send-once/no-restart assertions, and records
+each boundary. An incomplete precondition fails the test before termination.
+Independent source review accepted the stronger assertion and failure guard.
+
+Focused native PASS31.469s (Executed1), runner and owned-simulator cleanup exit0:
+`/tmp/ios4361-stop-input-boundary-2.xcresult`. Both equality predicates passed.
+The earlier `/tmp/ios4361-stop-input-boundary.xcresult` selected the wrong class
+and executed0 tests despite exit0; it is NOT validation. Captured AX descriptions
+truncate long values, so the final diagnostic attachment additionally records raw
+`input.value`; that diagnostic-only addition followed the passing run and was not
+claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
