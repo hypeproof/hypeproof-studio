@@ -928,3 +928,53 @@ regressions. No blanket exact-final native-suite pass is claimed.
 Fixture transport, OS permission result and notification envelope are synthetic;
 the actual account, model, protected preferences, navigation and screens remain.
 No production subscription, provider send or installed-device receipt is claimed.
+
+
+### Explicit question and reply authoring — Studio #4370
+
+Focused Core controls cover old JSON draft recovery with exact v1 payload/key,
+v2 intent/target freezing through serialization, same-request target selection,
+authoring discovery and malformed metadata, specific definitive conflict versus
+unknown409, and matching acknowledged server tombstones versus uncertain text.
+Core12 (Discussion5 plus existing Request7) passed in
+`/tmp/ios4370-core-final.log`. After the final target-selection guard, focused
+Discussion5 passed in `/tmp/ios4370-core-target-guard.log`. The existing Request7
+pass precedes that isolated guard; it was not unnecessarily repeated.
+
+Native v2 question unknown-result recovery followed by a selected-comment reply
+passed48.996s in `/tmp/ios4370-discussion-ui-2.xcresult`, runner/cleanup exit0.
+Final expanded journey PASS59.040s in `/tmp/ios4370-discussion-ui-4.xcresult`,
+runner and owned-simulator cleanup exit0: both home entries are visible/hittable
+and opened; question recovery retains one event; definitive target409 permits
+explicit fresh choice; words remain and send stays disabled until a replacement
+target is selected; the chosen reply is stored and rendered descriptively.
+The final native source includes the pre-dispatch epoch fence. Inspected image:
+`/tmp/ios4370-discussion-ui-4-attachments/A826EC23-AEA3-49B0-AF3E-DDEEAFECF15F.png`.
+
+Preserved failures: first runner attempt exited2 before build because an external
+checkout switched away from a selector script; the script is now pinned locally
+from exact2c6d0f83. Native v1 exposed the parent inbox toolbar regression: multiple
+buttons in a single ToolbarItem hid the existing team-request entry. A scoped
+ToolbarItemGroup correction retains both entries rather than removing assertions.
+Native v3 remains FAIL: both home entries passed, then the focused editor kept
+the target selection from taking effect. Dismissing editor focus at send/new
+choice corrected that flow with one ordinary target tap; no assertion or wait
+budget was weakened. Toolbar correction is isolated in69abb919 for parent4368.
+Fixture HTTP responses remain synthetic; no production send or phone acceptance.
+
+Retention limitation: discovery exposes supported schemas, not current thread
+writability. A stored content-expired draft stays unavailable/exportable; an old
+purge mark does not prove current write permission after a later reopening.
+That reactivation needs a separately defined current writable contract. The
+client does not infer it or automatically retry an expired send.
+
+4370 retention review correction: comment pages now share one purge generation.
+A changed purge revision clears accumulated rows before a read-only first-page
+refetch; an older refetch cannot restore them. Acknowledged local content stays
+hidden until fresh matching account/key/receipt content is reconciled. Uncertain
+and unsent drafts are not removed. The pre-purge page1/post-purge page2 regression
+and the existing Discussion controls passed together (Core6) in
+`/tmp/ios4370-core-retention-pages.log`, exit0. The actual simulator-target App
+build passed in `/tmp/ios4370-retention-app-build.log`, exit0. Native v4 evidence
+above predates this pagination correction; it was not relabeled as a final-head
+UI rerun.

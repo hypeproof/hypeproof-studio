@@ -10499,3 +10499,14 @@ Uncertain subscription outcomes never replay automatically. Existing question
 and approval registration remains independent of internal-product entitlement.
 Notification entry preserves current drafts and does not switch accounts or
 replace an occupied composition screen. Discussion labels are descriptive.
+
+
+## iPhone explicit question and reply authoring (#4370)
+
+Members choose whether their text is a discussion, question or reply. A reply
+identifies the request or selected comment; labels describe the posted event
+without deciding whether a question is answered or a problem resolved.
+Uncertain drafts keep their exact pre-upgrade payload and transmission key.
+A definitive missing-target rejection permits an explicit new choice; unknown
+results never automatically change schema or resend. Authoring support is
+discovered separately from push permission and notification capability.

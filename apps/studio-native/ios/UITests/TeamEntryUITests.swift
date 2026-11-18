@@ -412,12 +412,18 @@ final class TeamEntryUITests: XCTestCase {
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
         for (key,value) in flags { app.launchEnvironment[key] = value }; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
-        XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10)); app.buttons["teamRequestHomeEntry"].tap()
+        XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10))
+        if flags["HP_TEAM_DISCUSSION"] == "1" {
+            XCTAssertTrue(app.buttons["teamInboxHomeEntry"].isHittable); app.buttons["teamInboxHomeEntry"].tap()
+            XCTAssertTrue(app.navigationBars["팀 알림함"].waitForExistence(timeout:10)); app.navigationBars["팀 알림함"].buttons["닫기"].tap()
+        }
+        XCTAssertTrue(app.buttons["teamRequestHomeEntry"].isHittable); app.buttons["teamRequestHomeEntry"].tap()
         let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("GitHub fixture request")
         githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
         githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
+        if flags["HP_TEAM_DISCUSSION"] == "1" { return app }
         let entry = app.buttons[outcome ? "teamOutcomeEntry" : delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
         githubReveal(app, entry); entry.tap()
         return app
@@ -546,6 +552,48 @@ final class TeamEntryUITests: XCTestCase {
         let reason = app.textViews["teamOutcomeResult"]; githubReveal(app,reason); reason.tap(); reason.typeText("X")
         XCTAssertEqual(reason.value as? String,"X"); githubReveal(app,app.buttons["결과 초안 내보내기"])
         XCTAssertTrue(app.buttons["결과 초안 내보내기"].isEnabled); XCTAssertFalse(app.buttons["teamOutcomeSend"].isEnabled)
+    }
+
+    @MainActor func testExplicitQuestionRecoveryAndSelectedCommentReply() throws {
+        let app = githubApp(["HP_TEAM_DISCUSSION":"1"])
+        let question = app.buttons["teamCommentChooseQuestion"]; githubReveal(app, question); question.tap()
+        let body = app.textViews["teamCommentBody"]; githubReveal(app, body); body.tap(); body.typeText("Can you confirm this build?")
+        let send = app.buttons["teamCommentSend"]; githubReveal(app, send); send.tap(); app.alerts.buttons["보내기"].tap()
+        let status = app.staticTexts["teamCommentStatus"]
+        for _ in 0..<8 { if status.exists && status.isHittable { break }; if app.staticTexts["GitHub fixture request"].isHittable { break }; app.swipeDown() }
+        let uncertain = XCTNSPredicateExpectation(predicate: NSPredicate(format:"label CONTAINS %@", "접수 여부"), object:status)
+        XCTAssertEqual(XCTWaiter.wait(for:[uncertain],timeout:10),.completed)
+        XCTAssertFalse(question.exists); githubReveal(app,send); XCTAssertEqual(send.label,"같은 번호로 다시 보내기")
+        send.tap(); app.alerts.buttons["보내기"].tap()
+        let next = app.buttons["새 댓글"]; githubReveal(app,next); next.tap()
+        app.navigationBars["요청과 논의"].buttons["새로고침"].tap()
+        let target = app.buttons["teamReplyTo-tcm_" + String(repeating:"b",count:32)]
+        for _ in 0..<8 {
+            if target.exists && target.isHittable { break }
+            if app.staticTexts["GitHub fixture request"].isHittable { break }
+            app.swipeDown()
+        }
+        XCTAssertTrue(target.isHittable); target.tap()
+        githubReveal(app,app.staticTexts["teamCommentReplyTarget"])
+        XCTAssertTrue(app.staticTexts["teamCommentReplyTarget"].label.contains("Can you confirm this build?"))
+        githubReveal(app,body); body.tap(); body.typeText("I checked build 18.1.")
+        githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
+        let chooseAgain = app.buttons["teamCommentNewTarget"]; githubReveal(app,chooseAgain); chooseAgain.tap()
+        githubReveal(app,send); XCTAssertFalse(send.isEnabled)
+        XCTAssertEqual(body.value as? String,"I checked build 18.1.")
+        let rootReply = app.buttons["teamReplyToRequest"]
+        for _ in 0..<8 { if rootReply.exists && rootReply.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(rootReply.isHittable); rootReply.tap()
+        githubReveal(app,send); XCTAssertTrue(send.isEnabled); send.tap(); app.alerts.buttons["보내기"].tap(); githubReveal(app,next)
+        app.navigationBars["요청과 논의"].buttons["새로고침"].tap()
+        let reply = app.staticTexts["teamCommentIntent-tcm_" + String(repeating:"c",count:32)]
+        for _ in 0..<8 {
+            if reply.exists && reply.isHittable { break }
+            if app.staticTexts["GitHub fixture request"].isHittable { break }
+            app.swipeDown()
+        }
+        XCTAssertEqual(reply.label,"답글")
+        let shot = XCTAttachment(screenshot:app.screenshot()); shot.name="explicit-question-and-selected-reply"; shot.lifetime = .keepAlways; add(shot)
     }
 
     @MainActor private func closeInboxDetail(_ app: XCUIApplication) {

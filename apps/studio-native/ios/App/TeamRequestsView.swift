@@ -9,6 +9,7 @@ import SwiftUI
     var controller: TeamRequestController?
     var inbox: TeamInboxPresentation?
     var detail: (String, String?) async throws -> TeamRequestDetail = { _, _ in throw CancellationError() }
+    var commentSchemas: (String) async throws -> [String] = { _ in throw CancellationError() }
     var comment: (TeamCommentDraft) async throws -> String = { _ in throw CancellationError() }
     var loadComment: (String) throws -> TeamCommentDraft = { _ in throw CancellationError() }
     var saveComment: (TeamCommentDraft) throws -> Void = { _ in throw CancellationError() }
@@ -91,8 +92,11 @@ struct TeamRequestDetailView: View {
     @State private var confirmLeave = false
     @ObservedObject var model: TeamRequestPresentation
     let requestID: String
-    @State private var detail: TeamRequestDetail?
-    @State private var comments: [TeamRequestComment] = []
+    @State private var history = TeamCommentHistory()
+    private var detail: TeamRequestDetail? { history.detail }
+    private var comments: [TeamRequestComment] { history.comments }
+    @State private var commentSchemas: [String] = []
+    @FocusState private var commentFocused: Bool
     @State private var draft: TeamCommentDraft?
     @State private var busy = false
     @State private var storageReady = true
@@ -103,20 +107,41 @@ struct TeamRequestDetailView: View {
         List {
             if !message.isEmpty { Text(message).accessibilityIdentifier("teamCommentStatus") }
             if let detail {
-                Section("원문") { Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id)").font(.caption) }
+                Section("원문") {
+                    Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id)").font(.caption)
+                    if canChooseIntent { Button("원문에 답글") { choose("reply", target: requestID) }.accessibilityIdentifier("teamReplyToRequest") }
+                    if detail.retention?.content_purged_at != nil { Text("서버 보관 기간이 지난 내용은 삭제됐어요.").font(.caption) }
+                }
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry") }
                 if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamSubscriptionScreen(model: inbox, product: detail.request.product, request: requestID) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
-                    ForEach(comments) { comment in VStack(alignment: .leading, spacing: 6) { Text(comment.body).textSelection(.enabled); Text(comment.account_id).font(.caption).foregroundStyle(.secondary) } }
+                    ForEach(comments) { comment in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(intentLabel(comment.discussionIntent)).font(.caption).accessibilityIdentifier("teamCommentIntent-" + comment.id)
+                            if let target = comment.reply_to { Text(targetLabel(target)).font(.caption) }
+                            Text(comment.body).textSelection(.enabled); Text(comment.account_id).font(.caption).foregroundStyle(.secondary)
+                            if canChooseIntent { Button("이 댓글에 답글") { choose("reply", target: comment.id) }.accessibilityIdentifier("teamReplyTo-" + comment.id) }
+                        }
+                    }
                     if detail.next_comments_cursor != nil { Button("댓글 더 보기") { Task { await refresh(more: true) } }.disabled(busy) }
                 }
             }
-            if let draft {
+            if let draft, !history.canDisplay(draft) {
+                Text("보관 상태가 바뀌어 저장된 댓글 내용을 다시 확인하고 있어요. 새로고침하거나 이전 댓글을 더 확인해 주세요.")
+            }
+            if let draft, history.canDisplay(draft) {
                     Section {
+                        Text(draft.needsReplyTarget == true ? "답글 대상을 선택해 주세요" : intentLabel(draft.discussionIntent)).accessibilityIdentifier("teamCommentSelectedIntent")
+                        if let target = draft.replyTo { Text(targetLabel(target)).accessibilityIdentifier("teamCommentReplyTarget") }
+                        if canChooseIntent {
+                            Button("논의로 작성") { choose("discussion", target: nil) }.accessibilityIdentifier("teamCommentChooseDiscussion")
+                            Button("질문으로 작성") { choose("question", target: nil) }.accessibilityIdentifier("teamCommentChooseQuestion")
+                        }
                         TextEditor(text: Binding(get: { self.draft?.body ?? "" }, set: edit)).frame(minHeight: 110).accessibilityLabel("댓글 내용").accessibilityIdentifier("teamCommentBody")
+                            .focused($commentFocused)
                             .disabled(busy || !storageReady || draft.phase != .draft)
                         if !draft.body.isEmpty { ShareLink("댓글 내용 내보내기", item: draft.body) }
                         if draft.phase == .received {
@@ -125,9 +150,16 @@ struct TeamRequestDetailView: View {
                                 let next = TeamCommentDraft(accountID: draft.accountID, requestID: requestID)
                                 do { try model.saveComment(next); self.draft = next } catch { storageReady = false; message = "새 댓글을 저장하지 못했어요." }
                             }.disabled(busy || !storageReady)
+                        } else if draft.definitiveRejection == "team_reply_target_unavailable" {
+                            Button("다른 대상으로 새 답글 작성") { startFreshReplyChoice() }
+                                .disabled(busy || !storageReady || !commentSchemas.contains("hps-team-comment/2"))
+                                .accessibilityIdentifier("teamCommentNewTarget")
+                            Text("원래 답글은 저장되지 않았어요. 글을 유지한 채 새 대상을 직접 선택할 수 있어요.").font(.caption)
+                        } else if draft.definitiveRejection == "team_content_expired" {
+                            Text("서버 보관 기간이 지나 지금은 추가할 수 없어요. 작성한 글은 내보낼 수 있어요.")
                         } else {
                             Button(draft.phase == .uncertain ? "같은 번호로 다시 보내기" : "댓글 보내기") { confirmSend = true }
-                                .disabled(busy || !storageReady || draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .disabled(busy || !storageReady || draft.needsReplyTarget == true || draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (draft.phase == .draft && !commentSchemas.contains(draft.wireSchema)))
                                 .accessibilityIdentifier("teamCommentSend")
                         }
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
@@ -147,10 +179,36 @@ struct TeamRequestDetailView: View {
             .task(id: requestID) {
                 do { draft = try model.loadComment(requestID) } catch { storageReady = false; message = "저장된 댓글을 읽지 못했어요. 원본을 유지했어요." }
                 await refresh()
-            }.onDisappear { generation = UUID(); busy = false; detail = nil; comments = [] }
+            }.onDisappear { generation = UUID(); busy = false; history.clear() }
             .alert("댓글을 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await submit() } }
-            } message: { Text("이 제품 권한이 있는 내부 멤버에게 댓글을 공유해요.") }
+            } message: { Text("이 제품 권한이 있는 내부 멤버에게 \(intentLabel(draft?.discussionIntent ?? "discussion"))를 공유해요. \(draft?.replyTo.map(targetLabel) ?? "")") }
+    }
+    private var canChooseIntent: Bool { !busy && storageReady && draft?.phase == .draft && commentSchemas.contains("hps-team-comment/2") }
+    private func intentLabel(_ intent: String) -> String { ["discussion":"논의", "question":"질문", "reply":"답글"][intent] ?? "논의" }
+    private func targetLabel(_ target: String) -> String {
+        if target == requestID { return "원문에 남기는 답글" }
+        if let comment = comments.first(where: { $0.id == target }) { return "답글 대상: " + String(comment.body.prefix(80)) }
+        return "이전 댓글에 남기는 답글 (" + target + ")"
+    }
+    private func choose(_ intent: String, target: String?) {
+        guard canChooseIntent, let draft else { return }
+        commentFocused = false
+        do {
+            let next = try draft.choosing(intent, reply: target, loadedComments: comments)
+            try model.saveComment(next); self.draft = next
+        } catch { storageReady = false; message = "작성 방식을 저장하지 못했어요. 원래 글은 유지했어요." }
+    }
+    private func startFreshReplyChoice() {
+        guard !busy, storageReady, commentSchemas.contains("hps-team-comment/2"), let draft else { return }
+        commentFocused = false
+        do { let next = try draft.freshReplyChoice(); try model.saveComment(next); self.draft = next; message = "답글 대상을 다시 선택해 주세요. 글은 유지했어요." }
+        catch { storageReady = false; message = "새 선택을 저장하지 못했어요. 원래 글과 전송 번호는 유지했어요." }
+    }
+    private func reject(_ code: String, generation expected: UUID) {
+        guard generation == expected, var local = draft, local.recordDefinitiveRejection(code) else { return }
+        draft = local
+        do { try model.saveComment(local) } catch { storageReady = false; message = "서버 결과를 기기에 저장하지 못했어요. 원래 글을 내보내 주세요." }
     }
     private func edit(_ text: String) {
         guard !busy, storageReady, var draft, draft.phase == .draft, text.utf16.count <= 5000 else { return }
@@ -161,14 +219,29 @@ struct TeamRequestDetailView: View {
         guard !busy else { return }; busy = true; let g = generation
         defer { if g == generation { busy = false } }
         do {
-            let result = try await model.detail(requestID, more ? detail?.next_comments_cursor : nil)
+            var result = try await model.detail(requestID, more ? detail?.next_comments_cursor : nil)
             guard g == generation, !Task.isCancelled else { return }
-            if more { let known = Set(comments.map(\.id)); comments += result.comments.filter { !known.contains($0.id) } } else { comments = result.comments }
-            detail = result
-        } catch { if g == generation { detail = nil; comments = []; message = "논의를 불러오지 못했어요. 로그인과 제품 권한을 확인해 주세요." } }
+            if try !history.accept(result, more: more) {
+                // A purge between pages invalidates every previously loaded row.
+                // Fetch from the beginning; never append another generation.
+                result = try await model.detail(requestID, nil)
+                guard g == generation, !Task.isCancelled else { return }
+                _ = try history.accept(result, more: false)
+            }
+            if var local = draft, local.observeTombstone(result) {
+                draft = local
+                do { try model.saveComment(local) } catch { storageReady = false; message = "서버에서 삭제된 내용의 기기 사본을 정리하지 못했어요." }
+            }
+            do {
+                let supported = try await model.commentSchemas(result.request.product)
+                guard g == generation, !Task.isCancelled else { return }; commentSchemas = supported
+            } catch { if g == generation { commentSchemas = []; message = "지금 작성 가능한 방식을 확인하지 못했어요. 새로고침해 주세요." } }
+        } catch { if g == generation { history.clear(); commentSchemas = []; message = "논의를 불러오지 못했어요. 로그인과 제품 권한을 확인해 주세요." } }
     }
     private func submit() async {
-        guard !busy, storageReady, var draft, draft.phase != .received else { return }
+        guard !busy, storageReady, var draft, draft.phase != .received, draft.definitiveRejection == nil, draft.needsReplyTarget != true,
+              draft.phase == .uncertain || commentSchemas.contains(draft.wireSchema) else { return }
+        commentFocused = false
         let g = generation; busy = true
         defer { if g == generation { busy = false } }
         do {
@@ -177,9 +250,13 @@ struct TeamRequestDetailView: View {
             self.draft = draft
             let receipt = try await model.comment(draft)
             guard g == generation, !Task.isCancelled else { return }
-            draft.phase = .received; draft.receipt = receipt; self.draft = draft
+            draft.phase = .received; draft.receipt = receipt; draft.definitiveRejection = nil; self.draft = draft
             do { try model.saveComment(draft); message = "댓글이 접수됐어요. 새로고침하면 논의에서 확인할 수 있어요." }
             catch { storageReady = false; message = "접수됐지만 기기에 저장하지 못했어요. 댓글 내용을 내보내 주세요." }
+        } catch SyncFailure.http(409, "team_content_expired") {
+            if g == generation { message = "서버 보관 기간이 지나 지금은 이 내용에 추가할 수 없어요. 작성한 글과 전송 번호는 이 기기에 유지돼요."; reject("team_content_expired", generation:g) }
+        } catch SyncFailure.http(409, "team_reply_target_unavailable") {
+            if g == generation { message = "답글 대상을 지금 확인할 수 없어요. 원래 글과 전송 번호는 유지돼요. 새로고침해 주세요."; reject("team_reply_target_unavailable", generation:g) }
         } catch { if g == generation { message = "접수 여부를 확인하지 못했어요. 댓글과 전송 번호는 유지돼요." } }
     }
 }

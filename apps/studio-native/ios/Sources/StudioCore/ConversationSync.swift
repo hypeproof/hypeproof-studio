@@ -441,10 +441,9 @@ extension ConversationService {
         let (data, _) = try await request("/v1/me/team-requests/" + id + (after.map { "?after=" + $0 } ?? ""), token: token)
         let detail = try JSONDecoder().decode(TeamRequestDetail.self, from: data); try detail.validate(id: id); return detail
     }
-    public func teamRequestComment(id: String, key: String, body: String, token: String) async throws -> String {
-        guard TeamRequestRecord.validID(id), UUID(uuidString: key)?.uuidString.lowercased() == key,
-              !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, body.utf16.count <= 5000, !body.contains("\0") else { throw SyncFailure.invalidResponse }
-        let (data, _) = try await request("/v1/me/team-requests/" + id + "/comments", method: "POST", body: ["schema": "hps-team-comment/1", "client_comment_id": key, "body": body], token: token)
+    public func teamRequestComment(_ draft: TeamCommentDraft, token: String) async throws -> String {
+        let payload = try draft.payload()
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/comments", method: "POST", body: payload, token: token)
         struct Receipt: Decodable { let comment_id: String; let already: Bool }
         let result = try JSONDecoder().decode(Receipt.self, from: data)
         guard result.comment_id.count == 36, result.comment_id.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
