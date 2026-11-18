@@ -10519,3 +10519,11 @@ preserving the association draft. Historical linkage evidence remains explicitly
 historical. Display checked time, expiry, source mismatch and provider failure;
 never infer build availability or resolution. See MTR-25–27 in
 [mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone related requests (#4375)
+
+Related-request navigation and explicit operator link/unlink use existing product
+membership and account drafts. Every change previews target/action/reason; unknown
+outcomes retain the same mutation. Related originals remain independent. See
+MTR-28–30 in [mobile growth requirements](requirements/mobile-growth-roadmap.md).

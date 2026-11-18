@@ -423,7 +423,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
         githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
-        if flags["HP_TEAM_DISCUSSION"] == "1" { return app }
+        if flags["HP_TEAM_DISCUSSION"] == "1" || flags["HP_TEAM_RELATED"] == "1" { return app }
         let entry = app.buttons[outcome ? "teamOutcomeEntry" : delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
         githubReveal(app, entry); entry.tap()
         return app
@@ -440,6 +440,58 @@ final class TeamEntryUITests: XCTestCase {
         }
         XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")
         return trace.value as? String ?? ""
+    }
+    @MainActor private func relatedTrace(_ app:XCUIApplication)->String{
+        let trace=app.staticTexts["teamRelatedTrace"]
+        for _ in 0..<8{if trace.exists && trace.isHittable{return trace.value as? String ?? ""};app.swipeDown()}
+        XCTFail("Related trace must remain in the open screen");return ""
+    }
+    @MainActor func testRelatedCancelUnknownRecoveryOriginalAndUnlink() throws{
+        let app=githubApp(["HP_TEAM_RELATED":"1","HP_TEAM_RELATED_UNKNOWN":"1"]),target="trq_"+String(repeating:"b",count:32)
+        let entry=app.buttons["teamRelationsEntry"];githubReveal(app,entry);entry.tap()
+        let choose=app.buttons["teamRelatedSelect-"+target];XCTAssertTrue(choose.waitForExistence(timeout:10));githubReveal(app,choose);choose.tap()
+        let reason=app.textViews["teamRelatedReason"];githubReveal(app,reason);reason.tap();reason.typeText("Same symptom, separate original")
+        let send=app.buttons["teamRelatedSend"];githubReveal(app,send);send.tap();app.alerts.buttons["취소"].tap()
+        XCTAssertTrue(relatedTrace(app).contains("\"relationPosts\":0"))
+        githubReveal(app,send);send.tap();app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamRelatedMessage"].waitForExistence(timeout:10));app.buttons["teamRelatedRefresh"].tap()
+        githubReveal(app,send);XCTAssertEqual(send.label,"같은 내용으로 결과 다시 확인");XCTAssertEqual(reason.value as? String,"Same symptom, separate original")
+        send.tap();app.alerts.buttons["저장"].tap();githubReveal(app,app.staticTexts["teamRelatedReceipt"])
+        XCTAssertTrue(relatedTrace(app).contains("\"relationEvents\":1"))
+        let original=app.buttons["teamRelatedOriginal-"+target];githubReveal(app,original);original.tap()
+        XCTAssertTrue(app.staticTexts["Related original request"].waitForExistence(timeout:10));app.navigationBars["요청과 논의"].buttons.element(boundBy:0).tap()
+        XCTAssertTrue(app.navigationBars["관련 요청"].waitForExistence(timeout:10))
+        let next=app.buttons["teamRelatedNewChoice"];githubReveal(app,next);next.tap()
+        _ = relatedTrace(app);let action=app.staticTexts["teamRelatedAction"];githubReveal(app,action);XCTAssertEqual(action.label,"관련 요청 연결 해제")
+        githubReveal(app,reason);reason.tap();reason.typeText("No longer related")
+        githubReveal(app,send);send.tap();app.alerts.buttons["저장"].tap()
+        githubReveal(app,app.staticTexts["teamRelatedReceipt"]);let trace=relatedTrace(app);XCTAssertTrue(trace.contains("\"relationEvents\":2"));XCTAssertTrue(trace.contains("\"relationPosts\":3"));XCTAssertTrue(app.staticTexts["teamRelatedEmpty"].exists)
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Related withdrawal retains history";shot.lifetime = .keepAlways;add(shot)
+    }
+    @MainActor func testRelatedStorageFailureBlocksOriginalNavigationAndPreservesExport() throws{
+        let app=githubApp(["HP_TEAM_RELATED":"1","HP_TEAM_RELATED_SEEDED":"1","HP_TEAM_DRAFT_SAVE_FAILURE":"related"]),target="trq_"+String(repeating:"b",count:32)
+        let entry=app.buttons["teamRelationsEntry"];githubReveal(app,entry);entry.tap()
+        let choose=app.buttons["teamRelatedSelect-"+target];XCTAssertTrue(choose.waitForExistence(timeout:10));githubReveal(app,choose);choose.tap()
+        let reason=app.textViews["teamRelatedReason"];githubReveal(app,reason);reason.tap();reason.typeText("X")
+        XCTAssertEqual(reason.value as? String,"X");XCTAssertFalse(app.buttons["teamRelatedSend"].isEnabled)
+        let selected=app.buttons["teamRelatedSelectedOriginal"];githubReveal(app,selected);XCTAssertFalse(selected.isEnabled)
+        githubReveal(app,app.buttons["연결 초안 내보내기"]);XCTAssertTrue(app.buttons["연결 초안 내보내기"].isEnabled)
+        XCTAssertTrue(relatedTrace(app).contains("\"relationPosts\":0"));XCTAssertFalse(app.buttons["teamRelatedOriginal-"+target].isEnabled)
+    }
+    @MainActor func testRelatedReadOnlyHistoryPreservesCommentDraft() throws{
+        let app=githubApp(["HP_TEAM_RELATED":"1","HP_TEAM_RELATED_READONLY":"1"])
+        let comment=app.textViews["teamCommentBody"];githubReveal(app,comment);comment.tap();comment.typeText("Keep my comment draft")
+        let entry=app.buttons["teamRelationsEntry"]
+        for _ in 0..<8{if entry.exists && entry.isHittable{break};app.swipeDown()};XCTAssertTrue(entry.isHittable);entry.tap()
+        XCTAssertTrue(app.staticTexts["teamRelatedReadOnly"].waitForExistence(timeout:10));XCTAssertFalse(app.buttons["teamRelatedSend"].exists)
+        let inspect=app.buttons["연결 이력 보기"];githubReveal(app,inspect);inspect.tap();githubReveal(app,app.staticTexts["Existing related reason"])
+        XCTAssertTrue(relatedTrace(app).contains("\"relationPosts\":0"))
+        app.navigationBars["관련 요청"].buttons.element(boundBy:0).tap();XCTAssertTrue(app.navigationBars["요청과 논의"].waitForExistence(timeout:10))
+        let keyboardTip=app.staticTexts.matching(NSPredicate(format:"label BEGINSWITH %@","Speed up your typing")).firstMatch
+        if keyboardTip.exists {let proceed=app.buttons["Continue"];XCTAssertTrue(proceed.isHittable);proceed.tap()}
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout:5),"Returning from related history must not restore an offscreen keyboard.")
+        githubReveal(app,comment);XCTAssertEqual(comment.value as? String,"Keep my comment draft")
+        let restored=XCTAttachment(screenshot:app.screenshot());restored.name="Readonly history preserves comment draft";restored.lifetime = .keepAlways;add(restored)
     }
     @MainActor func testGitHubObservationsPreserveDraftAndSeparateStaleFailure() throws {
         let app = githubApp(["HP_TEAM_GITHUB_OBSERVATIONS":"1"])

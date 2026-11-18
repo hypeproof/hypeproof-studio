@@ -5,6 +5,7 @@ import SwiftUI
     var makeOutcome: (String) -> TeamOutcomePresentation = { _ in TeamOutcomePresentation() }
     var makeDelivery: (String) -> TeamDeliveryPresentation = { _ in TeamDeliveryPresentation() }
     var makeGitHub: (String) -> TeamGitHubPresentation = { _ in TeamGitHubPresentation() }
+    var makeRelations: (String, String) -> TeamRelationPresentation = { _, _ in TeamRelationPresentation() }
     var makeWorkflow: (String, String) -> TeamWorkflowPresentation = { _, _ in TeamWorkflowPresentation() }
     var controller: TeamRequestController?
     var inbox: TeamInboxPresentation?
@@ -97,6 +98,8 @@ struct TeamRequestDetailView: View {
     private var comments: [TeamRequestComment] { history.comments }
     @State private var commentSchemas: [String] = []
     @FocusState private var commentFocused: Bool
+    @State private var showRelated = false
+    @State private var relatedProduct = "studio"
     @State private var draft: TeamCommentDraft?
     @State private var busy = false
     @State private var storageReady = true
@@ -115,7 +118,13 @@ struct TeamRequestDetailView: View {
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
-                Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry") }
+                Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
+                    Button("관련 요청") {
+                        commentFocused = false; relatedProduct = detail.request.product
+                        let expected = generation
+                        // Commit focus resignation before NavigationStack captures the source view.
+                        DispatchQueue.main.async { if generation == expected && !busy && storageReady { showRelated = true } }
+                    }.disabled(busy || !storageReady).accessibilityIdentifier("teamRelationsEntry") }
                 if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamSubscriptionScreen(model: inbox, product: detail.request.product, request: requestID) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
                     ForEach(comments) { comment in
@@ -165,6 +174,7 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showRelated) { TeamRelationScreen(model: model.makeRelations(requestID, relatedProduct), requests: model) }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -179,7 +189,7 @@ struct TeamRequestDetailView: View {
             .task(id: requestID) {
                 do { draft = try model.loadComment(requestID) } catch { storageReady = false; message = "저장된 댓글을 읽지 못했어요. 원본을 유지했어요." }
                 await refresh()
-            }.onDisappear { generation = UUID(); busy = false; history.clear() }
+            }.onDisappear { commentFocused = false; generation = UUID(); busy = false; history.clear() }
             .alert("댓글을 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await submit() } }
             } message: { Text("이 제품 권한이 있는 내부 멤버에게 \(intentLabel(draft?.discussionIntent ?? "discussion"))를 공유해요. \(draft?.replyTo.map(targetLabel) ?? "")") }
