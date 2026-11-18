@@ -38,7 +38,7 @@ function facts(over = {}) {
     platforms: ['darwin-arm64', 'win32-x64'],
     macReceipt: {notarization: {status: 'Accepted', submission_id: 'id-1'}},
     blockers: {allow: true, blockers: [], reasons: []},
-    live: 'proceed', comments,
+    live: 'proceed', comments, casebookCases: [],
     ...rest,
   };
 }
@@ -148,7 +148,8 @@ test('publish gate: the auto route needs RELEASE_AUTO on and a valid record; app
   const body = recordBody({pr: facts().promotion.pr, candidate: CAND, rcTag: 'v2026.1116.0-rc.1', version: 'v2026.1116.0', gates: v.gates, runUrl: 'r'});
   const releasePr = {number: 4254, labels: ['release'], head: HEAD, headDate: HEAD_DATE, reviews: [],
     comments: [{user: 'hypeproof-org-lab-bot[bot]', association: 'NONE', created_at: at(30), body, url: 'u'}]};
-  const base = {tag: 'v2026.1116.0', tagSha: CAND, rcTags: [{name: 'v2026.1116.0-rc.1', sha: CAND}], releasePrs: [releasePr], p0: []};
+  const base = {tag: 'v2026.1116.0', tagSha: CAND, rcTags: [{name: 'v2026.1116.0-rc.1', sha: CAND}], releasePrs: [releasePr], p0: [],
+    autoCasebook: {cases: [], receipts: [], platforms: [], reporters: policy.evidenceReporters}};
   const on = decide({...base, auto: {enabled: true, pipeline: policy.pipeline}});
   assert.equal(on.allow, true, on.reasons.join('; '));
   assert.equal(on.route, 'auto');
@@ -172,4 +173,19 @@ test('policy, workflow and blocker title', () => {
   }
   const t = blockerTitle('v2026.1116.0', [{id: 'holds', status: 'FAIL'}, {id: 'freeze', status: 'WAIT'}]);
   assert.equal(t, 'Auto-release stopped: v2026.1116.0 (holds)');
+});
+
+test('post-publish finds the new stable release behind a first page of drafts', async () => {
+  const {latestStableRelease} = await import('../auto-release.mjs');
+  const now = Date.parse('2026-11-18T11:00:00Z');
+  const drafts = Array.from({length: 20}, (_, i) => ({tag_name: `v2026.11${String(i).padStart(2, '0')}.0-rc.1`, draft: true, prerelease: true, published_at: null}));
+  const list = [...drafts,
+    {tag_name: 'v2026.1118.0-rc.1', draft: false, prerelease: true, published_at: '2026-11-18T08:47:40Z'},
+    {tag_name: 'measurement-v0.3.1', draft: false, prerelease: false, published_at: '2026-11-18T10:50:00Z'},
+    {tag_name: 'v2026.1118.0', draft: false, prerelease: false, published_at: '2026-11-18T10:37:35Z'},
+    {tag_name: 'v2026.1115.0', draft: false, prerelease: false, published_at: '2026-11-14T23:48:50Z'}];
+  assert.equal(latestStableRelease(list, now)?.tag_name, 'v2026.1118.0');
+  // negative controls: only the first page (the old lookup), and a stable release older than 72 h
+  assert.equal(latestStableRelease(list.slice(0, 20), now), null);
+  assert.equal(latestStableRelease(list, Date.parse('2026-11-22T11:00:00Z')), null);
 });
