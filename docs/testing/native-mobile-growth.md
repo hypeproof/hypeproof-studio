@@ -573,3 +573,175 @@ visually quiet. `testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeep
 holds an actual model history GET while a second final event produces a distinct accepted request,
 then verifies a third capture and Stop preserving its partial draft. Injected recognizer events and
 synthetic playback do not establish physical Korean ASR or acoustic turn-taking.
+
+### iOS product feedback verification
+
+`TeamEntryUITests.testSettingsLoginShowsActualAccountAndLogoutClearsIdentity`
+covers the settings login entry, exact synthetic account ID, authenticated state,
+and identity removal after logout using the existing member-inbox fixture.
+Swift syntax parsing passed locally; simulator execution is pending. This is
+not evidence of real account sign-in, session restoration or TestFlight readiness.
+The fixture performs no live support report submission.
+
+Remaining environment gates (2026-11-18):
+- Local scheduling: app automation/project tools return request errors; no
+  Mac-bound schedule has been established. Keep the hosted schedule paused.
+- App verification: use the existing ios-verify recipe in an authorized Xcode
+  environment; current session restrictions still prevent full execution.
+- Guarded PR: canonical Harness is absent; connected GitHub contents lookup for
+  its policy returned 404 (unavailable to this connection, not proof of deletion).
+- TestFlight: verify protected environment configuration, distribution profile,
+  App Store Connect access and internal testers after exact-source CI passes.
+  Workflow declarations alone do not prove that credentials or permissions exist.
+- Product loop: separately verify support receipt, GitHub issue creation and push
+  delivery; no end-to-end completion is claimed from local controller tests.
+
+Environment follow-up (2026-11-18): the Mac checkout is accessible again. The
+previous 126-test native contract run ended with eight failures and two errors,
+all in Android environment/emulator tests; two errors explicitly report denied
+`ps` execution. Do not attribute these failures to iOS feedback behavior or mark
+the full suite passing. The isolated `test_apple_push_config.py` suite was rerun:
+10 tests passed in 62.648s, using synthetic Apple tools, with no real upload.
+Log: `/tmp/hps-apple-boundaries.log`.
+
+SwiftPM was retried with writable module caches but manifest execution still
+fails with `sandbox_apply: Operation not permitted`; see
+`/tmp/hps-ios-core-recheck.log`. Local automation inspection through the app tool
+also failed, so Mac-bound scheduling remains unverified and the hosted task
+remains paused. Neither limitation is fixed by changing product source.
+
+Resume in an authorized local terminal or the existing CI runner with
+`bash apps/studio-native/scripts/ios-verify.sh` from the repository root. This
+runs Core tests, the unsigned device build, simulator journeys and evidence
+collection without uploading a release. Inspect its results before guarded PR
+preparation. Do not disable sandbox protections or substitute these synthetic
+Apple-tool tests for this full app verification.
+
+`ProductFeedbackTests` exercises the production controller with injected transport
+and persistence: payload allowlist, save-before-send failure, concurrent taps,
+receipt persistence/reopen, malformed/failed responses, corrupt storage, receipt
+save failure, timeout and input bounds. No production report is sent.
+
+With Xcode, run the StudioCore test suite. On a Command Line Tools-only Mac the
+same feedback scenarios can be compiled directly (XCTest is not available):
+
+```sh
+swiftc -module-cache-path /tmp/hps-swift-cache -parse-as-library apps/studio-native/ios/Sources/StudioCore/*.swift apps/studio-native/ios/Tests/StudioCoreTests/ProductFeedbackTests.swift -o /tmp/hps-feedback-smoke
+/tmp/hps-feedback-smoke
+```
+
+Before TestFlight: build the iOS target; on simulator and physical iPhone verify
+settings → feedback before login, keyboard/Dynamic Type, close/reopen persistence,
+separate account drafts, cancellation without a POST, export, and VoiceOver.
+With an authorized staging transport, verify receipt and disconnect/relaunch
+behavior. Then verify the existing support service contract and triage destination
+before a deliberately labeled live internal report. Do not claim GitHub issue
+creation or push delivery from a support receipt alone.
+
+Local 2026-11-17 update: Xcode 27.2 (27B52) is installed and
+`xcodebuild -checkFirstLaunchStatus` succeeds. The simulator Debug build reached
+compilation but failed: `sandbox-exec: sandbox_apply: Operation not permitted`
+prevents the SwiftUI State macro plugin from running. Missing projected State
+bindings in that log are downstream diagnostics, not verified source defects.
+CoreSimulator also cannot connect to its runtime-image service in this execution
+environment. Build log: `/tmp/hps-ios-account-build.log` (local, temporary).
+
+SwiftPM tests initially failed on the default module-cache write location.
+Relocating the caches to `/tmp` resolved that error, but manifest execution then
+failed on the same sandbox restriction (`/tmp/hps-ios-core-tests.log`). Do not
+disable sandbox protection to obtain a passing result. The direct feedback
+scenario executable was rebuilt with the installed Xcode compiler and passed.
+Project plist validation and `git diff --check` also passed.
+
+Next: run the app build and full StudioCore suite in an authorized Xcode/CI
+environment, then verify settings login, account ID, session restore, logout and
+feedback draft isolation on simulator and physical iPhone. Preserve the existing
+working changes. Recheck guarded Harness access before PR preparation; earlier
+CLI authentication/private Harness failures are historical, not a fresh auth
+check. App build, full XCTest, UI/device tests, guarded PR creation, CI and
+TestFlight release remain pending. No live report or release was performed.
+
+Local verification passed: compiled every StudioCore Swift source with the feedback
+scenario executable and ran it successfully; parsed the changed SwiftUI sources;
+validated the Xcode project plist and `git diff --check`. SwiftUI parsing is not an
+iOS typecheck/build and these results do not substitute for the device checks above.
+
+### Authorized local Xcode recheck — 2026-11-18
+
+Host `Jays-MacBook-Pro-M6.local`, macOS Darwin 27.2 arm64, Xcode 27.2 (27B52),
+base `50f141915281619915f9c837c9a9f434e54ee523` plus the preserved uncommitted
+feedback/account changes. The prior sandbox and CoreSimulator connection failures
+did not recur in this session; no sandbox protections were disabled.
+
+`bash apps/studio-native/scripts/ios-verify.sh`, through the shared `local_heavy`
+queue, passed all 85 Swift core tests, the unsigned Release iPhone build and the
+actual-app/three-control push metadata checks. The first attempt then failed
+with CoreSimulator `Incompatible device` (exit 147): selecting the last matching
+27.2 runtime chose the iPhone Duo-only runtime for iPhone 16 Pro. The recipe now
+requires the requested device in the runtime's `supportedDeviceTypes`. Nine shell
+contract tests pass with an incompatible same-version runtime last; the original
+selector fails that control as expected.
+
+The corrected recipe created and booted its own iPhone 16 Pro on
+`com.apple.CoreSimulator.SimRuntime.iOS-27-2`, compiled the simulator app and ran
+all 38 UI tests: **37 passed, 1 failed; recipe exit 65**. The new
+`testSettingsLoginShowsActualAccountAndLogoutClearsIdentity` passed.
+`testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry` failed
+at `TeamEntryUITests.swift:174` because the expected settings button was not found.
+The captured accessibility hierarchy shows an open settings sheet; the cause of
+the missing button remains unresolved. This is not an Xcode environment failure.
+No test was skipped or retried into a pass. The collector retains overall FAIL.
+The owned simulator was shut down and deleted successfully.
+
+Evidence: `apps/studio-native/evidence/{swift-tests.log,device-build.log,
+push-metadata.json,simulator-test.log,Studio.xcresult,journey-attachments/,
+native-journeys.json,signin-journey.json,simulator-cleanup.log}`. The original
+failed attempt and initial working-file hashes are under
+`/tmp/hps-xcode-env-01a1ec6e/`; these are local artifacts, not CI receipts.
+Physical iPhone, completed live authentication, live support submission and
+TestFlight remain NOT_RUN. Environment execution is restored; full app acceptance
+is still FAIL pending investigation of the settings journey.
+
+
+### Internal feedback candidate — Studio #4337
+
+`testFeedbackDraftIsolationCancelAndReceiptSurviveReopen` exercises the actual
+settings and feedback Form, real per-scope local files, guest restart recovery,
+confirmation cancellation with zero requests, guest/account draft separation,
+and a synthetic receipt surviving restart without replay.
+`testUncertainFeedbackRestartsWithoutResending` injects a transport timeout and
+requires preserved text, no receipt, no Send action and zero new requests after
+restart. The DEBUG-only transport replaces all report requests during native
+journeys; it never contacts the operating support endpoint. Its files use the
+existing journey namespace to prevent contamination between runs.
+
+The experience-consent journey must scroll the real settings list until its
+existing control is hittable, tap it, and retain both grant/decline and the
+subsequent question-entry assertions. A missing or unreachable control still
+fails after bounded scrolling. The inherited failure stays in the original
+2026-11-18 evidence; new runs use separate result bundles.
+
+These checks do not establish real-account sign-in, server receipt, physical
+iPhone accessibility, TestFlight processing, installation or reporter acceptance.
+
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MFB-T01 | MFB-01, MFB-02 | Settings account journey and guest/account draft reopen journey, with zero requests after cancellation. |
+| MFB-T02 | MFB-03 | Core persistence/failure controls and native receipt/timeout restart journeys; positive request-count control before restart. |
+| MFB-T03 | MFB-04 | UTF-16 boundary controls, retained text/receipt on persistence failure, native experience settings grant/decline and physical export/accessibility verification. |
+
+### Internal request and discussion client (Studio #4340)
+
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MTR-T01 | MTR-01, MTR-02 | Core account-switch/late-receipt tests and storage-failure controls; native draft reopen and permission denial. |
+| MTR-T02 | MTR-03 | Persist-before-POST, timeout/restart/recovery without a new POST, mismatched receipt rejection and same-key manual retry. |
+| MTR-T03 | MTR-04, MTR-05 | Actual native composer cancel/send, request detail, comment cancel/send and receipt/recovery screenshots; pagination and service permission tests are separately owned by Service. |
+
+`TeamRequestTests` uses synthetic identities and injected transport/storage.
+`TeamEntryUITests.testInternalRequestCancelReceiptAndDiscussion` and
+`testInternalRequestUnknownResultRecoversWithoutReplay` use the real UI and
+account model with the DEBUG-only TeamEntry transport. They never contact the
+operating internal request API. Their results do not establish live Lab/D1
+membership, production retention, real-account discussion or installed-iPhone
+acceptance. TestFlight and physical accessibility remain separate acceptance.

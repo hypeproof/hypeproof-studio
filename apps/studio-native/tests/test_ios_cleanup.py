@@ -32,8 +32,15 @@ elif name == "xcrun":
     if args == ["--sdk", "iphonesimulator", "--show-sdk-version"]:
         print("26.3")
     elif args[:3] == ["simctl", "list", "runtimes"]:
-        print(json.dumps({"runtimes": [{"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3", "version": "26.3"}]}))
+        print(json.dumps({"runtimes": [
+            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3", "version": "26.3",
+             "supportedDeviceTypes": [{"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"}]},
+            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3-special", "version": "26.3",
+             "supportedDeviceTypes": [{"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"}]}
+        ]}))
     elif args[:2] == ["simctl", "create"]:
+        if args[-1] != "com.apple.CoreSimulator.SimRuntime.iOS-26-3":
+            raise SystemExit("Incompatible device")
         if os.environ.get("STUB_CREATE_EXIT"):
             raise SystemExit(int(os.environ["STUB_CREATE_EXIT"]))
         print(os.environ["STUB_DEVICE"])

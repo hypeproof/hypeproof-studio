@@ -12,7 +12,9 @@
 //   notarization  the Mac signing receipt says notarization Accepted (when darwin-arm64 ships)
 //   blockers      no open `release-blocker` issue in Studio, Service or Lab (release-blockers.mjs)
 //   blackbox-kit  hps-blackbox-kit/1 result for the candidate, every required scenario PASS
-//   casebook      the release casebook P0 run (hps-blackbox-run/1) at the head, as the publish gate reads it
+//   casebook      every `gate: auto` P0 case of the casebook has its evidence (acceptance, kit or a run at the
+//                 head) and no P0 case FAILed at the head (casebook-gate.mjs). after-publish and human cases
+//                 do not hold it: after publication they are the "v<version> 출시 후 점검" issue (2026-11-18)
 //   holds         no unhidden comment outside the release machinery, no changes-requested review
 //   release-deps  hps-release-deps/1 result for the candidate with verdict PASS
 //   freeze        no live class (check-live-sessions.mjs decision `proceed`)
@@ -25,6 +27,9 @@
 //         `release-blocker` issue in Studio (stops every later cut and promotion until closed), #alerts.
 //         The job itself succeeds: the stop is reported, not a machinery error (#4315).
 // Off (RELEASE_AUTO not "on") does nothing at all: releases stay manual (release-promote on approval).
+// After publication: the SDK seed check and "출시됨 vX", then one "vX 출시 후 점검" issue listing the release's
+// after-publish and human P0 cases for the team. Every run labels such an issue `release-blocker` when a
+// trusted hps-blackbox-run/1 comment on it reports a FAIL, which stops the next release.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync, spawnSync} from 'node:child_process';
@@ -34,7 +39,9 @@ import {AUTO_SCHEMA, REQUIRED_GATES, depsEvidence, holds, kitEvidence} from './a
 import {checkBlockers} from './release-blockers.mjs';
 import {PUBLISHED_SCHEMA, alreadyAsked, askBody, askReason, publishChecks, publishedBody} from './release-ask.mjs';
 import {gatherPromotion, promotionDecision} from './promote.mjs';
-import {casebookEvidence} from './publish-gate.mjs';
+import {CASEBOOK, p0CaseIds} from './publish-gate.mjs';
+import {loadCasebook, parseYaml} from './casebook.mjs';
+import {CHECKLIST_SUFFIX, autoCasebook, checklistBody, checklistFailures, checklistTitle, splitByGate} from './casebook-gate.mjs';
 import {releasePlatforms} from './platforms.mjs';
 import {MAC_RECEIPT} from './macos-signing-receipt.mjs';
 
@@ -56,7 +63,8 @@ const gate = (id, status, detail) => ({id, status, detail});
 // Pure. facts: everything already read; policy: config/release-auto.json.
 //   facts: {enabled, promotion: promotionDecision facts, structural: promotionDecision result (approval-free),
 //           acceptance: {receipts} | null, platforms: [..], macReceipt: {notarization} | null,
-//           blockers: blockerDecision result, live: 'proceed'|'blocked'|''}
+//           blockers: blockerDecision result, live: 'proceed'|'blocked'|'',
+//           casebookCases: the current casebook's cases (their gate fields)}
 export function autoGates(facts, policy) {
   const g = [];
   const {pr, mergeState} = facts.promotion;
@@ -95,9 +103,14 @@ export function autoGates(facts, policy) {
   const kit = kitEvidence({pr, candidate, reporters: policy.evidenceReporters, required: policy.blackboxKit.requiredScenarios});
   g.push(gate('blackbox-kit', kit.status, kit.detail));
 
-  const cb = casebookEvidence({number: pr.number, head: pr.head, headDate: pr.headDate, p0: facts.promotion.p0 ?? [], comments: pr.comments ?? [], approvers: []});
   if (!Array.isArray(facts.promotion.p0)) g.push(gate('casebook', 'FAIL', 'the casebook P0 list was not read'));
-  else g.push(gate('casebook', cb.ok ? 'PASS' : 'WAIT', cb.reasons.join('; ')));
+  else if (!Array.isArray(facts.casebookCases)) g.push(gate('casebook', 'FAIL', 'the casebook gate fields were not read'));
+  else {
+    const cb = autoCasebook({number: pr.number, head: pr.head, headDate: pr.headDate, candidate, p0: facts.promotion.p0,
+      cases: facts.casebookCases, comments: pr.comments ?? [], receipts: facts.acceptance?.receipts ?? null,
+      platforms: facts.platforms, reporters: policy.evidenceReporters});
+    g.push(gate('casebook', cb.status, cb.reasons.join('; ')));
+  }
 
   const h = holds({comments: facts.comments, reviews: pr.reviews}, policy.machinery);
   if (!h.open.length && !h.changes.length) g.push(gate('holds', 'PASS', 'no unresolved comment or change request'));
@@ -198,7 +211,7 @@ export function gatherAuto({number, repo, out, env = process.env}) {
       acceptance: rcTag ? rcAsset(repo, rcTag, ACCEPTANCE, dir) : null,
       macReceipt: rcTag ? rcAsset(repo, rcTag, MAC_RECEIPT, dir) : null,
       platforms, blockers: checkBlockers(), live: env.LIVE_DECISION ?? '',
-      comments: commentsWithState(repo, number),
+      comments: commentsWithState(repo, number), casebookCases: loadCasebook().cases,
     },
   };
 }
@@ -210,11 +223,20 @@ function alert(text) {
 }
 
 // The latest public stable release, when it is recent and its release PR has no published record yet.
-function unpublishedRelease(repo, policy, now) {
-  const list = JSON.parse(gh(['api', `repos/${repo}/releases?per_page=20`]));
-  const r = list.filter(x => !x.draft && !x.prerelease && /^v\d+\.\d+\.\d+$/.test(x.tag_name))
+// The latest public stable app release when it is at most 72 h old, or null. Pure.
+// GitHub lists draft releases first, so a short first page can hold only drafts: the caller passes every page.
+export function latestStableRelease(list, now) {
+  const r = list.filter(x => !x.draft && !x.prerelease && x.published_at && /^v\d+\.\d+\.\d+$/.test(x.tag_name))
     .sort((a, b) => b.published_at.localeCompare(a.published_at))[0];
-  if (!r || now - Date.parse(r.published_at) > 72 * 3600 * 1000) return null;
+  return r && now - Date.parse(r.published_at) <= 72 * 3600 * 1000 ? r : null;
+}
+
+function unpublishedRelease(repo, policy, now) {
+  // Every page (#4344 follow-up): with 20 drafts the old first page of 20 never reached v2026.1118.0, so the
+  // post-publish step (seed check, 출시됨, checklist) silently did nothing.
+  const list = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`])).flat();
+  const r = latestStableRelease(list, now);
+  if (!r) return null;
   const prs = JSON.parse(gh(['pr', 'list', '--repo', repo, '--state', 'merged', '--head', `release/${r.tag_name}`, '--json', 'number']));
   if (prs.length !== 1) return null;
   const number = prs[0].number;
@@ -238,6 +260,8 @@ function postPublish({repo, policy, out, runUrl, say, pipelineToken}) {
   if (!r) return;
   const {status, seed} = seedOf(repo, r.tag);
   const check = publishChecks({tag: r.tag, seedStatus: status, seed, assets: r.assets});
+  // Before "출시됨": a failure here throws, nothing is posted, and the next run tries both again.
+  openChecklist({repo, policy, release: r, out, runUrl, say});
   const file = path.join(out, 'published.md');
   fs.writeFileSync(file, publishedBody({tag: r.tag, pr: r.number, ok: check.ok, problems: check.problems, team: policy.team, runUrl}));
   gh(['pr', 'comment', String(r.number), '--repo', repo, '--body-file', file], pipelineToken);
@@ -248,6 +272,41 @@ function postPublish({repo, policy, out, runUrl, say, pipelineToken}) {
   const issue = gh(['issue', 'create', '--repo', repo, '--title', `Post-publish check failed: ${r.tag} (sdk-seed)`, '--label', 'release-blocker', '--body-file', file]).split('\n').pop();
   say(`${r.tag} post-publish check failed: ${check.problems.join('; ')}. ${issue}`);
   alert(`Studio ${r.tag} is public but its post-publish check failed (${check.problems[0]}). ${issue} ${runUrl}`);
+}
+
+// The release's after-publish and human P0 cases, as one issue for the team. Idempotent by title.
+function openChecklist({repo, policy, release, out, runUrl, say}) {
+  const title = checklistTitle(release.tag);
+  const existing = JSON.parse(gh(['issue', 'list', '--repo', repo, '--state', 'all', '--search', `"${title}" in:title`, '--json', 'number,title,url']));
+  const found = existing.find(i => i.title === title);
+  if (found) { say(`Post-release checklist already open: ${found.url}`); return; }
+  const tagSha = execFileSync('git', ['rev-parse', `${release.tag}^{commit}`], {encoding: 'utf8'}).trim();
+  const p0 = p0CaseIds(parseYaml(execFileSync('git', ['show', `${tagSha}:${CASEBOOK}`], {encoding: 'utf8', maxBuffer: 16 << 20}), CASEBOOK)?.cases ?? []);
+  const cases = loadCasebook().cases;
+  const split = splitByGate(p0, cases);
+  const file = path.join(out, 'checklist.md');
+  fs.writeFileSync(file, checklistBody({tag: release.tag, pr: release.number, candidate: tagSha, cases, split, team: policy.team, runUrl}));
+  const url = gh(['issue', 'create', '--repo', repo, '--title', title, '--body-file', file]).split('\n').pop();
+  say(`Post-release checklist (${split.afterPublish.length} after-publish, ${split.human.length} human): ${url}`);
+}
+
+// A FAIL reported on an open post-release checklist stops the next release: the issue becomes a release-blocker.
+function sweepChecklists({repo, say}) {
+  const open = JSON.parse(gh(['issue', 'list', '--repo', repo, '--state', 'open', '--search', `"${CHECKLIST_SUFFIX}" in:title`, '--json', 'number,title,labels,body']));
+  for (const issue of open.filter(i => i.title.endsWith(` ${CHECKLIST_SUFFIX}`))) {
+    if (issue.labels.some(l => l.name === 'release-blocker')) continue;
+    const pr = /"pr": (\d+)/.exec(issue.body ?? '')?.[1];
+    if (!pr) continue;
+    const comments = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/issues/${issue.number}/comments?per_page=100`])).flat()
+      .map(c => ({user: c.user?.login, association: c.author_association, created_at: c.created_at, body: c.body ?? '', url: c.html_url}));
+    const failed = checklistFailures({pr: Number(pr), comments});
+    if (!failed.length) continue;
+    gh(['issue', 'edit', String(issue.number), '--repo', repo, '--add-label', 'release-blocker']);
+    gh(['issue', 'comment', String(issue.number), '--repo', repo, '--body',
+      `출시 후 점검에서 FAIL: ${failed.join(', ')}. 이 이슈를 release-blocker 로 바꿨어요. 고친 뒤 라벨을 떼거나 이슈를 닫기 전까지 다음 출시는 멈춰요.`]);
+    alert(`Studio post-release check FAIL (${failed.join(', ')}): ${issue.title} is now a release-blocker. https://github.com/${repo}/issues/${issue.number}`);
+    say(`${issue.title}: FAIL ${failed.join(', ')} -> release-blocker`);
+  }
 }
 
 // Ask the whole team on the release PR, once per head.
@@ -279,6 +338,9 @@ function run({pr: requested, out}) {
   const pipelineToken = process.env.RELEASE_PR_TOKEN;
   try { postPublish({repo, policy: loadPolicy(), out, runUrl, say, pipelineToken}); } catch (error) {
     say(`WARNING: post-publish check could not run: ${String(error.stderr || error.message).split('\n')[0]}`);
+  }
+  try { sweepChecklists({repo, say}); } catch (error) {
+    say(`WARNING: post-release checklist sweep could not run: ${String(error.stderr || error.message).split('\n')[0]}`);
   }
   const number = requested ?? openReleasePr(repo);
   if (!number) { say('No single open release PR (label release, head release/vX.Y.Z): nothing to promote.'); finish(0); }

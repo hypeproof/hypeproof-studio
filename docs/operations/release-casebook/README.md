@@ -100,6 +100,37 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 - **예외는 override 하나이고, 막힌 케이스와 돌리지 못한 케이스만 면제한다**(#3462). 아래 [Release manager override](#release-manager-override)를 따른다.
   **P0 FAIL 은 override 로 면제할 수 없다.** 게이트는 FAIL 케이스 id 를 이름으로 대고 거부한다.
 
+## 자동 출시 관문 (`gate`, 2026-11-18)
+
+결정: 자동 출시는 **자동으로 확인되는 케이스만** 관문으로 쓴다 ("자동 항목만 관문", 2026-11-18).
+데스크톱 P0 케이스(`자동화됨` 제외)는 모두 `gate:` 를 적는다. 빠지면 `loadCasebook` 이 케이스북 오류로 멈춘다.
+
+| `gate` | 뜻 | 자동 출시(release-auto)를 막나 |
+|---|---|---|
+| `auto` | 사람 없이 증거가 나온다. `gate_evidence` 에 근거를 적는다 | 막는다. 증거가 PASS 여야 하고, 없으면 기다린다(WAIT) |
+| `after-publish` | 공개된 안정 버전에서만 할 수 있다 (앱 안 업데이트는 공개된 안정 버전만 읽는다) | 막지 않는다 |
+| `human` | 사람이 해야 한다: 실제 Google 로그인·결제, 참여 코드·계정, Windows 11 실기기, 운영 DB 읽기, 또는 아직 무인 러너가 없음 | 막지 않는다 |
+
+`gate_evidence` (auto 에만, 하나 이상):
+
+| 값 | 근거 |
+|---|---|
+| `acceptance:public-classroom` · `public-trial` | rc 의 `unified-acceptance.json`: 릴리스가 내는 모든 플랫폼에서 후보 커밋 PASS, 공개 Service 의 수업/체험 활동 (`e2e/unified-release/public.mjs`) |
+| `acceptance:activity-classroom` · `activity-trial` | 같은 파일, 고정 Service 로 돈 활동 전환·초안·재시작 (`e2e/unified-release/run.mjs`) |
+| `kit:<sN>` | 후보의 `hps-blackbox-kit/1` 기록에서 그 시나리오 PASS |
+| `run` | PR head 의 `hps-blackbox-run/1` 결과 행 (러너나 사람) |
+
+규칙 (`scripts/release/casebook-gate.mjs`):
+
+- 자동 경로는 `auto` 케이스만 본다. 증거가 다 PASS 이면 통과, 아직 없으면 WAIT, 관측된 실패면 FAIL.
+- **어느 gate 든 head 에서 P0 FAIL 이 하나라도 있으면 출시하지 않는다.** 면제 없음.
+- 분류는 지금 main 의 케이스북을 따르고, P0 목록은 태그 자신의 케이스북을 따른다. main 에서 분류되지 않은 P0 는 막는다.
+- 승인 경로(릴리스 승인자의 Approve)는 그대로다: 모든 P0 PASS 또는 Release manager override.
+- 출시 뒤 release-auto 가 **"v<버전> 출시 후 점검"** 이슈를 하나 연다. after-publish·human 케이스 목록과 팀 전체 멘션이 들어간다.
+  결과는 그 이슈에 `hps-blackbox-run/1` 댓글로 남긴다. FAIL 이 있으면 다음 release-auto 실행이 그 이슈에 `release-blocker`
+  라벨을 붙이고, 다음 출시가 멈춘다. 자동으로 도는 출시 후 점검은 아직 없다.
+- 케이스를 `auto` 로 바꾸려면 그 케이스를 **실제로** 덮는 무인 증거가 있어야 한다. 비슷한 흐름을 지나가는 테스트는 근거가 아니다.
+
 ## Release manager override
 
 Jay 나 그 PR 을 승인한 writer 가 head 커밋 뒤에 `Release manager override` 로 시작하는 댓글을 남기면
