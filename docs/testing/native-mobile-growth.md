@@ -1342,3 +1342,20 @@ failure exit handling are unchanged. This budget change does not repair or
 reclassify any of the four actual test failures and is not a passing test result.
 No model calls are added; at most ten additional hosted Mac runner minutes are
 permitted per full job. Normal completion still ends the job immediately.
+
+
+### Android second explicit capture boundary — 2026-11-19
+
+Run44393604967 at `d8563645` failed one of44 Android tests: the background/reopen
+journey expected2 capture starts but observed1. Its second click was followed by
+partial injection through whichever listener remained, without first proving a
+new capture. This establishes a missing start, not a background reopening defect.
+The test now observes actual foreground/allowed conversation, empty draft and
+visible enabled target readiness using the existing five-second readiness budget,
+then performs exactly one real click. Before injecting or backgrounding it requires
+starts2, a new listener and LISTENING. Existing background no-reopen, submitted1 and
+preserved draft assertions remain unchanged. Content-free failure state records
+guards, target readiness and new-listener identity as a boolean; no credentials or
+utterance text are added to diagnostics. No retry, relaxed count or product change.
+A periodic-read race remains a hypothesis until runtime evidence; new execution is
+NOT RUN while shared compute is blocked. Static integrity checks are not acceptance.
