@@ -683,7 +683,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(refresh.isHittable); XCTAssertGreaterThanOrEqual(refresh.frame.height, 44)
         refresh.tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertFalse(syncing.exists, "The held history read must not restore the removed conversation spinner.")
         // Refresh may overlap the sheet dismissal. A voice button behind an
         // open settings surface is not yet a usable touch target.
         XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
@@ -693,7 +694,7 @@ final class StudioJourneyTests: XCTestCase {
                 && !voice.frame.isEmpty && app.frame.contains(voice.frame)
         }, object: voice)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
-        XCTAssertTrue(syncing.exists, "The voice action must still overlap the held history read.")
+        XCTAssertFalse(syncing.exists, "History activity is observed through the fixture barrier, not removed UI.")
         let before = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
         XCTAssertEqual(before["history_sync_automatic"] as? Bool, false, "This journey must hold the explicit Settings refresh, not an earlier quiet poll.")
         XCTAssertEqual(before["active_history_reads"] as? Int, 1)
@@ -811,8 +812,12 @@ final class StudioJourneyTests: XCTestCase {
         app.terminate(); app.launch(); _ = field(app)
         let retry = app.buttons["sharedRetry"]; enabled(retry)
         XCTAssertTrue(app.scrollViews["conversationTimeline"].staticTexts["Keep my unfinished question"].exists)
+        XCTAssertTrue(retry.isHittable); XCTAssertGreaterThanOrEqual(retry.frame.width, 44); XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
+        let target = XCTAttachment(string: "Retry before single tap: frame=\(retry.frame), enabled=\(retry.isEnabled), hittable=\(retry.isHittable)")
+        target.name = "retry-single-touch-target"; target.lifetime = .keepAlways; add(target)
         retry.tap(); answer(app)
         let after = try trace(app)
+        XCTAssertEqual(after["retry_stages"] as? [String], ["touch", "attempt", "admitted", "post"])
         XCTAssertEqual(after["submitted_ids"] as? [String], [firstIDs[0], firstIDs[0]], "Retry must preserve the durable request ID.")
         XCTAssertEqual(after["submitted_texts"] as? [String], ["Keep my unfinished question", "Keep my unfinished question"])
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)

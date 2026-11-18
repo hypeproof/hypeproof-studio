@@ -10469,3 +10469,11 @@ observation cannot imply personal invitation acceptance, installation or
 resolution. Unsupported or inaccessible server capability stays explicitly
 unverified, and account changes remove prior records. No new operator or
 reporter mutation is exposed by this screen.
+
+
+### Durable retry touch target — 2026-11-18
+
+A saved local request's explicit retry action must expose at least a 44pt touch
+area. A single activation retries the preserved request identity and words;
+restart and background history reads must not create an automatic replay.
+This applies the existing native touch-target contract to the outbox action.
