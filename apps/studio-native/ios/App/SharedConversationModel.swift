@@ -172,6 +172,21 @@ private struct SharedCacheFile: Codable {
         guard epoch == attempt, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { return }
         failure(SyncFailure.http(status, code))
     }
+    private func commentSchemas(product: String) async throws -> [String] {
+        let attempt = epoch
+        guard let binding = try await approvalIdentity() else { throw CancellationError() }
+        let access = try await teamService.teamRequestAccess(token: approvalToken(binding)); try access.validate(account: binding.accountID)
+        guard epoch == attempt, try await approvalIdentity() == binding, access.products.contains(product) else { throw CancellationError() }
+        return try TeamCommentSupport.schemas(access.supported_comment_schemas)
+    }
+    private func sendTeamComment(_ draft: TeamCommentDraft) async throws -> String {
+        let attempt = epoch
+        guard let binding = try await approvalIdentity(), epoch == attempt, binding.accountID == draft.accountID else { throw CancellationError() }
+        try draft.validate(account: binding.accountID, request: draft.requestID)
+        let receipt = try await teamService.teamRequestComment(draft, token: approvalToken(binding))
+        guard epoch == attempt, try await approvalIdentity() == binding else { throw CancellationError() }
+        return receipt
+    }
     func authorizedTeamPushRequest(_ destination: TeamPushDestination) async -> String? {
         let attempt = epoch
         var captured: MemberApprovalIdentity?
@@ -249,12 +264,11 @@ private struct SharedCacheFile: Codable {
             guard try await self.approvalIdentity() == binding else { throw CancellationError() }
             return result
         }
+        presentation.commentSchemas = { [weak self] product in
+            guard let self else { throw CancellationError() }; return try await self.commentSchemas(product: product)
+        }
         presentation.comment = { [weak self] draft in
-            guard let self, let binding = try await self.approvalIdentity(), binding.accountID == draft.accountID else { throw CancellationError() }
-            try draft.validate(account: binding.accountID, request: draft.requestID)
-            let receipt = try await self.teamService.teamRequestComment(id: draft.requestID, key: draft.key, body: draft.body, token: self.approvalToken(binding))
-            guard try await self.approvalIdentity() == binding else { throw CancellationError() }
-            return receipt
+            guard let self else { throw CancellationError() }; return try await self.sendTeamComment(draft)
         }
         presentation.loadComment = { [weak self] request in
             guard let self, self.signedIn, !self.loggingOut, let account = self.account?.accountID, TeamRequestRecord.validID(request) else { throw CancellationError() }

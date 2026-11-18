@@ -4,6 +4,7 @@ public struct TeamRequestAccess: Codable, Sendable {
     public let schema, account_id, notice_version: String
     public let products: [String]
     public var supported_push_capabilities: [String]? = nil
+    public var supported_comment_schemas: [String]? = nil
     public func validate(account: String) throws {
         guard schema == "hps-team-request-access/1", account_id == account,
               !notice_version.isEmpty, notice_version.utf16.count <= 128,
@@ -61,18 +62,42 @@ public struct TeamRequestPage: Decodable, Sendable {
 public struct TeamRequestComment: Decodable, Identifiable, Sendable {
     public let id, request_id, account_id, client_comment_id, body: String
     public let created_at: Double
+    public var intent: String? = nil
+    public var reply_to: String? = nil
+    public var discussionIntent: String { intent ?? "discussion" }
     public func validate(request: String) throws {
         guard id.count == 36, id.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil,
               request_id == request, StoredAccount.validID(account_id), !body.isEmpty, body.utf16.count <= 5000,
-              !body.contains("\0"), created_at.isFinite, created_at > 0 else { throw SyncFailure.invalidResponse }
+              !body.contains("\0"), created_at.isFinite, created_at > 0,
+              TeamCommentDraft.validIntent(discussionIntent, reply: reply_to, request: request) else { throw SyncFailure.invalidResponse }
+    }
+}
+public struct TeamCommentSupport {
+    public static func schemas(_ values: [String]?) throws -> [String] {
+        guard let values else { return ["hps-team-comment/1"] }
+        guard values.count <= 16, Set(values).count == values.count,
+              values.allSatisfy({ $0.range(of: "^hps-team-comment/[1-9][0-9]*$", options: .regularExpression) != nil && $0.count < 64 }) else { throw SyncFailure.invalidResponse }
+        return values.filter { ["hps-team-comment/1", "hps-team-comment/2"].contains($0) }
+    }
+}
+public struct TeamCommentRetention: Decodable, Sendable {
+    public let policy: String
+    public let purge_implemented: Bool
+    public let content_purged_at: Double?
+    public let purged_outcome_revision: Int?
+    public func validate() throws {
+        guard policy == "90_days_after_reporter_confirmation", (content_purged_at == nil) == (purged_outcome_revision == nil),
+              content_purged_at.map({ $0.isFinite && $0 > 0 }) ?? true,
+              purged_outcome_revision.map({ $0 > 0 && $0 <= 9_007_199_254_740_991 }) ?? true else { throw SyncFailure.invalidResponse }
     }
 }
 public struct TeamRequestDetail: Decodable, Sendable {
     public let request: TeamRequestRecord
     public let comments: [TeamRequestComment]
     public let next_comments_cursor: String?
+    public var retention: TeamCommentRetention? = nil
     public func validate(id: String) throws {
-        try request.validate()
+        try request.validate(); try retention?.validate()
         guard request.id == id, comments.count <= 100, Set(comments.map(\.id)).count == comments.count,
               next_comments_cursor.map({ TeamRequestPage.validCursor($0, prefix: "tcm_") }) ?? true else { throw SyncFailure.invalidResponse }
         for comment in comments { try comment.validate(request: id) }
@@ -198,10 +223,57 @@ public struct TeamCommentDraft: Codable, Sendable {
     public var body = ""
     public var phase: TeamRequestDraft.Phase = .draft
     public var receipt: String?
+    // Missing fields decode as v1, retaining the exact pre-upgrade digest and key.
+    public var schema: String? = nil
+    public var intent: String? = nil
+    public var replyTo: String? = nil
+    public var definitiveRejection: String? = nil
+    public var needsReplyTarget: Bool? = nil
+    public var wireSchema: String { schema ?? "hps-team-comment/1" }
+    public var discussionIntent: String { intent ?? "discussion" }
     public init(accountID: String, requestID: String) { self.accountID = accountID; self.requestID = requestID; self.key = UUID().uuidString.lowercased() }
+    public static func validIntent(_ intent: String, reply: String?, request: String) -> Bool {
+        guard ["discussion", "question", "reply"].contains(intent), (intent == "reply") == (reply != nil) else { return false }
+        guard let reply else { return true }
+        return reply == request || (reply.count == 36 && reply.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil)
+    }
+    public func choosing(_ intent: String, reply: String?, loadedComments: [TeamRequestComment]) throws -> TeamCommentDraft {
+        guard phase == .draft, Self.validIntent(intent, reply: reply, request: requestID),
+              reply == nil || reply == requestID || loadedComments.contains(where: { $0.id == reply && $0.request_id == requestID }) else { throw SyncFailure.invalidResponse }
+        var next = TeamCommentDraft(accountID: accountID, requestID: requestID)
+        next.schema = "hps-team-comment/2"; next.intent = intent; next.replyTo = reply; next.body = body
+        try next.validate(account: accountID, request: requestID); return next
+    }
+    public mutating func recordDefinitiveRejection(_ code: String) -> Bool {
+        guard phase == .uncertain, code == "team_content_expired" || (code == "team_reply_target_unavailable" && wireSchema == "hps-team-comment/2" && discussionIntent == "reply") else { return false }
+        definitiveRejection = code; return true
+    }
+    public func freshReplyChoice() throws -> TeamCommentDraft {
+        guard phase == .uncertain, definitiveRejection == "team_reply_target_unavailable" else { throw SyncFailure.invalidResponse }
+        var next = TeamCommentDraft(accountID:accountID, requestID:requestID)
+        next.schema = "hps-team-comment/2"; next.intent = "discussion"; next.body = body; next.needsReplyTarget = true
+        return next
+    }
+    public func payload() throws -> [String: Any] {
+        try validate(account: accountID, request: requestID)
+        guard needsReplyTarget != true, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SyncFailure.invalidResponse }
+        var value: [String: Any] = ["schema":wireSchema, "client_comment_id":key, "body":body]
+        if wireSchema == "hps-team-comment/2" { value["intent"] = discussionIntent; value["reply_to"] = replyTo as Any? ?? NSNull() }
+        return value
+    }
+    public mutating func observeTombstone(_ detail: TeamRequestDetail) -> Bool {
+        guard phase == .received, detail.request.id == requestID, detail.retention?.content_purged_at != nil,
+              detail.comments.contains(where: { $0.id == receipt && $0.account_id == accountID && $0.client_comment_id == key && $0.body == "보관 기간이 지나 내용이 삭제됐어요." }) else { return false }
+        body = ""; return true
+    }
     public func validate(account: String, request: String) throws {
         guard accountID == account, requestID == request, StoredAccount.validID(account), TeamRequestRecord.validID(request),
               UUID(uuidString: key)?.uuidString.lowercased() == key, body.utf16.count <= 5000, !body.contains("\0"),
+              ["hps-team-comment/1", "hps-team-comment/2"].contains(wireSchema),
+              wireSchema != "hps-team-comment/1" || (intent == nil && replyTo == nil),
+              wireSchema != "hps-team-comment/2" || (intent != nil && Self.validIntent(discussionIntent, reply: replyTo, request: request)),
+              needsReplyTarget != true || (phase == .draft && wireSchema == "hps-team-comment/2" && definitiveRejection == nil),
+              definitiveRejection == nil || (phase == .uncertain && (definitiveRejection == "team_content_expired" || (definitiveRejection == "team_reply_target_unavailable" && wireSchema == "hps-team-comment/2" && discussionIntent == "reply"))),
               phase != .received || receipt.map({ $0.count == 36 && $0.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil }) == true else { throw SyncFailure.invalidResponse }
     }
 }

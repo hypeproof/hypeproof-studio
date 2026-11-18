@@ -619,3 +619,17 @@ real provider delivery. Comment intent authoring is a separate follow-up; no
 production subscription or feature-flag change is authorized by client tests.
 The product intent remains explicit human notification choice and authorized
 continuation, using the existing account/session and protected local storage.
+
+
+### Explicit question and reply authoring — Studio #4370
+
+| ID | Requirement |
+|---|---|
+| MTR-22 | Fresh authenticated comment-schema discovery is independent of push capability. Missing discovery keeps new legacy discussion drafts; unknown transport failure does not grant support. Existing uncertain drafts retain exact schema, key, text, intent and target across upgrades. |
+| MTR-23 | A member explicitly chooses discussion, question or reply, and replies select this request or a currently loaded comment from this request. Render intent and target context without inferring answered or resolved status. Persist before dispatch; no automatic resend or schema downgrade. |
+| MTR-24 | Only the specific receipt-first missing-target conflict enables an explicit fresh-key choice preserving words; the replacement remains unsendable until a target/type is chosen. Generic conflicts stay uncertain. Retention-expired writes remain unavailable/exportable; server tombstones scrub only matching acknowledged content, never uncertain drafts by elapsed time. |
+
+Uses Service #579 comment/2 semantics and #583 separate authoring discovery, not
+notification capability or notification flags. Existing account/session and
+protected per-request draft storage remain authoritative. No provider delivery,
+production authoring availability or installed-device acceptance is implied.

@@ -20714,6 +20714,45 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-DISCUSSION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Explicit question and reply authoring — Studio #4370"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone explicit question and reply authoring (#4370)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-DISCUSSION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-DISCUSSION",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Explicit question and reply authoring — Studio #4370"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamDiscussionTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }

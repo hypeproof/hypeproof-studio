@@ -162,7 +162,7 @@ private final class TeamEntryState: @unchecked Sendable {
             }
             switch (request.httpMethod ?? "GET", path) {
             case ("GET", "/v1/me/team-requests/access"):
-                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"], "supported_push_capabilities":ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" ? ["team_request/1","team_discussion/1"] : []])
+                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"], "supported_comment_schemas":ProcessInfo.processInfo.environment["HP_TEAM_DISCUSSION"] == "1" ? ["hps-team-comment/1","hps-team-comment/2"] : ["hps-team-comment/1"], "supported_push_capabilities":ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" ? ["team_request/1","team_discussion/1"] : []])
             case ("POST", "/v1/me/team-requests"):
                 requestPosts += 1
                 guard body["schema"] as? String == "hps-team-request/1", body["notice_version"] as? String == "synthetic/1", let key = body["client_request_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_request"]) }
@@ -184,9 +184,16 @@ private final class TeamEntryState: @unchecked Sendable {
                 if path == "/v1/me/team-requests/" + id + "/comments", request.httpMethod == "POST" {
                     commentPosts += 1
                     guard let key = body["client_comment_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_comment"]) }
-                    let commentID = "tcm_" + String(repeating: "b", count: 32)
-                    if !teamComments.contains(where: { $0["client_comment_id"] as? String == key }) { teamComments.append(["id": commentID, "request_id": id, "account_id": "journey-account", "client_comment_id": key, "body": words, "created_at": 1001]) }
-                    return (200, ["comment_id": commentID, "already": commentPosts > 1])
+                    let existing = teamComments.first { $0["client_comment_id"] as? String == key }
+                    let commentID = existing?["id"] as? String ?? "tcm_" + String(repeating:teamComments.isEmpty ? "b" : "c",count:32)
+                    if body["schema"] as? String == "hps-team-comment/2" {
+                        guard let intent = body["intent"] as? String, ["discussion","question","reply"].contains(intent), body.keys.count == 5 else { return (400,["error":"invalid_team_comment"]) }
+                        if intent == "reply", let target = body["reply_to"] as? String, target != id && !teamComments.contains(where: { $0["id"] as? String == target }) { return (409,["error":"team_reply_target_unavailable"]) }
+                    }
+                    if ProcessInfo.processInfo.environment["HP_TEAM_DISCUSSION"] == "1", commentPosts == 3, body["intent"] as? String == "reply" { return (409,["error":"team_reply_target_unavailable"]) }
+                    if existing == nil { teamComments.append(["id": commentID, "request_id": id, "account_id": "journey-account", "client_comment_id": key, "body": words, "created_at": 1001 + teamComments.count, "intent":body["intent"] ?? "discussion", "reply_to":body["reply_to"] ?? NSNull()]) }
+                    if ProcessInfo.processInfo.environment["HP_TEAM_DISCUSSION"] == "1", commentPosts == 1 { return (503,["error":"synthetic_unknown_comment"]) }
+                    return (200, ["comment_id": commentID, "already": existing != nil])
                 }
                 return (404, ["error": "synthetic_team_request_route"])
             }

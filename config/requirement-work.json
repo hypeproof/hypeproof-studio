@@ -1010,12 +1010,15 @@
         "MTR-18",
         "MTR-19",
         "MTR-20",
-        "MTR-21"
+        "MTR-21",
+        "MTR-22",
+        "MTR-23",
+        "MTR-24"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "47d72d59ffef89cc0b04cd398c0623b7347d4d48135dc3ac3be0ef80210edfe2",
+      "sha256": "7df3f56b4ab5f67e1d97dcadeb569b2c7feff05ba897f4258985b1a1b86cef46",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5557,6 +5560,42 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/TeamInboxTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
+      ]
+    },
+    {
+      "id": "ios-internal-discussion-m3",
+      "title": "iOS explicit question and reply authoring",
+      "issue": 4370,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-22",
+            "MTR-23",
+            "MTR-24"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-inbox-m3"
+      ],
+      "next_action": "Obtain exact-source CI, separately deploy the matching Service contract, and verify the installed iPhone flow before claiming acceptance.",
+      "design_delta": "Reuse existing account/session and protected durable drafts; explicit user actions bind immutable mutations to the authenticated scope.",
+      "positive_control": "Explicit question and selected reply persist schema/intent/target; receipt-first definitive missing target supports a fresh explicit choice without losing words.",
+      "negative_control": "Legacy uncertain payloads cannot change schema/key; unknown409 cannot unlock edits; replacement target selection gates send; foreign targets and account changes fail closed; retention does not erase uncertain drafts.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift",
+        "apps/studio-native/ios/App/TeamRequestsView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamDiscussionTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]
