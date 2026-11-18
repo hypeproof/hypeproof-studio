@@ -34,6 +34,7 @@ private final class TeamEntryState: @unchecked Sendable {
     private var teamRequest: [String: Any]?
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
+    private var relationEvents:[[String:Any]] = [], relationPosts = 0
     private var githubObservationReads = 0
     private var githubEvents: [[String: Any]] = [], githubPosts = 0
     private var outcomeEvents: [[String: Any]] = [], outcomePosts = 0
@@ -44,7 +45,7 @@ private final class TeamEntryState: @unchecked Sendable {
     private var acceptedCapabilities: [String] = []
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count, "subscriptionPosts":subscriptionPosts, "inboxReads":inboxReads, "readAcks":readAcks, "pushOpens":pushOpens, "capabilities":acceptedCapabilities], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "relationPosts":relationPosts,"relationEvents":relationEvents.count,"githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count, "subscriptionPosts":subscriptionPosts, "inboxReads":inboxReads, "readAcks":readAcks, "pushOpens":pushOpens, "capabilities":acceptedCapabilities], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func response(_ request: URLRequest, _ body: [String: Any]) throws -> (Int, [String: Any]) {
         lock.lock(); defer { lock.unlock() }
@@ -91,6 +92,25 @@ private final class TeamEntryState: @unchecked Sendable {
             if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_DENIED"] == "1" { return (403, ["error": "team_product_denied"]) }
             let id = "trq_" + String(repeating: "a", count: 32)
             let path = request.url?.path ?? ""
+            let relatedID="trq_"+String(repeating:"b",count:32)
+            let relatedRow:[String:Any] = ["id":relatedID,"account_id":"journey-account","client_request_id":"related-fixture","product":"studio","category":"bug","body":"Related original request","notice_version":"synthetic/1","status":"submitted","revision":1,"created_at":1001,"updated_at":1001]
+            if ProcessInfo.processInfo.environment["HP_TEAM_RELATED"] == "1",path.hasPrefix("/v1/me/team-requests/"+id+"/related") {
+                let manage=ProcessInfo.processInfo.environment["HP_TEAM_RELATED_READONLY"] != "1"
+                if (!manage || ProcessInfo.processInfo.environment["HP_TEAM_RELATED_SEEDED"] == "1") && relationEvents.isEmpty {relationEvents=[["id":"trl_"+String(repeating:"c",count:32),"sequence":1,"pair_left":id,"pair_right":relatedID,"actor_account_id":"journey-account","client_mutation_id":"fixture-related","revision":1,"action":"link","reason":"Existing related reason","created_at":1001,"redacted_at":NSNull(),"target_request_id":relatedID]]}
+                if request.httpMethod == "POST" {
+                    relationPosts += 1
+                    guard manage else{return(403,["error":"team_operator_required"])}
+                    if let old=relationEvents.first(where:{$0["client_mutation_id"] as? String==body["client_mutation_id"] as? String}){return(200,["event":old,"already":true])}
+                    guard body["target_request_id"] as? String==relatedID,body["expected_revision"] as? Int==relationEvents.count else{return(409,["error":"team_relation_conflict"])}
+                    let event:[String:Any] = ["id":"trl_"+String(format:"%032x",relationEvents.count+1),"sequence":relationEvents.count+1,"pair_left":id,"pair_right":relatedID,"actor_account_id":"journey-account","client_mutation_id":body["client_mutation_id"] ?? "","revision":relationEvents.count+1,"action":body["action"] ?? "","reason":body["reason"] ?? "","created_at":1001,"redacted_at":NSNull(),"target_request_id":relatedID]
+                    relationEvents.append(event)
+                    if relationPosts==1 && ProcessInfo.processInfo.environment["HP_TEAM_RELATED_UNKNOWN"] == "1" {return(503,["error":"synthetic_unknown"])}
+                    return(200,["event":event,"already":false])
+                }
+                let history=path.hasSuffix("/"+relatedID)
+                return(200,["schema":history ? "hps-team-relation-history/1":"hps-team-related-requests/1","request_id":id,"target_request_id":history ? relatedID as Any:NSNull(),"current":history ? relationEvents.last ?? NSNull():NSNull(),"can_manage":manage,"items":history ? relationEvents:(relationEvents.last?["action"] as? String=="link" ? [relationEvents.last!]:[]),"next_cursor":NSNull()])
+            }
+            if ProcessInfo.processInfo.environment["HP_TEAM_RELATED"] == "1",path=="/v1/me/team-requests/"+relatedID,request.httpMethod=="GET"{return(200,["request":relatedRow,"comments":[],"next_comments_cursor":NSNull()])}
             if path == "/v1/me/team-requests/" + id + "/outcomes" {
                 let allowed = ProcessInfo.processInfo.environment["HP_TEAM_OUTCOME_READONLY"] != "1"
                 if request.httpMethod == "POST" {
@@ -190,7 +210,7 @@ private final class TeamEntryState: @unchecked Sendable {
             case ("GET", "/v1/me/team-requests"):
                 let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
                 if let key = query.first(where: { $0.name == "client_request_id" })?.value, teamRequest?["client_request_id"] as? String != key { return (404, ["error": "team_request_not_found"]) }
-                return (200, ["requests": teamRequest.map { [$0] } ?? [], "next_cursor": NSNull()])
+                return (200, ["requests": (teamRequest.map { [$0] } ?? []) + (ProcessInfo.processInfo.environment["HP_TEAM_RELATED"] == "1" ? [relatedRow]:[]), "next_cursor": NSNull()])
             default:
                 if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", ProcessInfo.processInfo.environment["HP_TEAM_DETAIL_FAILURE"] == "1" { return (503, ["error": "synthetic_detail_unavailable"]) }
                 if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", let teamRequest { return (200, ["request": teamRequest, "comments": teamComments, "next_comments_cursor": NSNull()]) }

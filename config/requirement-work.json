@@ -1016,12 +1016,15 @@
         "MTR-24",
         "MTR-25",
         "MTR-26",
-        "MTR-27"
+        "MTR-27",
+        "MTR-28",
+        "MTR-29",
+        "MTR-30"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "85b8bb7914136ee1cbf8afdd03aa98797f7ef6fc4e193c60569b80e16a748cee",
+      "sha256": "7375aef2f976477af1b9fa7d09e38ee863ab68b43ddfb8335950305137700644",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5635,6 +5638,42 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/TeamGitHubObservationTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
+      ]
+    },
+    {
+      "id": "ios-internal-related-m3",
+      "title": "iOS explicit related request navigation and operator changes",
+      "issue": 4375,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-28",
+            "MTR-29",
+            "MTR-30"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-github-observations-m3"
+      ],
+      "next_action": "Obtain exact-source CI, separately deploy the matching Service contract, and verify the installed iPhone flow before claiming acceptance.",
+      "design_delta": "Use existing product/operator admission, account identity and protected per-request draft storage; related originals are never merged or assigned inferred status.",
+      "positive_control": "Explicit link/unlink preview, cancellation, same-key recovery, immutable history and navigation preserve originals and unrelated drafts.",
+      "negative_control": "Readonly users cannot mutate; ambiguous and conflict outcomes never auto-rekey; foreign pairs, stale accounts, unavailable content and malformed pages fail closed.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamRelations.swift",
+        "apps/studio-native/ios/App/TeamRelationView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamRelationTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]

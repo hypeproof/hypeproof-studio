@@ -548,3 +548,19 @@ extension ConversationService {
         return try TeamPushDestination(response, reference: reference)
     }
 }
+
+
+extension ConversationService {
+    public func teamRelations(id: String, target: String? = nil, after: String? = nil, token: String) async throws -> TeamRelationPage {
+        guard TeamRequestRecord.validID(id), target.map({ TeamRequestRecord.validID($0) && $0 != id }) ?? true,
+              after.map({ target == nil ? TeamRequestRecord.validID($0) : TeamRelationPage.historyCursor($0) != nil }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/related" + (target.map { "/" + $0 } ?? "") + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamRelationPage.self, from: data); try page.validate(source: id, target: target, after: after); return page
+    }
+    public func changeTeamRelation(_ draft: TeamRelationDraft, token: String) async throws -> TeamRelationEvent {
+        struct Receipt: Decodable { let event: TeamRelationEvent; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/related", method: "POST", body: draft.payload(), token: token)
+        let event = try JSONDecoder().decode(Receipt.self, from: data).event; try event.validate(source: draft.requestID, target: draft.targetID)
+        guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
+    }
+}

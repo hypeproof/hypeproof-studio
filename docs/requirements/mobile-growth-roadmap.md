@@ -647,3 +647,18 @@ Consumes Service #581 / PR #582. This implements PRD GH-02 under the existing
 account/session boundary. User decisions and original association evidence remain
 separate from provider observations; no production activation or phone acceptance
 is established by source or synthetic simulator checks.
+
+
+### Explicit related requests — Studio #4375
+
+| ID | Requirement |
+|---|---|
+| MTR-28 | Related requests are explicit same-product undirected links, independent of duplicate status, ownership or resolution. Members can inspect current links/history and open the original; only current operators can link or unlink with a preview and explicit reason. Cancel never sends. |
+| MTR-29 | Persist the account-bound target/action/revision/reason/key before POST. Unknown outcomes retain immutable exact-key recovery across restart. A recognized conflict retains the old key and words; a deliberate fresh choice requires newly fetched authoritative pair history, never an inferred failed commit or automatic rebase. |
+| MTR-30 | Preserve unrelated drafts and request originals through navigation. Bound/validate both list and history pages; permission, unavailable content and account/session changes clear remote data and fence late responses. Retained identities and masked reasons are not evidence of failed commits or physical deletion. |
+
+Consumes Service #589 under existing operator policy and protected per-account
+request storage. Ordinary link triangles do not imply a duplicate representative.
+No provider write, notification or workflow transition is triggered. The broader
+Service #590 hidden-content contract and native cache adoption remain separate
+integration before deployment, not implicit in this source slice.

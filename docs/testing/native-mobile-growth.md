@@ -1034,3 +1034,78 @@ frame `/tmp/ios4373-failed-frame.png` visibly shows the complete mismatch warnin
 Removed the unused container identifier to preserve child identifiers; the exact
 child assertion remains. Original v2 result is retained at
 `/tmp/ios4373-observations-ui-2.xcresult` (one executed failure, wrapper exit65).
+
+
+### Explicit related requests — Studio #4375
+
+Focused Core4 PASS in `/tmp/ios4375-core-2.log`, resource wrapper exit0: a committed
+unknown link recovers the same key and can later be explicitly withdrawn; a
+recognized conflict preserves words/key until fresh history and deliberate choice;
+readonly inspection does not change its draft or send; foreign/malformed pairs
+and receipt identity mismatches are rejected. Initial test-fixture compilation
+failure in `/tmp/ios4375-core.log` is preserved (mixed String/NSNull inference,
+corrected with explicit Any; no runtime workaround).
+
+Core5 including late-account and failed-persistence controls passed in
+`/tmp/ios4375-core-3.log`, wrapper exit0. Independent review found that original
+navigation could discard an in-memory draft after storage failure; both original
+links now share the busy/storage guard. Native savefailure navigation/export
+control passed22.024s in `/tmp/ios4375-related-ui-2.xcresult`.
+
+At that point the other two native journeys required concrete corrections. v1
+failed before tests because @State declarations cannot share multiple variable
+names; splitting the declaration fixes the actual build error. v2 failed after
+unknown recovery and original navigation passed: an unlink action assertion was
+queried after its row scrolled offscreen; the unchanged assertion now runs before
+reason typing, after bounded reveal. Readonly history exposed a product bug:
+NavigationLink and history Button shared an automatic List row, so the history
+tap also navigated. `/tmp/ios4375-readonly-frame.png` shows the wrong destination.
+The two actions now occupy separate rows. Failed evidence is preserved in
+`/tmp/ios4375-related-ui-1.log` and `ios4375-related-ui-2.xcresult`; affected
+two-case retry followed, without repeating the unrelated passing savefailure
+journey. These fixtures
+are not actual Service deployment or installed-device acceptance. Broad hidden
+content/local acknowledged-cache compatibility is a separate required integration
+before rollout. Source does not grant operators or activate production state.
+
+Native v3 passed the full cancel/unknown-recovery/original-navigation/unlink case
+in47.925s. Its readonly case passed history inspection, then the final draft hit
+check was blocked by the simulator's first-use keyboard tip. The actual frame
+`/tmp/ios4375-return-frame.png` shows the complete preserved comment beneath
+"Speed up your typing… Continue". The retry recognizes only that exact system-tip
+prefix and dismisses Continue once; original hittable and exact draft assertions
+remain unchanged. `/tmp/ios4375-related-ui-3.xcresult` retains both the passing
+case and this failure. No product source changes followed v3; only readonly-test
+handling of the system tip and documentation changed.
+
+Native v4 dismissed the recognized keyboard tip, but the restored editor focus
+then placed the keyboard over its retained input. Actual frame:
+`/tmp/ios4375-return4-frame.png`; the failure is retained in
+`/tmp/ios4375-related-ui-4.xcresult`. Clearing only comment focus on detail
+disappearance was attempted without changing the draft.
+That callback alone did not fix the interaction; prior passes are not relabeled.
+
+Final Core6 PASS in `/tmp/ios4375-core-final.log`, wrapper exit0, adds a durable
+received-receipt floor and exact receipt ID at equal revision. Stale history
+cannot enable a new action; a coherent explicit refresh can. Pagination cannot
+roll back the currently loaded same-pair history. This does not claim a general
+cross-refresh maximum-revision cache. Independent final source review PASS for
+these guards, protected navigation and focus clearing. Native link/unlink v3 and
+savefailure v2 evidence above predates the final receipt guard/focus correction.
+
+Native v5 still showed the restored keyboard covering the editor
+(`/tmp/ios4375-return5-frame.png`). Focus resignation on disappearance was too
+late for navigation's focus capture. The related entry now uses an explicit
+state-driven transition: clear focus, capture product, then present on the next
+main turn only if the source generation/storage/busy guards still hold. There
+is no arbitrary sleep or automatic request. The affected test additionally
+requires keyboard absence before its original hittable/exact-draft assertions.
+Original v5 failure is retained. V6 passed31.713s (Executed1) in
+`/tmp/ios4375-related-ui-6.xcresult`, resource runner and owned-simulator cleanup
+exit0. It verifies readonly history, no mutation, absent keyboard and exact
+preserved editable comment text. Inspected restored screenshot:
+`/tmp/ios4375-related-ui-6-attachments/AE57CF32-6D18-40A6-8075-386FEA7CCC97.png`.
+The link/unlink screenshot from passing v3 was also inspected:
+`/tmp/ios4375-link-3-attachments/DD9767A4-503D-4D1C-917A-33B914864F5B.png`.
+Final targeted focus/navigation source review PASS. Requirement integrity PASS746.
+No product source changed after v6; only this evidence record was completed.
