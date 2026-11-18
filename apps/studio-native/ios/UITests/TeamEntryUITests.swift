@@ -331,7 +331,13 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertFalse(receiptFrame.isEmpty || receiptFrame.isInfinite || receiptFrame.isNull)
         XCTAssertTrue(app.windows.firstMatch.frame.contains(receiptFrame))
         app.buttons["새로고침"].tap()
-        XCTAssertTrue(app.staticTexts["Follow up question"].waitForExistence(timeout: 10))
+        let receivedComment = app.staticTexts["Follow up question"]
+        reveal(receivedComment)
+        XCTAssertTrue(receivedComment.waitForExistence(timeout: 10))
+        XCTAssertEqual(receivedComment.label, "Follow up question")
+        let commentFrame = receivedComment.frame
+        XCTAssertFalse(commentFrame.isEmpty || commentFrame.isInfinite || commentFrame.isNull)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(commentFrame))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
     }
 

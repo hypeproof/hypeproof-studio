@@ -1261,3 +1261,20 @@ Both assignments now explicitly target `self.error`; the logout early return and
 credential cleanup safeguards remain unchanged. Independent source review passed.
 The prior compile failure remains recorded; corrected device build and UI tests
 require new exact-source CI and are not claimed by the Core result.
+
+Run44378435132 at `41fa5285` passed the original retry journey, the new held-history
+single-retry control, Korean speech completion and the real original-request reply
+journey (127.845 seconds). The comment journey passed its exact receipt check but
+failed the subsequent fresh-comment existence assertion. It had scrolled to the
+top receipt and then waited in place, while the discussion row sits below the
+navigation sections of a lazy list. The test now uses its existing bounded reveal
+helper after the single refresh, retaining the exact comment body assertion and
+checking the resulting frame lies in the viewport. This geometry diagnosis is
+not proof of the original cause: cancellation left an incomplete xcresult without
+Info.plist, so the failure screenshot could not be extracted.
+The run was cancelled at the outer 55-minute limit; partial passes do not establish
+full-suite acceptance. The separately reviewed `2df4fcf1` outer 65-minute budget is
+propagated for the measured approximately 43-minute 62-case suite plus setup/build
+and evidence collection. Per-test limits, the five-scroll reveal bound and real
+interaction assertions are unchanged. New changes are locally runtime NOT RUN:
+shared-resource ownership remains blocked; no queue bypass or duplicate run.
