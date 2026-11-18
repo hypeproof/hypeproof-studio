@@ -1013,12 +1013,15 @@
         "MTR-21",
         "MTR-22",
         "MTR-23",
-        "MTR-24"
+        "MTR-24",
+        "MTR-25",
+        "MTR-26",
+        "MTR-27"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "7df3f56b4ab5f67e1d97dcadeb569b2c7feff05ba897f4258985b1a1b86cef46",
+      "sha256": "85b8bb7914136ee1cbf8afdd03aa98797f7ef6fc4e193c60569b80e16a748cee",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5596,6 +5599,42 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/TeamDiscussionTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
+      ]
+    },
+    {
+      "id": "ios-internal-github-observations-m3",
+      "title": "iOS readonly current GitHub observations",
+      "issue": 4373,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-25",
+            "MTR-26",
+            "MTR-27"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-discussion-m3"
+      ],
+      "next_action": "Obtain exact-source CI, separately deploy the matching Service contract, and verify the installed iPhone flow before claiming acceptance.",
+      "design_delta": "Reuse account-bound authenticated GET transport and live-controller invalidation; immutable association drafts are not changed by readonly observations.",
+      "positive_control": "Recent recorded-run observations and explicit timestamps remain distinct from historical evidence; returning preserves the association draft.",
+      "negative_control": "Expired/provider-failed records cannot appear current; malformed sources and late accounts fail closed; cursor replacement discards old pages before reload.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamGitHubObservations.swift",
+        "apps/studio-native/ios/App/TeamGitHubObservationView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamGitHubObservationTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]

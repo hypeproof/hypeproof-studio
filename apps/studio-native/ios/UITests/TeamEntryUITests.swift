@@ -441,6 +441,29 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")
         return trace.value as? String ?? ""
     }
+    @MainActor func testGitHubObservationsPreserveDraftAndSeparateStaleFailure() throws {
+        let app = githubApp(["HP_TEAM_GITHUB_OBSERVATIONS":"1"])
+        let issue = app.textFields["teamGitHubIssue"]
+        XCTAssertTrue(issue.waitForExistence(timeout:10)); githubReveal(app,issue); issue.tap(); issue.typeText("77")
+        XCTAssertEqual(issue.value as? String,"77")
+        _ = githubTrace(app)
+        let open = app.buttons["teamGitHubObservationsOpen"]; XCTAssertTrue(open.isHittable); open.tap()
+        let freshness = app.staticTexts["teamObservationFreshness"]
+        XCTAssertTrue(freshness.waitForExistence(timeout:10)); XCTAssertEqual(freshness.label,"확인한 시점에는 아래 상태였어요.")
+        let hierarchy = XCTAttachment(string:app.debugDescription); hierarchy.name="GitHub current observation hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        XCTAssertTrue(app.staticTexts["teamObservationSourceMismatch"].exists)
+        app.buttons["teamObservationRefresh"].tap()
+        XCTAssertTrue(app.staticTexts["teamObservationProviderError"].waitForExistence(timeout:10))
+        XCTAssertEqual(freshness.label,"현재 상태는 다시 확인이 필요해요.")
+        let stale = XCTAttachment(screenshot:app.screenshot()); stale.name="GitHub old record and failed provider check"; stale.lifetime = .keepAlways; add(stale)
+        app.buttons["teamObservationRefresh"].tap()
+        XCTAssertTrue(app.staticTexts["teamObservationUnavailable"].waitForExistence(timeout:10))
+        XCTAssertFalse(app.staticTexts["teamObservationFreshness"].exists); XCTAssertFalse(app.staticTexts["teamObservationEmpty"].exists)
+        app.navigationBars["GitHub 상태 기록"].buttons.element(boundBy:0).tap()
+        XCTAssertTrue(app.navigationBars["GitHub 연결 근거"].waitForExistence(timeout:10))
+        githubReveal(app,issue); XCTAssertEqual(issue.value as? String,"77")
+        XCTAssertTrue(githubTrace(app).contains("\"githubPosts\":0"))
+    }
     @MainActor func testInternalGitHubCancelSaveAndHistory() throws {
         let app = githubApp(), issue = app.textFields["teamGitHubIssue"], reason = app.textViews["teamGitHubReason"]
         XCTAssertTrue(issue.waitForExistence(timeout: 10)); issue.tap(); issue.typeText("123")

@@ -363,6 +363,7 @@ private struct TeamWorkflowScreen: View {
 @MainActor final class TeamGitHubPresentation: ObservableObject {
     @Published var state = TeamGitHubController.View()
     var controller: TeamGitHubController?
+    var makeObservations: (() -> TeamGitHubObservationPresentation)?
 }
 private struct TeamGitHubScreen: View {
     @Environment(\.dismiss) private var dismiss
@@ -381,13 +382,13 @@ private struct TeamGitHubScreen: View {
             Text("연결 관계: 운영자 지정 · 변경 \(event.revision)").font(.caption)
             if let proof = event.evidence {
                 Link("확인된 이슈 열기", destination: URL(string: proof.issue.url)!)
-                Text("GitHub에서 확인한 상태: \(proof.issue.state == "closed" ? "닫힘" : "열림")")
+                Text("연결 당시 상태: \(proof.issue.state == "closed" ? "닫힘" : "열림")")
                 if let pull = proof.pull { Link("PR #\(pull.number) · \(pull.merged ? "병합됨" : "미병합")", destination: URL(string: pull.url)!) }
                 if let sha = proof.source_sha { Text("소스 SHA: \(sha)").font(.caption).textSelection(.enabled) }
                 if let ci = proof.ci { Link("CI 실행 \(ci.run_id) · 시도 \(ci.attempt) · \(ci.conclusion)", destination: URL(string: ci.url)!) }
             } else { Text("작성자 삭제로 연결 근거가 제거됐어요.") }
             if let reason = event.reason { Text(reason).textSelection(.enabled) }
-            Text("확인: \(Date(timeIntervalSince1970: event.verified_at / 1000).formatted())").font(.caption)
+            Text("연결 당시 확인: \(Date(timeIntervalSince1970: event.verified_at / 1000).formatted())").font(.caption)
             Text("TestFlight 제공 여부·사용자 해결 확인: 확인되지 않음").font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -397,9 +398,13 @@ private struct TeamGitHubScreen: View {
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic GitHub trace").font(.caption2).accessibilityIdentifier("teamGitHubTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
 
+            if let make = model.makeObservations {
+                NavigationLink { TeamGitHubObservationScreen(model: make()) } label: { Text("최근 확인한 GitHub 상태") }
+                    .disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamGitHubObservationsOpen")
+            }
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamGitHubMessage") }
             if let page = model.state.page {
-                Section("최근 연결") {
+                Section("연결 당시 기록") {
                     if let event = page.current { evidence(event).accessibilityIdentifier("teamGitHubCurrent") }
                     else { Text("아직 연결된 GitHub 근거가 없어요.") }
                     if !page.can_manage { Text("조회 권한으로 보고 있어요. 연결 변경은 권한이 있는 운영자만 할 수 있어요.").accessibilityIdentifier("teamGitHubReadOnly") }

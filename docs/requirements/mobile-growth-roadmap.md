@@ -633,3 +633,17 @@ Uses Service #579 comment/2 semantics and #583 separate authoring discovery, not
 notification capability or notification flags. Existing account/session and
 protected per-request draft storage remain authoritative. No provider delivery,
 production authoring availability or installed-device acceptance is implied.
+
+
+### Current GitHub observations — Studio #4373
+
+| ID | Requirement |
+|---|---|
+| MTR-25 | Show readonly recent GitHub observations separately from immutable association receipts. Issue/PR state and the recorded run's latest attempt never imply newest PR checks, TestFlight availability, installation or reporter resolution. Preserve association drafts. |
+| MTR-26 | Current status requires both server freshness and unexpired device-time bounds. A failed provider check retains clearly historical evidence; unavailable/malformed API responses clear visible data rather than become empty success. Validate normalized sources, match flags, request identity and bounded cursors. |
+| MTR-27 | On association-bound cursor conflict discard accumulated history before first-page reload. Account/session changes invalidate all live views and late responses cannot repaint. Refresh performs only authenticated GETs against stored observations, never provider fetches or writes. |
+
+Consumes Service #581 / PR #582. This implements PRD GH-02 under the existing
+account/session boundary. User decisions and original association evidence remain
+separate from provider observations; no production activation or phone acceptance
+is established by source or synthetic simulator checks.

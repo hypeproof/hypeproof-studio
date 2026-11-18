@@ -34,6 +34,7 @@ private final class TeamEntryState: @unchecked Sendable {
     private var teamRequest: [String: Any]?
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
+    private var githubObservationReads = 0
     private var githubEvents: [[String: Any]] = [], githubPosts = 0
     private var outcomeEvents: [[String: Any]] = [], outcomePosts = 0
     private var workflowEvents: [[String: Any]] = []
@@ -123,6 +124,18 @@ private final class TeamEntryState: @unchecked Sendable {
             }
             if path == "/v1/me/team-requests/members" {
                 return (200, ["schema": "hps-team-assignment-members/1", "account_id": "journey-account", "product": "studio", "members": [["account_id": "journey-account", "display_name": "내부 테스트 멤버"]]])
+            }
+            if path == "/v1/me/team-requests/" + id + "/github-observations" {
+                guard request.httpMethod == "GET", ProcessInfo.processInfo.environment["HP_TEAM_GITHUB_OBSERVATIONS"] == "1" else { return (503,["error":"team_github_observations_not_ready"]) }
+                githubObservationReads += 1
+                if githubObservationReads >= 3 { return (503,["error":"synthetic_observation_unavailable"]) }
+                let now = Date().timeIntervalSince1970 * 1000, stale = githubObservationReads == 2
+                let observed = now - (stale ? 2_000_000 : 1000), a=String(repeating:"a",count:40), b=String(repeating:"b",count:40)
+                let metadata:[String:Any] = ["schema":"hps-team-github-observation/1","repo":"hypeproof/hypeproof-studio","issue":["number":42,"state":"open"],
+                    "historical":["source_sha":a,"run_id":99,"attempt":1],"pull":["number":43,"state":"open","merged":false,"head_sha":b,"merge_sha":NSNull(),"source_matches_historical":false],
+                    "ci":["run_id":99,"attempt":2,"source_sha":a,"status":"completed","conclusion":"success","source_matches_historical":true,"source_matches_current_pull":false],"testflight":"not_observed","reporter_confirmation":"not_observed"]
+                return (200,["schema":"hps-team-github-observations/1","request_id":id,"association_id":"tgl_"+String(repeating:"b",count:32),"association_revision":1,
+                    "current":metadata,"observed_at":observed,"valid_until":observed+1_800_000,"fresh":!stale,"last_checked_at":now,"last_error":stale ? "provider_timeout":NSNull(),"events":[],"next_cursor":NSNull()])
             }
             if path == "/v1/me/team-requests/" + id + "/github" {
                 let canManage = ProcessInfo.processInfo.environment["HP_TEAM_GITHUB_READONLY"] != "1"

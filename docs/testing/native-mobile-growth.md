@@ -978,3 +978,59 @@ and the existing Discussion controls passed together (Core6) in
 build passed in `/tmp/ios4370-retention-app-build.log`, exit0. Native v4 evidence
 above predates this pagination correction; it was not relabeled as a final-head
 UI rerun.
+
+### Stopped voice response draft input boundary — CI #4361
+
+Run44326288656 on0ea2078b restored `Keep my separate` after the stop-response
+journey immediately terminated following `typeText("Keep my separate draft")`.
+The original recording at
+`/tmp/ios4361-stop-full/A9397026-6036-45C3-9082-4E3D51828601.mp4` does not establish
+complete input before termination: sampled frames show `Ke`, then termination,
+then the partial restored text. This is not proof of a persistence defect.
+
+The journey now requires exact full input before terminating and exact full
+restoration afterwards, each using the existing10s wait. It keeps one typeText,
+no retyping, original cancellation/send-once/no-restart assertions, and records
+each boundary. An incomplete precondition fails the test before termination.
+Independent source review accepted the stronger assertion and failure guard.
+
+Focused native PASS31.469s (Executed1), runner and owned-simulator cleanup exit0:
+`/tmp/ios4361-stop-input-boundary-2.xcresult`. Both equality predicates passed.
+The earlier `/tmp/ios4361-stop-input-boundary.xcresult` selected the wrong class
+and executed0 tests despite exit0; it is NOT validation. Captured AX descriptions
+truncate long values, so the final diagnostic attachment additionally records raw
+`input.value`; that diagnostic-only addition followed the passing run and was not
+claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
+
+
+### Current GitHub observations — Studio #4373
+
+Core4 PASS in `/tmp/ios4373-core.log`, resource wrapper exit0: device expiry and
+provider failure remain distinct; recorded-run source claims are validated;
+association cursor409 clears old rows before fresh reload; account/session
+changes clear late responses and repeated registry invalidation survives reopen.
+The native acceptance journey preserves an association draft across current,
+expired/provider-failed and unavailable reads, then returns without a write.
+Native v3 PASS39.150s (Executed1), `/tmp/ios4373-observations-ui-3.xcresult`,
+runner and owned-simulator cleanup exit0. It preserves draft issue77 after
+current→expired/provider-failed→503 reads and back, with zero association POSTs.
+Inspected stale/error screenshot:
+`/tmp/ios4373-observations-ui-3-attachments/2247375E-83CD-44D4-9275-10B0350688F5.png`.
+Independent source review and root read-through PASS; root also inspected the
+current-state screenshot. Requirement integrity PASS743; this is not whole-product
+acceptance. No source changes followed the passing native run, only this record.
+
+Initial native build failed before test execution because the new App file
+imported StudioCore even though this Xcode target compiles Core sources directly.
+Removing that import follows the existing App file pattern. Original evidence:
+`/tmp/ios4373-observations-ui-1.log`, wrapper exit65, zero executed UI tests.
+No Service deployment, provider reconciliation, TestFlight upload or installed
+user acceptance is claimed. Integrated stop-input boundary test evidence above
+remains independent of this readonly feature.
+
+Native v2 failed after rendering current evidence: the parent VStack accessibility
+identifier overrode the nested source-mismatch identifier. The actual recording
+frame `/tmp/ios4373-failed-frame.png` visibly shows the complete mismatch warning.
+Removed the unused container identifier to preserve child identifiers; the exact
+child assertion remains. Original v2 result is retained at
+`/tmp/ios4373-observations-ui-2.xcresult` (one executed failure, wrapper exit65).
