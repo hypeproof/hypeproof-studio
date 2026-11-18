@@ -10510,3 +10510,12 @@ Uncertain drafts keep their exact pre-upgrade payload and transmission key.
 A definitive missing-target rejection permits an explicit new choice; unknown
 results never automatically change schema or resend. Authoring support is
 discovered separately from push permission and notification capability.
+
+
+## iPhone current GitHub observations (#4373)
+
+The existing request GitHub screen links to readonly current observations while
+preserving the association draft. Historical linkage evidence remains explicitly
+historical. Display checked time, expiry, source mismatch and provider failure;
+never infer build availability or resolution. See MTR-25–27 in
+[mobile growth requirements](requirements/mobile-growth-roadmap.md).

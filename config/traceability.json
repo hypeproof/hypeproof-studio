@@ -20753,6 +20753,45 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-GITHUB-OBSERVATIONS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Current GitHub observations — Studio #4373"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone current GitHub observations (#4373)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-GITHUB-OBSERVATIONS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-GITHUB-OBSERVATIONS",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Current GitHub observations — Studio #4373"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamGitHubObservationTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }
