@@ -406,7 +406,7 @@ final class TeamEntryUITests: XCTestCase {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-comment-unsaved-export-and-exit-guard"; shot.lifetime = .keepAlways; add(shot)
     }
 
-    @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false) -> XCUIApplication {
+    @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false, outcome: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
@@ -418,7 +418,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
         githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
-        let entry = app.buttons[delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
+        let entry = app.buttons[outcome ? "teamOutcomeEntry" : delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
         githubReveal(app, entry); entry.tap()
         return app
     }
@@ -500,6 +500,51 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(unavailable.staticTexts["teamDeliveryUnavailable"].waitForExistence(timeout: 10))
         XCTAssertFalse(unavailable.staticTexts["teamDeliveryBuild1"].exists)
         XCTAssertFalse(unavailable.staticTexts["teamDeliveryEmpty"].exists)
+    }
+
+    @MainActor private func outcomeTrace(_ app: XCUIApplication) -> String {
+        let trace = app.staticTexts["teamOutcomeTrace"]
+        for _ in 0..<8 { if trace.exists && trace.isHittable { return trace.value as? String ?? "" }; app.swipeDown() }
+        XCTAssertTrue(trace.waitForExistence(timeout: 5)); return trace.value as? String ?? ""
+    }
+    @MainActor func testInternalOutcomeCancelResolveRefreshAndReopen() throws {
+        let app = githubApp(outcome: true), resolve = app.buttons["teamOutcomeResolved"]
+        XCTAssertTrue(resolve.waitForExistence(timeout: 10)); githubReveal(app,resolve); resolve.tap()
+        XCTAssertTrue(app.staticTexts["teamOutcomeBuild"].label.contains("18.1"))
+        let send = app.buttons["teamOutcomeSend"]; githubReveal(app,send); send.tap(); app.alerts.buttons["취소"].tap()
+        XCTAssertTrue(outcomeTrace(app).contains("\"outcomePosts\":0"))
+        githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
+        let receipt = app.staticTexts["teamOutcomeReceipt"]; githubReveal(app,receipt); XCTAssertTrue(receipt.label.contains("18.1"))
+        githubReveal(app, app.buttons["다른 결과 작성"]); XCTAssertFalse(app.buttons["다른 결과 작성"].isEnabled)
+        app.buttons["새로고침"].tap(); githubReveal(app,app.buttons["다른 결과 작성"]); app.buttons["다른 결과 작성"].tap()
+        _ = outcomeTrace(app); githubReveal(app,app.buttons["teamOutcomeReopened"]); app.buttons["teamOutcomeReopened"].tap()
+        githubReveal(app,send); XCTAssertFalse(send.isEnabled)
+        let reason = app.textViews["teamOutcomeResult"]; githubReveal(app,reason); reason.tap(); reason.typeText("Still happens after updating")
+        githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
+        githubReveal(app,receipt); XCTAssertTrue(outcomeTrace(app).contains("\"outcomeEvents\":2"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "reporter-outcome-exact-build-not-installed-proof"; shot.lifetime = .keepAlways; add(shot)
+    }
+    @MainActor func testInternalOutcomeUnknownReopenDoesNotResendAndExplicitRecoveryDeduplicates() throws {
+        let app = githubApp(["HP_TEAM_OUTCOME_UNKNOWN":"1"], outcome: true)
+        let resolve = app.buttons["teamOutcomeResolved"]; XCTAssertTrue(resolve.waitForExistence(timeout: 10)); githubReveal(app,resolve); resolve.tap()
+        let send = app.buttons["teamOutcomeSend"]; githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamOutcomeMessage"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        githubReveal(app,app.buttons["teamOutcomeEntry"]); app.buttons["teamOutcomeEntry"].tap()
+        githubReveal(app, app.buttons["teamOutcomeSend"])
+        XCTAssertTrue(outcomeTrace(app).contains("\"outcomePosts\":1"))
+        githubReveal(app,send); XCTAssertEqual(send.label,"같은 내용으로 결과 다시 확인"); send.tap(); app.alerts.buttons["보내기"].tap()
+        githubReveal(app,app.staticTexts["teamOutcomeReceipt"])
+        let trace = outcomeTrace(app); XCTAssertTrue(trace.contains("\"outcomePosts\":2")); XCTAssertTrue(trace.contains("\"outcomeEvents\":1"))
+    }
+    @MainActor func testInternalOutcomeReadOnlyAndStorageFailurePreserveExport() throws {
+        let readOnly = githubApp(["HP_TEAM_OUTCOME_READONLY":"1"], outcome: true)
+        XCTAssertTrue(readOnly.staticTexts["teamOutcomeReadOnly"].waitForExistence(timeout: 10)); XCTAssertFalse(readOnly.buttons["teamOutcomeSend"].exists); readOnly.terminate()
+        let app = githubApp(["HP_TEAM_DRAFT_SAVE_FAILURE":"outcome"], outcome: true)
+        let reopened = app.buttons["teamOutcomeReopened"]; XCTAssertTrue(reopened.waitForExistence(timeout: 10)); githubReveal(app,reopened); reopened.tap()
+        let reason = app.textViews["teamOutcomeResult"]; githubReveal(app,reason); reason.tap(); reason.typeText("X")
+        XCTAssertEqual(reason.value as? String,"X"); githubReveal(app,app.buttons["결과 초안 내보내기"])
+        XCTAssertTrue(app.buttons["결과 초안 내보내기"].isEnabled); XCTAssertFalse(app.buttons["teamOutcomeSend"].isEnabled)
     }
 
 }

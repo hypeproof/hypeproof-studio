@@ -20633,6 +20633,45 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-OUTCOME",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Reporter outcome confirmation — Studio #4366"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone reporter outcome confirmation (#4366)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-OUTCOME",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-OUTCOME",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Reporter outcome confirmation — Studio #4366"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamOutcomeTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }

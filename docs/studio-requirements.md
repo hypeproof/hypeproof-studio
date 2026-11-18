@@ -10469,3 +10469,12 @@ observation cannot imply personal invitation acceptance, installation or
 resolution. Unsupported or inaccessible server capability stays explicitly
 unverified, and account changes remove prior records. No new operator or
 reporter mutation is exposed by this screen.
+
+
+## iPhone reporter outcome confirmation (#4366)
+
+MTR-15–17 adds an explicit reporter-only result flow from request detail,
+separate from read-only delivery evidence. Exact build choice, required reopen
+reason, cancel-before-send, protected drafts, uncertain same-key recovery,
+and refreshed revisions preserve human judgment and prevent duplicate results.
+History is explicitly self-reported; server capability failures remain visible.
