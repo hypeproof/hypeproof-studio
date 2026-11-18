@@ -1310,3 +1310,22 @@ A fixture trace flag explicitly identifies the frozen synthetic endpoint; trace,
 submitted words and playback timeline are attached before count assertions.
 Static review and diff checks are not runtime evidence; new execution is NOT RUN
 while the shared resource slot remains blocked. No heavy work was requeued.
+
+### Actual comment button and outcome trace follow-up — 2026-11-19
+
+Run44385991373 at2d93 completed153 Core and60 UI cases with3 UI failures.
+The comment retry failed in XCTest hit-point calculation before the retry tap.
+Its failure hierarchy and binary snapshot show an enabled370x52 button inside
+the window with no keyboard or alert, so an offscreen-frame explanation is not
+confirmed. An explicit borderless native button with a full-width, minimum44-point
+rectangular label is a candidate correction for automatic List-row interaction;
+the identifier, confirmation action, disabling rules and actual UI tap assertions
+remain. Other borderless controls have also failed; this is not a proven fix.
+
+Run44387085419 at8a5dd1 completed59 UI cases with2 failures. One was the same
+invalid hit-point lookup on read-only teamOutcomeTrace. It now reads the existing
+value with the same bounded fallback; the real reopen action is separately
+revealed downwards and retains its hit assertion and tap. The other failure was
+teamOutcomeEntry during read-only setup, before export/storage assertions; it
+remains under investigation. Exact post/event and result-history checks remain.
+No corrected native runtime or installed-device acceptance is claimed.

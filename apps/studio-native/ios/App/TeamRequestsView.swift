@@ -188,7 +188,12 @@ struct TeamRequestDetailView: View {
                         } else if draft.definitiveRejection == "team_content_expired" {
                             Text("서버 보관 기간이 지나 지금은 추가할 수 없어요. 작성한 글은 내보낼 수 있어요.")
                         } else {
-                            Button(draft.phase == .uncertain ? "같은 번호로 다시 보내기" : "댓글 보내기") { confirmSend = true }
+                            Button { confirmSend = true } label: {
+                                Text(draft.phase == .uncertain ? "같은 번호로 다시 보내기" : "댓글 보내기")
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                                .buttonStyle(.borderless)
                                 .disabled(detail?.retention?.hidden == true || busy || !storageReady || draft.needsReplyTarget == true || draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (draft.phase == .draft && !commentSchemas.contains(draft.wireSchema)))
                                 .accessibilityIdentifier("teamCommentSend")
                         }

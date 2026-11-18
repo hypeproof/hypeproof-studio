@@ -736,7 +736,8 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor private func outcomeTrace(_ app: XCUIApplication) -> String {
         let trace = app.staticTexts["teamOutcomeTrace"]
-        for _ in 0..<8 { if trace.exists && trace.isHittable { return trace.value as? String ?? "" }; app.swipeDown() }
+        // Diagnostic counters are read, not touch targets.
+        for _ in 0..<8 { if trace.exists { return trace.value as? String ?? "" }; app.swipeDown() }
         XCTAssertTrue(trace.waitForExistence(timeout: 5)); return trace.value as? String ?? ""
     }
     @MainActor func testInternalOutcomeCancelResolveRefreshAndReopen() throws {
@@ -749,7 +750,10 @@ final class TeamEntryUITests: XCTestCase {
         let receipt = app.staticTexts["teamOutcomeReceipt"]; githubReveal(app,receipt); XCTAssertTrue(receipt.label.contains("18.1"))
         githubReveal(app, app.buttons["다른 결과 작성"]); XCTAssertTrue(app.buttons["다른 결과 작성"].isEnabled)
         app.buttons["다른 결과 작성"].tap()
-        _ = outcomeTrace(app); githubReveal(app,app.buttons["teamOutcomeReopened"]); app.buttons["teamOutcomeReopened"].tap()
+        _ = outcomeTrace(app)
+        let reopened = app.buttons["teamOutcomeReopened"]
+        for _ in 0..<8 { if reopened.exists && reopened.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(reopened.isHittable); reopened.tap()
         githubReveal(app,send); XCTAssertFalse(send.isEnabled)
         let reason = app.textViews["teamOutcomeResult"]; githubReveal(app,reason); reason.tap(); reason.typeText("Still happens after updating")
         githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
