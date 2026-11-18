@@ -281,9 +281,9 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
-                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied {
+                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory {
                     settingsButton("Hold next history read") { leaveSettings(for: .holdHistory) }.accessibilityIdentifier("nativeJourneyHoldHistory")
-                    if NativeJourneyFixture.logoutSync {
+                    if NativeJourneyFixture.logoutSync || NativeJourneyFixture.retryHistory {
                         settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
                     }
                 }
@@ -368,7 +368,7 @@ struct SharedConversationView: View {
         case .holdHistory:
             NativeJourneyFixture.holdNextHistory()
             // The failed-draft journey observes the ordinary periodic GET.
-            if !NativeJourneyFixture.accessDenied { model.refresh() }
+            if !NativeJourneyFixture.accessDenied && !NativeJourneyFixture.retryHistory { model.refresh() }
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
         case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
@@ -462,9 +462,9 @@ struct SharedConversationView: View {
 #if DEBUG
                                     NativeJourneyFixture.recordRetry("touch")
 #endif
-                                    model.retry()
+                                    model.retryFromUser()
                                 } label: { Text("다시 보내기").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
-                                .buttonStyle(.bordered).disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry")
+                                .buttonStyle(.bordered).disabled(!model.canRetryLocalRequest).accessibilityIdentifier("sharedRetry")
                             }
                             if model.isReflection && request.status == "failed" {
                                 Button { voice.stop(); if model.restoreFailedReflectionDraft() { focused = true } } label: {
@@ -691,7 +691,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

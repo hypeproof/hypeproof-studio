@@ -59,7 +59,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
     }
     public var reflectionStatusLabel: String {
         switch status {
-        case "local": return "이 기기에 저장됨 · 전송 대기"
+        case "local": return "전송 대기"
         case "running", "pending": return "질문을 이어가고 있어요"
         case "completed": return "같은 계정의 대화에 저장됨"
         case "cancelled": return "답변 받기를 중지했어요. 보낸 이야기는 남아 있어요."
@@ -70,7 +70,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
     public var outstanding: Bool { ["local", "pending", "running"].contains(status) }
     public var statusLabel: String {
         switch status {
-        case "local": return "이 iPhone에 저장됨 · 전송 대기"
+        case "local": return "전송 대기"
         case "pending": return "전송됨 · 데스크톱에서 이 대화를 열어 주세요"
         case "running": return "데스크톱에서 답변 중 · 필요한 승인은 컴퓨터에서 확인해 주세요"
         case "completed": return "양쪽 대화에 저장됨"

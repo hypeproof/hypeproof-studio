@@ -855,3 +855,17 @@ and executed0 tests despite exit0; it is NOT validation. Captured AX description
 truncate long values, so the final diagnostic attachment additionally records raw
 `input.value`; that diagnostic-only addition followed the passing run and was not
 claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
+
+
+### Held-history retry regression — 2026-11-19
+
+Run44342724464 attempt3 atb35a2e2c passed105 Core and46of47 UI tests. Real
+Korean playback passed; the single retry-after-relaunch test failed with no
+button-action trace and no second POST. Keep that failed result.
+
+The new MFR-T05 held-history case first releases an ordinary history read after
+restart without Retry and requires no replay. It then holds another read, taps
+Retry exactly once and requires no early POST or duplicate intent, followed by
+the same ID/text, one accepted turn and the original answer assertion after
+release. The reviewed fix and remaining device-copy removal are backported
+from41fa5285; new native execution is pending, not a passing result.
