@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {gateProblems} from './casebook-gate.mjs';
 
 export const CASEBOOK_DIR = fileURLToPath(new URL('../../docs/operations/release-casebook/', import.meta.url));
 export const PRIORITIES = ['P0', 'P1', 'P2'];
@@ -238,6 +239,10 @@ export function validateCasebook({journeys, cases}) {
     }
     if (c.status !== undefined && !STATUSES.includes(c.status)) problems.push(`${at}: status must be one of ${STATUSES.join('/')}`);
     if (c.status === '자동화됨' && !c.automated_by) problems.push(`${at}: 자동화됨 needs automated_by`);
+    // Every desktop P0 case says whether it holds the automatic release (casebook-gate.mjs, 2026-11-18).
+    let desktop = false;
+    try { desktop = caseTargets(c).includes('desktop'); } catch { desktop = false; }
+    problems.push(...gateProblems(c, c.priority === 'P0' && c.status !== '자동화됨' && desktop));
   }
   return problems;
 }

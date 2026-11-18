@@ -23,9 +23,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {appliesToTarget, parseYaml, validateTarget} from './casebook.mjs';
-import {OVERRIDE_SCHEMA, SCHEMA, extractOverride, extractRun, validateOverride, validateRun} from './validate-blackbox-run.mjs';
+import {appliesToTarget, loadCasebook, parseYaml, validateTarget} from './casebook.mjs';
+import {OVERRIDE_SCHEMA, SCHEMA, extractOverride, validateOverride} from './validate-blackbox-run.mjs';
 import {autoAuthority} from './auto-release-record.mjs';
+import {autoCasebook, runRows} from './casebook-gate.mjs';
+import {releasePlatforms} from './platforms.mjs';
 
 const APP_STABLE = /^v\d+\.\d+\.\d+$/;
 
@@ -40,10 +42,7 @@ export function latestReviewStates(reviews, head) {
 
 export const CASEBOOK = 'docs/operations/release-casebook/cases.yaml';
 export const OVERRIDE_OWNER = 'jayleekr';
-// Who may post a run result: members and collaborators, or the org's own bots. Studio is public,
-// so anyone can comment; a stranger's PASS is not evidence.
-const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-const TRUSTED_BOTS = ['hypeproof-agent[bot]', 'hypeproof-org-lab-bot[bot]'];
+// Who may post a run result is decided in casebook-gate.mjs (runRows): members, collaborators and the org bots.
 const OVERRIDE = /^\s*Release manager override\b[\s:.,;—–-]*([\s\S]*)$/i;
 const MIN_REASON = 10;
 
@@ -62,22 +61,8 @@ export const GATE_SCHEMA = 'hps-publish-gate/1';
 // P0 FAIL. It must list every non-PASS P0 case it waives (hps-release-override/1, see
 // validate-blackbox-run.mjs). The result carries `summary`, the counts and ids the release record keeps.
 export function casebookEvidence({number, head, headDate, p0 = [], comments = [], approvers = []}) {
-  const notes = [];
-  const latest = new Map();
-  const rcs = new Set();
+  const {latest, rcs, notes} = runRows({number, head, comments});
   const ordered = [...comments].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-  for (const c of ordered) {
-    if (!String(c.body ?? '').includes(SCHEMA)) continue;
-    if (!TRUSTED_ASSOCIATIONS.includes(c.association) && !TRUSTED_BOTS.includes(c.user)) { notes.push(`run by ${c.user} ignored: not a member or org bot`); continue; }
-    let run;
-    try { run = extractRun(c.body); } catch (error) { notes.push(`run by ${c.user}: ${error.message}`); continue; }
-    const problems = validateRun(run);
-    if (problems.length) { notes.push(`run by ${c.user} is invalid: ${problems[0]}`); continue; }
-    if (run.pr !== number) { notes.push(`run by ${c.user} is for #${run.pr}`); continue; }
-    if (run.head_sha !== head) { notes.push(`run by ${c.user} tested ${run.head_sha.slice(0, 8)}, not the head ${String(head).slice(0, 8)}`); continue; }
-    rcs.add(run.rc_tag);
-    for (const row of run.cases) latest.set(row.id, row.result);
-  }
   // Status of every P0 case at the head: PASS, FAIL, BLOCKED, or NOT_RUN (no row in any valid run).
   const status = id => latest.get(id) ?? 'NOT_RUN';
   const ids = result => p0.filter(id => status(id) === result);
@@ -145,8 +130,13 @@ export function firstDecisive(reviews = [], head, allowed) {
 //   rangePrs:   [{sha, prs: [{number, labels, base, mergeCommit}]}]; rangeTooLong: commit count when not read
 //   auto:       {enabled, pipeline: [login]}: with RELEASE_AUTO=on, an hps-auto-release/1 record from the
 //               pipeline identity at the PR head (every gate PASS on this candidate) stands in for the
-//               approval (route `auto`). The casebook rule still applies.
-export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new Set(), p0, previous, rangePrs = [], rangeTooLong, auto}) {
+//               approval (route `auto`). The casebook rule of that route applies (casebook-gate.mjs): every
+//               `gate: auto` P0 case has its evidence and no P0 case FAILed at the head; after-publish and
+//               human cases go to the post-release checklist (owner decision 2026-11-18).
+//   autoCasebook: {cases, receipts, platforms, reporters} for that rule: the current casebook (its gate
+//               fields), the rc's unified-acceptance.json receipts, the release's platforms and the kit
+//               reporters. Missing refuses the auto route.
+export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new Set(), p0, previous, rangePrs = [], rangeTooLong, auto, autoCasebook: autoInputs}) {
   if (tag.includes('-')) return {allow: true, route: 'prerelease', casebook: 'prerelease',
     notesLine: 'Release casebook: rc prerelease; the casebook gate (P0 run or release manager override) applies when the stable tag is published.',
     reasons: ['prerelease tag; the in-app updater ignores it']};
@@ -183,7 +173,10 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
     }
     if (!rcAtTag.length) { reasons.push(`#${pr.number}: approved, but no ${tag}-rc.N tag points at ${tagSha.slice(0, 8)}`); continue; }
     if (!Array.isArray(p0)) { reasons.push(`#${pr.number}: approved, but the casebook P0 list was not read`); continue; }
-    const evidence = casebookEvidence({number: pr.number, head: pr.head, headDate: pr.headDate, p0, comments: pr.comments ?? [], approvers: writerApprovers});
+    if (route === 'auto' && !Array.isArray(autoInputs?.cases)) { reasons.push(`#${pr.number}: automatic route, but the casebook gate fields were not read`); continue; }
+    const evidence = route === 'auto'
+      ? autoCasebook({number: pr.number, head: pr.head, headDate: pr.headDate, candidate: tagSha, p0, comments: pr.comments ?? [], ...autoInputs})
+      : casebookEvidence({number: pr.number, head: pr.head, headDate: pr.headDate, p0, comments: pr.comments ?? [], approvers: writerApprovers});
     summary = evidence.summary;
     if (!evidence.ok) { reasons.push(...evidence.reasons); continue; }
     return {allow: true, route, casebook: evidence.path, notesLine: evidence.line, summary,
@@ -241,17 +234,34 @@ export function gatherApproval({tag, repo}) {
   }
   // The tag's own casebook: a P0 added on main after the cut is the next release's.
   const p0 = p0CaseIds(parseYaml(git('show', `${tagSha}:${CASEBOOK}`), CASEBOOK)?.cases ?? []);
-  return {tag, tagSha, rcTags, releasePrs, writers, p0, auto: autoSetting()};
+  const auto = autoSetting();
+  return {tag, tagSha, rcTags, releasePrs, writers, p0, auto,
+    autoCasebook: auto.enabled ? autoCasebookInputs({repo, rcTags: rcTags.filter(t => t.sha === tagSha).map(t => t.name), candidate: tagSha, reporters: auto.reporters}) : undefined};
+}
+
+// The automatic route's casebook inputs. The gate fields come from the casebook of the checkout running the
+// gate (main: the classification is the current machinery's), the P0 list from the tag's own casebook. The
+// acceptance receipts are the rc's published unified-acceptance.json; unreadable leaves them null (WAIT).
+export function autoCasebookInputs({repo, rcTags, candidate, reporters, cases = loadCasebook().cases}) {
+  let receipts = null;
+  for (const rc of [...rcTags].reverse()) {
+    try {
+      const raw = execFileSync('gh', ['release', 'download', rc, '--repo', repo, '--pattern', 'unified-acceptance.json', '--output', '-'], {encoding: 'utf8', maxBuffer: 16 << 20});
+      receipts = JSON.parse(raw).receipts ?? null;
+      if (receipts) break;
+    } catch { receipts = null; }
+  }
+  return {cases, receipts, platforms: releasePlatforms(candidate), reporters};
 }
 
 // RELEASE_AUTO (repository variable, passed as env by the workflows) is the kill switch: only "on" enables it.
 export function autoSetting(env = process.env) {
-  let pipeline = [], approvers = [];
+  let pipeline = [], approvers = [], reporters = [];
   try {
     const cfg = JSON.parse(fs.readFileSync(new URL('../../config/release-auto.json', import.meta.url), 'utf8'));
-    pipeline = cfg.pipeline ?? []; approvers = cfg.releaseApprovers ?? [];
-  } catch { pipeline = []; approvers = []; }
-  return {enabled: env.RELEASE_AUTO === 'on' && pipeline.length > 0, pipeline, approvers};
+    pipeline = cfg.pipeline ?? []; approvers = cfg.releaseApprovers ?? []; reporters = cfg.evidenceReporters ?? [];
+  } catch { pipeline = []; approvers = []; reporters = []; }
+  return {enabled: env.RELEASE_AUTO === 'on' && pipeline.length > 0, pipeline, approvers, reporters};
 }
 
 // Only read when the approval route fails. A hotfix range is a few commits; a longer one is not a
