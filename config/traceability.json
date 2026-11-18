@@ -6308,6 +6308,9 @@
         },
         {
           "path": "scripts/release/templates/release-pr.md"
+        },
+        {
+          "path": "scripts/release/casebook-gate.mjs"
         }
       ]
     },
@@ -6321,6 +6324,9 @@
       "sources": [
         {
           "path": "scripts/release/test/select-cases.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/casebook-gate.test.mjs"
         }
       ]
     },

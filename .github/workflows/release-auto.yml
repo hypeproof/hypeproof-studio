@@ -56,7 +56,7 @@ jobs:
           node-version: "22.22.1"
 
       - name: Controls
-        run: node --test scripts/release/test/auto-release.test.mjs scripts/release/test/release-ask.test.mjs scripts/release/test/release-blockers.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
+        run: node --test scripts/release/test/auto-release.test.mjs scripts/release/test/casebook-gate.test.mjs scripts/release/test/release-ask.test.mjs scripts/release/test/release-blockers.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
 
       # A failed or unanswered check leaves the decision empty: the freeze gate then waits (fail closed).
       - name: Live-class freeze

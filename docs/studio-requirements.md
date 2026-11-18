@@ -4549,6 +4549,23 @@ an override and the pause switch). **Not claimed**: a scheduled run on GitHub, a
 the new body, a real pre-tester run on the Mac, or the cases themselves executed against an installed
 rc; the expected copy is read from source at `f9bde411`, not from a running app.
 
+**Automatic release gate (Jay, 2026-11-18, "자동 항목만 관문").** Every desktop P0 case declares
+`gate: auto | after-publish | human` (a missing gate is a casebook error). The automatic route
+(release-auto's `casebook` gate and the publish gate's `auto` route, `scripts/release/casebook-gate.mjs`)
+requires PASS only for `auto` cases, from the unattended evidence each one names in `gate_evidence`: the
+rc's `unified-acceptance.json` on every shipped platform, a black-box kit scenario for the candidate, or a
+trusted `hps-blackbox-run/1` row at the head. An auto case without that evidence waits. after-publish
+cases (only a published stable can exercise them) and human cases (real Google sign-in or payment, a class
+code or account, Windows 11 hardware, a production DB read, or no unattended runner yet) do not hold the
+release. Any P0 FAIL at the head, whatever its gate, still stops it. After publication release-auto opens one
+`v<version> 출시 후 점검` issue listing the after-publish and human P0 cases and mentioning the team. A trusted
+FAIL row posted there turns that issue into a `release-blocker`, which stops the next cut and promotion. The
+approval route (a release approver's Approve) still needs every P0 case or a release manager override.
+Tests: `scripts/release/test/casebook-gate.test.mjs` (positive control; negative controls for missing,
+foreign-candidate, untrusted and partial evidence; FAIL on any gate; unclassified P0; the real casebook's
+mapping; the publish gate's auto and approval routes; checklist body and FAIL detection). **Not claimed**: a
+post-release checklist issue opened by a real publication, or any after-publish case run automatically.
+
 
 ## Artifact version list and single-file restore (CGP-KNOW-R-017)
 
