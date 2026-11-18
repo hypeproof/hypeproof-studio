@@ -487,7 +487,13 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(form.waitForExistence(timeout: 5))
         if item.exists && item.isHittable { return }
         let top=app.staticTexts["teamIntakeTrace"]
-        for _ in 0..<6 { if top.exists && top.isHittable { break }; form.swipeDown() }
+        for _ in 0..<6 {
+            if top.exists {
+                let frame = top.frame
+                if !frame.isEmpty && !frame.isInfinite && !frame.isNull && form.frame.contains(frame) { break }
+            }
+            form.swipeDown()
+        }
         for _ in 0..<8 { if item.exists && item.isHittable { return }; form.swipeUp() }
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "intake-reveal-failure-screen"; screenshot.lifetime = .keepAlways; add(screenshot)

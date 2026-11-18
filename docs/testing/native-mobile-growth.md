@@ -1376,3 +1376,5 @@ and submission assertions remain. Exhausted reveal captures a screenshot and
 hierarchy before its final assertion. Persistence and authentication are unchanged.
 This delta has not been built or run locally; shared-resource validation was not
 bypassed. Integrated CI and actual user acceptance remain separate gates.
+
+The Intake diagnostic top anchor uses a finite frame contained in the List, not a touch activation-point query. The same six-scroll positioning bound and all real-control hittability assertions remain. Root and independent source review passed; corrected runtime remains pending.
