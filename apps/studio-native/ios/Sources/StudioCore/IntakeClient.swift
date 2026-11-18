@@ -29,11 +29,21 @@ public enum IntakeWire {
     private var protocolVersion:String?, counter=0, generation=0
     public init(origin:String,token:@escaping ()->String?,transport:@escaping IntakeTransport)throws {endpoint=try IntakeWire.origin(origin).appendingPathComponent("mcp");self.token=token;self.transport=transport}
     public func invalidate(){generation+=1;protocolVersion=nil}
+    private static func toolCallBody(_ tool:String,arguments:IntakeJSON,id:Int)throws->Data {
+        let body=try IntakeWire.encode(IntakeJSON.object(["jsonrpc":.string("2.0"),"id":.number(id),"method":.string("tools/call"),"params":.object(["name":.string(tool),"arguments":arguments])]))
+        guard body.count<=65536 else{throw IntakeFailure.invalidInput};return body
+    }
+    /// Same encoder as the actual transport, using the largest possible request ID.
+    /// Call BEFORE a durable operation becomes uncertain; local size refusal did not send.
+    public static func preflightToolCall(_ tool:String,arguments:IntakeJSON)throws { _ = try toolCallBody(tool,arguments:arguments,id:Int.max) }
     private func exchange(method:String,params:IntakeJSON,id:Int?)async throws->IntakeJSON? {
         let g=generation
         guard let bearer=token(),IntakeWire.matches(bearer,"^[A-Za-z0-9_-]{43,128}$") else{throw IntakeFailure.expired}
         var envelope:[String:IntakeJSON] = ["jsonrpc":.string("2.0"),"method":.string(method),"params":params];if let id{envelope["id"] = .number(id)}
-        let data=try IntakeWire.encode(IntakeJSON.object(envelope));guard data.count<=65536 else{throw IntakeFailure.invalidInput}
+        let data:Data
+        if method=="tools/call" {guard let tool=params["name"]?.string,let arguments=params["arguments"],let id else{throw IntakeFailure.invalidInput};data=try Self.toolCallBody(tool,arguments:arguments,id:id)}
+        else {data=try IntakeWire.encode(IntakeJSON.object(envelope))}
+        guard data.count<=65536 else{throw IntakeFailure.invalidInput}
         var headers=["Authorization":"Bearer "+bearer,"Content-Type":"application/json","Accept":"application/json, text/event-stream"];if let protocolVersion{headers["MCP-Protocol-Version"]=protocolVersion}
         let r=try await transport(endpoint,headers,data)
         guard generation==g,token()==bearer else{throw IntakeFailure.identityChanged}

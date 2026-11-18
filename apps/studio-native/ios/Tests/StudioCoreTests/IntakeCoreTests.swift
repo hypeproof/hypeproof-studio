@@ -47,7 +47,7 @@ final class IntakeCoreTests:XCTestCase {
             if url.path.hasSuffix("start") {XCTAssertEqual(body["remember_device"],.bool(false));XCTAssertEqual(body["code_challenge"]?.string?.count,64);return IntakeHTTPResponse(status:200,url:url,body:try IntakeWire.encode(IntakeJSON.object(["device_code":.string(String(repeating:"d",count:43)),"user_code":.string("ABCD-1234"),"verification_uri":.string("https://hypeproof-ai.xyz/members/mcp?code=ABCD-1234"),"expires_in":.number(600),"interval":.number(5)])))}
             XCTAssertEqual(body["code_verifier"]?.string?.count,43);throw URLError(.networkConnectionLost)
         },now:{now},saveSecret:{_,_ in saved+=1},clearSecret:{clear+=1},changed:{_ in})
-        try await auth.start();do{try await auth.poll();XCTFail()}catch{XCTAssertEqual(error as? IntakeFailure,.tooEarly)};XCTAssertEqual(requests,1)
+        try await auth.start();XCTAssertEqual(auth.view.nextPollAt,now.addingTimeInterval(5));do{try await auth.poll();XCTFail()}catch{XCTAssertEqual(error as? IntakeFailure,.tooEarly)};XCTAssertEqual(requests,1)
         now=now.addingTimeInterval(5);do{try await auth.poll();XCTFail()}catch{};XCTAssertTrue(auth.view.needsFreshLogin);XCTAssertEqual(saved,0)
         do{try await auth.poll();XCTFail()}catch{XCTAssertEqual(error as? IntakeFailure,.cancelled)};XCTAssertEqual(requests,2)
         try await auth.start();try auth.cancel();XCTAssertNil(auth.view.verificationURL);XCTAssertGreaterThan(clear,1)
@@ -87,9 +87,10 @@ final class IntakeCoreTests:XCTestCase {
         guard case .object(var object)=data else{return}
         object["publication"] = .object(["state":.string("issue_created"),"issue_url":.string("https://github.com/hypeproof/hypeproof-studio/issues/123"),"issue_number":.number(123),"project_item_id":.null,"project_url":.string("https://github.com/orgs/hypeproof/projects/4"),"problem":.string("Board pending"),"next_action":.string("Reconcile board")]);data = .object(object)
         let r=try JSONDecoder().decode(IntakeReceipt.self,from:IntakeWire.encode(data));try r.validate(binding:b);XCTAssertNotNil(r.issueURL);XCTAssertFalse(r.boardComplete)
-        var old=IntakeOperation(binding:b,proposal:proposal());old.phase = .received;old.receipt=r;old.proposalID=r.proposal_id;var calls:[String]=[]
-        let c=IntakeProposalController(context:{b},route:{_ in self.route()},call:{name,_ in calls.append(name);return data},load:{_ in old},save:{_ in},changed:{_ in})
-        await c.open();await c.prepareExisting(retryPublication:true);await c.confirm();await c.send();XCTAssertEqual(calls,["get_proposal","retry_publication"]);XCTAssertEqual(c.view.operation?.receipt?.issueURL,r.issueURL)
+        var old=IntakeOperation(binding:b,proposal:proposal());old.phase = .received;old.receipt=r;old.proposalID=r.proposal_id;var calls:[String]=[],policy="p1",writes=0
+        let c=IntakeProposalController(context:{b},route:{_ in IntakeRoute(configuredRepository:"hypeproof/hypeproof-studio",repositories:["hypeproof/hypeproof-studio"],policyRevision:policy)},call:{name,_ in calls.append(name);if name=="retry_publication"{writes+=1;if writes==1{throw URLError(.timedOut)}};return data},load:{_ in old},save:{_ in},changed:{_ in})
+        await c.open();await c.prepareExisting(retryPublication:true);await c.confirm();await c.send();XCTAssertEqual(calls,["get_proposal","get_proposal","retry_publication"]);XCTAssertEqual(c.view.operation?.receipt?.issueURL,r.issueURL);XCTAssertEqual(c.view.operation?.phase,.uncertain)
+        policy="p2";await c.send();XCTAssertEqual(writes,1);await c.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision:"p2");await c.send();XCTAssertEqual(writes,2);XCTAssertEqual(calls,["get_proposal","get_proposal","retry_publication","get_proposal","retry_publication"]);XCTAssertEqual(c.view.operation?.receipt?.issueURL,r.issueURL)
         object["publication"] = .object(["state":.string("issue_created"),"issue_url":.string("https://github.com/hypeproof/other/issues/123"),"issue_number":.number(123),"next_action":.string("Mismatch")])
         let bad=try JSONDecoder().decode(IntakeReceipt.self,from:IntakeWire.encode(IntakeJSON.object(object)));XCTAssertThrowsError(try bad.validate(binding:b))
     }
@@ -103,6 +104,45 @@ final class IntakeCoreTests:XCTestCase {
         await c.recoverForCurrentSession();XCTAssertEqual(c.view.operation?.binding,original);XCTAssertEqual(c.view.operation?.approvalDigest,approval)
         await c.send();XCTAssertEqual(calls.count,2);XCTAssertEqual(calls[0],calls[1]);XCTAssertEqual(c.view.operation?.phase,.received)
         c.invalidate();current=binding("B");await c.recoverForCurrentSession();XCTAssertNil(c.view.operation);XCTAssertEqual(calls.count,2)
+    }
+
+    @MainActor func testChangedPolicyNeedsAdditionalExplicitRecoveryConsentAndAllowsReadOnlyKnown()async throws {
+        let b=binding();var policy="p1",stored:IntakeOperation?,calls:[String]=[],payloads:[IntakeJSON]=[]
+        let c=IntakeProposalController(context:{b},route:{_ in IntakeRoute(configuredRepository:"hypeproof/hypeproof-studio",repositories:["hypeproof/hypeproof-studio"],policyRevision:policy)},call:{name,args in calls.append(name);payloads.append(args);if calls.count==1{throw URLError(.timedOut)};return self.receipt(self.proposal())},load:{_ in stored},save:{stored=$0},changed:{_ in})
+        await c.preview(proposal());await c.confirm();await c.send();let originalApproval=stored?.approvalDigest,originalKey=stored?.key
+        policy="p2";await c.send();XCTAssertEqual(calls.count,1);XCTAssertEqual(c.view.failure,.confirmationRequired)
+        await c.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision:"p1");XCTAssertEqual(calls.count,1);XCTAssertNil(stored?.recoveryConsent);XCTAssertEqual(c.view.failure,.confirmationRequired)
+        await c.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision:"p2");XCTAssertEqual(calls.count,1);XCTAssertEqual(stored?.approvalDigest,originalApproval);XCTAssertEqual(stored?.key,originalKey);XCTAssertEqual(stored?.policyRevision,"p1");XCTAssertEqual(stored?.recoveryConsent?.policyRevision,"p2")
+        await c.send();XCTAssertEqual(calls.count,2);XCTAssertEqual(payloads[0],payloads[1]);XCTAssertEqual(c.view.operation?.phase,.received)
+        policy="p3";await c.reconcileKnown();XCTAssertEqual(calls,["submit_proposal","submit_proposal","get_proposal"]);XCTAssertEqual(c.view.operation?.receipt?.proposal_id,stored?.proposalID)
+    }
+
+    @MainActor func testChangedPolicyExactRevisionRecoveryAndConcurrentRevisionConflict()async throws {
+        let b=binding();var current=proposal(),revision=1,policy="p1",writes=0,args:[IntakeJSON]=[]
+        var stored=IntakeOperation(binding:b,proposal:current);stored.receipt=try JSONDecoder().decode(IntakeReceipt.self,from:IntakeWire.encode(receipt(current)));stored.proposalID=stored.receipt?.proposal_id;stored.phase = .received
+        let c=IntakeProposalController(context:{b},route:{_ in IntakeRoute(configuredRepository:"hypeproof/hypeproof-studio",repositories:["hypeproof/hypeproof-studio"],policyRevision:policy)},call:{name,arguments in
+            if name=="revise_proposal" {writes+=1;args.append(arguments);if writes==1{throw URLError(.timedOut)};current.title="Approved revised words";revision=2}
+            return self.receipt(current,revision:revision)
+        },load:{_ in stored},save:{stored=$0},changed:{_ in})
+        await c.open();var next=proposal();next.title="Approved revised words";await c.prepareExisting(proposal:next);await c.confirm();await c.send();XCTAssertEqual(writes,1)
+        policy="p2";await c.reconcileKnown();XCTAssertEqual(c.view.operation?.phase,.uncertain);await c.send();XCTAssertEqual(writes,1)
+        await c.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision:"p2");await c.send();XCTAssertEqual(writes,2);XCTAssertEqual(args[0],args[1]);XCTAssertEqual(c.view.operation?.phase,.received)
+        // A different device wins a later revision while our next exact CAS is uncertain.
+        var edit=next;edit.title="Next edit";await c.prepareExisting(proposal:edit);await c.confirm()
+        stored.phase = .uncertain;stored.approvalDigest=try stored.digest();c.invalidate();await c.open()
+        current.title="Other device";revision=3;policy="p3"
+        await c.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision:"p3");await c.send()
+        XCTAssertEqual(writes,2);XCTAssertEqual(c.view.operation?.phase,.conflict);XCTAssertEqual(c.view.operation?.proposal,edit)
+    }
+
+    @MainActor func testOversizedMultibyteSummaryStaysEditableWithoutAnyCall()async throws {
+        let b=binding();var calls=0
+        let c=IntakeProposalController(context:{b},route:{_ in self.route()},call:{_,_ in calls+=1;return self.receipt(self.proposal())},load:{_ in nil},save:{_ in},changed:{_ in})
+        var large=proposal();large.intent=String(repeating:"한",count:4000);large.requested_change=String(repeating:"글",count:8000);large.acceptance=Array(repeating:String(repeating:"말",count:1000),count:12)
+        try large.validate() // Valid per-field UTF-16 lengths still exceed the HTTP UTF-8 bound.
+        await c.preview(large);await c.confirm();await c.send()
+        XCTAssertEqual(calls,0);XCTAssertEqual(c.view.operation?.phase,.confirmed);XCTAssertEqual(c.view.operation?.proposal,large);XCTAssertEqual(c.view.failure,.invalidInput)
+        await c.preview(proposal());await c.confirm();await c.send();XCTAssertEqual(calls,1);XCTAssertEqual(c.view.operation?.phase,.received)
     }
 
 }

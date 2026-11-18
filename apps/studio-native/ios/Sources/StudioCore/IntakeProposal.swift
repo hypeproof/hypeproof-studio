@@ -44,17 +44,22 @@ public struct IntakeReceipt: Codable, Equatable, Sendable {
 public struct IntakeOperation: Codable, Equatable, Sendable {
     public enum Action:String,Codable,Sendable {case submit, revise, retryPublication}
     public enum Phase:String,Codable,Sendable {case preview, confirmed, uncertain, received, conflict}
+    public struct RecoveryConsent:Codable,Equatable,Sendable {
+        public let executionBinding:IntakeBinding, policyRevision:String, originalApprovalDigest:String
+    }
     public let binding:IntakeBinding, key:String
     public var proposal:IntakeProposal, action:Action, proposalID:String?, expectedRevision:Int?, policyRevision:String?, approvalDigest:String?, phase:Phase, receipt:IntakeReceipt?
+    public var recoveryConsent:RecoveryConsent?
     public init(binding:IntakeBinding,proposal:IntakeProposal,key:String=UUID().uuidString.lowercased()){self.binding=binding;self.proposal=proposal;self.key=key;action = .submit;phase = .preview}
     public func digest()throws->String {
         struct Approval:Encodable {let binding:IntakeBinding,key:String,proposal:IntakeProposal,action:Action,proposalID:String?,expectedRevision:Int?,policyRevision:String?}
-        return SHA256.hash(data:try IntakeWire.encode(Approval(binding:binding,key:key,proposal:proposal,action:action,proposalID:proposalID,expectedRevision:expectedRevision,policyRevision:policyRevision))).map{String(format:"%02x",$0)}.joined()
+        return SHA256.hash(data:try IntakeWire.encode(Approval(binding:binding,key:key,proposal:proposal,action:action,proposalID:action == .submit ? nil:proposalID,expectedRevision:expectedRevision,policyRevision:policyRevision))).map{String(format:"%02x",$0)}.joined()
     }
     public func validate()throws {
         try binding.validate();try proposal.validate();guard IntakeWire.matches(key,"^[a-zA-Z0-9._:-]{8,120}$") else{throw IntakeFailure.invalidInput}
-        if action != .submit {guard let id=proposalID,IntakeWire.matches(id,"^HP-[a-f0-9-]{36}$"),let rev=expectedRevision,rev>0 else{throw IntakeFailure.invalidInput}}
+        if action != .submit {guard let id=proposalID,IntakeWire.matches(id,"^HP-[a-f0-9-]{36}$"),let rev=expectedRevision,rev>0,rev<1_000_000_000 else{throw IntakeFailure.invalidInput}}
         if phase == .confirmed || phase == .uncertain {guard approvalDigest == (try digest()) else{throw IntakeFailure.confirmationRequired}}
+        if let consent=recoveryConsent {guard consent.executionBinding.sameRecoveryOwner(as:binding),consent.originalApprovalDigest==approvalDigest,consent.originalApprovalDigest==(try digest()),!consent.policyRevision.isEmpty,consent.policyRevision.utf16.count<=160 else{throw IntakeFailure.confirmationRequired};try consent.executionBinding.validate()}
         if let receipt {try receipt.validate(binding:binding)}
         if phase == .received {guard receipt != nil else{throw IntakeFailure.invalidResponse}}
     }
@@ -76,7 +81,7 @@ public struct IntakeOperation: Codable, Equatable, Sendable {
     private func admit(_ binding:IntakeBinding,_ g:Int)async throws {let current=try await context();guard generation==g,current==(executionBinding ?? binding),current?.sameRecoveryOwner(as:binding)==true else{if generation==g{invalidate()};throw IntakeFailure.identityChanged}}
     @discardableResult private func persist(_ op:IntakeOperation)->Bool {view.operation=op;do{try op.validate();try save(op);view.storageReady=true;changed(view);return true}catch{view.storageReady=false;view.failure = .storage;changed(view);return false}}
     public func open()async {
-        guard !view.busy,view.storageReady else{return};let g=generation;view.busy=true;changed(view)
+        guard !view.busy,view.storageReady else{return};let g=generation;view.busy=true;view.failure=nil;changed(view)
         do {guard let b=try await context() else{throw IntakeFailure.identityChanged};try b.validate();try await admit(b,g);let old=try load(b);if let old{try old.validate();guard old.binding==b else{throw IntakeFailure.identityChanged}};executionBinding=b;view.operation=old;view.busy=false;changed(view)}catch{await finishChecked(error,g)}
     }
     /// Explicit recovery action after reauthentication. Load must be keyed by stable account,
@@ -84,7 +89,7 @@ public struct IntakeOperation: Codable, Equatable, Sendable {
     /// Retains the ORIGINAL approval/source digest and exact payload/key; only the execution
     /// fence attaches to the new session. This is not confirmation of a changed summary.
     public func recoverForCurrentSession()async {
-        guard !view.busy,view.storageReady else{return};let g=generation;view.busy=true;changed(view)
+        guard !view.busy,view.storageReady else{return};let g=generation;view.busy=true;view.failure=nil;changed(view)
         do {
             guard let b=try await context() else{throw IntakeFailure.identityChanged};try b.validate()
             let current=try await context();guard generation==g,current==b else{throw IntakeFailure.identityChanged}
@@ -102,7 +107,7 @@ public struct IntakeOperation: Codable, Equatable, Sendable {
     }
     /// Must be called only by the explicit public-summary confirmation action, not sheet appearance.
     public func confirm()async {
-        guard !view.busy,view.storageReady,var op=view.operation,op.phase == .preview else{return};let g=generation;view.busy=true;changed(view)
+        guard !view.busy,view.storageReady,var op=view.operation,op.phase == .preview else{return};let g=generation;view.busy=true;view.failure=nil;changed(view)
         do {try await admit(op.binding,g);let r=try await route(executionBinding ?? op.binding);try await admit(op.binding,g);try r.validate(proposal:op.proposal);op.policyRevision=r.policyRevision;op.approvalDigest=try op.digest();op.phase = .confirmed;view.busy=false;_ = persist(op)}catch{await finishChecked(error,g)}
     }
     public func cancelConfirmation(){guard !view.busy,var op=view.operation,op.phase == .confirmed else{return};op.phase = .preview;op.approvalDigest=nil;_ = persist(op)}
@@ -112,19 +117,28 @@ public struct IntakeOperation: Codable, Equatable, Sendable {
         let g=generation;view.busy=true;view.failure=nil;changed(view)
         do {
             try op.validate();try await admit(op.binding,g);let r=try await route(executionBinding ?? op.binding);try await admit(op.binding,g);try r.validate(proposal:op.proposal)
-            guard r.policyRevision==op.policyRevision else{throw IntakeFailure.confirmationRequired}
+            let consent=op.recoveryConsent
+            let approvedRecovery=op.phase == .uncertain && consent?.executionBinding==(executionBinding ?? op.binding) && consent?.policyRevision==r.policyRevision && consent?.originalApprovalDigest==op.approvalDigest
+            guard r.policyRevision==op.policyRevision || approvedRecovery else{throw IntakeFailure.confirmationRequired}
+            var args:[String:IntakeJSON];let tool:String
+            switch op.action {case .submit:tool="submit_proposal";args=["request_key":.string(op.key),"proposal":try op.proposal.json]
+            case .revise:tool="revise_proposal";args=["proposal_id":.string(op.proposalID!),"expected_revision":.number(op.expectedRevision!),"proposal":try op.proposal.json]
+            case .retryPublication:tool="retry_publication";args=["proposal_id":.string(op.proposalID!)]}
+            try IntakeClient.preflightToolCall(tool,arguments:.object(args))
             // Revise has no request key. Reconcile an uncertain CAS before any further mutation.
             if op.phase == .uncertain,op.action == .revise {
                 let value=try await call("get_proposal",.object(["proposal_id":.string(op.proposalID!)]));try await admit(op.binding,g)
                 let receipt=try decode(value,op)
                 if receipt.revision==op.expectedRevision!+1,receipt.draft==op.proposal {op.receipt=receipt;op.phase = .received;view.busy=false;_ = persist(op);return}
-                guard receipt.revision==op.expectedRevision else{throw IntakeFailure.conflict}
+                guard receipt.revision==op.expectedRevision,["reviewed","held"].contains(receipt.state),receipt.publication?.issue_number==nil else{throw IntakeFailure.conflict}
+            }
+            if op.action == .retryPublication {
+                let value=try await call("get_proposal",.object(["proposal_id":.string(op.proposalID!)]));try await admit(op.binding,g)
+                let receipt=try decode(value,op)
+                guard receipt.revision==op.expectedRevision,receipt.draft==op.proposal,["approved","publishing","issued"].contains(receipt.state) else{throw IntakeFailure.conflict}
+                if receipt.boardComplete {op.receipt=receipt;op.phase = .received;view.busy=false;_ = persist(op);return}
             }
             op.phase = .uncertain;guard persist(op) else{view.busy=false;changed(view);return}
-            var args:[String:IntakeJSON];let tool:String
-            switch op.action {case .submit:tool="submit_proposal";args=["request_key":.string(op.key),"proposal":try op.proposal.json]
-            case .revise:tool="revise_proposal";args=["proposal_id":.string(op.proposalID!),"expected_revision":.number(op.expectedRevision!),"proposal":try op.proposal.json]
-            case .retryPublication:tool="retry_publication";args=["proposal_id":.string(op.proposalID!)]}
             let value=try await call(tool,.object(args));try await admit(op.binding,g);let receipt=try decode(value,op)
             guard receipt.draft==op.proposal else{throw IntakeFailure.invalidResponse}
             if op.action == .revise {guard receipt.revision==op.expectedRevision!+1 else{throw IntakeFailure.invalidResponse}}
@@ -132,9 +146,32 @@ public struct IntakeOperation: Codable, Equatable, Sendable {
             op.receipt=receipt;op.proposalID=receipt.proposal_id;op.phase = .received;view.busy=false;_ = persist(op)
         }catch {guard generation==g else{return};let current=try? await context();guard generation==g else{return};guard current == (executionBinding ?? op.binding),current?.sameRecoveryOwner(as:op.binding)==true else{invalidate();return};if error as? IntakeFailure == .tool("revision_conflict") || error as? IntakeFailure == .conflict {op.phase = .conflict;view.busy=false;_ = persist(op)};finish(error,g)}
     }
+    /// Explicit UI action: the same key may either recover a receipt OR publish for the first
+    /// time under the current policy. Original approval is retained; this adds consent only.
+    public func confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision:String)async {
+        guard !view.busy,view.storageReady,var op=view.operation,op.phase == .uncertain else{return}
+        let g=generation;view.busy=true;view.failure=nil;changed(view)
+        do {try await admit(op.binding,g);let active=executionBinding ?? op.binding;let routing=try await route(active);try await admit(op.binding,g);try routing.validate(proposal:op.proposal);guard routing.policyRevision==expectedPolicyRevision else{throw IntakeFailure.confirmationRequired}
+            guard let approval=op.approvalDigest,approval==(try op.digest()) else{throw IntakeFailure.confirmationRequired}
+            op.recoveryConsent = .init(executionBinding:active,policyRevision:routing.policyRevision,originalApprovalDigest:approval)
+            view.busy=false;_ = persist(op)
+        }catch{await finishChecked(error,g)}
+    }
+    /// Read-only recovery is permitted even if publication policy changed. This never issues work.
+    /// A receipt proves only the returned proposal/publication state, not provider installation.
+    public func reconcileKnown()async {
+        guard !view.busy,view.storageReady,var op=view.operation,let id=op.proposalID ?? op.receipt?.proposal_id else{return}
+        let g=generation;view.busy=true;view.failure=nil;changed(view)
+        do {try await admit(op.binding,g);let value=try await call("get_proposal",.object(["proposal_id":.string(id)]));try await admit(op.binding,g)
+            let receipt=try decode(value,op);guard receipt.proposal_id==id,receipt.draft.target_repo==op.proposal.target_repo,receipt.revision >= (op.receipt?.revision ?? 1) else{throw IntakeFailure.invalidResponse}
+            op.receipt=receipt;op.proposalID=id
+            if receipt.draft==op.proposal && (op.action != .revise || receipt.revision==op.expectedRevision.map({$0+1})){op.phase = .received}
+            view.busy=false;_ = persist(op)
+        }catch{await finishChecked(error,g)}
+    }
     /// Re-fetch the existing proposal before an explicit revise/retry preview. Does not publish.
     public func prepareExisting(proposal:IntakeProposal? = nil,retryPublication:Bool=false)async {
-        guard !view.busy,view.storageReady,let old=view.operation,old.phase != .uncertain,let id=old.receipt?.proposal_id else{return};let g=generation;view.busy=true;changed(view)
+        guard !view.busy,view.storageReady,let old=view.operation,old.phase != .uncertain,let id=old.receipt?.proposal_id else{return};let g=generation;view.busy=true;view.failure=nil;changed(view)
         do {try await admit(old.binding,g);let result=try await call("get_proposal",.object(["proposal_id":.string(id)]));try await admit(old.binding,g);let current=try decode(result,old)
             var op=IntakeOperation(binding:executionBinding ?? old.binding,proposal:proposal ?? current.draft);op.receipt=current;op.proposalID=id;op.expectedRevision=current.revision
             if retryPublication {guard ["approved","publishing","issued"].contains(current.state) else{throw IntakeFailure.conflict};op.action = .retryPublication;op.proposal=current.draft}
