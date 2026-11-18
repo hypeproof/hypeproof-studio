@@ -802,3 +802,17 @@ retrieved log: `/tmp/ios-4360-ubuntu-contracts-result.log`. The authorized Mac
 full suite still had 8 failures out of 129, including process-control permission
 errors. Linux controls pass unchanged; neither platform result establishes actual
 Android application instrumentation or resolves the prior consent-flow failure.
+
+### Durable retry target regression — 2026-11-18
+
+CI run44310462168 at359cb613 failed the single retry after relaunch: one initial
+POST, no second POST, and a visible 20.3pt retry target. The old trace cannot
+distinguish a missed touch from an admission race; it does not prove either.
+The retry now has a >=44pt label hit area. DEBUG-only stage diagnostics contain
+no user text and distinguish actual touch, admission and POST entry. The same
+single normal tap, exact request ID/words and visible reply assertions remain.
+Focused simulator validation passed in `/tmp/ios-release-failure-focused.xcresult`:
+the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitted
+twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
+This is local synthetic evidence; remote CI and physical-device acceptance remain
+separate. The prior failing CI evidence is retained.

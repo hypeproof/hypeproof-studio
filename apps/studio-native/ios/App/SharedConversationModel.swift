@@ -758,7 +758,18 @@ private struct SharedCacheFile: Codable {
         } else { retry() }
     }
     func retry() {
-        guard !busy, !syncing, !stoppingReflection, let id = selected, let request = entries[id]?.request, request.status == "local" else { return }
+#if DEBUG
+        NativeJourneyFixture.recordRetry("attempt")
+#endif
+        guard !busy, !syncing, !stoppingReflection, let id = selected, let request = entries[id]?.request, request.status == "local" else {
+#if DEBUG
+            NativeJourneyFixture.recordRetry(busy ? "blocked_busy" : syncing ? "blocked_syncing" : stoppingReflection ? "blocked_stopping" : "blocked_request")
+#endif
+            return
+        }
+#if DEBUG
+        NativeJourneyFixture.recordRetry("admitted")
+#endif
         busy = true; let attempt = epoch; error = nil
         let generation = UUID(); responseGeneration = generation; stoppedResponse = nil
         let credentialTask = Task { try await self.token() }
@@ -769,6 +780,9 @@ private struct SharedCacheFile: Codable {
                 guard epoch == attempt, responseGeneration == generation else { return }
                 if id == Self.personalID {
                     observedReflectionID = request.id; experience.controller?.record(.reflectionStarted)
+#if DEBUG
+                    NativeJourneyFixture.recordRetry("post")
+#endif
                     let result = try await service.reflect(request, token: credential)
                     guard epoch == attempt, responseGeneration == generation else { return }
                     try applyReflection(result)

@@ -457,7 +457,15 @@ struct SharedConversationView: View {
                                 Text(request.text).textSelection(.enabled)
                             }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
-                            if request.status == "local" { Button("다시 보내기") { model.retry() }.disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry") }
+                            if request.status == "local" {
+                                Button {
+#if DEBUG
+                                    NativeJourneyFixture.recordRetry("touch")
+#endif
+                                    model.retry()
+                                } label: { Text("다시 보내기").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
+                                .buttonStyle(.bordered).disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry")
+                            }
                             if model.isReflection && request.status == "failed" {
                                 Button { voice.stop(); if model.restoreFailedReflectionDraft() { focused = true } } label: {
                                     Text("입력란에 가져오기").frame(minHeight: 44)
