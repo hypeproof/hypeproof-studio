@@ -715,7 +715,7 @@ private struct SharedCacheFile: Codable {
             if current == Self.personalID {
                 refreshConversationList(credential, attempt: attempt)
                 error = guestDraftFailure ?? cache.requestFailure
-                notice = "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."
+                notice = ""
                 return
             }
             var list = try await service.list(credential)
@@ -741,7 +741,7 @@ private struct SharedCacheFile: Codable {
                 }
             }
             error = guestDraftFailure ?? cache.requestFailure
-            notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
+            notice = isReflection ? "" : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
         } catch {
             if epoch == attempt {
                 if !(error is CancellationError), (error as? URLError)?.code != .cancelled {

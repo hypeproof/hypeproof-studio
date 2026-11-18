@@ -451,7 +451,7 @@ struct SharedConversationView: View {
                                 .accessibilityLabel("HP Studio의 답변. \(message.content)")
                         }
                     }
-                    if let request = model.cache.request {
+                    if let request = model.cache.request, !model.isReflection || request.status != "completed" {
                         VStack(alignment: .leading, spacing: 8) {
                             if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" && $0.content == request.text })) {
                                 Text(request.text).textSelection(.enabled)
@@ -675,7 +675,6 @@ struct SharedConversationView: View {
             .accessibilityIdentifier("retryConversationSync")
         }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
-        if model.showsSyncProgress { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
     }
 #if DEBUG
     // Overlay diagnostics never participate in transcript/composer measurement.

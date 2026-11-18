@@ -793,3 +793,15 @@ run passing. A new exact-source remote run is required.
 Both affected simulator journeys passed on 2026-11-18 (2 tests, 0 failures;
 `/tmp/ios-4361-github-regression.xcresult`, log of the same basename).
 This is focused synthetic verification, not a full-suite or installed-device pass.
+
+
+Conversation status simplification (2026-11-18): the existing
+`testPersonalQuestionReadyAndSendWhileDesktopListIsHeld` journey now verifies
+that a successful answer does not display the completed saved caption, routine
+same-account notice, or main syncing spinner while its transport counters still
+prove a real send during a held background request. Existing timeout/retry and
+logout journeys retain their actionable-state assertions. Focused simulator validation passed: both this journey and
+`testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft` completed with zero
+failures (`/tmp/ios-quiet-conversation.log`, `/tmp/ios-quiet-conversation.xcresult`).
+The resource-wrapped runner exited 0; its dedicated simulator was removed.
+This is local synthetic UI evidence, not a new shipped TestFlight build.

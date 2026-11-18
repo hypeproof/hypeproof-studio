@@ -10433,3 +10433,13 @@ CI never implies TestFlight availability, device installation or reporter accept
 Edits and uncertain mutation keys stay account-scoped and durable; only explicit
 confirmation sends. Cancellation, read-only access and failed storage send nothing.
 Core and native UI controls belong to the mobile roadmap/testing contract.
+
+
+### Native conversation status simplification — 2026-11-18
+
+Under `ST-REQ-NATIVE-MOBILE` / `ST-INT-NATIVE`, Jay requested removal of the
+completed personal-message saved caption, routine same-account explanation, and
+main-conversation syncing spinner. Preserve background synchronization and all
+actionable error, retry, logout, pending-send and unsent-draft warnings. Settings
+may still indicate an in-progress refresh. The intent is to keep attention on
+the conversation while retaining information needed for user judgment.
