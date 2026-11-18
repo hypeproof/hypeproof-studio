@@ -1061,6 +1061,19 @@ private struct SharedCacheFile: Codable {
             queuedSend = (id, request.id); notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
         } else { retry() }
     }
+    var canRetryLocalRequest: Bool {
+        signedIn && accountStorageReady && cacheReadable && !loggingOut
+            && !stoppingReflection && !sendingCurrentRequest && cache.request?.status == "local"
+    }
+    // An explicit user Retry can wait behind a read just like explicit Send.
+    // Reads/restarts/uncertain results themselves never create a retry intent.
+    func retryFromUser() {
+        guard canRetryLocalRequest, let id = selected, let request = entries[id]?.request else { return }
+        if syncing {
+            queuedSend = (id, request.id)
+            notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
+        } else { retry() }
+    }
     func retry() {
 #if DEBUG
         NativeJourneyFixture.recordRetry("attempt")

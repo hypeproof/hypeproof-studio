@@ -315,7 +315,21 @@ final class TeamEntryUITests: XCTestCase {
         let sendComment = app.buttons["teamCommentSend"]; reveal(sendComment); sendComment.tap()
         app.alerts.buttons["취소"].tap(); XCTAssertTrue(sendComment.isEnabled)
         sendComment.tap(); app.alerts.buttons["보내기"].tap()
-        XCTAssertTrue(app.staticTexts["댓글이 접수됐어요."].waitForExistence(timeout: 10))
+        // A received local body stays withheld until fresh matching history. Assert the
+        // actual receipt status, then retain the fresh-read/exact-comment check below.
+        let commentReceipt = app.staticTexts["teamCommentStatus"]
+        for _ in 0..<8 {
+            if commentReceipt.exists {
+                let frame = commentReceipt.frame
+                if !frame.isEmpty && !frame.isInfinite && !frame.isNull && app.windows.firstMatch.frame.contains(frame) { break }
+            }
+            app.swipeDown()
+        }
+        XCTAssertTrue(commentReceipt.waitForExistence(timeout: 10))
+        XCTAssertEqual(commentReceipt.label,"댓글이 접수됐어요. 새로고침하면 논의에서 확인할 수 있어요.")
+        let receiptFrame = commentReceipt.frame
+        XCTAssertFalse(receiptFrame.isEmpty || receiptFrame.isInfinite || receiptFrame.isNull)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(receiptFrame))
         app.buttons["새로고침"].tap()
         XCTAssertTrue(app.staticTexts["Follow up question"].waitForExistence(timeout: 10))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
@@ -443,7 +457,7 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor private func relatedTrace(_ app:XCUIApplication)->String{
         let trace=app.staticTexts["teamRelatedTrace"]
-        for _ in 0..<8{if trace.exists && trace.isHittable{return trace.value as? String ?? ""};app.swipeDown()}
+        for _ in 0..<8{if trace.exists{return trace.value as? String ?? ""};app.swipeDown()}
         XCTFail("Related trace must remain in the open screen");return ""
     }
     @MainActor private func textTrace(_ app: XCUIApplication) -> [String:Any] {

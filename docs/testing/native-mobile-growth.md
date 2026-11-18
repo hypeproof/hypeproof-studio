@@ -287,6 +287,7 @@ the new fixtures as a successful physical retest.
 | MFR-T03-stop-denial | Stop races a recorded admission failure; the original POST delivers its typed403 after the snapshot already says failed. Relaunch. | Preserve the exact refusal reason and human words; no fake cancellation, extra POST or voice continuation. |
 | MFR-T03-response-stop | A real native voice turn leaves its POST pending while a Service-shaped running row exists. Explicitly stop; the original POST returns its late error before cancel acknowledgment, then relaunch with a separate draft. | The >=44pt action is usable during POST; only exact terminal acknowledgment shows stopped. Same human words/ID remain; no automatic replay, extra capture, reply or draft loss. Synthetic transport; physical/live voice remains separate. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T05-held-read | After the failed POST and relaunch, hold an ordinary periodic history read. Release it without tapping Retry and require no replay. Hold another read, tap Retry exactly once, then release. | The explicit action remains enabled during the read, queues once without an early POST, and sends the same ID/text after reconciliation. Require one accepted turn, no fixture timeout, and the original answer assertion. |
 | MFR-T05-recorded | A Service-shaped failed turn leaves its user event and terminal ID after the first POST. Relaunch, explicitly restore into an empty composer, relaunch again, then explicitly Send. | Restore/relaunch creates no POST; only Send creates a distinct ID at the reconciled revision. The original failed event remains. |
 | MFR-T05-collision | After a recorded failure, write a different draft and relaunch. | Restore stays disabled and preserves the draft. Pure controls also cover unsaved overlays, whitespace and all non-failed states. |
 | MPER-T03-history | Reopen an 80-message cached conversation, switch away while reading an equal-count cached conversation, and change synthetic account. | The correct latest answer is inside the actual viewport; history navigation creates no AI request and cannot retain the other account's messages. |
@@ -1221,3 +1222,20 @@ journeys have not run. Source review, project-file validation and requirement
 inventory checks do not establish runtime, provider, Keychain-device, TestFlight
 or production acceptance. The complete reviewed candidate is preserved for CI;
 no local timeout, assertion or resource safeguard was bypassed.
+
+### Native failure recovery — 2026-11-19
+
+Run44364736519 at3f854ffd executed62 UI journeys with four failures; its job also
+reached the55-minute limit after tests failed. The original retry trace contains
+no button-action entry or second POST, despite an unobscured44pt-plus target.
+Ordinary synchronization disabled that action; an explicit-intent queue and
+MFR-T05-held-read now cover that race. This is a source-grounded fix pending
+execution, not proof that synchronization caused the observed missed tap.
+
+The comment receipt check now reads the visible full receipt status before
+refreshing and checking the exact received comment. Received-body withholding
+still requires fresh matching history. Noninteractive related-trace inspection
+no longer asks XCTest for an activation point. The real original-request reply
+button still requires a hittable target and a native tap; its activation-point
+failure remains unresolved. These changes have source review and diff checks,
+but focused native execution and full acceptance have not yet passed.

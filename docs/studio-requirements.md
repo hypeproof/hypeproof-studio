@@ -10460,6 +10460,8 @@ main-conversation syncing spinner. Preserve background synchronization and all
 actionable error, retry, logout, pending-send and unsent-draft warnings. Settings
 may still indicate an in-progress refresh. The intent is to keep attention on
 the conversation while retaining information needed for user judgment.
+Local outbox status likewise says only pending transmission; it does not repeat
+the device-storage explanation.
 
 ## iPhone request delivery evidence (#4364)
 
@@ -10489,6 +10491,10 @@ A saved local request's explicit retry action must expose at least a 44pt touch
 area. A single activation retries the preserved request identity and words;
 restart and background history reads must not create an automatic replay.
 This applies the existing native touch-target contract to the outbox action.
+An ordinary background history read must not disable this explicit action.
+One activation during the read queues the existing request identity; only that
+intent may dispatch after reconciliation, with the existing account, selection,
+logout and stop fences. A second activation cannot enqueue another send.
 
 
 ## iPhone team notification inbox (#4368)
