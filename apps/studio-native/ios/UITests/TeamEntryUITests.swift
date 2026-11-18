@@ -453,9 +453,11 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor private func githubTrace(_ app: XCUIApplication) -> String {
         let trace = app.staticTexts["teamGitHubTrace"]
+        // This diagnostic value is read, never tapped. Asking for an activation
+        // point can fail even when its accessibility value is available.
         // Stop at the first row. Further downward swipes dismiss the containing sheet.
         for _ in 0..<8 {
-            if trace.exists && trace.isHittable { return trace.value as? String ?? "" }
+            if trace.exists { return trace.value as? String ?? "" }
             app.swipeDown()
         }
         XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")
@@ -646,7 +648,9 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(issue.waitForExistence(timeout:10)); githubReveal(app,issue); issue.tap(); issue.typeText("77")
         XCTAssertEqual(issue.value as? String,"77")
         _ = githubTrace(app)
-        let open = app.buttons["teamGitHubObservationsOpen"]; XCTAssertTrue(open.isHittable); open.tap()
+        let open = app.buttons["teamGitHubObservationsOpen"]
+        for _ in 0..<8 { if open.exists && open.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(open.isHittable); open.tap()
         let freshness = app.staticTexts["teamObservationFreshness"]
         XCTAssertTrue(freshness.waitForExistence(timeout:10)); XCTAssertEqual(freshness.label,"확인한 시점에는 아래 상태였어요.")
         let hierarchy = XCTAttachment(string:app.debugDescription); hierarchy.name="GitHub current observation hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)

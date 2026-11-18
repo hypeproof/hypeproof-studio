@@ -1278,3 +1278,15 @@ propagated for the measured approximately 43-minute 62-case suite plus setup/bui
 and evidence collection. Per-test limits, the five-scroll reveal bound and real
 interaction assertions are unchanged. New changes are locally runtime NOT RUN:
 shared-resource ownership remains blocked; no queue bypass or duplicate run.
+
+### Noninteractive GitHub diagnostics — Studio #4361 follow-up
+
+Run44383839227 at0a59f232 completed105 Core and48 UI cases;47 UI passed.
+The sole failure was XCTest activation-point calculation for teamGitHubTrace,
+which is read as diagnostic data and never tapped. Both retry cases and Korean
+playback passed. The trace helper now reads an existing accessibility value
+without a hit test, retaining bounded fallback and exact event/post assertions.
+The observation journey explicitly reveals its actual open button before the
+unchanged hittability assertion and tap, rather than relying on a diagnostic read
+to position the screen. This does not claim corrected runtime acceptance.
+The current39745c68 CI remains running and is not cancelled for this local fix.
