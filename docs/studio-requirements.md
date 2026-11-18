@@ -10481,3 +10481,11 @@ After a saved receipt, an automatic read updates current history. Failed reads
 preserve the receipt and label the older snapshot instead of presenting it as
 the latest result; they never resend the result.
 History is explicitly self-reported; server capability failures remain visible.
+
+
+### Durable retry touch target — 2026-11-18
+
+A saved local request's explicit retry action must expose at least a 44pt touch
+area. A single activation retries the preserved request identity and words;
+restart and background history reads must not create an automatic replay.
+This applies the existing native touch-target contract to the outbox action.

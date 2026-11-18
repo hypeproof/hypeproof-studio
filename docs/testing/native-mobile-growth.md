@@ -865,3 +865,30 @@ The affected native journey passed with runner/cleanup exit 0 in
 result as current immediately, matching its saved draft and reason. Prior v3/v4
 UI passes predate this automatic-read change and are not exact-source evidence
 for it. No broad or unrelated test rerun was performed.
+
+
+### Durable retry target regression — 2026-11-18
+
+CI run44310462168 at359cb613 failed the single retry after relaunch: one initial
+POST, no second POST, and a visible 20.3pt retry target. The old trace cannot
+distinguish a missed touch from an admission race; it does not prove either.
+The retry now has a >=44pt label hit area. DEBUG-only stage diagnostics contain
+no user text and distinguish actual touch, admission and POST entry. The same
+single normal tap, exact request ID/words and visible reply assertions remain.
+Focused simulator validation passed in `/tmp/ios-release-failure-focused.xcresult`:
+the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitted
+twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
+This is local synthetic evidence; remote CI and physical-device acceptance remain
+separate. The prior failing CI evidence is retained.
+
+
+### Held history without removed status UI — 2026-11-18
+
+CI run44310557985 at2e7de2dc exposed an obsolete positive assertion for the
+removed `sharedSyncing` element. The queued-voice journey now waits for the
+fixture's actual active-history-read barrier and asserts that the removed UI
+stays absent. Existing held-read, voice capture, send-once, reply and resumed
+listening checks remain. Both this case and durable retry passed together in
+`/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
+All remaining references to the removed saved/account/sync labels in native
+journeys were checked; they assert absence, not stale positive visibility.

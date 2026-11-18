@@ -10,11 +10,17 @@ import CryptoKit
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String {
         let value = JourneyTransport.store.trace()
-        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty,
+        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty,
               var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
         if !emptyStopBoundary.isEmpty { fields["empty_stop_boundary"] = emptyStopBoundary }
+        if !retryStages.isEmpty { fields["retry_stages"] = retryStages }
         if !requestedPlaybackVoice.isEmpty { fields["requested_playback_voice"] = requestedPlaybackVoice }
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
+    }
+    private static var retryStages: [String] = []
+    static func recordRetry(_ stage: String) {
+        guard enabled, JourneyConfiguration.scenario == "retry-once" else { return }
+        retryStages.append(stage)
     }
     private static var requestedPlaybackVoice: [String: Any] = [:]
     static func recordRequestedPlaybackVoice(inventory: [[String: String]], requested: [String: String]?,
