@@ -1239,3 +1239,15 @@ no longer asks XCTest for an activation point. The real original-request reply
 button still requires a hittable target and a native tap; its activation-point
 failure remains unresolved. These changes have source review and diff checks,
 but focused native execution and full acceptance have not yet passed.
+
+
+The original-request reply loop now preserves the controlled app screenshot and
+hierarchy immediately before each explicit hittability query, including the final
+assertion. Its eight-scroll budget, assertion and single real tap are unchanged.
+This captures evidence before an XCTest activation-point exception can interrupt
+the test; it does not establish or fix the cause of that exception. Frame extraction
+from the earlier CI videos never ran because its resource wait expired (exit 75).
+The reviewed outer iOS job budget from `2df4fcf1` is also propagated: 65 minutes
+covers the measured 62-case UI duration of about 43 minutes plus setup, build and
+failure-evidence collection. Individual test deadlines and assertions are unchanged.
+These diagnostic and job-budget changes have not been executed locally.

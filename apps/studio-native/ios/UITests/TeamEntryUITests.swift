@@ -798,7 +798,20 @@ final class TeamEntryUITests: XCTestCase {
         githubReveal(app,send); XCTAssertFalse(send.isEnabled)
         XCTAssertEqual(body.value as? String,"I checked build 18.1.")
         let rootReply = app.buttons["teamReplyToRequest"]
-        for _ in 0..<8 { if rootReply.exists && rootReply.isHittable { break }; app.swipeDown() }
+        func captureRootReplyBeforeHitTest(_ step: String) {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "root-reply-before-hit-test-\(step)"; shot.lifetime = .keepAlways; add(shot)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "root-reply-hierarchy-before-hit-test-\(step)"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        }
+        for step in 0..<8 {
+            if rootReply.exists {
+                captureRootReplyBeforeHitTest("scroll-\(step)")
+                if rootReply.isHittable { break }
+            }
+            app.swipeDown()
+        }
+        captureRootReplyBeforeHitTest("final-assertion")
         XCTAssertTrue(rootReply.isHittable); rootReply.tap()
         githubReveal(app,send); XCTAssertTrue(send.isEnabled); send.tap(); app.alerts.buttons["보내기"].tap(); githubReveal(app,next)
         app.navigationBars["요청과 논의"].buttons["새로고침"].tap()
