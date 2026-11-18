@@ -501,6 +501,10 @@ final class StudioJourneyTests: XCTestCase {
         }, object: trace)
         let result = XCTWaiter.wait(for: [observed], timeout: timeout)
         if result != .completed {
+            // Preserve the selected OS voice and fixture state on the failure
+            // path too. Success-only trace collection cannot diagnose synthesis
+            // that starts but never delivers its completion callback.
+            readinessFailure("voice-handoff-incomplete", app: app, queries: [("timeline", trace)])
             let evidence = XCTAttachment(string: trace.value as? String ?? "voice timeline missing")
             evidence.name = "voice-handoff-incomplete"; evidence.lifetime = .keepAlways; add(evidence)
             let screen = XCTAttachment(screenshot: app.screenshot()); screen.lifetime = .keepAlways; add(screen)
