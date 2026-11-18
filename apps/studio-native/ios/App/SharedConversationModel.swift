@@ -412,7 +412,7 @@ private struct SharedCacheFile: Codable {
         intakePresentations.invalidate()
         if let id = account?.accountID {
             do { try clearIntakeCredentials(accountID: id) }
-            catch { error = "Lab 연결 정보를 지우지 못했어요. 다시 로그인하기 전에 저장소를 확인해 주세요." }
+            catch { self.error = "Lab 연결 정보를 지우지 못했어요. 다시 로그인하기 전에 저장소를 확인해 주세요." }
         }
     }
     private func makeTeamIntake(request: String, product: String) -> TeamIntakePresentation {
@@ -1233,7 +1233,7 @@ private struct SharedCacheFile: Codable {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
         do { try clearIntakeCredentials(accountID: account.accountID) }
-        catch { error = "Lab 연결 정보를 지우지 못했어요. 저장소를 확인한 뒤 로그아웃을 다시 눌러 주세요."; return }
+        catch { self.error = "Lab 연결 정보를 지우지 못했어요. 저장소를 확인한 뒤 로그아웃을 다시 눌러 주세요."; return }
         approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); invalidateIntake(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or

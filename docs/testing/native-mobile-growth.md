@@ -1251,3 +1251,13 @@ The reviewed outer iOS job budget from `2df4fcf1` is also propagated: 65 minutes
 covers the measured 62-case UI duration of about 43 minutes plus setup, build and
 failure-evidence collection. Individual test deadlines and assertions are unchanged.
 These diagnostic and job-budget changes have not been executed locally.
+
+### Intake App compilation correction — Studio #4384
+
+Exact candidate a4e1d264 reached 178 passing Core tests in CI44388287014,
+then device compilation failed before UI execution: the implicit Swift catch
+`error` shadowed the model error property in credential invalidation and logout.
+Both assignments now explicitly target `self.error`; the logout early return and
+credential cleanup safeguards remain unchanged. Independent source review passed.
+The prior compile failure remains recorded; corrected device build and UI tests
+require new exact-source CI and are not claimed by the Core result.
