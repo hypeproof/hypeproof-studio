@@ -805,3 +805,24 @@ logout journeys retain their actionable-state assertions. Focused simulator vali
 failures (`/tmp/ios-quiet-conversation.log`, `/tmp/ios-quiet-conversation.xcresult`).
 The resource-wrapped runner exited 0; its dedicated simulator was removed.
 This is local synthetic UI evidence, not a new shipped TestFlight build.
+
+### Read-only delivery evidence — Studio #4364
+
+`TeamDeliveryTests` checks the exact freshness boundary, rejection of foreign
+request/repository and malformed/overclaimed evidence, account changes during
+both successful and failed reads, and unavailable-server clearing/retry. The
+screen recomputes freshness each second; it does not poll or mutate the server.
+`TeamEntryUITests` opens the real request detail and delivery screen against a
+DEBUG-only transport, checking exact version/build, unobserved personal states,
+stale observation wording and unavailable-endpoint handling. These tests do not
+prove production activation, Apple state, installation or reporter resolution.
+
+Local evidence (2026-11-18): six focused Core cases passed, including repeated
+account-boundary invalidation of a retained navigation controller
+(`/tmp/ios4364-core-final-lifetime.log`). Two real simulator journeys passed with
+owned-device cleanup exit 0 (`/tmp/ios4364-delivery-ui-reviewed.xcresult`); their
+rendered screenshot was inspected. Those UI runs preceded the final weak-registry
+retention correction, which is covered by the final Core case. Full-suite CI,
+production Service integration, signed delivery and physical-device acceptance
+remain NOT RUN for this slice. No hosted model call, automatic server polling,
+operator mutation or additional cloud service is introduced.

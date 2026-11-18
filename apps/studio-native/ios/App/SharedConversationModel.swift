@@ -70,6 +70,7 @@ private struct SharedCacheFile: Codable {
 }
 
 @MainActor final class SharedConversationModel: ObservableObject {
+    private let deliveryControllers = TeamDeliveryControllers()
     static let personalID = "personal-reflection"
     @Published private(set) var opening = "요즘 어떤 일에 시간을 많이 쓰세요?"
     @Published private(set) var openingHint = "일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요."
@@ -203,6 +204,15 @@ private struct SharedCacheFile: Codable {
             guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
             try draft.validate(account: draft.accountID, request: draft.requestID)
             try self.writeTeamDraft(draft, account: draft.accountID, name: draft.requestID + ".json")
+        }
+        presentation.makeDelivery = { [weak self] request in
+            let delivery = TeamDeliveryPresentation()
+            let controller = TeamDeliveryController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamDeliveries(id: request, after: after, token: self.approvalToken(binding))
+            }, changed: { [weak delivery] in delivery?.state = $0 })
+            delivery.controller = controller; self?.deliveryControllers.register(controller)
+            return delivery
         }
         presentation.makeGitHub = { [weak self] request in
             let github = TeamGitHubPresentation()
@@ -607,7 +617,7 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -659,7 +669,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -944,7 +954,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -982,7 +992,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); deliveryControllers.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

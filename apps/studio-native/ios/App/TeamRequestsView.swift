@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
     @Published var state = TeamRequestController.View()
+    var makeDelivery: (String) -> TeamDeliveryPresentation = { _ in TeamDeliveryPresentation() }
     var makeGitHub: (String) -> TeamGitHubPresentation = { _ in TeamGitHubPresentation() }
     var makeWorkflow: (String, String) -> TeamWorkflowPresentation = { _, _ in TeamWorkflowPresentation() }
     var controller: TeamRequestController?
@@ -102,6 +103,7 @@ private struct TeamRequestDetailView: View {
             if let detail {
                 Section("원문") { Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id)").font(.caption) }
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
+                Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry") }
                 Section("논의") {
                     ForEach(comments) { comment in VStack(alignment: .leading, spacing: 6) { Text(comment.body).textSelection(.enabled); Text(comment.account_id).font(.caption).foregroundStyle(.secondary) } }
@@ -366,5 +368,50 @@ private struct TeamGitHubScreen: View {
             .alert("저장되지 않은 연결 초안이 있어요", isPresented: $confirmLeave) {
                 Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
             } message: { Text("나가기 전에 연결 초안을 내보내 주세요.") }
+    }
+}
+
+@MainActor final class TeamDeliveryPresentation: ObservableObject {
+    @Published var state = TeamDeliveryController.View()
+    var controller: TeamDeliveryController?
+}
+private struct TeamDeliveryScreen: View {
+    @StateObject private var model: TeamDeliveryPresentation
+    init(model: TeamDeliveryPresentation) { _model = StateObject(wrappedValue: model) }
+    private func date(_ time: Double) -> String { Date(timeIntervalSince1970: time / 1000).formatted(date: .abbreviated, time: .shortened) }
+    @ViewBuilder private func record(_ event: TeamDeliveryEvent, now: Date) -> some View {
+        if let proof = event.evidence {
+            Text("버전 \(proof.package.version) · 빌드 \(proof.package.build)").font(.headline).accessibilityIdentifier("teamDeliveryBuild\(event.revision)")
+            Text(proof.isFresh(at: now) ? "확인한 시각: \(date(proof.observed_at)) · 유효: \(date(proof.valid_until))까지" : "확인한 시각: \(date(proof.observed_at)) · 현재 상태는 다시 확인이 필요해요.").font(.caption).accessibilityIdentifier("teamDeliveryFreshness\(event.revision)")
+            Text(event.availability == "group_available" && proof.groupAvailable(at: now) ? "내부 테스트 그룹에 빌드가 제공된 것을 확인했어요." : "현재 그룹의 설치 가능 여부는 확인되지 않았어요.").accessibilityIdentifier("teamDeliveryAvailability\(event.revision)")
+            Text("내 계정의 초대·참여 자격, 이 기기의 설치, 작성자의 해결 확인은 아직 확인되지 않았어요.").font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("teamDeliveryUnobserved\(event.revision)")
+            if let instructions = event.instructions { Text(instructions).textSelection(.enabled).accessibilityIdentifier("teamDeliveryInstructions\(event.revision)") }
+            Link("빌드 확인 기록 보기", destination: proof.observationURL)
+        } else { Text("작성자 삭제로 배포 근거가 제거됐어요.") }
+    }
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            List {
+                if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamDeliveryUnavailable") }
+                if let page = model.state.page {
+                    Section("최근 배포 기록") {
+                        if let current = page.current { record(current, now: context.date) }
+                        else { Text("아직 연결된 배포 기록이 없어요.").accessibilityIdentifier("teamDeliveryEmpty") }
+                    }
+                    if !model.state.events.isEmpty {
+                        Section("이전 기록") {
+                            ForEach(model.state.events.filter { $0.id != page.current?.id }) { event in
+                                VStack(alignment: .leading, spacing: 8) { record(event, now: context.date) }
+                            }
+                            if page.next_cursor != nil { Button("기록 더 보기") { Task { await model.controller?.more() } }.disabled(model.state.busy) }
+                        }
+                    }
+                }
+                if model.state.busy { ProgressView().accessibilityLabel("배포 근거 불러오는 중") }
+            }
+        }.navigationTitle("배포 버전과 확인 안내").navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy) }
+            .task { await model.controller?.open() }
+            .onDisappear { model.controller?.invalidate() }
     }
 }
