@@ -683,7 +683,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(refresh.isHittable); XCTAssertGreaterThanOrEqual(refresh.frame.height, 44)
         refresh.tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertFalse(syncing.exists, "The held history read must not restore the removed conversation spinner.")
         // Refresh may overlap the sheet dismissal. A voice button behind an
         // open settings surface is not yet a usable touch target.
         XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
@@ -693,7 +694,7 @@ final class StudioJourneyTests: XCTestCase {
                 && !voice.frame.isEmpty && app.frame.contains(voice.frame)
         }, object: voice)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
-        XCTAssertTrue(syncing.exists, "The voice action must still overlap the held history read.")
+        XCTAssertFalse(syncing.exists, "History activity is observed through the fixture barrier, not removed UI.")
         let before = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
         XCTAssertEqual(before["history_sync_automatic"] as? Bool, false, "This journey must hold the explicit Settings refresh, not an earlier quiet poll.")
         XCTAssertEqual(before["active_history_reads"] as? Int, 1)

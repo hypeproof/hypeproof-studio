@@ -820,3 +820,15 @@ the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitte
 twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
 This is local synthetic evidence; remote CI and physical-device acceptance remain
 separate. The prior failing CI evidence is retained.
+
+
+### Held history without removed status UI — 2026-11-18
+
+CI run44310557985 at2e7de2dc exposed an obsolete positive assertion for the
+removed `sharedSyncing` element. The queued-voice journey now waits for the
+fixture's actual active-history-read barrier and asserts that the removed UI
+stays absent. Existing held-read, voice capture, send-once, reply and resumed
+listening checks remain. Both this case and durable retry passed together in
+`/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
+All remaining references to the removed saved/account/sync labels in native
+journeys were checked; they assert absence, not stale positive visibility.
