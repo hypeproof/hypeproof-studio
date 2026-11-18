@@ -1154,3 +1154,48 @@ The synthetic transport retains its existing purge_implemented=false after
 reopening; its capability footer is not a statement about deployed retention.
 Requirement integrity PASS749; no runtime source changed after v3.
 No deployment, deletion job, provider push, TestFlight or phone acceptance claim.
+
+
+### Author text revisions — Studio #4379
+
+Core parser/controller slice35cea1d3 was independently reviewed and passed8
+focused controls in the root checkout before UI integration. The API/UI slice
+uses authenticated /:id/text/:target and supported_text_revision_schemas, the
+existing protected account draft store and a weak live-controller registry.
+Detail navigation clears comment focus before a generation-checked transition.
+Original/current labels and author/server timestamps are explicit; latest
+question metadata can point outside the loaded comment page.
+
+Core21 PASS `/tmp/ios4379-wire-core1.log`, wrapper exit0, includes9 text controls
+plus existing hidden-content/discussion controls. An explicit fresh edit can
+start from current authoritative text even when an acknowledged older receipt
+lies outside the loaded history; that withheld local body is not displayed.
+Native v3 `/tmp/ios4379-text-ui-3.xcresult` passed both focused journeys
+(59.709s and43.998s), with wrapper cleanup exit0. These exercise latest-question
+navigation beyond page1, immutable original, exact captured edited words,
+unknown same-key recovery, explicit conflict choice, author-only access and
+failed local-save export/cancel with zero POST. The existing explicit-question
+and selected-comment reply journey passed64.743s in v2 with identical app source.
+The v1/v2 failures remain preserved: test caret-position assumptions were replaced
+by exact single-insertion preservation; the v2 save-failure assertion failed on
+an offscreen diagnostic lookup after actionable export and disabled-send checks
+had passed. Bounded reveal fixed that diagnostic lookup without changing export.
+
+Viewed screenshot
+`/tmp/ios4379-text-ui-3-attachments/DE9EC64D-1E39-4FAD-9697-369323F1B66F.png`
+shows readable current/original text, author/server timestamps and history.
+The DEBUG trace and synthetic fixture dates are not production observations.
+Independent API/UI source review and targeted parent review passed.
+
+After native v3, a bounded Core correction accepts validated physically purged
+history after reopening and scrubs only an exact acknowledged receipt. Final
+`/tmp/ios4379-final-core2.log` passed10 controls, wrapper exit0, including hidden
+and readable physical-purge cases, one persistence per matching acknowledgment,
+private-body rejection and unchanged uncertain words/keys. Targeted source review
+passed; native v3 predates this Core-only correction (UI source unchanged).
+Requirement inventory check passed752 entries; `git diff --check` passed.
+Local release-check body contract passed via
+`/tmp/ios4379-release-check-validation.json`; the proposed section is
+`/tmp/ios4379-release-check.md`. This is not a remote release-check result.
+Synthetic transports are not real Service deployment, TestFlight readiness,
+phone installation or full integrated CI acceptance.

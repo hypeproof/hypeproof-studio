@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
     @Published var state = TeamRequestController.View()
+    var makeTextHistory: (String, String, String) -> TeamTextRevisionPresentation = { _, _, _ in TeamTextRevisionPresentation() }
     var makeOutcome: (String) -> TeamOutcomePresentation = { _ in TeamOutcomePresentation() }
     var makeDelivery: (String) -> TeamDeliveryPresentation = { _ in TeamDeliveryPresentation() }
     var makeGitHub: (String) -> TeamGitHubPresentation = { _ in TeamGitHubPresentation() }
@@ -102,6 +103,9 @@ struct TeamRequestDetailView: View {
     @FocusState private var commentFocused: Bool
     @State private var showRelated = false
     @State private var relatedProduct = "studio"
+    @State private var showTextHistory = false
+    @State private var textTarget = ""
+    @State private var textProduct = "studio"
     @State private var draft: TeamCommentDraft?
     @State private var busy = false
     @State private var storageReady = true
@@ -113,9 +117,17 @@ struct TeamRequestDetailView: View {
             if !message.isEmpty { Text(message).accessibilityIdentifier("teamCommentStatus") }
             if let detail {
                 Section("원문") {
-                    Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id)").font(.caption)
-                    if canChooseIntent { Button("원문에 답글") { choose("reply", target: requestID) }.accessibilityIdentifier("teamReplyToRequest") }
+                    Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id) · \(Date(timeIntervalSince1970: detail.request.created_at / 1000).formatted())").font(.caption)
+                    Button("현재 내용과 수정 이력") { openTextHistory(requestID, product: detail.request.product) }.buttonStyle(.borderless).disabled(busy || !storageReady).accessibilityIdentifier("teamRequestTextHistory")
+                    if canChooseIntent { Button("원문에 답글") { choose("reply", target: requestID) }.buttonStyle(.borderless).accessibilityIdentifier("teamReplyToRequest") }
                     if let retention = detail.retention, retention.hidden { Text(retention.marker).font(.caption).accessibilityIdentifier("teamHiddenContentNotice") }
+                }
+                if let question = detail.latest_question {
+                    Section("최근 올라온 질문") {
+                        Text("작성자: \(question.account_id) · \(Date(timeIntervalSince1970: question.created_at / 1000).formatted())").font(.caption)
+                        Button("질문 내용과 수정 이력 보기") { openTextHistory(question.target_id, product: detail.request.product) }.buttonStyle(.borderless).disabled(busy || !storageReady).accessibilityIdentifier("teamLatestQuestion")
+                        Text("작성 시각 기준이에요. 답변 여부나 해결 상태를 뜻하지 않아요.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
@@ -133,8 +145,10 @@ struct TeamRequestDetailView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(intentLabel(comment.discussionIntent)).font(.caption).accessibilityIdentifier("teamCommentIntent-" + comment.id)
                             if let target = comment.reply_to { Text(targetLabel(target)).font(.caption) }
-                            Text(comment.body).textSelection(.enabled); Text(comment.account_id).font(.caption).foregroundStyle(.secondary)
-                            if canChooseIntent { Button("이 댓글에 답글") { choose("reply", target: comment.id) }.accessibilityIdentifier("teamReplyTo-" + comment.id) }
+                            Text("처음 남긴 내용").font(.caption).foregroundStyle(.secondary)
+                            Text(comment.body).textSelection(.enabled); Text("\(comment.account_id) · \(Date(timeIntervalSince1970: comment.created_at / 1000).formatted())").font(.caption).foregroundStyle(.secondary)
+                            Button("현재 내용과 수정 이력") { openTextHistory(comment.id, product: detail.request.product) }.buttonStyle(.borderless).disabled(busy || !storageReady).accessibilityIdentifier("teamCommentTextHistory-" + comment.id)
+                            if canChooseIntent { Button("이 댓글에 답글") { choose("reply", target: comment.id) }.buttonStyle(.borderless).accessibilityIdentifier("teamReplyTo-" + comment.id) }
                         }
                     }
                     if detail.next_comments_cursor != nil { Button("댓글 더 보기") { Task { await refresh(more: true) } }.disabled(busy) }
@@ -174,6 +188,7 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showTextHistory) { TeamTextRevisionScreen(model: model.makeTextHistory(requestID, textTarget, textProduct)) }
             .navigationDestination(isPresented: $showRelated) { TeamRelationScreen(model: model.makeRelations(requestID, relatedProduct), requests: model) }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
@@ -193,6 +208,12 @@ struct TeamRequestDetailView: View {
             .alert("댓글을 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await submit() } }
             } message: { Text("이 제품 권한이 있는 내부 멤버에게 \(intentLabel(draft?.discussionIntent ?? "discussion"))를 공유해요. \(draft?.replyTo.map(targetLabel) ?? "")") }
+    }
+    private func openTextHistory(_ target: String, product: String) {
+        guard !busy, storageReady, TeamTextVersion.validTarget(target, request: requestID) else { return }
+        commentFocused = false; textTarget = target; textProduct = product
+        let expected = generation
+        DispatchQueue.main.async { if generation == expected && !busy && storageReady { showTextHistory = true } }
     }
     private var canChooseIntent: Bool { detail?.retention?.hidden != true && !busy && storageReady && draft?.phase == .draft && commentSchemas.contains("hps-team-comment/2") }
     private func intentLabel(_ intent: String) -> String { ["discussion":"논의", "question":"질문", "reply":"답글"][intent] ?? "논의" }

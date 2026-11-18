@@ -9,6 +9,7 @@ public struct TeamTextVersion: Codable, Equatable, Sendable, Identifiable {
     public let created_at: Double
     public let redacted_at: Double?
     public var retention: TeamContentRetention?
+    public var physicallyPurged: Bool { retention?.confirmsPurge(at: redacted_at) == true && body == TeamContentRetention.purgedMarker }
     public var authorID: String { account_id ?? actor_account_id ?? "" }
     public static func validTarget(_ value: String, request: String) -> Bool {
         value == request || (value.count == 36 && value.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil)
@@ -23,9 +24,10 @@ public struct TeamTextVersion: Codable, Equatable, Sendable, Identifiable {
                      client_mutation_id?.range(of: "^[A-Za-z0-9_-]{8,64}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse } }
         try retention?.validate()
         if retention?.hidden == true { guard body == retention?.marker else { throw SyncFailure.invalidResponse } }
+        else if retention?.confirmsPurge(at: redacted_at) == true { guard body == TeamContentRetention.purgedMarker else { throw SyncFailure.invalidResponse } }
     }
     public func matches(_ draft: TeamTextRevisionDraft) -> Bool {
-        request_id == draft.requestID && target_id == draft.targetID && actor_account_id == draft.accountID && client_mutation_id == draft.key && revision == draft.expectedRevision + 1 && (body == draft.body || retention?.hidden == true)
+        request_id == draft.requestID && target_id == draft.targetID && actor_account_id == draft.accountID && client_mutation_id == draft.key && revision == draft.expectedRevision + 1 && (body == draft.body || retention?.hidden == true || physicallyPurged)
     }
     func sameIdentity(as other: Self) -> Bool { id == other.id && request_id == other.request_id && target_id == other.target_id && account_id == other.account_id && actor_account_id == other.actor_account_id && client_mutation_id == other.client_mutation_id && revision == other.revision && created_at == other.created_at }
     public func hidden(using state: TeamContentRetention) -> Self { var copy = self; copy.body = state.marker; copy.retention = state; return copy }
@@ -164,7 +166,17 @@ public struct TeamTextRevisionDraft: Codable, Sendable {
             if let matching { guard matching.sameIdentity(as: receipt), matching.matches(pending) || receipt.retention?.hidden == true else { throw SyncFailure.invalidResponse } }
             if matching != nil || page.retention?.hidden == true {
                 if let state = page.retention, state.hidden { pending.receipt = receipt.hidden(using: state); pending.body = state.marker }
+                if let matching, matching.physicallyPurged { pending.receipt = matching; pending.body = matching.body }
                 view.draft = pending; withheldAcknowledged = nil; view.acknowledgedPending = false
+                if matching?.physicallyPurged == true, page.retention?.hidden != true { view.page = page; persist(pending) }
+            }
+        }
+        if page.retention?.hidden != true, var draft = view.draft, draft.phase == .received, let receipt = draft.receipt,
+           let matching = ([page.current] + page.events).first(where: { $0.id == receipt.id && $0.physicallyPurged }) {
+            guard matching.sameIdentity(as: receipt), matching.matches(draft) else { throw SyncFailure.invalidResponse }
+            if draft.body != matching.body || draft.receipt != matching {
+                draft.body = matching.body; draft.receipt = matching; view.page = page
+                view.events = view.events.map { $0.id == matching.id ? matching : $0 }; persist(draft)
             }
         }
         if let state = page.retention, state.hidden { view.page = page; view.events = view.events.map { $0.hidden(using: state) } }
@@ -178,6 +190,7 @@ public struct TeamTextRevisionDraft: Codable, Sendable {
         view.page = page
     }
     private var editable: Bool { view.supported && view.page?.can_edit == true && view.page?.original.authorID == binding?.accountID && view.page?.retention?.hidden != true && !view.historyNeedsRefresh }
+    public var editingAllowed: Bool { editable }
     public func open() async {
         guard !view.busy, view.storageReady else { return }; let g = UUID(); generation = g; view.busy = true; view.message = ""; clearRemote()
         if let draft = view.draft, draft.phase == .received { withheldAcknowledged = draft; view.draft = nil; view.acknowledgedPending = true }; changed(view)
@@ -196,10 +209,10 @@ public struct TeamTextRevisionDraft: Codable, Sendable {
     }
     /// Explicit action after a fresh authoritative read; never called automatically on conflict.
     public func beginEdit() {
-        guard !view.busy, view.storageReady, editable, let page = view.page, let old = view.draft, old.phase != .uncertain else { return }
+        guard !view.busy, view.storageReady, editable, let page = view.page, let old = view.draft ?? withheldAcknowledged, old.phase != .uncertain else { return }
         var next = TeamTextRevisionDraft(accountID: old.accountID, requestID: requestID, targetID: targetID, expectedRevision: page.current.revision)
         next.body = old.phase == .conflict || (old.phase == .draft && !old.body.isEmpty) ? old.body : page.current.body
-        persist(next)
+        withheldAcknowledged = nil; view.acknowledgedPending = false; persist(next)
     }
     public func editBody(_ value: String) { guard !view.busy, view.storageReady, editable, var draft = view.draft, draft.phase == .draft, value.utf16.count <= 5000, !value.contains("\0") else { return }; draft.body = value; persist(draft) }
     public func submit() async {
@@ -223,4 +236,16 @@ public struct TeamTextRevisionDraft: Codable, Sendable {
         do { let page = try await fetch(account, cursor); guard await current(g, account) else { return }; try accept(page, after: cursor) }
         catch { guard await current(g, account) else { return }; clearRemote(); view.message = "수정 이력을 더 읽지 못했어요. 새로고침해 주세요." }
     }
+}
+
+
+@MainActor public final class TeamTextRevisionControllers {
+    private final class Entry { weak var value: TeamTextRevisionController?; init(_ value: TeamTextRevisionController) { self.value = value } }
+    private var entries: [Entry] = []
+    public init() {}
+    public func register(_ controller: TeamTextRevisionController) {
+        entries.removeAll { $0.value == nil }
+        if !entries.contains(where: { $0.value === controller }) { entries.append(Entry(controller)) }
+    }
+    public func invalidate() { entries.removeAll { $0.value == nil }; entries.forEach { $0.value?.invalidate() } }
 }

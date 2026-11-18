@@ -10536,3 +10536,12 @@ identity. Logical hiding and completed physical cleanup have different labels.
 Fresh authoritative receipts scrub acknowledged copies; unknown sends keep their
 words and stable keys. See MTR-31–33 in
 [mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone author text revisions (#4379)
+
+Members read original and current request/comment text separately, with server
+byline/time and explicit revision history. Only the original author confirms an
+edit. Latest posted questions are visible independently of comment pagination;
+no answer/resolution judgment is inferred. See MTR-34–36 in
+[mobile growth requirements](requirements/mobile-growth-roadmap.md).

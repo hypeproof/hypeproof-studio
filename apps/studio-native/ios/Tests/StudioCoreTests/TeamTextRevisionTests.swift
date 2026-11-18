@@ -101,4 +101,34 @@ final class TeamTextRevisionTests: XCTestCase {
         stored.phase = .uncertain;stored.receipt=nil;controller.invalidate();await controller.open();XCTAssertEqual(controller.view.draft?.body,stored.body);XCTAssertTrue(controller.view.draft?.exportText.contains(stored.body)==true)
     }
 
+    @MainActor func testExplicitFreshEditDoesNotRequireOldReceiptInCurrentPage() async throws {
+        var stored = TeamTextRevisionDraft(accountID:"A",requestID:request,targetID:request)
+        stored.body="Old acknowledged words";stored.phase = .received;stored.receipt=try version(2,key:stored.key,body:stored.body)
+        let oldKey=stored.key, current=try version(60,body:"Authoritative current words")
+        let c=TeamTextRevisionController(requestID:request,targetID:request,identity:{self.identityA},discover:{_ in ["hps-team-text-change/1"]},fetch:{_,_ in try self.page(current:current,events:[])},send:{_,_ in throw SyncFailure.invalidResponse},load:{_ in stored},save:{stored=$0},changed:{_ in})
+        await c.open();XCTAssertNil(c.view.draft);XCTAssertTrue(c.view.acknowledgedPending)
+        c.beginEdit();XCTAssertEqual(c.view.draft?.body,"Authoritative current words");XCTAssertEqual(c.view.draft?.expectedRevision,60);XCTAssertNotEqual(c.view.draft?.key,oldKey);XCTAssertFalse(c.view.acknowledgedPending)
+    }
+    @MainActor func testPhysicalPurgeThenReopenScrubsOnlyMatchingAcknowledgedCopy() async throws {
+        for acknowledged in [true,false] {
+          for hidden in [false,true] {
+            var stored=TeamTextRevisionDraft(accountID:"A",requestID:request,targetID:request)
+            stored.body="Private old edit";stored.phase=acknowledged ? .received:.uncertain
+            let old=try version(2,key:stored.key,body:stored.body)
+            if acknowledged { stored.receipt=old }
+            var raw=try XCTUnwrap(JSONSerialization.jsonObject(with:JSONEncoder().encode(page(current:old,events:[old],canEdit:false))) as? [String:Any])
+            var state=retention(hidden);state["purged_outcome_revision"]=1;state["content_purged_at"]=4000
+            func purged(_ value:[String:Any])->[String:Any] { var copy=value;copy["body"]=TeamContentRetention.purgedMarker;copy["retention"]=state;if copy["revision"] as? Int != 1 {copy["redacted_at"]=4000};return copy }
+            raw["retention"]=state;raw["original"]=purged(raw["original"] as! [String:Any]);raw["current"]=purged(raw["current"] as! [String:Any]);raw["events"]=(raw["events"] as! [[String:Any]]).map(purged)
+            let reopened=try JSONDecoder().decode(TeamTextRevisionPage.self,from:JSONSerialization.data(withJSONObject:raw));try reopened.validate(request:request,target:request)
+            var sends=0,writes=0
+            let c=TeamTextRevisionController(requestID:request,targetID:request,identity:{self.identityA},discover:{_ in ["hps-team-text-change/1"]},fetch:{_,_ in reopened},send:{_,_ in sends+=1;throw SyncFailure.invalidResponse},load:{_ in stored},save:{writes+=1;stored=$0},changed:{_ in})
+            await c.open();XCTAssertNotNil(c.view.page);XCTAssertEqual(c.view.page?.retention?.hidden,hidden);XCTAssertEqual(writes,acknowledged ? 1:0)
+            XCTAssertEqual(stored.body,acknowledged ? TeamContentRetention.purgedMarker:"Private old edit");XCTAssertEqual(stored.key,old.client_mutation_id);XCTAssertEqual(stored.phase,acknowledged ? .received:.uncertain)
+            c.beginEdit();await c.submit();XCTAssertEqual(sends,0)
+            var leaking=raw["current"] as! [String:Any];leaking["body"]="Private old edit"
+            XCTAssertThrowsError(try JSONDecoder().decode(TeamTextVersion.self,from:JSONSerialization.data(withJSONObject:leaking)).validate(request:request,target:request))
+        }          }
+
+    }
 }

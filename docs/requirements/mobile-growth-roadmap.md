@@ -676,3 +676,16 @@ Consumes Service #590 logical hiding and existing retention cleanup. Actual D1
 route fixtures include the additive #593 response metadata, which this slice
 ignores; text revisions remain separate. No server feature activation, deletion
 job execution, TestFlight delivery or installed-phone acceptance is implied.
+
+
+### Author text revisions — Studio #4379
+
+| ID | Requirement |
+|---|---|
+| MTR-34 | Display immutable original, authenticated current text, author and server timestamps with bounded revision history. A failed fetch never promotes original text to current. Latest explicit question is independent of the oldest comment page and does not imply unanswered or resolved status. |
+| MTR-35 | Only the original author may explicitly confirm a supported text edit. Persist words, expected revision and stable mutation key before dispatch; unknown results recover with the exact payload. A definitive revision conflict requires fresh history and a deliberate new edit; never auto-rebase or change intent/reply target. |
+| MTR-36 | Preserve unsent/unknown edits and export on storage failure or account change. Withhold acknowledged local copies until fresh matching history; validated retention may hide acknowledged copies while preserving receipt identity. Navigation preserves unrelated drafts and all live controllers are cleared on account boundaries. |
+
+Uses Service #593 / PR #595 and existing authoring discovery, session binding and
+protected draft storage. No operator proxy edit, automatic edit notification,
+implicit publish, production activation or installed-device acceptance is granted.

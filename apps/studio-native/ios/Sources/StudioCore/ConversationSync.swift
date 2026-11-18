@@ -564,3 +564,18 @@ extension ConversationService {
         guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
     }
 }
+
+
+extension ConversationService {
+    public func teamTextHistory(id: String, target: String, after: String? = nil, token: String) async throws -> TeamTextRevisionPage {
+        guard TeamRequestRecord.validID(id), TeamTextVersion.validTarget(target, request: id), after.map({ TeamTextRevisionPage.cursor($0) != nil }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/text/" + target + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamTextRevisionPage.self, from: data); try page.validate(request: id, target: target, after: after); return page
+    }
+    public func reviseTeamText(_ draft: TeamTextRevisionDraft, token: String) async throws -> TeamTextVersion {
+        struct Receipt: Decodable { let event: TeamTextVersion; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/text/" + draft.targetID, method: "POST", body: draft.payload(), token: token)
+        let receipt = try JSONDecoder().decode(Receipt.self, from: data); try receipt.event.validate(request: draft.requestID, target: draft.targetID)
+        guard receipt.event.matches(draft) else { throw SyncFailure.invalidResponse }; return receipt.event
+    }
+}

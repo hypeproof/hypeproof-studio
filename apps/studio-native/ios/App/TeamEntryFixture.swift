@@ -56,6 +56,8 @@ private final class TeamEntryState: @unchecked Sendable {
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
     private var relationEvents:[[String:Any]] = [], relationPosts = 0
+    private var textEvents: [String:[[String:Any]]] = [:], textPosts = 0
+    private var textKeys: [String] = []
     private var githubObservationReads = 0
     private var githubEvents: [[String: Any]] = [], githubPosts = 0
     private var outcomeEvents: [[String: Any]] = [], outcomePosts = 0
@@ -66,7 +68,7 @@ private final class TeamEntryState: @unchecked Sendable {
     private var acceptedCapabilities: [String] = []
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "relationPosts":relationPosts,"relationEvents":relationEvents.count,"githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count, "subscriptionPosts":subscriptionPosts, "inboxReads":inboxReads, "readAcks":readAcks, "pushOpens":pushOpens, "capabilities":acceptedCapabilities], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "textPosts":textPosts,"textKeys":textKeys,"requestPosts": requestPosts, "commentPosts": commentPosts, "relationPosts":relationPosts,"relationEvents":relationEvents.count,"githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count, "subscriptionPosts":subscriptionPosts, "inboxReads":inboxReads, "readAcks":readAcks, "pushOpens":pushOpens, "capabilities":acceptedCapabilities], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func response(_ request: URLRequest, _ body: [String: Any]) throws -> (Int, [String: Any]) {
         lock.lock(); defer { lock.unlock() }
@@ -120,6 +122,29 @@ private final class TeamEntryState: @unchecked Sendable {
                     if route == "outcomes", outcomeEvents.isEmpty { outcomeEvents = result["events"] as? [[String:Any]] ?? [] }
                     return (200,result)
                 }
+            }
+            if ProcessInfo.processInfo.environment["HP_TEAM_TEXT"] == "1", path.contains("/text/"), let target=path.split(separator:"/").last.map(String.init) {
+                let latest="tcm_"+String(repeating:"e",count:32)
+                guard target==id || target==latest else { return (404,["error":"team_text_target_not_found"]) }
+                let readonly=ProcessInfo.processInfo.environment["HP_TEAM_TEXT_READONLY"] == "1"
+                let author=readonly ? "other-member":"journey-account"
+                let original:[String:Any] = ["request_id":id,"target_id":target,"account_id":author,"revision":1,"body":target==id ? teamRequest?["body"] ?? "Original request":"Latest explicit question beyond first page","created_at":target==id ? 1000:2001]
+                if request.httpMethod=="POST" {
+                    textPosts+=1;let key=body["client_mutation_id"] as? String ?? "";textKeys.append(key)
+                    guard !readonly else { return (403,["error":"team_text_author_required"]) }
+                    if let existing=textEvents[target]?.first(where:{$0["client_mutation_id"] as? String==key}) { return (200,["event":existing,"already":true]) }
+                    let revision=(textEvents[target]?.last?["revision"] as? Int ?? 1)+1
+                    if ProcessInfo.processInfo.environment["HP_TEAM_TEXT_RECOVERY"] == "1",textPosts==3 {
+                        let remote:[String:Any] = ["id":"ttv_"+String(format:"%032x",revision),"request_id":id,"target_id":target,"actor_account_id":author,"client_mutation_id":"other-device-key","revision":revision,"body":"Another device correction","created_at":3000+revision,"redacted_at":NSNull()]
+                        textEvents[target,default:[]].append(remote);return (409,["error":"team_text_revision_conflict"])
+                    }
+                    guard body["expected_revision"] as? Int==revision-1 else {return (409,["error":"team_text_revision_conflict"])}
+                    let event:[String:Any] = ["id":"ttv_"+String(format:"%032x",revision),"request_id":id,"target_id":target,"actor_account_id":author,"client_mutation_id":key,"revision":revision,"body":body["body"] ?? "","created_at":3000+revision,"redacted_at":NSNull()]
+                    textEvents[target,default:[]].append(event)
+                    if ProcessInfo.processInfo.environment["HP_TEAM_TEXT_RECOVERY"] == "1",textPosts==1 {return (503,["error":"synthetic_unknown"])}
+                    return (200,["event":event,"already":false])
+                }
+                return (200,["schema":"hps-team-text-history/1","request_id":id,"target_id":target,"can_edit":!readonly,"original":original,"current":textEvents[target]?.last ?? original,"events":textEvents[target] ?? [],"next_cursor":NSNull()])
             }
             let relatedID="trq_"+String(repeating:"b",count:32)
             let relatedRow:[String:Any] = ["id":relatedID,"account_id":"journey-account","client_request_id":"related-fixture","product":"studio","category":"bug","body":"Related original request","notice_version":"synthetic/1","status":"submitted","revision":1,"created_at":1001,"updated_at":1001]
@@ -224,7 +249,7 @@ private final class TeamEntryState: @unchecked Sendable {
             }
             switch (request.httpMethod ?? "GET", path) {
             case ("GET", "/v1/me/team-requests/access"):
-                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"], "supported_comment_schemas":ProcessInfo.processInfo.environment["HP_TEAM_DISCUSSION"] == "1" ? ["hps-team-comment/1","hps-team-comment/2"] : ["hps-team-comment/1"], "supported_push_capabilities":ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" ? ["team_request/1","team_discussion/1"] : []])
+                return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"], "supported_text_revision_schemas":ProcessInfo.processInfo.environment["HP_TEAM_TEXT"] == "1" ? ["hps-team-text-change/1"] : [], "supported_comment_schemas":ProcessInfo.processInfo.environment["HP_TEAM_DISCUSSION"] == "1" ? ["hps-team-comment/1","hps-team-comment/2"] : ["hps-team-comment/1"], "supported_push_capabilities":ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" ? ["team_request/1","team_discussion/1"] : []])
             case ("POST", "/v1/me/team-requests"):
                 requestPosts += 1
                 guard body["schema"] as? String == "hps-team-request/1", body["notice_version"] as? String == "synthetic/1", let key = body["client_request_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_request"]) }
@@ -242,7 +267,16 @@ private final class TeamEntryState: @unchecked Sendable {
                 return (200, ["requests": (teamRequest.map { [$0] } ?? []) + (ProcessInfo.processInfo.environment["HP_TEAM_RELATED"] == "1" ? [relatedRow]:[]), "next_cursor": NSNull()])
             default:
                 if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", ProcessInfo.processInfo.environment["HP_TEAM_DETAIL_FAILURE"] == "1" { return (503, ["error": "synthetic_detail_unavailable"]) }
-                if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", let teamRequest { return (200, ["request": teamRequest, "comments": teamComments, "next_comments_cursor": NSNull()]) }
+                if path == "/v1/me/team-requests/" + id, request.httpMethod == "GET", let teamRequest {
+                    var result:[String:Any] = ["request":teamRequest,"comments":teamComments,"next_comments_cursor":NSNull()]
+                    if ProcessInfo.processInfo.environment["HP_TEAM_TEXT"] == "1" {
+                        let latest="tcm_"+String(repeating:"e",count:32)
+                        result["latest_question"]=["request_id":id,"target_id":latest,"account_id":ProcessInfo.processInfo.environment["HP_TEAM_TEXT_READONLY"] == "1" ? "other-member":"journey-account","created_at":2001,"text_revision":textEvents[latest]?.last?["revision"] ?? 1,"edited_at":textEvents[latest]?.last?["created_at"] ?? NSNull()]
+                        // The latest question is deliberately outside this first comment page.
+                        result["next_comments_cursor"]="1001:tcm_"+String(repeating:"b",count:32)
+                    }
+                    return (200,result)
+                }
                 if path == "/v1/me/team-requests/" + id + "/comments", request.httpMethod == "POST" {
                     commentPosts += 1
                     guard let key = body["client_comment_id"] as? String, let words = body["body"] as? String else { return (400, ["error": "invalid_team_comment"]) }
