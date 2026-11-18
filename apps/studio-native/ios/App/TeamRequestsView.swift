@@ -92,8 +92,9 @@ struct TeamRequestDetailView: View {
     @State private var confirmLeave = false
     @ObservedObject var model: TeamRequestPresentation
     let requestID: String
-    @State private var detail: TeamRequestDetail?
-    @State private var comments: [TeamRequestComment] = []
+    @State private var history = TeamCommentHistory()
+    private var detail: TeamRequestDetail? { history.detail }
+    private var comments: [TeamRequestComment] { history.comments }
     @State private var commentSchemas: [String] = []
     @FocusState private var commentFocused: Bool
     @State private var draft: TeamCommentDraft?
@@ -128,7 +129,10 @@ struct TeamRequestDetailView: View {
                     if detail.next_comments_cursor != nil { Button("댓글 더 보기") { Task { await refresh(more: true) } }.disabled(busy) }
                 }
             }
-            if let draft {
+            if let draft, !history.canDisplay(draft) {
+                Text("보관 상태가 바뀌어 저장된 댓글 내용을 다시 확인하고 있어요. 새로고침하거나 이전 댓글을 더 확인해 주세요.")
+            }
+            if let draft, history.canDisplay(draft) {
                     Section {
                         Text(draft.needsReplyTarget == true ? "답글 대상을 선택해 주세요" : intentLabel(draft.discussionIntent)).accessibilityIdentifier("teamCommentSelectedIntent")
                         if let target = draft.replyTo { Text(targetLabel(target)).accessibilityIdentifier("teamCommentReplyTarget") }
@@ -175,7 +179,7 @@ struct TeamRequestDetailView: View {
             .task(id: requestID) {
                 do { draft = try model.loadComment(requestID) } catch { storageReady = false; message = "저장된 댓글을 읽지 못했어요. 원본을 유지했어요." }
                 await refresh()
-            }.onDisappear { generation = UUID(); busy = false; detail = nil; comments = [] }
+            }.onDisappear { generation = UUID(); busy = false; history.clear() }
             .alert("댓글을 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await submit() } }
             } message: { Text("이 제품 권한이 있는 내부 멤버에게 \(intentLabel(draft?.discussionIntent ?? "discussion"))를 공유해요. \(draft?.replyTo.map(targetLabel) ?? "")") }
@@ -215,10 +219,15 @@ struct TeamRequestDetailView: View {
         guard !busy else { return }; busy = true; let g = generation
         defer { if g == generation { busy = false } }
         do {
-            let result = try await model.detail(requestID, more ? detail?.next_comments_cursor : nil)
+            var result = try await model.detail(requestID, more ? detail?.next_comments_cursor : nil)
             guard g == generation, !Task.isCancelled else { return }
-            if more { let known = Set(comments.map(\.id)); comments += result.comments.filter { !known.contains($0.id) } } else { comments = result.comments }
-            detail = result
+            if try !history.accept(result, more: more) {
+                // A purge between pages invalidates every previously loaded row.
+                // Fetch from the beginning; never append another generation.
+                result = try await model.detail(requestID, nil)
+                guard g == generation, !Task.isCancelled else { return }
+                _ = try history.accept(result, more: false)
+            }
             if var local = draft, local.observeTombstone(result) {
                 draft = local
                 do { try model.saveComment(local) } catch { storageReady = false; message = "서버에서 삭제된 내용의 기기 사본을 정리하지 못했어요." }
@@ -227,7 +236,7 @@ struct TeamRequestDetailView: View {
                 let supported = try await model.commentSchemas(result.request.product)
                 guard g == generation, !Task.isCancelled else { return }; commentSchemas = supported
             } catch { if g == generation { commentSchemas = []; message = "지금 작성 가능한 방식을 확인하지 못했어요. 새로고침해 주세요." } }
-        } catch { if g == generation { detail = nil; comments = []; commentSchemas = []; message = "논의를 불러오지 못했어요. 로그인과 제품 권한을 확인해 주세요." } }
+        } catch { if g == generation { history.clear(); commentSchemas = []; message = "논의를 불러오지 못했어요. 로그인과 제품 권한을 확인해 주세요." } }
     }
     private func submit() async {
         guard !busy, storageReady, var draft, draft.phase != .received, draft.definitiveRejection == nil, draft.needsReplyTarget != true,

@@ -967,3 +967,14 @@ writability. A stored content-expired draft stays unavailable/exportable; an old
 purge mark does not prove current write permission after a later reopening.
 That reactivation needs a separately defined current writable contract. The
 client does not infer it or automatically retry an expired send.
+
+4370 retention review correction: comment pages now share one purge generation.
+A changed purge revision clears accumulated rows before a read-only first-page
+refetch; an older refetch cannot restore them. Acknowledged local content stays
+hidden until fresh matching account/key/receipt content is reconciled. Uncertain
+and unsent drafts are not removed. The pre-purge page1/post-purge page2 regression
+and the existing Discussion controls passed together (Core6) in
+`/tmp/ios4370-core-retention-pages.log`, exit0. The actual simulator-target App
+build passed in `/tmp/ios4370-retention-app-build.log`, exit0. Native v4 evidence
+above predates this pagination correction; it was not relabeled as a final-head
+UI rerun.

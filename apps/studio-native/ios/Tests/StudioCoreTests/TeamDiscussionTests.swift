@@ -56,6 +56,22 @@ final class TeamDiscussionTests: XCTestCase {
         row.reply_to = "trq_" + String(repeating:"c",count:32); XCTAssertThrowsError(try row.validate(request:request))
         row.intent = nil; row.reply_to = nil; XCTAssertEqual(row.discussionIntent,"discussion")
     }
+    func testPurgeBetweenPagesDropsOldContentAndReconcilesFirstPageReceipt() throws {
+        var acknowledged = TeamCommentDraft(accountID:"A", requestID:request)
+        acknowledged.body = "Private page one"; acknowledged.phase = .received; acknowledged.receipt = commentID
+        let record = TeamRequestRecord(id:request, account_id:"A", client_request_id:"key", product:"studio", category:"bug", body:"Original", notice_version:"test", status:"submitted", revision:1, created_at:1000, updated_at:1000)
+        let first = TeamRequestDetail(request:record,comments:[comment(body:acknowledged.body,key:acknowledged.key)],next_comments_cursor:"1000:" + commentID)
+        let mark = TeamCommentRetention(policy:"90_days_after_reporter_confirmation",purge_implemented:true,content_purged_at:2000,purged_outcome_revision:2)
+        var second = TeamRequestDetail(request:record,comments:[],next_comments_cursor:nil); second.retention = mark
+        var history = TeamCommentHistory(); XCTAssertTrue(try history.accept(first,more:false)); XCTAssertTrue(history.canDisplay(acknowledged))
+        XCTAssertFalse(try history.accept(second,more:true)); XCTAssertTrue(history.comments.isEmpty); XCTAssertNil(history.detail); XCTAssertFalse(history.canDisplay(acknowledged))
+        XCTAssertThrowsError(try history.accept(first,more:false),"An older first page cannot restore private content after a known purge.")
+        var fresh = TeamRequestDetail(request:record,comments:[comment(body:"보관 기간이 지나 내용이 삭제됐어요.",key:acknowledged.key)],next_comments_cursor:nil); fresh.retention = mark
+        XCTAssertTrue(try history.accept(fresh,more:false)); XCTAssertFalse(history.comments.contains { $0.body == "Private page one" })
+        var uncertain = acknowledged; uncertain.phase = .uncertain; uncertain.receipt = nil
+        XCTAssertTrue(history.canDisplay(uncertain)); XCTAssertFalse(uncertain.observeTombstone(fresh)); XCTAssertEqual(uncertain.body,"Private page one")
+        XCTAssertTrue(acknowledged.observeTombstone(try XCTUnwrap(history.detail))); XCTAssertEqual(acknowledged.body,""); XCTAssertTrue(history.canDisplay(acknowledged))
+    }
     func testServerTombstoneScrubsOnlyMatchingAcknowledgedCommentNeverUncertainDraft() throws {
         var draft = TeamCommentDraft(accountID:"A",requestID:request); draft.body="Private retained text"; draft.phase = .uncertain
         let record = TeamRequestRecord(id:request, account_id:"A", client_request_id:"key", product:"studio", category:"bug", body:"Original", notice_version:"test", status:"submitted", revision:1, created_at:1000, updated_at:1000)

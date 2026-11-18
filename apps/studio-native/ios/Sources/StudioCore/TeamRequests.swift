@@ -104,6 +104,34 @@ public struct TeamRequestDetail: Decodable, Sendable {
     }
 }
 
+/// Accumulated comment pages share one server retention generation.
+public struct TeamCommentHistory: Sendable {
+    public private(set) var detail: TeamRequestDetail?
+    public private(set) var comments: [TeamRequestComment] = []
+    private var minimumPurgedRevision = 0
+    public init() {}
+    public mutating func clear() { detail = nil; comments = [] }
+    /// False requests a fresh first page after old content has already been hidden.
+    public mutating func accept(_ page: TeamRequestDetail, more: Bool) throws -> Bool {
+        try page.validate(id: page.request.id)
+        let incoming = page.retention?.purged_outcome_revision ?? 0
+        let previous = detail?.retention?.purged_outcome_revision ?? 0
+        if more, previous != incoming {
+            minimumPurgedRevision = max(minimumPurgedRevision, previous, incoming)
+            clear(); return false
+        }
+        guard incoming >= minimumPurgedRevision, detail == nil || detail?.request.id == page.request.id else { clear(); throw SyncFailure.invalidResponse }
+        minimumPurgedRevision = max(minimumPurgedRevision, incoming)
+        if more { let known = Set(comments.map(\.id)); comments += page.comments.filter { !known.contains($0.id) } }
+        else { comments = page.comments }
+        detail = page; return true
+    }
+    public func canDisplay(_ draft: TeamCommentDraft) -> Bool {
+        guard draft.phase == .received, !draft.body.isEmpty, minimumPurgedRevision > 0 else { return true }
+        return comments.contains { $0.id == draft.receipt && $0.account_id == draft.accountID && $0.client_comment_id == draft.key && $0.body == draft.body }
+    }
+}
+
 /// Account/session-bound intake. No automatic POST replay; an uncertain send keeps its stable key.
 @MainActor public final class TeamRequestController {
     public struct View {
