@@ -957,6 +957,16 @@
         "MADR-03",
         "MADR-04",
         "MADR-05",
+        "MENT-01",
+        "MENT-02",
+        "MENT-03",
+        "MENT-04",
+        "MENT-05",
+        "MENT-06",
+        "MFB-01",
+        "MFB-02",
+        "MFB-03",
+        "MFB-04",
         "MFR-01",
         "MFR-02",
         "MFR-03",
@@ -975,21 +985,6 @@
         "MREF-04",
         "MREF-05",
         "MTF-01",
-        "MVOICE-01",
-        "MVOICE-02",
-        "MVOICE-03",
-        "MVOICE-04",
-        "MVOICE-05",
-        "MENT-01",
-        "MENT-02",
-        "MENT-03",
-        "MENT-04",
-        "MENT-05",
-        "MENT-06",
-        "MFB-01",
-        "MFB-02",
-        "MFB-03",
-        "MFB-04",
         "MTR-01",
         "MTR-02",
         "MTR-03",
@@ -1000,12 +995,20 @@
         "MTR-08",
         "MTR-09",
         "MTR-10",
-        "MTR-11"
+        "MTR-11",
+        "MTR-12",
+        "MTR-13",
+        "MTR-14",
+        "MVOICE-01",
+        "MVOICE-02",
+        "MVOICE-03",
+        "MVOICE-04",
+        "MVOICE-05"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "57dbd1429f210f7dccbdde247beaea0d585925512fddd8bd4267476bba347527",
+      "sha256": "4b8385bb65e925aba8d5dfe33956857b89baa138d1894ab5636329f88860813f",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5441,6 +5444,41 @@
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
         "apps/studio-native/ios/App/TeamEntryFixture.swift",
         "apps/studio-native/scripts/ios-verify.sh"
+      ]
+    },
+    {
+      "id": "ios-internal-delivery-m2",
+      "title": "iOS request delivery evidence and verification instructions",
+      "issue": 4364,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-12",
+            "MTR-13",
+            "MTR-14"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-github-m1"
+      ],
+      "next_action": "Verify the read-only delivery screen against the deployed Service contract, then obtain exact-source CI and separate TestFlight/device acceptance.",
+      "design_delta": "Display bounded provider evidence through existing account sessions; retain the distinction between group availability, personal eligibility, installation and reporter confirmation.",
+      "positive_control": "Current version/build and ordered history show instructions and expiry; explicit refresh and pagination preserve request scope.",
+      "negative_control": "Expired evidence loses availability wording; unavailable API is not an empty result; late account responses are discarded; read-only UI cannot resolve or associate delivery.",
+      "evidence_required": "Core and native fixture results, exact-source CI and device build; separately deployed Service, member enrollment, TestFlight availability and actual iPhone acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift",
+        "apps/studio-native/ios/App/TeamRequestsView.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamDeliveryTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift"
       ]
     }
   ]
