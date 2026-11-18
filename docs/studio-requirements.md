@@ -10545,3 +10545,14 @@ byline/time and explicit revision history. Only the original author confirms an
 edit. Latest posted questions are visible independently of comment pagination;
 no answer/resolution judgment is inferred. See MTR-34–36 in
 [mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone explicit public summaries (#4381)
+
+Internal members can explicitly sign in to Lab and preview a separately authored
+public summary for the product's configured repository. Submission reuses Intake
+and may publish immediately under existing policy. Unknown results retain the
+original approval/key; existing verified issue and board/association states remain
+separate. Only current operators may associate the published issue with an
+internal request. Implementation evidence and installed-device acceptance are
+tracked separately; see MTR-37–39 in the mobile growth roadmap.

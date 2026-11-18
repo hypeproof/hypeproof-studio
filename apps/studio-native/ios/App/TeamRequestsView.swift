@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
     @Published var state = TeamRequestController.View()
+    var makeIntake: (String, String) -> TeamIntakePresentation = { _, _ in TeamIntakePresentation() }
     var makeTextHistory: (String, String, String) -> TeamTextRevisionPresentation = { _, _, _ in TeamTextRevisionPresentation() }
     var makeOutcome: (String) -> TeamOutcomePresentation = { _ in TeamOutcomePresentation() }
     var makeDelivery: (String) -> TeamDeliveryPresentation = { _ in TeamDeliveryPresentation() }
@@ -101,6 +102,8 @@ struct TeamRequestDetailView: View {
     private var comments: [TeamRequestComment] { history.comments }
     @State private var commentSchemas: [String] = []
     @FocusState private var commentFocused: Bool
+    @State private var showIntake = false
+    @State private var intakeProduct = "studio"
     @State private var showRelated = false
     @State private var relatedProduct = "studio"
     @State private var showTextHistory = false
@@ -132,6 +135,10 @@ struct TeamRequestDetailView: View {
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
+                Section { Button("공개 요청으로 제안") {
+                    commentFocused = false; intakeProduct = detail.request.product; let expected = generation
+                    DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { showIntake = true } }
+                }.disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
                     Button("관련 요청") {
                         commentFocused = false; relatedProduct = detail.request.product
@@ -188,6 +195,7 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showIntake) { TeamIntakeScreen(model: model.makeIntake(requestID, intakeProduct)) }
             .navigationDestination(isPresented: $showTextHistory) { TeamTextRevisionScreen(model: model.makeTextHistory(requestID, textTarget, textProduct)) }
             .navigationDestination(isPresented: $showRelated) { TeamRelationScreen(model: model.makeRelations(requestID, relatedProduct), requests: model) }
             .navigationBarBackButtonHidden(!storageReady || busy)
@@ -409,7 +417,7 @@ private struct TeamWorkflowScreen: View {
     var controller: TeamGitHubController?
     var makeObservations: (() -> TeamGitHubObservationPresentation)?
 }
-private struct TeamGitHubScreen: View {
+struct TeamGitHubScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: TeamGitHubPresentation
     @State private var confirmSend = false

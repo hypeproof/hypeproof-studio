@@ -215,6 +215,7 @@ private final class TeamEntryState: @unchecked Sendable {
                 let canManage = ProcessInfo.processInfo.environment["HP_TEAM_GITHUB_READONLY"] != "1"
                 if request.httpMethod == "POST" {
                     githubPosts += 1
+                    if ProcessInfo.processInfo.environment["HP_TEAM_INTAKE_ASSOCIATION_FAIL"] == "1" { return (503,["error":"provider_unavailable"]) }
                     guard canManage else { return (403, ["error": "team_workflow_denied"]) }
                     if let old = githubEvents.first(where: { $0["client_mutation_id"] as? String == body["client_mutation_id"] as? String }) { return (200, ["event": old, "already": true]) }
                     guard body["expected_revision"] as? Int == githubEvents.count else { return (409, ["error": "team_github_conflict"]) }
@@ -231,7 +232,7 @@ private final class TeamEntryState: @unchecked Sendable {
                     if ProcessInfo.processInfo.environment["HP_TEAM_GITHUB_UNKNOWN"] == "1" { throw URLError(.timedOut) }
                     return (200,["event":event,"already":false])
                 }
-                return (200,["schema":"hps-team-github-links/1","request_id":id,"can_manage":canManage,"current":githubEvents.last ?? NSNull(),"events":githubEvents,"next_cursor":NSNull()])
+                return (200,["schema":"hps-team-github-links/1","configured_repository":"hypeproof/hypeproof-studio","request_id":id,"can_manage":canManage,"current":githubEvents.last ?? NSNull(),"events":githubEvents,"next_cursor":NSNull()])
             }
             if path == "/v1/me/team-requests/" + id + "/workflow" {
                 if request.httpMethod == "POST" {

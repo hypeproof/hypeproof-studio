@@ -1199,3 +1199,25 @@ Local release-check body contract passed via
 `/tmp/ios4379-release-check.md`. This is not a remote release-check result.
 Synthetic transports are not real Service deployment, TestFlight readiness,
 phone installation or full integrated CI acceptance.
+
+
+### Explicit public request summaries — Studio #4381
+
+Initial durable Core a22a5448 was independently reviewed before native integration.
+The native integration adds explicit Lab login, public-summary preview and
+confirmation, exact-key recovery and separately confirmed operator association.
+Synthetic Intake HTTP/MCP responses follow the existing Service source contract;
+they make no provider calls. The selected principal metadata is nonsecret; its
+bearer is stored only in the separate Keychain adapter. Every account boundary
+clears that scoped vault even if no Intake screen remains alive.
+
+Planned native controls cover cancel without publication, committed-but-unknown
+submission recovery with the same key, published issue retention after association
+failure, and exportable words after local save failure. Earlier isolated Core
+controls (9) and adapter controls (3) passed before the final policy-recovery and
+UTF-8 payload-size changes. Final Core/adapter source is `30752e94`; its combined
+run never started because the shared-resource wait expired (exit 75). The native
+journeys have not run. Source review, project-file validation and requirement
+inventory checks do not establish runtime, provider, Keychain-device, TestFlight
+or production acceptance. The complete reviewed candidate is preserved for CI;
+no local timeout, assertion or resource safeguard was bypassed.

@@ -206,6 +206,7 @@ public enum SyncFailure: Error, LocalizedError {
 public final class ConversationService: @unchecked Sendable {
     private let session: URLSession
     private let base: URL
+    public var serviceOrigin: String { base.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
     public init(session: URLSession = .shared, base: URL = URL(string: "https://api.hypeproof-ai.xyz")!) { self.session = session; self.base = base }
     private func path(_ id: String) throws -> String {
         guard !id.isEmpty, id.count <= 128, id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }

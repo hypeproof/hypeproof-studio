@@ -453,6 +453,67 @@ final class TeamEntryUITests: XCTestCase {
         let value=trace.value as? String ?? "{}"
         return (try? JSONSerialization.jsonObject(with:Data(value.utf8))) as? [String:Any] ?? [:]
     }
+    @MainActor private func intakeReveal(_ app:XCUIApplication,_ item:XCUIElement) {
+        if item.exists && item.isHittable { return }
+        let top=app.staticTexts["teamIntakeTrace"]
+        for _ in 0..<6 { if top.exists && top.isHittable { break }; app.swipeDown() }
+        for _ in 0..<8 { if item.exists && item.isHittable { return }; app.swipeUp() }
+        XCTAssertTrue(item.isHittable)
+    }
+    @MainActor private func intakeTrace(_ app: XCUIApplication) throws -> [String:Any] {
+        let item = app.staticTexts["teamIntakeTrace"]
+        for _ in 0..<6 { if item.exists { break }; app.swipeDown() }
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data((item.value as? String ?? "{}").utf8)) as? [String:Any])
+    }
+    @MainActor func testIntakeExplicitPreviewUnknownRecoveryPreservesPublishedIssue() throws {
+        let app = githubApp(["HP_TEAM_INTAKE":"unknown","HP_TEAM_TEXT":"1","HP_TEAM_RELATED":"1","HP_TEAM_INTAKE_ASSOCIATION_FAIL":"1"])
+        githubReveal(app, app.buttons["teamIntakeEntry"]); app.buttons["teamIntakeEntry"].tap()
+        XCTAssertTrue(app.buttons["teamIntakeLogin"].waitForExistence(timeout:10)); app.buttons["teamIntakeLogin"].tap()
+        XCTAssertTrue(app.staticTexts["teamIntakeCode"].waitForExistence(timeout:10)); XCTAssertEqual(app.staticTexts["teamIntakeCode"].label,"ABCD-1234")
+        XCTAssertTrue(XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:app.buttons["teamIntakePoll"])],timeout:5) == .completed); app.buttons["teamIntakePoll"].tap()
+        XCTAssertTrue(app.buttons["teamIntakeDisconnect"].waitForExistence(timeout:10))
+        for (id,words) in [("teamIntakeTitle","Public test summary"),("teamIntakeIntent","Help the team"),("teamIntakeChange","Improve the request screen"),("teamIntakeAcceptance","The visible result is usable")] {
+            let field = app.descendants(matching:.any).matching(identifier:id).firstMatch
+            intakeReveal(app,field); field.tap(); field.typeText(words); XCTAssertEqual(field.value as? String,words)
+        }
+        intakeReveal(app,app.buttons["teamIntakePreview"]); app.buttons["teamIntakePreview"].tap()
+        intakeReveal(app,app.buttons["teamIntakeSend"]); app.buttons["teamIntakeSend"].tap(); app.alerts.buttons["취소"].tap()
+        XCTAssertEqual(try intakeTrace(app)["posts"] as? Int,0)
+        intakeReveal(app,app.buttons["teamIntakeSend"]); app.buttons["teamIntakeSend"].tap(); app.alerts.buttons["확인하고 전송"].tap()
+        XCTAssertTrue(app.staticTexts["teamIntakeFailure"].waitForExistence(timeout:10))
+        intakeReveal(app,app.buttons["teamIntakeSend"]); app.buttons["teamIntakeSend"].tap(); app.alerts.buttons["확인하고 전송"].tap()
+        intakeReveal(app, app.descendants(matching:.any).matching(identifier:"teamIntakeIssue").firstMatch); XCTAssertTrue(app.descendants(matching:.any).matching(identifier:"teamIntakeIssue").firstMatch.isHittable)
+        let keys = try XCTUnwrap(intakeTrace(app)["keys"] as? [String]); XCTAssertEqual(keys.count,2); XCTAssertEqual(keys[0],keys[1])
+        intakeReveal(app,app.buttons["teamIntakeAssociate"]); app.buttons["teamIntakeAssociate"].tap()
+        XCTAssertTrue(app.navigationBars["GitHub 연결 근거"].waitForExistence(timeout:10))
+        githubReveal(app,app.buttons["teamGitHubSend"]); app.buttons["teamGitHubSend"].tap(); app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamGitHubMessage"].waitForExistence(timeout:10))
+        let associationTrace = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(githubTrace(app).utf8)) as? [String:Any]); XCTAssertEqual(associationTrace["githubPosts"] as? Int,1); XCTAssertEqual(associationTrace["githubEvents"] as? Int,0)
+        app.navigationBars.buttons.element(boundBy:0).tap()
+        intakeReveal(app, app.descendants(matching:.any).matching(identifier:"teamIntakeIssue").firstMatch); XCTAssertTrue(app.descendants(matching:.any).matching(identifier:"teamIntakeIssue").firstMatch.isHittable); XCTAssertEqual(try intakeTrace(app)["posts"] as? Int,2)
+    }
+
+    @MainActor func testIntakeFailedSummarySaveKeepsExportAndBlocksPublication() throws {
+        let app = githubApp(["HP_TEAM_INTAKE":"normal","HP_TEAM_TEXT":"1","HP_TEAM_RELATED":"1","HP_TEAM_DRAFT_SAVE_FAILURE":"intake","HP_TEAM_INTAKE_DISCONNECT_FAIL":"1"])
+        githubReveal(app,app.buttons["teamIntakeEntry"]); app.buttons["teamIntakeEntry"].tap()
+        XCTAssertTrue(app.buttons["teamIntakeLogin"].waitForExistence(timeout:10));app.buttons["teamIntakeLogin"].tap()
+        XCTAssertTrue(app.buttons["teamIntakePoll"].waitForExistence(timeout:10))
+        XCTAssertTrue(XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:app.buttons["teamIntakePoll"])],timeout:5) == .completed);app.buttons["teamIntakePoll"].tap()
+        XCTAssertTrue(app.buttons["teamIntakeDisconnect"].waitForExistence(timeout:10))
+        app.buttons["teamIntakeDisconnect"].tap()
+        XCTAssertTrue(app.staticTexts["teamIntakeMessage"].waitForExistence(timeout:5));XCTAssertTrue(app.staticTexts["teamIntakeMessage"].label.contains("지우지 못했어요"))
+        XCTAssertTrue(app.buttons["teamIntakeDisconnect"].exists);XCTAssertFalse(app.buttons["teamIntakeLogin"].exists)
+        let authTrace=try intakeTrace(app);XCTAssertEqual(authTrace["starts"] as? Int,1);XCTAssertEqual(authTrace["polls"] as? Int,1)
+        let title=app.descendants(matching:.any).matching(identifier:"teamIntakeTitle").firstMatch
+        intakeReveal(app,title);title.tap();title.typeText("Unstored public summary");XCTAssertEqual(title.value as? String,"Unstored public summary")
+        intakeReveal(app,app.buttons["teamIntakeSummaryExport"]);XCTAssertTrue(app.buttons["teamIntakeSummaryExport"].isHittable);XCTAssertFalse(app.buttons["teamIntakePreview"].isEnabled)
+        XCTAssertEqual(try intakeTrace(app)["posts"] as? Int,0)
+        intakeReveal(app,app.buttons["teamIntakeRefresh"]);app.buttons["teamIntakeRefresh"].tap()
+        intakeReveal(app,title);XCTAssertEqual(title.value as? String,"Unstored public summary")
+        app.navigationBars["공개 요청 제안"].buttons["닫기"].tap();app.alerts.buttons["계속 작성"].tap()
+        intakeReveal(app,title);XCTAssertEqual(title.value as? String,"Unstored public summary")
+    }
+
     @MainActor func testTextHistoryLatestQuestionUnknownRecoveryAndConflictChoice() throws {
         let app=githubApp(["HP_TEAM_TEXT":"1","HP_TEAM_TEXT_RECOVERY":"1","HP_TEAM_RELATED":"1"])
         let latest=app.buttons["teamLatestQuestion"];githubReveal(app,latest);latest.tap()

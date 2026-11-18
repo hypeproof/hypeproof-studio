@@ -689,3 +689,22 @@ job execution, TestFlight delivery or installed-phone acceptance is implied.
 Uses Service #593 / PR #595 and existing authoring discovery, session binding and
 protected draft storage. No operator proxy edit, automatic edit notification,
 implicit publish, production activation or installed-device acceptance is granted.
+
+
+### Explicit public request summaries — Studio #4381
+
+| ID | Requirement |
+|---|---|
+| MTR-37 | Reuse separate Lab DeviceAuth and the existing Intake MCP publisher. Validate endpoints, expire/cancel authorization and isolate secrets in Keychain; never infer Lab identity from Studio membership. Each operation binds both identities, source revisions, exact approved public summary, destination and durable key. |
+| MTR-38 | Require a visible public-summary preview and explicit confirmation before submit/revise because current policy may publish immediately. Intersect authenticated configured repository with Intake policy, recheck before dispatch, and preserve the exact uncertain operation across restart or explicit same-owner reauthentication. Never automatically publish private history or manufacture an authority decision. |
+| MTR-39 | Keep verified issue creation separate from project linkage and internal association. Reconcile existing proposals/publications; operator-only association requires its own explicit confirmation and cannot erase a published issue on failure. Storage, account, policy and retention failures preserve unsent/unknown summary export and prevent silent rekey or resend. |
+
+Service source contract: `worker/src/routes/intake-device-auth.ts`,
+`worker/src/lib/intake/device-auth.ts`, `worker/src/routes/intake.ts`,
+`worker/src/lib/intake/policy.ts`, `worker/src/lib/intake/service.ts`, and
+`worker/src/lib/team-request-github-links.ts` in `hypeproof/hypeproof-service`.
+Initial runtime audit was d31bb402; configured repository discovery is #596/PR597.
+The native preview covers the submitted structured summary; Service may append
+review annotations. This is not a signed server-side source-revision delegation.
+No remembered login/refresh, new publication authority, provider write during
+validation, production feature activation or installed-device acceptance is granted.

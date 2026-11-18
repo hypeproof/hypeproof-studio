@@ -655,6 +655,7 @@ public struct TeamGitHubEvent: Codable, Sendable, Identifiable {
     }
 }
 public struct TeamGitHubPage: Decodable, Sendable {
+    public var configured_repository: String? = nil
     public let schema, request_id: String
     public let can_manage: Bool
     public let current: TeamGitHubEvent?
@@ -662,7 +663,7 @@ public struct TeamGitHubPage: Decodable, Sendable {
     public let next_cursor: String?
     public var retention: TeamContentRetention? = nil
     public func validate(request: String) throws {
-        guard schema == "hps-team-github-links/1", request_id == request, events.count <= 50 else { throw SyncFailure.invalidResponse }
+        guard schema == "hps-team-github-links/1", request_id == request, events.count <= 50, configured_repository.map(IntakeProposal.repository) ?? true else { throw SyncFailure.invalidResponse }
         try retention?.validate()
         if let current { try current.validate(request: request); try retention?.validateScope(current.retention) }
         var previous = 0
