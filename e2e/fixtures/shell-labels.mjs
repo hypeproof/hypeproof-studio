@@ -46,6 +46,7 @@ const EN_CORE = {
   'workbench.action.reloadWindow': 'Developer: Reload Window',
   'workbench.action.revertAndCloseActiveEditor': 'View: Revert and Close Editor',
   'workbench.action.closeWindow': 'Close Window',
+  'workbench.action.switchWindow': 'Switch Window...',
 };
 const EN_MENU = {file: ['File'], exit: ['Exit']};
 const EN_CATALOG_LABELS = {'open': ['Open']};
@@ -59,6 +60,7 @@ const CORE = {
   'workbench.action.reloadWindow': ['developer', 'vs/workbench/browser/actions/windowActions', 'reloadWindow'],
   'workbench.action.revertAndCloseActiveEditor': ['view', 'vs/workbench/browser/parts/editor/editorActions', 'revertAndCloseActiveEditor'],
   'workbench.action.closeWindow': [null, 'vs/workbench/electron-browser/actions/windowActions', 'closeWindow'],
+  'workbench.action.switchWindow': [null, 'vs/workbench/electron-browser/actions/windowActions', 'switchWindow'],
 };
 // Menu items: label key per menu (titlebar menu on Windows/Linux). "&&" marks the mnemonic.
 const MENU = {

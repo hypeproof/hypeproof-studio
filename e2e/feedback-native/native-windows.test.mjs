@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {ownedWindowPrerequisite,newOwnedWorkbench} from './native-windows.mjs';
+import {coreCommandLabel} from '../fixtures/shell-labels.mjs';
 test('two-window ownership refuses local/attach/wrong receipt/linked roots before any input',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'native-window-guards-'));
  try{const data=path.join(dir,'profile'),workspace=Object.fromEntries(['a','b','c'].map(n=>[n,path.join(dir,n)]));for(const p of[data,...Object.values(workspace)])fs.mkdirSync(p);
@@ -22,7 +23,7 @@ test('public Switch Window starts in focused owner and selects complete observed
  const {switchOwnedWindow}=await import('./native-windows.mjs');const events=[];let sourceFocus=true,targetFocus=false;
  const from={workbenchId:'C',endpoint:'http://127.0.0.1:9777',workbench:async()=>({evaluate:async()=>sourceFocus}),palette:async title=>events.push(['palette',title]),quick:async title=>{events.push(['quick',title]);targetFocus=true;sourceFocus=false;}};
  const to={workbenchId:'A',endpoint:from.endpoint,workbench:async()=>({evaluate:async expression=>expression==='document.title'?'[DEV] Chat — A 전체 경로':targetFocus})};
- await switchOwnedWindow(from,to);assert.deepEqual(events,[['palette','Switch Window...'],['quick','[DEV] Chat — A 전체 경로']]);
+ await switchOwnedWindow(from,to);assert.deepEqual(events,[['palette',coreCommandLabel('workbench.action.switchWindow')],['quick','[DEV] Chat — A 전체 경로']]);
  events.length=0;await switchOwnedWindow(from,to);assert.deepEqual(events,[],'already focused target is observation only');
  targetFocus=false;await assert.rejects(switchOwnedWindow(from,to),/actually focused/);assert.deepEqual(events,[]);
  await assert.rejects(switchOwnedWindow(from,{...to,workbenchId:'C'}),/distinct/);
