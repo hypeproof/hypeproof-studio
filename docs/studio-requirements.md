@@ -10241,8 +10241,9 @@ availability requires exact app/version/build/group identity, completed processi
 internal testing, explicit group association and an unexpired build. Reconcile
 the existing source/IPA evidence before and after provider reads. Upload receipts
 remain unchanged; group availability cannot establish reporter membership,
-invitation acceptance, installation or resolution. Protected workflow publication
-and Service consumption are pending until their actual evidence is verified.
+invitation acceptance, installation or resolution. A main-only protected observation workflow publishes separate run/attempt-bound
+evidence. Actual protected execution, Apple permissions and Service consumption
+remain unverified until their live evidence is collected.
 
 ## Show what I made (#3794 slice 1)
 

@@ -19075,6 +19075,9 @@
         },
         {
           "path": "apps/studio-native/scripts/apple-testflight-observation.py"
+        },
+        {
+          "path": ".github/workflows/studio-testflight-observe.yml"
         }
       ]
     },

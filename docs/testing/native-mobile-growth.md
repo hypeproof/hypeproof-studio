@@ -373,7 +373,10 @@ processing/expiry/group state, complete bounded pagination, state changes during
 reads, changed upload attempts, safe transport errors and the distinction between
 group availability and tester/device evidence. `collect` invokes the existing
 native release reconciler instead of trusting caller-supplied receipt JSON.
-This suite does not verify live Apple permissions, workflow artifact provenance,
+The suite additionally verifies a real OpenSSL ES256 signature, token expiry,
+trusted workflow/source admission, scoped credential isolation and enforced
+streaming byte/time limits using local child processes. It does not verify live
+Apple permissions, workflow artifact provenance,
 the reporter's Apple identity or installation. Those remain required integration
 work; this module alone must not enable a user-facing resolved action.
 

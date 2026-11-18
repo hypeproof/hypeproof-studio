@@ -1,10 +1,17 @@
 """Provider fixture evidence only; never Apple acceptance or physical installation."""
 import copy
+import base64
 from datetime import datetime, timezone, timedelta
 import importlib.util
+import json
+import io
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location('apple_observer',
     Path(__file__).resolve().parents[1] / 'scripts/apple-testflight-observation.py')
@@ -152,6 +159,79 @@ class ObservationTests(unittest.TestCase):
         reader._remaining = 0
         with self.assertRaises(observer.Refused): reader('/v1/apps/42')
         with self.assertRaises(observer.Refused): observer.NoRedirect().redirect_request(None)
+
+    def test_workflow_only_context_rejects_wrong_source_ref_and_request_target(self):
+        env = {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': 'hypeproof/hypeproof-studio',
+               'GITHUB_REF': 'refs/heads/main', 'GITHUB_EVENT_NAME': 'workflow_dispatch',
+               'GITHUB_WORKFLOW_REF': 'hypeproof/hypeproof-studio/.github/workflows/studio-testflight-observe.yml@refs/heads/main',
+               'GITHUB_SHA': 'a' * 40, 'OBSERVE_EXPECTED_SHA': 'a' * 40,
+               'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2',
+               'OBSERVE_RELEASE_REQUEST': json.dumps({'repository': 'hypeproof/hypeproof-studio',
+                   'workflow': 'studio-apple-testflight.yml', 'platform': 'ios', 'ref': 'main'})}
+        _, context = observer.workflow_context(env)
+        self.assertEqual(context['run_attempt'], 2)
+        for field, value in [('GITHUB_REF', 'refs/heads/attacker'), ('GITHUB_EVENT_NAME', 'pull_request'),
+                             ('OBSERVE_EXPECTED_SHA', 'b' * 40), ('GITHUB_RUN_ID', '0'),
+                             ('GITHUB_WORKFLOW_REF', 'untrusted'), ('OBSERVE_RELEASE_REQUEST', '{}')]:
+            with self.subTest(field=field), self.assertRaises(observer.Refused):
+                observer.workflow_context({**env, field: value})
+
+    def test_actions_reader_refuses_write_scope_and_never_uses_ambient_credentials(self):
+        with patch.dict(os.environ, {'GH_TOKEN': 'ambient-human-token', 'APP_STORE_CONNECT_PRIVATE_KEY': 'private'}):
+            reader = observer.WorkflowActions('workflow-only-token')
+            with patch.object(observer, 'bounded_command', return_value=b'{}') as run:
+                reader.api('repos/hypeproof/hypeproof-studio/actions/runs/123')
+                call = run.call_args
+                self.assertEqual(call.args[0][0:4], ['gh', 'api', '--method', 'GET'])
+                self.assertEqual(call.args[1]['GH_TOKEN'], 'workflow-only-token')
+                self.assertNotIn('APP_STORE_CONNECT_PRIVATE_KEY', call.args[1])
+                for path in ['repos/hypeproof/other/actions/runs',
+                             'repos/hypeproof/hypeproof-studio/issues/1',
+                             'repos/hypeproof/hypeproof-studio/actions/../issues']:
+                    with self.assertRaises(observer.Refused): reader.api(path)
+                self.assertEqual(run.call_count, 1)
+
+    def test_response_limits_stop_real_reader_before_excess_bytes_are_written(self):
+        args = [sys.executable, '-c', 'import sys; sys.stdout.write("x" * 10000)']
+        sink = io.BytesIO()
+        with self.assertRaises(observer.Refused):
+            observer.bounded_command(args, {}, limit=100, output=sink)
+        self.assertLessEqual(len(sink.getvalue()), 100)
+        with self.assertRaises(observer.Refused): observer.bounded_command(args, {}, limit=100)
+        self.assertEqual(observer.bounded_command([sys.executable, '-c', 'print("ok", end="")'],
+                                                  {}, limit=2), b'ok')
+        with self.assertRaises(observer.Refused):
+            observer.bounded_command([sys.executable, '-c', 'import time; time.sleep(10)'],
+                                     {}, limit=100, timeout=0.05)
+
+    def test_real_openssl_token_signature_and_expiry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = subprocess.check_output(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout'])
+            token = observer.apple_token('ABC1234567', '12345678-1234-1234-1234-123456789abc',
+                                         private.decode(), 1000)
+            header, payload, signature = token.split('.')
+            def decode(value): return base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
+            self.assertEqual(json.loads(decode(header))['alg'], 'ES256')
+            self.assertEqual(json.loads(decode(payload)), {'iss': '12345678-1234-1234-1234-123456789abc',
+                                                         'iat': 970, 'exp': 1600, 'aud': 'appstoreconnect-v1'})
+            raw = decode(signature)
+            self.assertEqual(len(raw), 64)
+            integers = []
+            for part in (raw[:32], raw[32:]):
+                value = part.lstrip(b'\x00')
+                if value[0] & 0x80: value = b'\x00' + value
+                integers.append(b'\x02' + bytes([len(value)]) + value)
+            body = b''.join(integers)
+            (root / 'signature').write_bytes(b'\x30' + bytes([len(body)]) + body)
+            public = subprocess.check_output(['openssl', 'pkey', '-pubout'], input=private)
+            (root / 'public.pem').write_bytes(public)
+            check = subprocess.run(['openssl', 'dgst', '-sha256', '-verify', str(root / 'public.pem'),
+                                    '-signature', str(root / 'signature')], input=(header + '.' + payload).encode(),
+                                    capture_output=True)
+            self.assertEqual(check.returncode, 0)
+            for bad in [b'', b'\x30\x00', b'\x30\x06\x02\x01\x80\x02\x01\x01']:
+                with self.assertRaises(observer.Refused): observer.raw_es256(bad)
 
 
 if __name__ == '__main__':

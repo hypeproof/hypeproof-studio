@@ -5,11 +5,17 @@ No persisted JSON receipt is accepted as proof of upload. Workflow authenticatio
 and publication must bind this output to their exact trusted source separately.
 """
 from datetime import datetime, timedelta, timezone
+import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import selectors
+import subprocess
 import sys
+import tempfile
+import time
 from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
@@ -86,11 +92,6 @@ def attributes(value):
     result = value.get('attributes')
     require(isinstance(result, dict), 'missing Apple attributes')
     return result
-
-
-def relationship(value, name, kind, expected_id):
-    data = value.get('relationships', {}).get(name, {}).get('data')
-    require(data == {'type': kind, 'id': expected_id}, 'Apple relationship mismatch')
 
 
 def group_has_build(read, group_id, build_id):
@@ -212,3 +213,163 @@ def collect(actions, request, request_digest, read, **target):
                        read, **target)
     finally:
         sys.path.remove(str(release_root))
+
+
+def encoded(value):
+    return base64.urlsafe_b64encode(value).rstrip(b'=')
+
+
+def raw_es256(signature):
+    """OpenSSL DER ECDSA -> JWT's fixed-width R || S representation."""
+    require(8 <= len(signature) <= 72 and signature[0] == 0x30
+            and signature[1] == len(signature) - 2, 'invalid ES256 signature')
+    offset, result = 2, b''
+    for _ in range(2):
+        require(offset + 2 <= len(signature) and signature[offset] == 2, 'invalid ES256 integer')
+        size = signature[offset + 1]
+        value = signature[offset + 2:offset + 2 + size]
+        require(1 <= size <= 33 and len(value) == size and not value[0] & 0x80
+                and (size == 1 or value[0] != 0 or value[1] & 0x80), 'invalid ES256 integer')
+        integer = int.from_bytes(value, 'big')
+        require(0 < integer < 2 ** 256, 'invalid ES256 scalar')
+        result += integer.to_bytes(32, 'big')
+        offset += size + 2
+    require(offset == len(signature), 'trailing ES256 signature bytes')
+    return result
+
+
+def apple_token(key_id, issuer, private_key, timestamp):
+    require(isinstance(key_id, str) and re.fullmatch('[A-Z0-9]{10}', key_id), 'invalid Apple key ID')
+    require(isinstance(issuer, str) and re.fullmatch('[a-fA-F0-9-]{36}', issuer), 'invalid Apple issuer')
+    require(isinstance(private_key, str) and 0 < len(private_key) <= 8192, 'missing Apple private key')
+    header = encoded(json.dumps({'alg': 'ES256', 'kid': key_id, 'typ': 'JWT'}, separators=(',', ':')).encode())
+    claims = encoded(json.dumps({'iss': issuer, 'iat': timestamp - 30, 'exp': timestamp + 600,
+                                 'aud': 'appstoreconnect-v1'}, separators=(',', ':')).encode())
+    payload = header + b'.' + claims
+    # Neither key nor token enters argv, stdout or provider-error diagnostics.
+    with tempfile.TemporaryDirectory(prefix='hps-apple-observe-') as directory:
+        key = Path(directory) / 'key.p8'
+        descriptor = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, 'w') as stream:
+            stream.write(private_key)
+        result = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', str(key)],
+                                input=payload, capture_output=True, timeout=15,
+                                env={'PATH': os.defpath})
+        require(result.returncode == 0, 'Apple token signing failed')
+    return (payload + b'.' + encoded(raw_es256(result.stdout))).decode()
+
+
+def bounded_command(args, env, *, limit, output=None, timeout=180):
+    """Stop our own reader process before an oversized response reaches storage."""
+    deadline = time.monotonic() + timeout
+    content, size = bytearray(), 0
+    with subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, env=env) as process:
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    require(remaining > 0 and selector.select(remaining), 'Actions read timed out')
+                    chunk = os.read(process.stdout.fileno(), min(65536, limit - size + 1))
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    require(size <= limit, 'Actions response exceeds enforced byte bound')
+                    if output is None:
+                        content.extend(chunk)
+                    else:
+                        output.write(chunk)
+            require(process.wait(timeout=max(0.001, deadline - time.monotonic())) == 0,
+                    'Actions observation read failed')
+            return bytes(content)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+
+
+class WorkflowActions:
+    """Only the workflow's explicit read-only token; no local account fallback."""
+    def __init__(self, token):
+        require(isinstance(token, str) and token, 'missing workflow Actions token')
+        self._env = {'PATH': os.environ.get('PATH', os.defpath), 'GH_TOKEN': token,
+                     'GH_HOST': 'github.com', 'GH_PROMPT_DISABLED': '1'}
+        self._remaining = 60
+
+    def _run(self, path, output=None):
+        require(isinstance(path, str) and re.fullmatch(
+            r'repos/hypeproof/hypeproof-studio/actions/[A-Za-z0-9_./?=&-]+', path)
+            and '..' not in path, 'outside read-only Studio Actions scope')
+        require(self._remaining > 0, 'Actions observation read budget exhausted')
+        self._remaining -= 1
+        return bounded_command(['gh', 'api', '--method', 'GET', path], self._env,
+                               output=output, limit=1024 ** 3 if output else 16 * 1024 * 1024)
+
+    def api(self, path):
+        body = self._run(path)
+        require(len(body) <= 16 * 1024 * 1024, 'Actions response exceeds bound')
+        return json.loads(body)
+
+    def artifact_zip(self, repo, artifact_id, destination):
+        require(repo == 'hypeproof/hypeproof-studio' and type(artifact_id) is int and artifact_id > 0,
+                'invalid Actions artifact identity')
+        with Path(destination).open('xb') as output:
+            self._run(f'repos/{repo}/actions/artifacts/{artifact_id}/zip', output)
+        require(0 < Path(destination).stat().st_size <= 1024 ** 3, 'Actions artifact exceeds bound')
+
+
+def workflow_context(env):
+    require(env.get('GITHUB_ACTIONS') == 'true'
+            and env.get('GITHUB_REPOSITORY') == 'hypeproof/hypeproof-studio'
+            and env.get('GITHUB_REF') == 'refs/heads/main'
+            and env.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+            and env.get('GITHUB_WORKFLOW_REF') ==
+                'hypeproof/hypeproof-studio/.github/workflows/studio-testflight-observe.yml@refs/heads/main',
+            'observation requires the trusted main workflow')
+    sha = env.get('GITHUB_SHA', '')
+    require(re.fullmatch('[a-f0-9]{40}', sha), 'invalid observation source')
+    require(env.get('OBSERVE_EXPECTED_SHA') == sha, 'observation workflow source moved')
+    for field in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'):
+        require(re.fullmatch('[1-9][0-9]*', env.get(field, '')), 'invalid observation run identity')
+    request_text = env.get('OBSERVE_RELEASE_REQUEST', '')
+    require(len(request_text) <= 16384, 'release request too large')
+    request = json.loads(request_text)
+    require(isinstance(request, dict) and request.get('repository') == 'hypeproof/hypeproof-studio'
+            and request.get('workflow') == 'studio-apple-testflight.yml'
+            and request.get('platform') == 'ios' and request.get('ref') == 'main',
+            'unexpected release request target')
+    return request, {'repository': env['GITHUB_REPOSITORY'], 'source_sha': sha,
+                     'run_id': int(env['GITHUB_RUN_ID']), 'run_attempt': int(env['GITHUB_RUN_ATTEMPT']),
+                     'workflow': '.github/workflows/studio-testflight-observe.yml'}
+
+
+def main():
+    request, provenance = workflow_context(os.environ)
+    root = Path(__file__).resolve().parents[3]
+    head = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+    dirty = subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain',
+                                     '--untracked-files=no'], text=True).strip()
+    require(head == provenance['source_sha'] and not dirty, 'observation checkout differs from trusted source')
+    token = apple_token(os.environ.get('APP_STORE_CONNECT_KEY_ID'), os.environ.get('APP_STORE_CONNECT_ISSUER_ID'),
+                        os.environ.pop('APP_STORE_CONNECT_PRIVATE_KEY', None), int(datetime.now(timezone.utc).timestamp()))
+    actions = WorkflowActions(os.environ.pop('GH_TOKEN', None))
+    result = collect(actions, request, os.environ.get('OBSERVE_REQUEST_DIGEST'), AppleReader(token),
+                     app_id=os.environ.get('OBSERVE_APP_ID'), build_id=os.environ.get('OBSERVE_BUILD_ID'),
+                     group_id=os.environ.get('OBSERVE_GROUP_ID'))
+    result['observation_run'] = provenance
+    # Exclusive output: a failed rerun cannot leave or relabel a stale observation.
+    output = Path(os.environ['RUNNER_TEMP']) / 'testflight-observation.json'
+    with output.open('x') as stream:
+        json.dump(result, stream, sort_keys=True, indent=2)
+        stream.write('\n')
+    print('Read-only TestFlight observation saved; tester and device acceptance remain unobserved.')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        # No traceback can accidentally reveal secret material or provider bodies.
+        print('TestFlight observation refused; no availability evidence published.', file=sys.stderr)
+        sys.exit(1)

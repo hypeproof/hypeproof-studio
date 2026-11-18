@@ -1,0 +1,67 @@
+name: Studio TestFlight Observation
+run-name: studio-testflight-observe:${{ inputs.request_digest }}
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact trusted main SHA for this observation workflow
+        required: true
+        type: string
+      release_request:
+        description: Exact previously dispatched native release request JSON (not a receipt)
+        required: true
+        type: string
+      request_digest:
+        description: Previously dispatched native release request digest
+        required: true
+        type: string
+      app_id:
+        description: Exact Apple app ID
+        required: true
+        type: string
+      build_id:
+        description: Exact Apple build resource ID
+        required: true
+        type: string
+      group_id:
+        description: Exact internal beta group ID
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: studio-testflight-observe
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: github.repository == 'hypeproof/hypeproof-studio' && github.ref == 'refs/heads/main' && inputs.expected_sha == github.sha
+    environment: apple-native-preview
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe exact uploaded build without changing Apple state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          OBSERVE_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          OBSERVE_RELEASE_REQUEST: ${{ inputs.release_request }}
+          OBSERVE_REQUEST_DIGEST: ${{ inputs.request_digest }}
+          OBSERVE_APP_ID: ${{ inputs.app_id }}
+          OBSERVE_BUILD_ID: ${{ inputs.build_id }}
+          OBSERVE_GROUP_ID: ${{ inputs.group_id }}
+        run: python3 apps/studio-native/scripts/apple-testflight-observation.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-testflight-observation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/testflight-observation.json
+          if-no-files-found: error
+          retention-days: 14
