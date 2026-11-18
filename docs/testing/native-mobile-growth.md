@@ -816,3 +816,26 @@ the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitte
 twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
 This is local synthetic evidence; remote CI and physical-device acceptance remain
 separate. The prior failing CI evidence is retained.
+
+### Accessibility evidence collection regression — 2026-11-19
+
+Run44326111986 at source2c6d0f83 failed two of43 UI cases;92 Core cases passed.
+Its checkoute83b9db3 has the same native tree and workflow blobs as the source
+head, recorded in the native-candidate artifact. LongHistory failed its initial
+login-enabled wait before any history action. Its final video frame shows the
+guest screen without a storage-error message; this does not establish why the
+accessibility wait failed. Failed enabled waits now preserve one element snapshot
+and the composer screen without changing the original wait result or repeating
+the user's action.
+
+MemberInbox reached its final draft and one-POST/recovery-GET assertions, then
+exceeded180seconds while collecting evidence. The retained spindump shows the
+test runner and app traversing accessibility snapshots in evidence/trace, not
+account storage. The test now reuses that already-asserted final trace for its
+attachment, retaining the screenshot, assertions and unchanged timeout budgets.
+
+Focused local Xcode27.2 validation passed both cases in84.670seconds:
+LongHistory40.217s and MemberInbox44.453s. Runner and owned-simulator cleanup
+exited0. Evidence: `/tmp/ios-4360-accessibility-regression.log` and `.xcresult`.
+Independent source review found no weakened assertion. The earlier remote run
+remains FAIL; this focused pass is not a complete remote or physical acceptance.
