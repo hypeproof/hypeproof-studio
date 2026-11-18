@@ -159,6 +159,21 @@ permission to resend. This adds no approval engine, desktop build or bypass of
 the existing environment and source-CI gates. MTF-T01 covers the contract; live
 trusted workflow and Harness consumption remain distinct acceptance evidence.
 
+Studio #4362 extends observation without changing upload or release authority.
+Use read-only Apple metadata with existing protected credentials; never transfer
+Apple keys to Service. Emit a separate short-lived group observation, bound to
+canonical upload reconciliation and package identity. Repeat critical reads to
+detect changes. Unknown processing states, incomplete pages and access failures
+cannot establish availability. Group assignment is not an accepted invitation or
+physical installation, and no implicit mapping from a Studio user to an Apple
+tester is permitted. The separate main-only observation workflow uses the existing protected Apple
+environment, a short-lived locally signed token, GET-only scoped GitHub reads,
+and bounded transport. It publishes only successful observations; no release
+dispatch, signing certificate or provider mutation is involved. Actual protected
+execution and downstream request linkage remain integration acceptance work.
+Cost is at most 15 Ubuntu runner minutes per explicit invocation, no model calls,
+and no additional paid Apple subscription. No schedule or automatic retry is added.
+
 
 ## Native voice client slice — #3687
 
