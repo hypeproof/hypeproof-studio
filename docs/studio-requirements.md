@@ -10460,3 +10460,11 @@ main-conversation syncing spinner. Preserve background synchronization and all
 actionable error, retry, logout, pending-send and unsent-draft warnings. Settings
 may still indicate an in-progress refresh. The intent is to keep attention on
 the conversation while retaining information needed for user judgment.
+
+
+### Durable retry touch target — 2026-11-18
+
+A saved local request's explicit retry action must expose at least a 44pt touch
+area. A single activation retries the preserved request identity and words;
+restart and background history reads must not create an automatic replay.
+This applies the existing native touch-target contract to the outbox action.
