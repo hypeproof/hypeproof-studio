@@ -122,7 +122,7 @@ struct SharedConversationView: View {
                         Image(systemName: "sidebar.left").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel("대화 기록").accessibilityIdentifier("conversationHistory")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     if model.signedIn { Button("팀 알림") { voice.stop(); focused = false; pendingTeamRequest = nil; showTeamInbox = true }.disabled(model.loggingOut).accessibilityIdentifier("teamInboxHomeEntry") }
                     if model.signedIn { Button("팀 요청") { voice.stop(); focused = false; showTeamRequests = true }.disabled(model.loggingOut).accessibilityIdentifier("teamRequestHomeEntry") }
                 }
