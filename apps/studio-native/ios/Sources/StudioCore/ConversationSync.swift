@@ -464,3 +464,17 @@ extension ConversationService {
         try receipt.event.validate(request: draft.requestID); guard receipt.event.matches(draft) else { throw SyncFailure.invalidResponse }; return receipt.event
     }
 }
+
+extension ConversationService {
+    public func teamGitHub(id: String, after: String? = nil, token: String) async throws -> TeamGitHubPage {
+        guard TeamRequestRecord.validID(id), after.map({ $0.count <= 9 && !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/github" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamGitHubPage.self, from: data); try page.validate(request: id); return page
+    }
+    public func associateTeamGitHub(_ draft: TeamGitHubDraft, token: String) async throws -> TeamGitHubEvent {
+        struct Receipt: Decodable { let event: TeamGitHubEvent; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/github", method: "POST", body: draft.payload(), token: token)
+        let event = try JSONDecoder().decode(Receipt.self, from: data).event
+        try event.validate(request: draft.requestID); guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
+    }
+}

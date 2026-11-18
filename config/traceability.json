@@ -20549,6 +20549,45 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-GITHUB",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Internal GitHub association client — Studio #4349"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone internal GitHub association evidence (#4349)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-GITHUB",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-GITHUB",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Internal GitHub association client — Studio #4349"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }

@@ -10422,3 +10422,14 @@ require refresh and explicit rebase. This is internal triage, not completed
 delivery or reporter resolution. Canonical requirements and test cases are in
 `mobile-growth-roadmap.md` and `testing/native-mobile-growth.md` (MTR-06–08,
 MTR-T04–05). Production policy and real-device evidence remain separate gates.
+
+## iPhone internal GitHub association evidence (#4349)
+
+MTR-09/10/11 require operator-authorized existing-issue association from request
+detail, verified provider metadata with canonical repository URLs, complete optional
+PR/SHA/CI run-attempt evidence, ordered history and verification timestamps.
+Association is an operator assertion, not provider-proven issue/PR causality.
+CI never implies TestFlight availability, device installation or reporter acceptance.
+Edits and uncertain mutation keys stay account-scoped and durable; only explicit
+confirmation sends. Cancellation, read-only access and failed storage send nothing.
+Core and native UI controls belong to the mobile roadmap/testing contract.

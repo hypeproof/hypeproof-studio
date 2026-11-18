@@ -757,3 +757,23 @@ acceptance. TestFlight and physical accessibility remain separate acceptance.
 `testInternalWorkflowCancelSaveAndHistory` uses DEBUG-only synthetic transport;
 it does not prove deployed API integration or installed-device acceptance.
 Service owns the insert/read revocation and product membership controls.
+
+### Internal GitHub association client — Studio #4349
+
+Core `TeamGitHubTests` covers durable uncertain-before-send, restart without replay,
+explicit same-key recovery, read-only access, disk failure, refresh-before-rebase,
+late account reply rejection, complete lineage input, foreign URLs and ordered history.
+Actual native `TeamEntryUITests` covers cancel with zero synthetic posts, explicit
+save with one event, refreshed metadata, read-only access and unsaved export/exit guard.
+The DEBUG fixture never contacts GitHub or the production Service and contains no
+provider credentials. Its counters distinguish requests from stored associations.
+
+Focused local validation: seven Core tests passed in
+`artifacts/m1/github-core-3.log`; three native simulator journeys passed in
+`artifacts/m1/github-ui-4.log`. Earlier failed UI attempts remain in
+`github-ui-1.log` (SwiftUI declaration), `github-ui-2.log` (offscreen receipt)
+and `github-ui-3.log` (history accessibility identity). Final UI assertions
+use bounded real scrolling and confirm one stored event, cancellation with
+zero POSTs, and two explicit same-key POSTs with one event after an unknown result. These fixtures do not prove deployed Service #567 integration,
+actual operator grants, Apple processing, TestFlight availability, installation
+or reporter confirmation. Those gates remain NOT RUN.

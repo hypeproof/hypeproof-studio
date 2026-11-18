@@ -558,3 +558,16 @@ rollout, the source API is disabled and current records stay submitted/unresolve
 
 Existing Lab membership plus separate product enrollment remains the admission
 contract. Operator-policy choice and production activation remain pending.
+
+### Internal GitHub association client — Studio #4349
+
+| ID | Requirement |
+|---|---|
+| MTR-09 | Show verified existing GitHub issue and optional complete PR/source SHA/CI run-attempt records, verification time and ordered association history. Distinguish operator-asserted association from provider records; CI never proves TestFlight availability or reporter confirmation. |
+| MTR-10 | Only server-authorized operators may explicitly associate an existing issue with a reason. Repository selection and provider credentials stay server-side. Never publish private request text or reason to GitHub. |
+| MTR-11 | Preserve protected account-scoped edits and a stable mutation key across unknown outcomes and restart. Cancel sends nothing; definitive conflicts require refresh before explicit rebase. Reject foreign URLs, mismatched receipts and delayed account/session replies. Storage failure preserves export and guards exit. |
+
+This slice consumes Service #567 (source 9e20acf) without activating a production
+registry, running a migration, publishing GitHub content or changing operator policy.
+The existing 18.1 release contains M0 only; source and simulator results are separate
+from deployed API integration and physical-device acceptance.

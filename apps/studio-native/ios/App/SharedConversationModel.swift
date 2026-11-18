@@ -204,6 +204,24 @@ private struct SharedCacheFile: Codable {
             try draft.validate(account: draft.accountID, request: draft.requestID)
             try self.writeTeamDraft(draft, account: draft.accountID, name: draft.requestID + ".json")
         }
+        presentation.makeGitHub = { [weak self] request in
+            let github = TeamGitHubPresentation()
+            github.controller = TeamGitHubController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamGitHub(id: request, after: after, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.associateTeamGitHub(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }
+                return try self.readTeamDraft(TeamGitHubDraft.self, account: account, name: request + "-github.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request)
+                try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-github.json")
+            }, changed: { [weak github] in github?.state = $0 })
+            return github
+        }
         presentation.makeWorkflow = { [weak self] request, product in
             let workflow = TeamWorkflowPresentation()
             workflow.controller = TeamWorkflowController(requestID: request, product: product, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
@@ -242,6 +260,7 @@ private struct SharedCacheFile: Codable {
     }
     private func writeTeamDraft<T: Encodable>(_ value: T, account: String, name: String) throws {
 #if DEBUG
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "github", name.hasSuffix("-github.json"), let draft = value as? TeamGitHubDraft, !draft.reason.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
         if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "comment" && name.hasPrefix("trq_") { throw CocoaError(.fileWriteOutOfSpace) }
 #endif
         let file = try teamDraftFile(account: account, name: name)
