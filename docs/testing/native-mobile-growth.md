@@ -1109,3 +1109,14 @@ The link/unlink screenshot from passing v3 was also inspected:
 `/tmp/ios4375-link-3-attachments/DD9767A4-503D-4D1C-917A-33B914864F5B.png`.
 Final targeted focus/navigation source review PASS. Requirement integrity PASS746.
 No product source changed after v6; only this evidence record was completed.
+
+
+### Full related-request suite budget — 2026-11-19
+
+Run44352970455 attempt3 atcae1f21b passed147Core and59UI tests (2410.189seconds
+forUI), but its iOS job was cancelled after reaching the55-minute fulljob cap.
+Android instrumentation did not start because Google Messaging showed a foreign
+ANR; keep that environment failure separate. Increase only the outer iOS cap
+to65minutes, retaining individual test limits, assertions, failure handling and
+strict same-attempt acceptance. This permits at most ten additional hosted Mac
+minutes per job and adds no model calls. A fresh full run is still required.
