@@ -729,3 +729,19 @@ iPhone accessibility, TestFlight processing, installation or reporter acceptance
 | MFB-T01 | MFB-01, MFB-02 | Settings account journey and guest/account draft reopen journey, with zero requests after cancellation. |
 | MFB-T02 | MFB-03 | Core persistence/failure controls and native receipt/timeout restart journeys; positive request-count control before restart. |
 | MFB-T03 | MFB-04 | UTF-16 boundary controls, retained text/receipt on persistence failure, native experience settings grant/decline and physical export/accessibility verification. |
+
+### Internal request and discussion client (Studio #4340)
+
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MTR-T01 | MTR-01, MTR-02 | Core account-switch/late-receipt tests and storage-failure controls; native draft reopen and permission denial. |
+| MTR-T02 | MTR-03 | Persist-before-POST, timeout/restart/recovery without a new POST, mismatched receipt rejection and same-key manual retry. |
+| MTR-T03 | MTR-04, MTR-05 | Actual native composer cancel/send, request detail, comment cancel/send and receipt/recovery screenshots; pagination and service permission tests are separately owned by Service. |
+
+`TeamRequestTests` uses synthetic identities and injected transport/storage.
+`TeamEntryUITests.testInternalRequestCancelReceiptAndDiscussion` and
+`testInternalRequestUnknownResultRecoversWithoutReplay` use the real UI and
+account model with the DEBUG-only TeamEntry transport. They never contact the
+operating internal request API. Their results do not establish live Lab/D1
+membership, production retention, real-account discussion or installed-iPhone
+acceptance. TestFlight and physical accessibility remain separate acceptance.

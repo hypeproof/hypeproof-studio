@@ -989,12 +989,17 @@
         "MFB-01",
         "MFB-02",
         "MFB-03",
-        "MFB-04"
+        "MFB-04",
+        "MTR-01",
+        "MTR-02",
+        "MTR-03",
+        "MTR-04",
+        "MTR-05"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "45a9dceaac53b790cd0c4f38df89af64de240025c393f0b67d37009add41163b",
+      "sha256": "b895a0b94ddb353f2880e9f2cbc6f8bced8f823049f7a91c7987a4ee55d956e1",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5313,6 +5318,46 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/ProductFeedbackTests.swift",
         "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/scripts/ios-verify.sh"
+      ]
+    },
+    {
+      "id": "ios-internal-requests-m1",
+      "title": "Authenticated iOS internal intake and discussion",
+      "issue": 4340,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-01",
+            "MTR-02",
+            "MTR-03",
+            "MTR-04",
+            "MTR-05"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-feedback-m0"
+      ],
+      "next_action": "Verify the private intake/discussion UI against the Service contract, then obtain exact-source CI and separate rollout/device evidence.",
+      "design_delta": "Reuse account sessions, refresh, file protection and Service membership; keep anonymous support independent.",
+      "positive_control": "Explicit send yields one account-bound request, shared product discussion and a recoverable receipt.",
+      "negative_control": "Account switches reject delayed replies; disk failure prevents POST; uncertain results never replay automatically; product denial exposes no server discussion.",
+      "evidence_required": "Core tests, real native UI fixture, device build and server contract evidence; separately deployed API, actual membership, TestFlight and physical acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift",
+        "apps/studio-native/ios/App/TeamRequestsView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift",
         "apps/studio-native/scripts/ios-verify.sh"
       ]
     }

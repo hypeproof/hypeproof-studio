@@ -18078,6 +18078,12 @@
         },
         {
           "path": "apps/studio-native/scripts/native-merge-gate.py"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/TeamRequestsView.swift"
         }
       ]
     },
@@ -18173,6 +18179,9 @@
         },
         {
           "path": "docs/testing/native-merge-acceptance.md"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift"
         }
       ]
     },

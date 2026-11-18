@@ -45,7 +45,7 @@ private struct ConversationTimelinePreference: PreferenceKey {
 
 struct SharedConversationView: View {
     private enum SettingsDestination {
-        case push, experience, approvals, context, exportCache, clearCache, notebook, privacy, feedback, login
+        case push, experience, approvals, context, exportCache, clearCache, notebook, privacy, feedback, teamRequests, login
 #if DEBUG
         case finishPlayback, advanceHistory, holdHistory, releaseHistory, finishSecondSpeech
 #endif
@@ -75,6 +75,7 @@ struct SharedConversationView: View {
     @State private var showPrivacy = false
     @State private var showSettings = false
     @State private var showFeedback = false
+    @State private var showTeamRequests = false
     @State private var settingsDestination: SettingsDestination?
     @State private var timelineGeneration = UUID()
     @State private var timelineLayout: ConversationTimelineLayout?
@@ -118,6 +119,9 @@ struct SharedConversationView: View {
                     Button { voice.stop(); focused = false; showHistory = true } label: {
                         Image(systemName: "sidebar.left").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel("대화 기록").accessibilityIdentifier("conversationHistory")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if model.signedIn { Button("팀 요청") { voice.stop(); focused = false; showTeamRequests = true }.disabled(model.loggingOut).accessibilityIdentifier("teamRequestHomeEntry") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -200,8 +204,9 @@ struct SharedConversationView: View {
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
+        .sheet(isPresented: $showTeamRequests) { TeamRequestsView(model: model.teamRequests).id(model.feedbackScope) }
         .sheet(isPresented: $showFeedback) { ProductFeedbackView(scope: model.feedbackScope).id(model.feedbackScope) }
-        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false }
+        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false; showTeamRequests = false }
         .sheet(isPresented: $showSettings, onDismiss: finishSettingsDismissal) { settingsSheet }
         .sheet(isPresented: $showContext) { contextSheet }
         .sheet(isPresented: $showHistory, onDismiss: {
@@ -250,6 +255,7 @@ struct SharedConversationView: View {
                         if model.selected != nil {
                             settingsButton("내 상황과 의도") { leaveSettings(for: .context) }.disabled(model.loggingOut)
                         }
+                        settingsButton("팀 요청·논의") { leaveSettings(for: .teamRequests) }.disabled(model.loggingOut).accessibilityIdentifier("teamRequestEntry")
                         settingsButton("새로 고침") { showSettings = false; model.refresh() }
                         settingsButton("이 기기의 연동 기록 내보내기") { leaveSettings(for: .exportCache) }
                         settingsButton("이 기기의 사본 삭제") { leaveSettings(for: .clearCache) }
@@ -316,7 +322,7 @@ struct SharedConversationView: View {
     }
     private func leaveSettings(for destination: SettingsDestination) {
         switch destination {
-        case .push, .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy, .feedback, .login: voice.stop(); focused = false
+        case .push, .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy, .feedback, .teamRequests, .login: voice.stop(); focused = false
 #if DEBUG
         case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory, .finishSecondSpeech: break
 #endif
@@ -353,6 +359,7 @@ struct SharedConversationView: View {
         case .notebook: showNotebook = true
         case .privacy: showPrivacy = true
         case .feedback: showFeedback = true
+        case .teamRequests: if model.signedIn && !model.loggingOut { showTeamRequests = true }
         case .login:
             if !model.signedIn && !model.busy && model.accountStorageReady { startLogin() }
 #if DEBUG
