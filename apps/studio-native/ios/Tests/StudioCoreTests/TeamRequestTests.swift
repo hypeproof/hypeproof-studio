@@ -97,3 +97,57 @@ final class TeamRequestTests: XCTestCase {
     }
 
 }
+
+final class TeamWorkflowTests: XCTestCase {
+    let request = "trq_" + String(repeating: "a", count: 32)
+    func initial() -> TeamWorkflowSnapshot { TeamWorkflowSnapshot(request_id: request, status: "submitted", priority: "unclassified", revision: 0, id: nil, actor_account_id: nil, client_mutation_id: nil, assignee_account_id: nil, next_action: nil, reason: nil, duplicate_request_id: nil, created_at: nil, redacted_at: nil) }
+    func page(_ current: TeamWorkflowSnapshot? = nil, manage: Bool = true) -> TeamWorkflowPage { TeamWorkflowPage(schema: "hps-team-workflow/1", request_id: request, can_manage: manage, current: current ?? initial(), events: [], next_cursor: nil) }
+    func people() -> TeamAssignmentMembers { TeamAssignmentMembers(schema: "hps-team-assignment-members/1", account_id: "A", product: "studio", members: []) }
+    func receipt(_ draft: TeamWorkflowDraft) -> TeamWorkflowSnapshot { TeamWorkflowSnapshot(request_id: request, status: draft.status, priority: draft.priority, revision: draft.expectedRevision + 1, id: "twe_" + String(repeating: "b", count: 32), actor_account_id: draft.accountID, client_mutation_id: draft.key, assignee_account_id: draft.assignee, next_action: draft.nextAction.isEmpty ? nil : draft.nextAction, reason: draft.reason, duplicate_request_id: draft.duplicateID, created_at: 1000, redacted_at: nil) }
+    @MainActor func testUnknownWorkflowRestoresStableKeyAndNeverAutomaticallyReplays() async throws {
+        var disk: TeamWorkflowDraft?, sends = 0, timeout = true
+        func make() -> TeamWorkflowController { TeamWorkflowController(requestID: request, product: "studio", identity: { MemberApprovalIdentity(accountID: "A", sessionID: "s") }, fetch: { _, _ in self.page() }, members: { _ in self.people() }, targets: { _, _ in TeamRequestPage(requests: [], next_cursor: nil) }, send: { _, draft in sends += 1; if timeout { throw URLError(.timedOut) }; return self.receipt(draft) }, load: { _ in disk }, save: { disk = $0 }, changed: { _ in }) }
+        let first = make(); await first.open(); first.edit { $0.reason = "추가 재현이 필요해요"; $0.status = "discussing" }; let key = first.view.draft?.key
+        await first.submit(); XCTAssertEqual(disk?.phase, .uncertain); XCTAssertEqual(sends, 1)
+        let restarted = make(); await restarted.open(); XCTAssertEqual(sends, 1); XCTAssertEqual(restarted.view.draft?.key, key)
+        restarted.edit { $0.reason = "바꾸면 안 됨" }; XCTAssertEqual(restarted.view.draft?.reason, "추가 재현이 필요해요")
+        timeout = false; await restarted.submit(); XCTAssertEqual(sends, 2); XCTAssertEqual(disk?.phase, .received); XCTAssertEqual(disk?.key, key)
+        await restarted.submit(); XCTAssertEqual(sends, 2)
+    }
+    @MainActor func testReadOnlyWorkflowDoesNotLoadMembersOrAllowChanges() async throws {
+        var privateReads = 0, sends = 0
+        let controller = TeamWorkflowController(requestID: request, product: "studio", identity: { MemberApprovalIdentity(accountID: "A", sessionID: "s") }, fetch: { _, _ in self.page(manage: false) }, members: { _ in privateReads += 1; return self.people() }, targets: { _, _ in privateReads += 1; return TeamRequestPage(requests: [], next_cursor: nil) }, send: { _, draft in sends += 1; return self.receipt(draft) }, load: { _ in nil }, save: { _ in }, changed: { _ in })
+        await controller.open(); XCTAssertNotNil(controller.view.page); XCTAssertEqual(privateReads, 0); XCTAssertNil(controller.view.draft)
+        controller.edit { $0.reason = "권한 없음" }; await controller.submit(); XCTAssertEqual(sends, 0)
+    }
+    @MainActor func testWorkflowStorageFailurePreventsDispatchAndPreservesText() async throws {
+        var disk: TeamWorkflowDraft?, fail = false, sends = 0
+        let controller = TeamWorkflowController(requestID: request, product: "studio", identity: { MemberApprovalIdentity(accountID: "A", sessionID: "s") }, fetch: { _, _ in self.page() }, members: { _ in self.people() }, targets: { _, _ in TeamRequestPage(requests: [], next_cursor: nil) }, send: { _, draft in sends += 1; return self.receipt(draft) }, load: { _ in disk }, save: { if fail { throw CocoaError(.fileWriteOutOfSpace) }; disk = $0 }, changed: { _ in })
+        await controller.open(); controller.edit { $0.reason = "보존할 사유" }; fail = true; await controller.submit()
+        XCTAssertEqual(sends, 0); XCTAssertFalse(controller.view.storageReady); XCTAssertEqual(controller.view.draft?.reason, "보존할 사유"); XCTAssertEqual(disk?.phase, .draft)
+    }
+    @MainActor func testKnownConflictRequiresRefreshAndExplicitRebase() async throws {
+        var disk: TeamWorkflowDraft?, revision = initial(), conflict = true
+        let controller = TeamWorkflowController(requestID: request, product: "studio", identity: { MemberApprovalIdentity(accountID: "A", sessionID: "s") }, fetch: { _, _ in self.page(revision) }, members: { _ in self.people() }, targets: { _, _ in TeamRequestPage(requests: [], next_cursor: nil) }, send: { _, draft in if conflict { throw SyncFailure.http(409, "team_workflow_conflict") }; return self.receipt(draft) }, load: { _ in disk }, save: { disk = $0 }, changed: { _ in })
+        await controller.open(); controller.edit { $0.reason = "내 제안" }; let key = controller.view.draft?.key
+        await controller.submit(); XCTAssertEqual(disk?.phase, .conflict); controller.rebase(); XCTAssertEqual(disk?.key, key)
+        var other = TeamWorkflowDraft(accountID: "A", product: "studio", current: initial()); other.reason = "다른 변경"; revision = receipt(other)
+        await controller.open(); controller.rebase(); XCTAssertNotEqual(disk?.key, key); XCTAssertEqual(disk?.expectedRevision, 1); XCTAssertEqual(disk?.reason, "내 제안")
+        conflict = false; await controller.submit(); XCTAssertEqual(disk?.phase, .received)
+    }
+    @MainActor func testAssigneeRejectionUnlocksOnlyFirstKnownUnsentAttempt() async throws {
+        var disk: TeamWorkflowDraft?, unknown = false
+        func make() -> TeamWorkflowController { TeamWorkflowController(requestID: request, product: "studio", identity: { MemberApprovalIdentity(accountID: "A", sessionID: "s") }, fetch: { _, _ in self.page() }, members: { _ in self.people() }, targets: { _, _ in TeamRequestPage(requests: [], next_cursor: nil) }, send: { _, _ in if unknown { throw URLError(.timedOut) }; throw SyncFailure.http(403, "team_assignee_denied") }, load: { _ in disk }, save: { disk = $0 }, changed: { _ in }) }
+        let first = make(); await first.open(); first.edit { $0.reason = "담당 확인"; $0.assignee = "B" }; await first.submit()
+        XCTAssertEqual(disk?.phase, .draft); first.edit { $0.assignee = nil }; XCTAssertNil(disk?.assignee)
+        unknown = true; await first.submit(); XCTAssertEqual(disk?.phase, .uncertain); let key = disk?.key
+        unknown = false; let restarted = make(); await restarted.open(); await restarted.submit(); XCTAssertEqual(disk?.phase, .uncertain); XCTAssertEqual(disk?.key, key)
+    }
+    func testWorkflowPayloadUsesExplicitNullsAndRejectsMissingReason() throws {
+        var draft = TeamWorkflowDraft(accountID: "A", product: "studio", current: initial())
+        XCTAssertThrowsError(try draft.payload()); draft.reason = "분류 확인"; let payload = try draft.payload()
+        XCTAssertTrue(payload["assignee_account_id"] is NSNull); XCTAssertTrue(payload["duplicate_request_id"] is NSNull); XCTAssertTrue(payload["next_action"] is NSNull)
+        draft.status = "resolved"; XCTAssertThrowsError(try draft.payload())
+        draft.status = "duplicate"; XCTAssertThrowsError(try draft.payload())
+    }
+}

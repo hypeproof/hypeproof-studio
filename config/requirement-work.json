@@ -994,12 +994,15 @@
         "MTR-02",
         "MTR-03",
         "MTR-04",
-        "MTR-05"
+        "MTR-05",
+        "MTR-06",
+        "MTR-07",
+        "MTR-08"
       ],
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "b895a0b94ddb353f2880e9f2cbc6f8bced8f823049f7a91c7987a4ee55d956e1",
+      "sha256": "3cd10c5a87dc5bc0263ad246549fa598924b9f263b898397695bdbf9bf565fec",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5346,6 +5349,44 @@
       "design_delta": "Reuse account sessions, refresh, file protection and Service membership; keep anonymous support independent.",
       "positive_control": "Explicit send yields one account-bound request, shared product discussion and a recoverable receipt.",
       "negative_control": "Account switches reject delayed replies; disk failure prevents POST; uncertain results never replay automatically; product denial exposes no server discussion.",
+      "evidence_required": "Core tests, real native UI fixture, device build and server contract evidence; separately deployed API, actual membership, TestFlight and physical acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift",
+        "apps/studio-native/ios/App/TeamRequestsView.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift",
+        "apps/studio-native/ios/UITests/TeamEntryUITests.swift",
+        "apps/studio-native/ios/App/TeamEntryFixture.swift",
+        "apps/studio-native/scripts/ios-verify.sh"
+      ]
+    },
+    {
+      "id": "ios-internal-triage-m1",
+      "title": "iOS internal request triage and history",
+      "issue": 4342,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTR-06",
+            "MTR-07",
+            "MTR-08"
+          ]
+        }
+      ],
+      "depends_on": [
+        "ios-internal-requests-m1"
+      ],
+      "next_action": "Prepare triage source PR; verify Service deployment and physical-device behavior separately.",
+      "design_delta": "Reuse account sessions, refresh, file protection and Service membership; keep anonymous support independent.",
+      "positive_control": "Confirmed change produces one revision and visible refreshed history.",
+      "negative_control": "Unknown outcomes keep the original key; known conflicts require fresh revision; storage failure prevents dispatch and navigation loss.",
       "evidence_required": "Core tests, real native UI fixture, device build and server contract evidence; separately deployed API, actual membership, TestFlight and physical acceptance.",
       "implementation_paths": [
         "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift",

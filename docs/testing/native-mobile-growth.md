@@ -745,3 +745,15 @@ account model with the DEBUG-only TeamEntry transport. They never contact the
 operating internal request API. Their results do not establish live Lab/D1
 membership, production retention, real-account discussion or installed-iPhone
 acceptance. TestFlight and physical accessibility remain separate acceptance.
+
+### Internal triage client — Studio #4342
+
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MTR-T04 | MTR-06, MTR-07 | Native request detail to triage, cancel preserving exact text, explicit save receipt and refreshed history. Read-only authority must prevent writes and member-picker reads. |
+| MTR-T05 | MTR-08 | Durable unknown outcome with same-key manual retry, storage failure before dispatch, revision conflict requiring refresh/rebase and first-attempt assignee denial versus uncertain retry. |
+
+`TeamWorkflowTests` covers six injected Core scenarios. The actual simulator
+`testInternalWorkflowCancelSaveAndHistory` uses DEBUG-only synthetic transport;
+it does not prove deployed API integration or installed-device acceptance.
+Service owns the insert/read revocation and product membership controls.

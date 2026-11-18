@@ -17,6 +17,7 @@ private final class TeamEntryState: @unchecked Sendable {
     private var teamRequest: [String: Any]?
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
+    private var workflowEvents: [[String: Any]] = []
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
         return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
@@ -28,6 +29,23 @@ private final class TeamEntryState: @unchecked Sendable {
             if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_DENIED"] == "1" { return (403, ["error": "team_product_denied"]) }
             let id = "trq_" + String(repeating: "a", count: 32)
             let path = request.url?.path ?? ""
+            if path == "/v1/me/team-requests/members" {
+                return (200, ["schema": "hps-team-assignment-members/1", "account_id": "journey-account", "product": "studio", "members": [["account_id": "journey-account", "display_name": "내부 테스트 멤버"]]])
+            }
+            if path == "/v1/me/team-requests/" + id + "/workflow" {
+                if request.httpMethod == "POST" {
+                    if let old = workflowEvents.first(where: { $0["client_mutation_id"] as? String == body["client_mutation_id"] as? String }) { return (200, ["event": old, "already": true]) }
+                    guard body["expected_revision"] as? Int == workflowEvents.count else { return (409, ["error": "team_workflow_conflict"]) }
+                    var event = body
+                    event["id"] = "twe_" + String(repeating: "c", count: 32)
+                    event["request_id"] = id; event["actor_account_id"] = "journey-account"
+                    event["revision"] = workflowEvents.count + 1; event["created_at"] = 2000
+                    workflowEvents.append(event)
+                    return (200, ["event": event, "already": false])
+                }
+                let initial: [String: Any] = ["request_id": id, "status": "submitted", "priority": "unclassified", "revision": 0]
+                return (200, ["schema": "hps-team-workflow/1", "request_id": id, "can_manage": true, "current": workflowEvents.last ?? initial, "events": workflowEvents, "next_cursor": NSNull()])
+            }
             switch (request.httpMethod ?? "GET", path) {
             case ("GET", "/v1/me/team-requests/access"):
                 return (200, ["schema": "hps-team-request-access/1", "account_id": "journey-account", "notice_version": "synthetic/1", "products": ["studio", "lab"]])

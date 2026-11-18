@@ -10411,3 +10411,14 @@ ST-REQ-NATIVE-MOBILE: settings must show signed-in or guest state and the
 locally authenticated account ID when available. Guest settings offer Login using
 the existing device sign-in flow after settings dismissal. Never send the account
 ID to the conversational model just to answer an account question.
+
+### Internal request triage — MTR-06–08
+
+The signed-in iOS request detail exposes current classification, assignee,
+priority, next action and immutable change history. Changes require server
+operator authority, an explicit confirmation and durable account-isolated drafts.
+Unknown delivery never permits a new-key replay; definitive stale revisions
+require refresh and explicit rebase. This is internal triage, not completed
+delivery or reporter resolution. Canonical requirements and test cases are in
+`mobile-growth-roadmap.md` and `testing/native-mobile-growth.md` (MTR-06–08,
+MTR-T04–05). Production policy and real-device evidence remain separate gates.

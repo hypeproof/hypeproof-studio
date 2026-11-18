@@ -445,3 +445,22 @@ extension ConversationService {
         return result.comment_id
     }
 }
+
+extension ConversationService {
+    public func teamWorkflow(id: String, after: String? = nil, token: String) async throws -> TeamWorkflowPage {
+        guard TeamRequestRecord.validID(id), after.map({ Int($0).map { $0 >= 0 && $0 < 1_000_000_000 } ?? false }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/workflow" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamWorkflowPage.self, from: data); try page.validate(request: id); return page
+    }
+    public func teamAssignmentMembers(product: String, account: String, token: String) async throws -> TeamAssignmentMembers {
+        guard TeamRequestDraft.products.contains(product) else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/members?product=" + product, token: token)
+        let people = try JSONDecoder().decode(TeamAssignmentMembers.self, from: data); try people.validate(account: account, product: product); return people
+    }
+    public func changeTeamWorkflow(_ draft: TeamWorkflowDraft, token: String) async throws -> TeamWorkflowSnapshot {
+        struct Receipt: Decodable { let event: TeamWorkflowSnapshot; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/workflow", method: "POST", body: draft.payload(), token: token)
+        let receipt = try JSONDecoder().decode(Receipt.self, from: data)
+        try receipt.event.validate(request: draft.requestID); guard receipt.event.matches(draft) else { throw SyncFailure.invalidResponse }; return receipt.event
+    }
+}
