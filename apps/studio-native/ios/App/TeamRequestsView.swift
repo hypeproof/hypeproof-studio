@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
     @Published var state = TeamRequestController.View()
+    var makeOutcome: (String) -> TeamOutcomePresentation = { _ in TeamOutcomePresentation() }
     var makeDelivery: (String) -> TeamDeliveryPresentation = { _ in TeamDeliveryPresentation() }
     var makeGitHub: (String) -> TeamGitHubPresentation = { _ in TeamGitHubPresentation() }
     var makeWorkflow: (String, String) -> TeamWorkflowPresentation = { _, _ in TeamWorkflowPresentation() }
@@ -103,6 +104,7 @@ private struct TeamRequestDetailView: View {
             if let detail {
                 Section("원문") { Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id)").font(.caption) }
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
+                Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry") }
                 Section("논의") {

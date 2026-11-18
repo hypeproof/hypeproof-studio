@@ -18,10 +18,11 @@ private final class TeamEntryState: @unchecked Sendable {
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
     private var githubEvents: [[String: Any]] = [], githubPosts = 0
+    private var outcomeEvents: [[String: Any]] = [], outcomePosts = 0
     private var workflowEvents: [[String: Any]] = []
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "githubPosts": githubPosts, "githubEvents": githubEvents.count], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "githubPosts": githubPosts, "githubEvents": githubEvents.count, "outcomePosts": outcomePosts, "outcomeEvents": outcomeEvents.count], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func response(_ request: URLRequest, _ body: [String: Any]) throws -> (Int, [String: Any]) {
         lock.lock(); defer { lock.unlock() }
@@ -30,6 +31,22 @@ private final class TeamEntryState: @unchecked Sendable {
             if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_DENIED"] == "1" { return (403, ["error": "team_product_denied"]) }
             let id = "trq_" + String(repeating: "a", count: 32)
             let path = request.url?.path ?? ""
+            if path == "/v1/me/team-requests/" + id + "/outcomes" {
+                let allowed = ProcessInfo.processInfo.environment["HP_TEAM_OUTCOME_READONLY"] != "1"
+                if request.httpMethod == "POST" {
+                    outcomePosts += 1
+                    guard allowed else { return (403,["error":"team_outcome_reporter_required"]) }
+                    if let old = outcomeEvents.first(where: { $0["client_mutation_id"] as? String == body["client_mutation_id"] as? String }) { return (200,["event":old,"already":true]) }
+                    guard body["expected_revision"] as? Int == outcomeEvents.count, body["version"] as? String == "0.2.0", body["build"] as? String == "18.1" else { return (409,["error":"team_outcome_conflict"]) }
+                    let action = body["action"] as? String ?? "", now = Date().timeIntervalSince1970 * 1000
+                    guard ["resolved","reopened"].contains(action), action != "reopened" || !(body["result"] as? String ?? "").isEmpty else { return (400,["error":"invalid_team_outcome"]) }
+                    let event: [String:Any] = ["id":"tor_"+String(format:"%032x",outcomeEvents.count+1),"request_id":id,"actor_account_id":"journey-account","client_mutation_id":body["client_mutation_id"] ?? "","revision":outcomeEvents.count+1,"delivery_id":body["delivery_id"] ?? "","delivery_revision":body["delivery_revision"] ?? 0,"version":"0.2.0","build":"18.1","action":action,"result":body["result"] ?? NSNull(),"created_at":now,"resolved_at":action == "resolved" ? now : NSNull(),"purge_eligible_at":action == "resolved" ? now+90*86400000 : NSNull(),"evidence_kind":"reporter_self_reported","device_installed":"not_observed","tester_eligibility":"not_observed"]
+                    outcomeEvents.append(event)
+                    if ProcessInfo.processInfo.environment["HP_TEAM_OUTCOME_UNKNOWN"] == "1", outcomePosts == 1 { return (503,["error":"synthetic_unknown"]) }
+                    return (200,["event":event,"already":false])
+                }
+                return (200,["schema":"hps-team-outcomes/1","request_id":id,"can_respond":allowed,"current":outcomeEvents.last ?? NSNull(),"events":outcomeEvents,"next_cursor":NSNull(),"retention":["policy":"90_days_after_reporter_confirmation","purge_eligible_at":outcomeEvents.last?["purge_eligible_at"] ?? NSNull(),"purge_implemented":false]])
+            }
             if path == "/v1/me/team-requests/" + id + "/deliveries" {
                 guard request.httpMethod == "GET" else { return (405, ["error":"read_only_fixture"]) }
                 if ProcessInfo.processInfo.environment["HP_TEAM_DELIVERY_UNAVAILABLE"] == "1" { return (503, ["error":"team_deliveries_unavailable"]) }

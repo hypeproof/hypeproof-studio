@@ -828,6 +828,45 @@ remain NOT RUN for this slice. No hosted model call, automatic server polling,
 operator mutation or additional cloud service is introduced.
 
 
+### Reporter outcome confirmation — Studio #4366
+
+Focused Core cases cover persisted-before-send explicit action, exact build,
+expired/unavailable evidence reopening, required reason, unknown restart and
+same-key replay against newer history, late account success/failure, storage
+failure export, readonly and revision conflicts, refresh-before-next response,
+retention capability compatibility, forged receipts, and latest/prior build
+selection without mutating uncertain drafts. Native UI journeys exercise
+cancel/resolve/refresh/reopen, unknown navigation and explicit deduplication,
+and readonly/storage-failure behavior through DEBUG-only transport.
+
+Core: nine cases PASS (`/tmp/ios4366-core-build-choice.log`). Initial native
+attempts failed during compilation (State declaration and Section overload);
+those failures are retained. Three native journeys subsequently passed: readonly/
+storage export in `/tmp/ios4366-outcome-ui-3.xcresult`, uncertain navigation/
+same-key recovery in `/tmp/ios4366-outcome-ui-4.xcresult`, and cancel/resolve/
+refresh/reopen in `/tmp/ios4366-outcome-ui-5.xcresult` (runner exit 0). Earlier
+scroll-window assertion failures remain in v3/v4; only failed cases were retried
+with bounded reveals and the original assertions. The server-scoped retention
+copy changed before v5; other product source is identical across these passing
+cases. The v5 screenshot was inspected for readable version/build and self-report
+wording. Dedicated simulators were cleaned up. Full-suite, production API, signed
+TestFlight and physical-device acceptance are NOT RUN.
+
+
+Follow-up visual review of the v5 screenshot found stale resolved history still
+labelled latest after a successful reopening. The corrected controller reads
+current history automatically after persisting the receipt, with account and
+revision guards; a failed read preserves acknowledgement and labels history as
+previously loaded. Eleven Core cases pass (`/tmp/ios4366-core-refresh.log`),
+including immediate resolve/reopen, read failure, stale read, account change
+while refreshing, and older receipt replay against newer current history.
+The affected native journey passed with runner/cleanup exit 0 in
+`/tmp/ios4366-outcome-ui-6.xcresult`. The inspected screenshot shows the reopened
+result as current immediately, matching its saved draft and reason. Prior v3/v4
+UI passes predate this automatic-read change and are not exact-source evidence
+for it. No broad or unrelated test rerun was performed.
+
+
 ### Durable retry target regression — 2026-11-18
 
 CI run44310462168 at359cb613 failed the single retry after relaunch: one initial
