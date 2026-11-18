@@ -869,3 +869,20 @@ Retry exactly once and requires no early POST or duplicate intent, followed by
 the same ID/text, one accepted turn and the original answer assertion after
 release. The reviewed fix and remaining device-copy removal are backported
 from41fa5285; new native execution is pending, not a passing result.
+
+
+### GitHub diagnostic observation — 2026-11-19
+
+Run44383839227 at `0a59f232` completed with 105 Core tests passing and one failure
+among 48 UI journeys. `testInternalGitHubUnknownReopenKeepsOneAssociation` failed
+inside `githubTrace`, asking XCTest for the activation point of the noninteractive
+`teamGitHubTrace` static text. The helper now reads its accessibility value once
+it exists, retaining the same bounded fallback and five-second existence check.
+All three callers were audited: subsequent actions already reveal their own
+button or history target, or end with counter assertions.
+All association counts, exact-key recovery assertions and real button taps remain
+unchanged. The original retry (29.089 seconds), held-history retry (55.193 seconds)
+and Korean speech completion (27.876 seconds) passed on the previous source;
+these partial results do not establish full acceptance of this correction.
+The new helper change is locally runtime NOT RUN while the shared resource slot
+is blocked. Diff and requirement-inventory checks are integrity evidence only.
