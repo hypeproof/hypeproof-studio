@@ -108,9 +108,12 @@ import CryptoKit
         try JSONSerialization.data(withJSONObject: snapshot).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
     static func speech(deliver: @escaping @MainActor (String, Bool) -> Void,
+                       prepareEndpoint: @MainActor (Bool) -> Void = { _ in },
                        stopAfterEmpty: @escaping @MainActor () -> Void = {}) -> Task<Void, Never>? {
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
+        let heldPlaybackContinuation = realPlayback && capture == 2
+        prepareEndpoint(heldPlaybackContinuation)
         if periodicVoice && capture == 2 {
             return Task { @MainActor in
                 let text = "I can send a second spoken thought"
@@ -161,7 +164,11 @@ import CryptoKit
             do {
                 try await Task.sleep(nanoseconds: 200_000_000)
                 try Task.checkCancellation(); deliver(text, false)
-                if !hold {
+                if heldPlaybackContinuation {
+                    // No synthetic final or wall-clock expiry. The real UI Stop,
+                    // app background or test teardown cancels this capture.
+                    while !Task.isCancelled { try await Task.sleep(nanoseconds: 400_000_000) }
+                } else if !hold {
                     try await Task.sleep(nanoseconds: 300_000_000)
                     try Task.checkCancellation(); JourneyTransport.store.finishedSpeech(); deliver(text, true)
                     JourneyTransport.store.deliveredSpeech()
@@ -408,7 +415,9 @@ private final class JourneyStore: @unchecked Sendable {
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
             "cancelled_requests": value.cancelledRequests ?? [], "held_response_returns": value.heldResponseReturns ?? 0,
             "accepted_turns": value.accepted.count, "failed_turns": failedTurns.count, "browser_callbacks": value.callbacks,
-            "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
+            "speech_captures": value.speechCaptures,
+            "held_second_capture_endpoint_clock": JourneyConfiguration.scenario == "voice-playback-real" && value.speechCaptures >= 2,
+            "desktop_requests": value.desktopRequests,
             "history_account": historyAccount, "history_advances": value.historyAdvances ?? 0,
             "history_window_messages": min(80, value.accepted.count * 2 + failedTurns.count), "history_revision": value.accepted.count * 2 + failedTurns.count,
             "voice_start_attempts": value.voiceStartAttempts,

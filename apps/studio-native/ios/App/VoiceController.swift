@@ -48,6 +48,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     private var nextTurn: (() -> Void)?
 #if DEBUG
     private var fixtureSpeech: Task<Void, Never>?
+    private var fixtureEndpointTime: Double?
     private var fixtureUtterance: AVSpeechUtterance?
 #endif
     private var tapInstalled = false
@@ -154,10 +155,15 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         if NativeJourneyFixture.enabled {
             guard turn.advance(token, from: [.authorizing], to: .listening) else { return }
             record(.syntheticCaptureStarted)
-            endpoint = VoiceEndpoint(now: ProcessInfo.processInfo.systemUptime)
-            watchEndpoint(token)
             fixtureSpeech = NativeJourneyFixture.speech(deliver: { [weak self] text, isFinal in
                 self?.receiveTranscript(text, isFinal: isFinal, token: token)
+            }, prepareEndpoint: { [weak self] held in
+                guard let self, self.turn.token == token else { return }
+                // Only the real-playback journey's synthetic second capture is
+                // held for the actual UI Stop. Production endpoint time is real.
+                self.fixtureEndpointTime = held ? ProcessInfo.processInfo.systemUptime : nil
+                self.endpoint = VoiceEndpoint(now: self.endpointNow)
+                self.watchEndpoint(token)
             }, stopAfterEmpty: { [weak self] in
                 guard let self, self.turn.token == token else { return }
                 // Deterministic controller cancellation at the actual scheduled
@@ -238,9 +244,15 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             watchEndpoint(token)
         } catch { record(.captureFailed); fail("마이크를 시작하지 못했어요. 입력한 글은 그대로 남아 있어요.") }
     }
+    private var endpointNow: Double {
+#if DEBUG
+        if let fixtureEndpointTime { return fixtureEndpointTime }
+#endif
+        return ProcessInfo.processInfo.systemUptime
+    }
     private func receiveTranscript(_ text: String, isFinal: Bool, token: UUID) {
         guard turn.token == token, [.listening, .finalizing].contains(turn.phase) else { return }
-        endpoint?.recognized(text, now: ProcessInfo.processInfo.systemUptime)
+        endpoint?.recognized(text, now: endpointNow)
         let words = endpoint?.transcript ?? ""
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             emptyCaptureRetries = 0
@@ -256,7 +268,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 200_000_000)
                     guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .listening else { return }
-                    switch self.endpoint?.decision(now: ProcessInfo.processInfo.systemUptime) {
+                    switch self.endpoint?.decision(now: self.endpointNow) {
                     case .finish: self.endSpeech(); return
                     case .noSpeech: self.finish("", token: token); return
                     default: break
@@ -303,7 +315,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         emptyCaptureRetries += 1
         timeout?.cancel(); endpointTask?.cancel(); endpointTask = nil
 #if DEBUG
-        fixtureSpeech?.cancel(); fixtureSpeech = nil
+        fixtureSpeech?.cancel(); fixtureSpeech = nil; fixtureEndpointTime = nil
 #endif
         stopInput(); request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil
         reviewCapture = nil; reviewData = nil; canReplayOwnVoice = false
@@ -405,7 +417,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         turn.stop(); timeout?.cancel(); timeout = nil; endpointTask?.cancel(); endpointTask = nil
         endpoint = nil; emptyCaptureRetries = 0; nextTurn = nil; authorizedToken = nil
 #if DEBUG
-        fixtureSpeech?.cancel(); fixtureSpeech = nil
+        fixtureSpeech?.cancel(); fixtureSpeech = nil; fixtureEndpointTime = nil
 #endif
         utteranceID = nil; speaker.stopSpeaking(at: .immediate)
         stopInput(); request?.endAudio(); recognition?.cancel(); request = nil; recognition = nil

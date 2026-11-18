@@ -1290,3 +1290,23 @@ The observation journey explicitly reveals its actual open button before the
 unchanged hittability assertion and tap, rather than relying on a diagnostic read
 to position the screen. This does not claim corrected runtime acceptance.
 The current39745c68 CI remains running and is not cancelled for this local fix.
+
+
+### Real-playback synthetic capture boundary — 2026-11-19
+
+Run44385991373 at `2d93` passed153 Core tests but failed3 of60 UI journeys. The
+real Korean playback case reached playback completion and capture2, then observed
+2 accepted turns instead of1 after Stop. Its finite synthetic partial producer
+ended after about20 seconds; the unchanged real endpoint can then finish on
+silence (or at30 seconds). Exact causality remains unconfirmed: the failure lacked
+its final trace and supplied only shallow snapshots plus video.
+Only DEBUG `voice-playback-real` capture2 now freezes endpoint time consistently
+for initialization, recognition and decisions, and holds its synthetic partial
+until actual Stop/background/teardown cancellation. Real OS synthesis/callback,
+first capture, other scenarios and production clocks stay unchanged. The actual
+Stop tap, accepted1/captures2 assertions and existing bounded test deadlines remain.
+This verifies playback-to-capture/Stop behavior, not real microphone endpointing.
+A fixture trace flag explicitly identifies the frozen synthetic endpoint; trace,
+submitted words and playback timeline are attached before count assertions.
+Static review and diff checks are not runtime evidence; new execution is NOT RUN
+while the shared resource slot remains blocked. No heavy work was requeued.

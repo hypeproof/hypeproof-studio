@@ -588,6 +588,12 @@ final class StudioJourneyTests: XCTestCase {
         waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 2)
         valueContains(field(app), "Keep this spoken draft without sending")
         app.buttons["sharedVoiceStop"].tap()
+        // Save before assertions: a failure must retain the submitted words and
+        // real playback events, not only a shallow XCTest snapshot.
+        try evidence("journey-real-playback-before-count-assertions", app: app)
+        let beforeAssertions = XCTAttachment(string: diagnostic("nativeVoiceTimeline", in: app).value as? String ?? "")
+        beforeAssertions.name = "journey-real-playback-before-count-timeline"; beforeAssertions.lifetime = .keepAlways; add(beforeAssertions)
+        XCTAssertEqual(try trace(app)["held_second_capture_endpoint_clock"] as? Bool, true)
         XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
         XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 2)
         let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
