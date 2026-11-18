@@ -59,6 +59,8 @@ elif name == 'curl': pathlib.Path(args[args.index('-o')+1]).write_bytes(b'synthe
 elif name == 'git':
     if args[0] == 'rev-parse': print('c'*40)
 elif name == 'xcodebuild':
+    if args == ['-version']:
+        print('Xcode 27.2'); sys.exit(0)
     if '-exportArchive' not in args:
         archive = pathlib.Path(args[args.index('-archivePath')+1]); archive.mkdir()
         (archive/'Info.plist').write_bytes(plistlib.dumps({}))
@@ -99,7 +101,9 @@ elif name == 'codesign':
     entitlements = dict(profile['Entitlements'])
     entitlements.update(config.get('signed', {}))
     sys.stdout.buffer.write(plistlib.dumps(entitlements))
-elif name == 'xcrun': pass
+elif name == 'xcrun':
+    if args == ['--sdk', 'iphoneos', '--show-sdk-version']:
+        print(config.get('sdk_version', '27.2'))
 else: raise AssertionError(name)
 '''
 
@@ -160,8 +164,17 @@ class UploadBoundary(unittest.TestCase):
 
     def assert_no_upload(self, result, calls):
         self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(any(x['tool']=='xcrun' for x in calls))
+        self.assertFalse(any(x['tool']=='xcrun' and ('--upload-app' in x['args'] or '--validate-app' in x['args']) for x in calls))
         self.assertFalse(any(x['tool']=='candidate-gate' and x['args'][0]=='receipt' for x in calls))
+
+    def test_obsolete_or_unreadable_sdk_stops_before_signing(self):
+        for sdk in ('26.2', '', 'not-a-version'):
+            with self.subTest(sdk=sdk):
+                root, result, calls = self.run_upload(config={'sdk_version': sdk})
+                self.assert_no_upload(result, calls)
+                self.assertIn('iOS 27+ SDK is required', result.stderr)
+                self.assertFalse(any(x['tool']=='security' for x in calls))
+                self.assertFalse(list((root/'runner').glob('hp-apple-*')))
 
     def test_enabled_export_is_verified_before_validation_and_upload(self):
         for value in (None, True):
@@ -228,7 +241,7 @@ class UploadBoundary(unittest.TestCase):
                 p = profile(); p['Entitlements'][key] = value
                 root, result, calls = self.run_upload(profile_data=p)
                 self.assert_no_upload(result, calls)
-                self.assertFalse(any(x['tool']=='xcodebuild' for x in calls))
+                self.assertFalse(any(x['tool']=='xcodebuild' and x['args'] != ['-version'] for x in calls))
                 self.assertFalse(list((root/'runner').glob('hp-apple-*')))
 
     def test_bad_export_never_reaches_upload_or_receipt(self):

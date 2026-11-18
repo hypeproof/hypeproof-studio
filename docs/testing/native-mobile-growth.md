@@ -729,3 +729,33 @@ iPhone accessibility, TestFlight processing, installation or reporter acceptance
 | MFB-T01 | MFB-01, MFB-02 | Settings account journey and guest/account draft reopen journey, with zero requests after cancellation. |
 | MFB-T02 | MFB-03 | Core persistence/failure controls and native receipt/timeout restart journeys; positive request-count control before restart. |
 | MFB-T03 | MFB-04 | UTF-16 boundary controls, retained text/receipt on persistence failure, native experience settings grant/decline and physical export/accessibility verification. |
+
+### SDK27 verification and delivery — Studio #4346
+
+The native CI and signed-upload lanes pin Xcode27.2 on the standard xcode-27
+image. Simulator selection uses the installed runtime's advertised iPhone
+support and deterministic preference, not a fixed obsolete device/runtime pair.
+Selection controls cover competing same-version runtimes, unavailable runtimes,
+wrong SDK versions and tablet-only support. Existing owned-simulator cleanup
+controls remain required after the toolchain change.
+
+The upload lane writes Xcode and iOS SDK version evidence and rejects SDKs
+below27 or unreadable versions before signing material is created. Synthetic
+Apple-tool controls execute the upload shell and verify that rejection creates
+no signing directory and invokes neither signing nor provider validation/upload.
+Metadata reads remain distinct from archive, validation and upload operations.
+A new source/workflow candidate,
+provider CI run and request-bound cost quote are required before signed upload.
+Local checks, official runner documentation and source review do not prove a
+provider run, Apple acceptance or installation. Earlier18.1 used iOS26.2; its
+nonblocking Apple warning cannot be retroactively relabeled as SDK27 evidence.
+
+Local validation for #4346: 11 simulator selection/cleanup controls and 11
+upload/push boundary controls passed. The complete Python contract suite ran
+129 tests with nine Android fixture failures. An isolated archive of unchanged
+base `be756b3d` reproduced eight of those failures in 26 Android tests, including
+an `Operation not permitted` process-control error; the remaining focus-deadline
+failure was not reproduced in that single baseline run. Android sources are
+unchanged. This is not a passing full-suite result or proof of provider CI.
+Logs: `/tmp/ios-sdk27-contracts.log`, `/tmp/ios-sdk27-upload-contracts-2.log`,
+`/tmp/ios-sdk27-all-contracts.log`, `/tmp/ios-sdk27-baseline-4346.log`.
