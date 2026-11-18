@@ -6308,6 +6308,9 @@
         },
         {
           "path": "scripts/release/templates/release-pr.md"
+        },
+        {
+          "path": "scripts/release/casebook-gate.mjs"
         }
       ]
     },
@@ -6321,6 +6324,9 @@
       "sources": [
         {
           "path": "scripts/release/test/select-cases.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/casebook-gate.test.mjs"
         }
       ]
     },
@@ -18078,6 +18084,12 @@
         },
         {
           "path": "apps/studio-native/scripts/native-merge-gate.py"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/TeamRequests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/TeamRequestsView.swift"
         }
       ]
     },
@@ -18173,6 +18185,9 @@
         },
         {
           "path": "docs/testing/native-merge-acceptance.md"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift"
         }
       ]
     },

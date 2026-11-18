@@ -11,6 +11,7 @@ cases:
   - id: BB-001
     journey: CUJ-1
     priority: P0
+    gate: human
     title: 한 줄 설치가 끝나고 Studio 가 macOS 차단 없이 열린다
     requirements: [US-01, TUX-COND-02]
     steps:
@@ -69,6 +70,7 @@ cases:
   - id: BB-004
     journey: CUJ-1
     priority: P0
+    gate: human
     title: 처음 열면 코드 없이 시작 카드가 나오고, 로그인 없이 무료로 시작할 수 있다
     requirements: [REQ-STUDIO-FREE-START, TUX-SP-14, TUX-SP-17, US-04, US-19]
     steps:
@@ -88,6 +90,7 @@ cases:
   - id: BB-005
     journey: CUJ-1
     priority: P0
+    gate: human
     title: 무료 시작이 수업이 묶은 폴더에서 멈추지 않고 다음 번호 폴더로 들어간다
     requirements: [REQ-STUDIO-FREE-START, US-09]
     steps:
@@ -126,6 +129,7 @@ cases:
   - id: BB-007
     journey: CUJ-1
     priority: P0
+    gate: human
     title: 무료 채팅의 첫 요청이 페이지를 만들고 카드에서 열린다
     requirements: [REQ-STUDIO-PAGE-CARD, CGP-ART-R-010]
     steps:
@@ -192,6 +196,7 @@ cases:
   - id: BB-026
     journey: CUJ-1
     priority: P0
+    gate: human
     title: 깨끗한 Windows 에서 공개 설치 명령으로 첫 답변과 결과물까지 만든다
     requirements: [PRA-09, PRA-16, REQ-STUDIO-FREE-START, TUX-SP-14]
     steps:
@@ -211,6 +216,7 @@ cases:
   - id: BB-038
     journey: CUJ-4
     priority: P0
+    gate: human
     title: Windows 이전 릴리스에서 업데이트한 뒤 기존 작업과 새 결과물이 모두 열린다
     requirements: [PRA-16]
     steps:
@@ -227,6 +233,7 @@ cases:
   - id: BB-027
     journey: CUJ-1
     priority: P0
+    gate: human
     title: Windows 에서 긴 한국어 글을 쓰며 창 너비를 바꿔도 채팅이 멈추지 않는다
     requirements: [REQ-STUDIO-COMPOSER-GEOMETRY]
     steps:
@@ -247,6 +254,7 @@ cases:
   - id: BB-028
     journey: CUJ-4
     priority: P0
+    gate: after-publish
     title: 이전 버전이 손대지 않아도 새 버전으로 올라간다
     requirements: [REQ-STUDIO-AUTO-UPDATE]
     steps:
@@ -267,6 +275,7 @@ cases:
   - id: BB-029
     journey: CUJ-5
     priority: P0
+    gate: human
     title: 코치가 사용자의 localhost 미리보기를 직접 보고 어떤 파일인지 말한다
     requirements: [REQ-STUDIO-PREVIEW-FOLLOW]
     steps:
@@ -286,6 +295,7 @@ cases:
   - id: BB-030
     journey: CUJ-6
     priority: P0
+    gate: human
     title: 대화 메뉴의 의견·문제 보내기로 보낸 신고에 원인 줄이 남는다
     requirements: [REQ-STUDIO-FEEDBACK-ENTRY, REQ-STUDIO-REPORT-LOGS]
     steps:
@@ -328,6 +338,7 @@ cases:
   - id: BB-011
     journey: CUJ-2
     priority: P0
+    gate: human
     title: 무료 사용량이 끝나면 파일이 남아 있다고 알리고 이용권은 사람이 열게 한다
     requirements: [TUX-COND-07, REQ-L12, AB-13]
     steps:
@@ -346,6 +357,7 @@ cases:
   - id: BB-012
     journey: CUJ-2
     priority: P0
+    gate: human
     title: 로그인하지 않은 무료 좌석의 이용권 목록은 Google 로그인만 앞에 둔다
     requirements: [TUX-SP-17, REQ-L12, REQ-STUDIO-FREE-START]
     steps:
@@ -363,6 +375,7 @@ cases:
   - id: BB-013
     journey: CUJ-2
     priority: P0
+    gate: human
     title: Google 로그인 → 결제 → 돌아오면 같은 작업 폴더에서 이용권으로 이어진다
     requirements: [TUX-SP-17, REQ-L12, AB-14]
     steps:
@@ -429,6 +442,8 @@ cases:
   - id: BB-017
     journey: CUJ-3
     priority: P0
+    gate: auto
+    gate_evidence: ["acceptance:public-classroom"]
     title: 참여 코드로 수업 활동에 들어간다
     requirements: [US-03, US-04, TUX-SP-14]
     steps:
@@ -447,6 +462,7 @@ cases:
   - id: BB-018
     journey: CUJ-3
     priority: P0
+    gate: human
     title: 다시 열면 같은 활동·대화·파일로 이어서 한다
     requirements: [US-10, US-07]
     steps:
@@ -508,6 +524,7 @@ cases:
   - id: BB-022
     journey: CUJ-4
     priority: P0
+    gate: after-publish
     title: 앱 안 업데이트 뒤에도 활동·파일·대화가 그대로다
     requirements: [REQ-I2, REQ-I4, REQ-I13, US-10]
     steps:
@@ -566,6 +583,7 @@ cases:
   - id: BB-032
     journey: CUJ-7
     priority: P0
+    gate: human
     title: 파일이 아주 많은 작업 폴더에서도 AI 요청을 되돌릴 수 있다
     requirements: [REQ-STUDIO-TURN-RESTORE]
     steps:
@@ -723,6 +741,7 @@ cases:
     journey: CUJ-8
     targets: [desktop, ios, android]
     priority: P0
+    gate: human
     title: 내 계정 인사와 질문을 보고 기존 대화와 승인 요청을 구분한다
     requirements: [MENT-01, MENT-02, MENT-03, MENT-04, MENT-05, MENT-06]
     steps:
@@ -750,6 +769,7 @@ cases:
   - id: BB-040
     journey: CUJ-4
     priority: P0
+    gate: after-publish
     title: Windows 에서 앱 안 업데이트를 누르면 설치되고 Studio 가 새 버전으로 다시 열린다
     requirements: [REQ-STUDIO-AUTO-UPDATE, REQ-I2]
     steps:

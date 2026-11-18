@@ -405,3 +405,43 @@ public final class ConversationService: @unchecked Sendable {
         return try JSONDecoder().decode(Result.self, from: data).request
     }
 }
+
+extension ConversationService {
+    public func teamRequestAccess(token: String) async throws -> TeamRequestAccess {
+        let (data, _) = try await request("/v1/me/team-requests/access", token: token)
+        return try JSONDecoder().decode(TeamRequestAccess.self, from: data)
+    }
+    public func teamRequestList(product: String, before: String? = nil, token: String) async throws -> TeamRequestPage {
+        guard TeamRequestDraft.products.contains(product), before.map({ TeamRequestPage.validCursor($0, prefix: "trq_") }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests?product=" + product + (before.map { "&before=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamRequestPage.self, from: data); try page.validate(product: product); return page
+    }
+    public func sendTeamRequest(_ draft: TeamRequestDraft, token: String) async throws -> TeamRequestRecord {
+        struct Receipt: Decodable { let request: TeamRequestRecord; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests", method: "POST", body: draft.payload(), token: token)
+        let row = try JSONDecoder().decode(Receipt.self, from: data).request
+        try row.validate(); guard row.matches(draft) else { throw SyncFailure.invalidResponse }; return row
+    }
+    public func recoverTeamRequest(_ draft: TeamRequestDraft, token: String) async throws -> TeamRequestRecord? {
+        try draft.validate(account: draft.accountID)
+        do {
+            let (data, _) = try await request("/v1/me/team-requests?product=" + draft.product + "&client_request_id=" + draft.key, token: token)
+            let page = try JSONDecoder().decode(TeamRequestPage.self, from: data); try page.validate(product: draft.product)
+            guard page.requests.count == 1, let row = page.requests.first, row.matches(draft) else { throw SyncFailure.invalidResponse }; return row
+        } catch SyncFailure.http(404, "team_request_not_found") { return nil }
+    }
+    public func teamRequestDetail(id: String, after: String? = nil, token: String) async throws -> TeamRequestDetail {
+        guard TeamRequestRecord.validID(id), after.map({ TeamRequestPage.validCursor($0, prefix: "tcm_") }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let detail = try JSONDecoder().decode(TeamRequestDetail.self, from: data); try detail.validate(id: id); return detail
+    }
+    public func teamRequestComment(id: String, key: String, body: String, token: String) async throws -> String {
+        guard TeamRequestRecord.validID(id), UUID(uuidString: key)?.uuidString.lowercased() == key,
+              !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, body.utf16.count <= 5000, !body.contains("\0") else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/comments", method: "POST", body: ["schema": "hps-team-comment/1", "client_comment_id": key, "body": body], token: token)
+        struct Receipt: Decodable { let comment_id: String; let already: Bool }
+        let result = try JSONDecoder().decode(Receipt.self, from: data)
+        guard result.comment_id.count == 36, result.comment_id.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
+        return result.comment_id
+    }
+}

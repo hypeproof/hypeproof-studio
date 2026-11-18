@@ -776,3 +776,29 @@ on one source line and no failure-time state, so its cause remains unproven. Its
 waits now have distinct stage names and synthetic model/counter diagnostics with
 the original wait budgets and assertions. Android compilation/instrumentation is
 pending remote CI; no speculative runtime change was made.
+
+### Internal request and discussion client (Studio #4340)
+
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MTR-T01 | MTR-01, MTR-02 | Core account-switch/late-receipt tests and storage-failure controls; native draft reopen and permission denial. |
+| MTR-T02 | MTR-03 | Persist-before-POST, timeout/restart/recovery without a new POST, mismatched receipt rejection and same-key manual retry. |
+| MTR-T03 | MTR-04, MTR-05 | Actual native composer cancel/send, request detail, comment cancel/send and receipt/recovery screenshots; pagination and service permission tests are separately owned by Service. |
+
+`TeamRequestTests` uses synthetic identities and injected transport/storage.
+`TeamEntryUITests.testInternalRequestCancelReceiptAndDiscussion` and
+`testInternalRequestUnknownResultRecoversWithoutReplay` use the real UI and
+account model with the DEBUG-only TeamEntry transport. They never contact the
+operating internal request API. Their results do not establish live Lab/D1
+membership, production retention, real-account discussion or installed-iPhone
+acceptance. TestFlight and physical accessibility remain separate acceptance.
+
+
+Same-source tool validation at `8c672ec9` on Ubuntu host `snts` passed all 26
+Android bootstrap/environment controls (exit 0). Exact command:
+`python3 -m unittest discover -s apps/studio-native/tests -p 'test_android*.py' -v`.
+Isolated source directory: `/home/snts/ub1000-native-contract-8c672ec9-L3QglI`;
+retrieved log: `/tmp/ios-4360-ubuntu-contracts-result.log`. The authorized Mac
+full suite still had 8 failures out of 129, including process-control permission
+errors. Linux controls pass unchanged; neither platform result establishes actual
+Android application instrumentation or resolves the prior consent-flow failure.
