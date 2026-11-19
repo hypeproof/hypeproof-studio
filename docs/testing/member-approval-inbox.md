@@ -37,3 +37,14 @@ adoption/session-change discovery and repeated account-watch deduplication. Nati
 `testOrdinaryAccountDoesNotShowMemberApprovalEntry` covers actual login and hidden menu entry.
 The member journey uses a separate `member-inbox` fixture scenario. These added native cases remain NOT_RUN until executed for the integrated candidate;
 ordinary existing first-answer fixtures explicitly return not-enrolled.
+
+## Physical iPhone approval notification
+
+1. On a signed TestFlight build, open **Question notifications** and verify that the enrolled
+   account's device is registered. Return to the iOS Home Screen.
+2. Deliver one eligible, clearly marked verification card through the Studio approval channel
+   to that account. Record the repository, PR number and card ID.
+3. Observe the approval alert on the phone and tap it. Verify that **Approval requests** opens
+   the matching card and displays the same repository and PR number.
+4. Leave the approval controls untouched. Record the installed build, iOS version, receipt and
+   tap results. Record provider acceptance independently of the on-device observation.
