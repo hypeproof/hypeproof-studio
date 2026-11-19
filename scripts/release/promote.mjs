@@ -183,6 +183,38 @@ export function gatherPromotion(number, repo) {
     rcRelease: rcTag ? releaseOf(rcTag) : null};
 }
 
+// Completion events only wake the existing gate; they never grant approval.
+export function completionMatches(event, facts, repo) {
+  const run = event?.workflow_run;
+  if (run?.conclusion !== 'success' || run.head_repository?.full_name !== repo
+      || facts.pr.state !== 'open' || facts.pr.merged) return false;
+  if (run.name === 'studio-pr-ci') {
+    return run.event === 'pull_request' && run.head_sha === facts.pr.head
+      && run.head_branch === facts.pr.headRef;
+  }
+  return run.name === 'Verify and publish Unified Studio' && run.event === 'workflow_dispatch'
+    && facts.commit.parents.length === 1 && run.head_sha === facts.commit.parents[0];
+}
+
+function resume({out}) {
+  const repo = process.env.GITHUB_REPOSITORY ?? 'hypeproof/hypeproof-studio';
+  const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  const prs = JSON.parse(gh('pr', 'list', '--repo', repo, '--state', 'open', '--label', 'release',
+    '--json', 'number,headRefName', '--limit', '100')).filter(p => branchVersion(p.headRefName));
+  const ready = [];
+  for (const pr of prs) {
+    const facts = gatherPromotion(pr.number, repo);
+    if (!completionMatches(event, facts, repo)) continue;
+    const verdict = promotionDecision(facts);
+    if (verdict.allow) ready.push(pr.number);
+    else console.log(`#${pr.number}: waiting; ${verdict.reasons.join('; ')}`);
+  }
+  if (ready.length > 1) throw new Error('Ambiguous completion: multiple release PRs are ready');
+  if (!ready.length) { console.log('No matching approved release is ready; nothing promoted.'); return; }
+  // Re-read all facts immediately before the existing mutation path.
+  run({pr: ready[0], out});
+}
+
 function draftAssets(repo, tag) {
   const list = () => gh('api', `repos/${repo}/releases`, '--paginate', '--jq', '.[] | {id, tag_name, draft}')
     .split('\n').filter(Boolean).map(line => JSON.parse(line));
@@ -318,6 +350,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(proces
   const {values} = parseArgs({args: rest, options: {pr: {type: 'string'}, out: {type: 'string'},
     tag: {type: 'string'}, sha: {type: 'string'}, version: {type: 'string'}, dir: {type: 'string'}}});
   if (command === 'run' && /^[1-9]\d*$/.test(values.pr ?? '')) run({pr: Number(values.pr), out: values.out ?? process.env.RUNNER_TEMP ?? '.'});
+  else if (command === 'resume') resume({out: values.out ?? process.env.RUNNER_TEMP ?? '.'});
   else if (command === 'reuse-acceptance' && values.tag && /^[a-f0-9]{40}$/.test(values.sha ?? '') && values.version && values.dir) await reuseAcceptance(values);
   else {
     console.error('usage: promote.mjs run --pr N [--out DIR] | reuse-acceptance --tag T --sha S --version V --dir D');

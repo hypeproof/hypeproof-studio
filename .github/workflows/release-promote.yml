@@ -16,6 +16,9 @@
 name: release-promote
 
 on:
+  workflow_run:
+    workflows: ["studio-pr-ci", "Verify and publish Unified Studio"]
+    types: [completed]
   pull_request_review:
     types: [submitted]
   workflow_dispatch:
@@ -30,7 +33,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: release-promote-${{ inputs.pr || github.event.pull_request.number }}
+  group: release-promote
   cancel-in-progress: false
 
 jobs:
@@ -38,6 +41,8 @@ jobs:
     # The script checks everything again; this only keeps other reviews from starting a runner.
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
       (github.event.review.state == 'approved' &&
        startsWith(github.event.pull_request.head.ref, 'release/v') &&
        contains(github.event.pull_request.labels.*.name, 'release'))
@@ -89,4 +94,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          node scripts/release/promote.mjs run --pr "$PR" --out "$RUNNER_TEMP/promote"
+          if [[ "$GITHUB_EVENT_NAME" == workflow_run ]]; then
+            node scripts/release/promote.mjs resume --out "$RUNNER_TEMP/promote"
+          else
+            node scripts/release/promote.mjs run --pr "$PR" --out "$RUNNER_TEMP/promote"
+          fi
