@@ -6632,6 +6632,9 @@
         },
         {
           "path": ".github/workflows/release-promote.yml"
+        },
+        {
+          "path": "policy/release-recovery.md"
         }
       ]
     },
