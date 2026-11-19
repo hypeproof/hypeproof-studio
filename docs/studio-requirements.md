@@ -10439,8 +10439,6 @@ require refresh and explicit rebase. This is internal triage, not completed
 delivery or reporter resolution. Canonical requirements and test cases are in
 `mobile-growth-roadmap.md` and `testing/native-mobile-growth.md` (MTR-06–08,
 MTR-T04–05). Production policy and real-device evidence remain separate gates.
-
-
 ### Durable retry touch target — 2026-11-18
 
 A saved local request's explicit retry action must expose at least a 44pt touch
