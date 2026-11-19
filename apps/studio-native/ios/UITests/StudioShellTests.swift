@@ -146,14 +146,32 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(text.waitForExistence(timeout: 5), "The personal conversation must be usable without a desktop.")
         return text
     }
-    @MainActor private func enabled(_ element: XCUIElement, timeout: TimeInterval = 10) {
-        XCTAssertTrue(element.waitForExistence(timeout: timeout))
+    @MainActor private func enabled(_ element: XCUIElement, timeout: TimeInterval = 10, app: XCUIApplication? = nil) {
+        let exists = element.waitForExistence(timeout: timeout)
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
+        let result = exists ? XCTWaiter.wait(for: [expectation], timeout: timeout) : .timedOut
+        if !exists || result != .completed {
+            // Keep the failed wait authoritative. One failure-time snapshot
+            // distinguishes an actually disabled control from an unresolved
+            // accessibility query without retrying the user's action.
+            let details: String
+            do {
+                let snapshot = try element.snapshot()
+                details = "exists=\(exists); wait=\(result.rawValue); enabled=\(snapshot.isEnabled); frame=\(snapshot.frame); identifier=\(snapshot.identifier)"
+            } catch { details = "exists=\(exists); wait=\(result.rawValue); snapshot unavailable: \(error)" }
+            let observation = XCTAttachment(string: details)
+            observation.name = "enabled-wait-failure"; observation.lifetime = .keepAlways; add(observation)
+            if let app {
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "enabled-wait-failure-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+            }
+        }
+        XCTAssertTrue(exists)
+        XCTAssertEqual(result, .completed)
     }
     @MainActor private func tapComposerTargetOnce(_ id: String, app: XCUIApplication) {
         let button = app.buttons[id]
-        enabled(button)
+        enabled(button, app: app)
         let frame = button.frame
         let point = button.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.15))
         let observation = XCTAttachment(string: "id=\(id); frame=\(frame); enabled=\(button.isEnabled); hittable=\(button.isHittable); tap=\(point.screenPoint); window=\(app.frame)")
@@ -227,9 +245,14 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(appeared, "A send action needs a visible answer or an actionable failure, not just a cleared composer.")
         XCTAssertEqual(app.staticTexts["sharedReply"].firstMatch.label, "HP Studio의 답변. What small change would make tomorrow better?")
     }
-    @MainActor private func evidence(_ name: String, app: XCUIApplication) throws {
+    @MainActor private func evidence(_ name: String, app: XCUIApplication, capturedTrace: [String: Any]? = nil) throws {
         let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
-        let observation = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: trace(app), options: [.sortedKeys]), encoding: .utf8)!)
+        // Reuse the observation already asserted at the end of a journey. A
+        // second accessibility traversal can consume the remaining test budget
+        // while collecting evidence, without observing another product action.
+        let observed: [String: Any]
+        if let capturedTrace { observed = capturedTrace } else { observed = try trace(app) }
+        let observation = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: observed, options: [.sortedKeys]), encoding: .utf8)!)
         observation.name = name + "-synthetic-trace"; observation.lifetime = .keepAlways; add(observation)
     }
     @MainActor func testOrdinaryAccountDoesNotShowMemberApprovalEntry() throws {
@@ -285,10 +308,11 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertFalse(app.buttons["approvalApprove-member-card"].isEnabled)
         XCTAssertFalse(app.staticTexts["GitHub 승인 반영됨"].exists)
         app.buttons["닫기"].tap(); valueContains(field(app), "Keep my question draft")
-        let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
+        let finalTrace = try trace(app)
+        let paths = try XCTUnwrap(finalTrace["paths"] as? [String])
         XCTAssertEqual(paths.filter { $0 == "POST /v1/me/approval-inbox/member-card/decisions" }.count, 1)
         XCTAssertTrue(paths.contains("GET /v1/me/approval-inbox/member-card"))
-        try evidence("member-inbox-uncertain-choice", app: app)
+        try evidence("member-inbox-uncertain-choice", app: app, capturedTrace: finalTrace)
     }
     @MainActor func testFirstInstallSignInToFirstAnswerWithoutDesktop() throws {
         let app = launch("first-answer")
@@ -957,6 +981,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 10), .completed)
     }
     @MainActor func testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords() throws {
+        // Hosted accessibility traversal exceeded the 180s default; keep the existing 240s hard cap.
+        executionTimeAllowance = 240
         let app = launch("logout-sync"); signIn(app)
         let words = "Keep my queued thought"
         field(app).tap(); field(app).typeText(words)

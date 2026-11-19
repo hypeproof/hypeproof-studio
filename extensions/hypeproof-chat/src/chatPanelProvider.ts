@@ -925,6 +925,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
     const activity = activityConnections(this.context)?.current;
     if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
+    // #4334 — an invite track seat is the class as taught: it gets the class screen (no task list, verdicts or folded
+    // header), so it keeps the class history key like a class token does. postConfig reads the profile first.
+    if (this.cachedProfile?.invite_track) { this.taskWorkspace = undefined; return; }
     if (this.taskWorkspace?.activityId === activity.id) { await this.taskWorkspace.ready; return; }
     const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
     const opening = { activityId: activity.id, store, ready: Promise.resolve() };
@@ -10542,14 +10545,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (requestSnapshot) requestSnapshot.message.content = historyText;
     // File attachments carry bytes on their first turn. A later explicit reference
     // re-reads this activity's files, so edits/deletions never resurrect old pixels.
-    const currentPaths = imagePathsFromNotes(attachedNote);
-    const priorReference = currentPaths.length || images?.length
+    // HP-d89934a3 — an activity without image_paste takes photos as files only (D-028): the coach gets the
+    // [첨부한 사진] paths and nothing is re-read as model images, so no "[참고 이미지 확인 실패]" line is drawn.
+    const imageReading = profile?.input?.image_paste === true;
+    const currentPaths = imageReading ? imagePathsFromNotes(attachedNote) : [];
+    const priorReference = !imageReading || currentPaths.length || images?.length
       ? { requested: false, paths: [] as string[] }
       : selectReferencedImagePaths(text, history);
     const referencePaths = [...currentPaths, ...priorReference.paths];
     const referenceRoot = this.resolveCoachCwd();
     const referenceRead = referenceRoot
-      ? readWorkspaceReferenceImages({ cwd: referenceRoot, paths: referencePaths, allowed: profile?.input?.image_paste === true })
+      ? readWorkspaceReferenceImages({ cwd: referenceRoot, paths: referencePaths, allowed: imageReading })
       : { images: [], assets: [], failures: referencePaths.map(p => ({ path: p, reason: "작업 폴더를 먼저 열어 주세요." })) };
     if (referenceRead.images.length) effectiveImages = [...(effectiveImages ?? []), ...referenceRead.images];
     if (referenceRead.assets.length) {

@@ -64,7 +64,28 @@ public class TeamEntryJourneyTest {
     @After public void cleanup(){if(app!=null)app.close();QuestionActivity.testTransport=null;QuestionActivity.testMenuObservation=null;}
     private static NativeTeamModel team(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("team");f.setAccessible(true);return(NativeTeamModel)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private void settled(java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
-        AtomicBoolean ready=new AtomicBoolean();for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}assertTrue("actual team model completion",ready.get());
+        settled("team-model",predicate);
+    }
+    private void settled(String stage,java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
+        AtomicBoolean ready=new AtomicBoolean();
+        for(int i=0;i<120&&!ready.get();i++){
+            app.onActivity(a->ready.set(predicate.test(team(a))));
+            if(!ready.get())Thread.sleep(50);
+        }
+        if(ready.get())return;
+        AtomicReference<String> state=new AtomicReference<>();
+        app.onActivity(a->{
+            NativeTeamModel t=team(a);NativeProductExperience e=experience(a);
+            try{
+                var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);
+                ReflectionModel reflection=(ReflectionModel)field.get(a);
+                state.set("teamBusy="+t.busy+",canStart="+t.canStart+",question="+(t.question==null?"none":t.question.key)
+                    +",message="+t.message+",reflectionBusy="+reflection.busy+",readOnly="+reflection.readOnly
+                    +",experienceAvailable="+e.available+",experienceBusy="+e.busy+",granted="+e.granted
+                    +",reads="+reads.get()+",triggers="+triggers.get()+",answers="+answers.get());
+            }catch(ReflectiveOperationException error){throw new AssertionError(error);}
+        });
+        fail("Team stage did not settle: "+stage+"; "+state.get());
     }
     private void screenshot(String name)throws Exception{Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}image.recycle();}
     @Test public void signedInGreetingOpensRealCardsAndKeepsConversationDraft()throws Exception{
@@ -115,7 +136,13 @@ public class TeamEntryJourneyTest {
         // Explicitly reopening settings flushes the already-persisted answer, without a product replay.
         selectMenu("사용 경험 공유 설정");experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
         onView(withText("공유하지 않기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->!e.busy&&!e.granted);int before=metricTypes.size();onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+        onView(withText("도착한 질문")).perform(click());
+        settled("after-decline-question-entry",t->!t.busy&&t.canStart);
+        onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());
+        settled("after-decline-trigger-card",t->!t.busy&&t.question!=null);
+        onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());
+        settled("after-decline-answer",t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));
+        assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private void selectMenu(String title)throws Exception {
         boolean observe=Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("observeTeamMenu","false"));

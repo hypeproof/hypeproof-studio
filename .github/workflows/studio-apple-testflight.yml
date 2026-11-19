@@ -70,7 +70,7 @@ jobs:
     needs: native-candidate
     if: github.repository == 'hypeproof/hypeproof-studio'
     environment: apple-native-preview
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -99,7 +99,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_CANDIDATE_ROOT: ${{ github.workspace }}/native-candidate
-          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+          DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
           APPLE_DEVELOPER_TEAM_ID: ${{ vars.APPLE_DEVELOPER_TEAM_ID }}

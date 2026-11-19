@@ -10462,6 +10462,7 @@ may still indicate an in-progress refresh. The intent is to keep attention on
 the conversation while retaining information needed for user judgment.
 
 
+
 ### Durable retry touch target — 2026-11-18
 
 A saved local request's explicit retry action must expose at least a 44pt touch

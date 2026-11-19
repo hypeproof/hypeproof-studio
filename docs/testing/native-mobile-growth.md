@@ -730,6 +730,53 @@ iPhone accessibility, TestFlight processing, installation or reporter acceptance
 | MFB-T02 | MFB-03 | Core persistence/failure controls and native receipt/timeout restart journeys; positive request-count control before restart. |
 | MFB-T03 | MFB-04 | UTF-16 boundary controls, retained text/receipt on persistence failure, native experience settings grant/decline and physical export/accessibility verification. |
 
+### SDK27 verification and delivery — Studio #4346
+
+The native CI and signed-upload lanes pin Xcode27.2 on the standard xcode-27
+image. Simulator selection uses the installed runtime's advertised iPhone
+support and deterministic preference, not a fixed obsolete device/runtime pair.
+Selection controls cover competing same-version runtimes, unavailable runtimes,
+wrong SDK versions and tablet-only support. Existing owned-simulator cleanup
+controls remain required after the toolchain change.
+
+The upload lane writes Xcode and iOS SDK version evidence and rejects SDKs
+below27 or unreadable versions before signing material is created. Synthetic
+Apple-tool controls execute the upload shell and verify that rejection creates
+no signing directory and invokes neither signing nor provider validation/upload.
+Metadata reads remain distinct from archive, validation and upload operations.
+A new source/workflow candidate,
+provider CI run and request-bound cost quote are required before signed upload.
+Local checks, official runner documentation and source review do not prove a
+provider run, Apple acceptance or installation. Earlier18.1 used iOS26.2; its
+nonblocking Apple warning cannot be retroactively relabeled as SDK27 evidence.
+
+Local validation for #4346: 11 simulator selection/cleanup controls and 11
+upload/push boundary controls passed. The complete Python contract suite ran
+129 tests with nine Android fixture failures. An isolated archive of unchanged
+base `be756b3d` reproduced eight of those failures in 26 Android tests, including
+an `Operation not permitted` process-control error; the remaining focus-deadline
+failure was not reproduced in that single baseline run. Android sources are
+unchanged. This is not a passing full-suite result or proof of provider CI.
+Logs: `/tmp/ios-sdk27-contracts.log`, `/tmp/ios-sdk27-upload-contracts-2.log`,
+`/tmp/ios-sdk27-all-contracts.log`, `/tmp/ios-sdk27-baseline-4346.log`.
+
+
+SDK27 remote run `44297615009` retained a failed logout-during-sync case at the
+180-second default and hit the iOS job's 45-minute execution cap. The logout case
+now explicitly uses the existing 240-second maximum; transport barriers, no-send
+assertions and logout completion checks remain unchanged. The job cap is 55 minutes
+for measured build/UI duration plus evidence finalization, adding at most ten runner
+minutes with no automatic retry or extra jobs. The prior run remains failed; these
+limits alone do not establish a passing run.
+
+The focused logout simulator journey passed on 2026-11-18 (1 test, 0 failures,
+51.487 seconds; `/tmp/ios-4360-logout-regression.xcresult`), with runner and owned
+simulator cleanup exit 0. The Android consent-decline failure had three predicates
+on one source line and no failure-time state, so its cause remains unproven. Its
+waits now have distinct stage names and synthetic model/counter diagnostics with
+the original wait budgets and assertions. Android compilation/instrumentation is
+pending remote CI; no speculative runtime change was made.
+
 ### Internal request and discussion client (Studio #4340)
 
 | Test ID | Targets | Required evidence |
@@ -806,6 +853,15 @@ failures (`/tmp/ios-quiet-conversation.log`, `/tmp/ios-quiet-conversation.xcresu
 The resource-wrapped runner exited 0; its dedicated simulator was removed.
 This is local synthetic UI evidence, not a new shipped TestFlight build.
 
+
+Same-source tool validation at `8c672ec9` on Ubuntu host `snts` passed all 26
+Android bootstrap/environment controls (exit 0). Exact command:
+`python3 -m unittest discover -s apps/studio-native/tests -p 'test_android*.py' -v`.
+Isolated source directory: `/home/snts/ub1000-native-contract-8c672ec9-L3QglI`;
+retrieved log: `/tmp/ios-4360-ubuntu-contracts-result.log`. The authorized Mac
+full suite still had 8 failures out of 129, including process-control permission
+errors. Linux controls pass unchanged; neither platform result establishes actual
+Android application instrumentation or resolves the prior consent-flow failure.
 
 ### Durable retry target regression — 2026-11-18
 
@@ -903,3 +959,26 @@ guards, target readiness and new-listener identity as a boolean; no credentials 
 utterance text are added to diagnostics. No retry, relaxed count or product change.
 A periodic-read race remains a hypothesis until runtime evidence; new execution is
 NOT RUN while shared compute is blocked. Static integrity checks are not acceptance.
+
+### Accessibility evidence collection regression — 2026-11-19
+
+Run44326111986 at source2c6d0f83 failed two of43 UI cases;92 Core cases passed.
+Its checkoute83b9db3 has the same native tree and workflow blobs as the source
+head, recorded in the native-candidate artifact. LongHistory failed its initial
+login-enabled wait before any history action. Its final video frame shows the
+guest screen without a storage-error message; this does not establish why the
+accessibility wait failed. Failed enabled waits now preserve one element snapshot
+and the composer screen without changing the original wait result or repeating
+the user's action.
+
+MemberInbox reached its final draft and one-POST/recovery-GET assertions, then
+exceeded180seconds while collecting evidence. The retained spindump shows the
+test runner and app traversing accessibility snapshots in evidence/trace, not
+account storage. The test now reuses that already-asserted final trace for its
+attachment, retaining the screenshot, assertions and unchanged timeout budgets.
+
+Focused local Xcode27.2 validation passed both cases in84.670seconds:
+LongHistory40.217s and MemberInbox44.453s. Runner and owned-simulator cleanup
+exited0. Evidence: `/tmp/ios-4360-accessibility-regression.log` and `.xcresult`.
+Independent source review found no weakened assertion. The earlier remote run
+remains FAIL; this focused pass is not a complete remote or physical acceptance.
