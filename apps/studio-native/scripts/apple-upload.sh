@@ -23,6 +23,13 @@ push_enabled=${HPS_IOS_PUSH_ENABLED:-false}
 case "$push_enabled" in true|false) ;; *) echo 'HPS_IOS_PUSH_ENABLED must be true or false' >&2; exit 2 ;; esac
 evidence="$PWD/../evidence/apple-$platform"
 mkdir -p "$evidence"
+# Fail before materializing signing secrets if the upload SDK is obsolete.
+xcodebuild -version > "$evidence/xcode-version.txt"
+xcrun --sdk iphoneos --show-sdk-version > "$evidence/ios-sdk-version.txt"
+sdk=$(cat "$evidence/ios-sdk-version.txt")
+if [[ ! "$sdk" =~ ^[0-9]+(\.[0-9]+)*$ ]] || [ "${sdk%%.*}" -lt 27 ]; then
+  echo 'iOS 27+ SDK is required for this native upload lane' >&2; exit 2
+fi
 git rev-parse HEAD > "$evidence/source.txt"
 git status --porcelain > "$evidence/source-dirty.txt"
 test ! -s "$evidence/source-dirty.txt"
