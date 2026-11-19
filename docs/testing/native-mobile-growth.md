@@ -730,6 +730,53 @@ iPhone accessibility, TestFlight processing, installation or reporter acceptance
 | MFB-T02 | MFB-03 | Core persistence/failure controls and native receipt/timeout restart journeys; positive request-count control before restart. |
 | MFB-T03 | MFB-04 | UTF-16 boundary controls, retained text/receipt on persistence failure, native experience settings grant/decline and physical export/accessibility verification. |
 
+### SDK27 verification and delivery — Studio #4346
+
+The native CI and signed-upload lanes pin Xcode27.2 on the standard xcode-27
+image. Simulator selection uses the installed runtime's advertised iPhone
+support and deterministic preference, not a fixed obsolete device/runtime pair.
+Selection controls cover competing same-version runtimes, unavailable runtimes,
+wrong SDK versions and tablet-only support. Existing owned-simulator cleanup
+controls remain required after the toolchain change.
+
+The upload lane writes Xcode and iOS SDK version evidence and rejects SDKs
+below27 or unreadable versions before signing material is created. Synthetic
+Apple-tool controls execute the upload shell and verify that rejection creates
+no signing directory and invokes neither signing nor provider validation/upload.
+Metadata reads remain distinct from archive, validation and upload operations.
+A new source/workflow candidate,
+provider CI run and request-bound cost quote are required before signed upload.
+Local checks, official runner documentation and source review do not prove a
+provider run, Apple acceptance or installation. Earlier18.1 used iOS26.2; its
+nonblocking Apple warning cannot be retroactively relabeled as SDK27 evidence.
+
+Local validation for #4346: 11 simulator selection/cleanup controls and 11
+upload/push boundary controls passed. The complete Python contract suite ran
+129 tests with nine Android fixture failures. An isolated archive of unchanged
+base `be756b3d` reproduced eight of those failures in 26 Android tests, including
+an `Operation not permitted` process-control error; the remaining focus-deadline
+failure was not reproduced in that single baseline run. Android sources are
+unchanged. This is not a passing full-suite result or proof of provider CI.
+Logs: `/tmp/ios-sdk27-contracts.log`, `/tmp/ios-sdk27-upload-contracts-2.log`,
+`/tmp/ios-sdk27-all-contracts.log`, `/tmp/ios-sdk27-baseline-4346.log`.
+
+
+SDK27 remote run `44297615009` retained a failed logout-during-sync case at the
+180-second default and hit the iOS job's 45-minute execution cap. The logout case
+now explicitly uses the existing 240-second maximum; transport barriers, no-send
+assertions and logout completion checks remain unchanged. The job cap is 55 minutes
+for measured build/UI duration plus evidence finalization, adding at most ten runner
+minutes with no automatic retry or extra jobs. The prior run remains failed; these
+limits alone do not establish a passing run.
+
+The focused logout simulator journey passed on 2026-11-18 (1 test, 0 failures,
+51.487 seconds; `/tmp/ios-4360-logout-regression.xcresult`), with runner and owned
+simulator cleanup exit 0. The Android consent-decline failure had three predicates
+on one source line and no failure-time state, so its cause remains unproven. Its
+waits now have distinct stage names and synthetic model/counter diagnostics with
+the original wait budgets and assertions. Android compilation/instrumentation is
+pending remote CI; no speculative runtime change was made.
+
 ### Internal request and discussion client (Studio #4340)
 
 | Test ID | Targets | Required evidence |
@@ -828,6 +875,15 @@ remain NOT RUN for this slice. No hosted model call, automatic server polling,
 operator mutation or additional cloud service is introduced.
 
 
+Same-source tool validation at `8c672ec9` on Ubuntu host `snts` passed all 26
+Android bootstrap/environment controls (exit 0). Exact command:
+`python3 -m unittest discover -s apps/studio-native/tests -p 'test_android*.py' -v`.
+Isolated source directory: `/home/snts/ub1000-native-contract-8c672ec9-L3QglI`;
+retrieved log: `/tmp/ios-4360-ubuntu-contracts-result.log`. The authorized Mac
+full suite still had 8 failures out of 129, including process-control permission
+errors. Linux controls pass unchanged; neither platform result establishes actual
+Android application instrumentation or resolves the prior consent-flow failure.
+
 ### Durable retry target regression — 2026-11-18
 
 CI run44310462168 at359cb613 failed the single retry after relaunch: one initial
@@ -853,3 +909,97 @@ listening checks remain. Both this case and durable retry passed together in
 `/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
 All remaining references to the removed saved/account/sync labels in native
 journeys were checked; they assert absence, not stale positive visibility.
+
+### Stopped voice response draft input boundary — CI #4361
+
+Run44326288656 on0ea2078b restored `Keep my separate` after the stop-response
+journey immediately terminated following `typeText("Keep my separate draft")`.
+The original recording at
+`/tmp/ios4361-stop-full/A9397026-6036-45C3-9082-4E3D51828601.mp4` does not establish
+complete input before termination: sampled frames show `Ke`, then termination,
+then the partial restored text. This is not proof of a persistence defect.
+
+The journey now requires exact full input before terminating and exact full
+restoration afterwards, each using the existing10s wait. It keeps one typeText,
+no retyping, original cancellation/send-once/no-restart assertions, and records
+each boundary. An incomplete precondition fails the test before termination.
+Independent source review accepted the stronger assertion and failure guard.
+
+Focused native PASS31.469s (Executed1), runner and owned-simulator cleanup exit0:
+`/tmp/ios4361-stop-input-boundary-2.xcresult`. Both equality predicates passed.
+The earlier `/tmp/ios4361-stop-input-boundary.xcresult` selected the wrong class
+and executed0 tests despite exit0; it is NOT validation. Captured AX descriptions
+truncate long values, so the final diagnostic attachment additionally records raw
+`input.value`; that diagnostic-only addition followed the passing run and was not
+claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
+
+
+### Held-history retry regression — 2026-11-19
+
+Run44342724464 attempt3 atb35a2e2c passed105 Core and46of47 UI tests. Real
+Korean playback passed; the single retry-after-relaunch test failed with no
+button-action trace and no second POST. Keep that failed result.
+
+The new MFR-T05 held-history case first releases an ordinary history read after
+restart without Retry and requires no replay. It then holds another read, taps
+Retry exactly once and requires no early POST or duplicate intent, followed by
+the same ID/text, one accepted turn and the original answer assertion after
+release. The reviewed fix and remaining device-copy removal are backported
+from41fa5285; new native execution is pending, not a passing result.
+
+
+### GitHub diagnostic observation — 2026-11-19
+
+Run44383839227 at `0a59f232` completed with 105 Core tests passing and one failure
+among 48 UI journeys. `testInternalGitHubUnknownReopenKeepsOneAssociation` failed
+inside `githubTrace`, asking XCTest for the activation point of the noninteractive
+`teamGitHubTrace` static text. The helper now reads its accessibility value once
+it exists, retaining the same bounded fallback and five-second existence check.
+All three callers were audited: subsequent actions already reveal their own
+button or history target, or end with counter assertions.
+All association counts, exact-key recovery assertions and real button taps remain
+unchanged. The original retry (29.089 seconds), held-history retry (55.193 seconds)
+and Korean speech completion (27.876 seconds) passed on the previous source;
+these partial results do not establish full acceptance of this correction.
+The new helper change is locally runtime NOT RUN while the shared resource slot
+is blocked. Diff and requirement-inventory checks are integrity evidence only.
+
+
+### Android second explicit capture boundary — 2026-11-19
+
+Run44393604967 at `d8563645` failed one of44 Android tests: the background/reopen
+journey expected2 capture starts but observed1. Its second click was followed by
+partial injection through whichever listener remained, without first proving a
+new capture. This establishes a missing start, not a background reopening defect.
+The test now observes actual foreground/allowed conversation, empty draft and
+visible enabled target readiness using the existing five-second readiness budget,
+then performs exactly one real click. Before injecting or backgrounding it requires
+starts2, a new listener and LISTENING. Existing background no-reopen, submitted1 and
+preserved draft assertions remain unchanged. Content-free failure state records
+guards, target readiness and new-listener identity as a boolean; no credentials or
+utterance text are added to diagnostics. No retry, relaxed count or product change.
+A periodic-read race remains a hypothesis until runtime evidence; new execution is
+NOT RUN while shared compute is blocked. Static integrity checks are not acceptance.
+
+### Accessibility evidence collection regression — 2026-11-19
+
+Run44326111986 at source2c6d0f83 failed two of43 UI cases;92 Core cases passed.
+Its checkoute83b9db3 has the same native tree and workflow blobs as the source
+head, recorded in the native-candidate artifact. LongHistory failed its initial
+login-enabled wait before any history action. Its final video frame shows the
+guest screen without a storage-error message; this does not establish why the
+accessibility wait failed. Failed enabled waits now preserve one element snapshot
+and the composer screen without changing the original wait result or repeating
+the user's action.
+
+MemberInbox reached its final draft and one-POST/recovery-GET assertions, then
+exceeded180seconds while collecting evidence. The retained spindump shows the
+test runner and app traversing accessibility snapshots in evidence/trace, not
+account storage. The test now reuses that already-asserted final trace for its
+attachment, retaining the screenshot, assertions and unchanged timeout budgets.
+
+Focused local Xcode27.2 validation passed both cases in84.670seconds:
+LongHistory40.217s and MemberInbox44.453s. Runner and owned-simulator cleanup
+exited0. Evidence: `/tmp/ios-4360-accessibility-regression.log` and `.xcresult`.
+Independent source review found no weakened assertion. The earlier remote run
+remains FAIL; this focused pass is not a complete remote or physical acceptance.

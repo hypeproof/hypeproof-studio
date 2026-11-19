@@ -427,9 +427,11 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor private func githubTrace(_ app: XCUIApplication) -> String {
         let trace = app.staticTexts["teamGitHubTrace"]
+        // This diagnostic value is read, never tapped. Asking for an activation
+        // point can fail even when its accessibility value is available.
         // Stop at the first row. Further downward swipes dismiss the containing sheet.
         for _ in 0..<8 {
-            if trace.exists && trace.isHittable { return trace.value as? String ?? "" }
+            if trace.exists { return trace.value as? String ?? "" }
             app.swipeDown()
         }
         XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")

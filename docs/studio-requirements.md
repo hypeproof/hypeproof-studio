@@ -10471,9 +10471,19 @@ unverified, and account changes remove prior records. No new operator or
 reporter mutation is exposed by this screen.
 
 
+
 ### Durable retry touch target — 2026-11-18
 
 A saved local request's explicit retry action must expose at least a 44pt touch
 area. A single activation retries the preserved request identity and words;
 restart and background history reads must not create an automatic replay.
 This applies the existing native touch-target contract to the outbox action.
+
+
+### Explicit outbox retry during history reconciliation — 2026-11-19
+
+A background history read must not disable the explicit Retry action. One
+activation queues the existing request ID and words until reconciliation ends;
+account, selection, logout and stop fences remain authoritative. A second
+activation cannot enqueue another send. Reads and restart alone never replay.
+Local status says only pending transmission, without device-storage copy.
