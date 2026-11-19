@@ -478,3 +478,11 @@ extension ConversationService {
         try event.validate(request: draft.requestID); guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
     }
 }
+
+extension ConversationService {
+    public func teamDeliveries(id: String, after: String? = nil, token: String) async throws -> TeamDeliveryPage {
+        guard TeamRequestRecord.validID(id), after.map({ $0.count <= 9 && !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/deliveries" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamDeliveryPage.self, from: data); try page.validate(request: id); return page
+    }
+}

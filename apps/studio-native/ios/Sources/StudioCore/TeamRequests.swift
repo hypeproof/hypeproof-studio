@@ -604,3 +604,130 @@ public struct TeamGitHubDraft: Codable, Sendable {
         } catch { if await admitFailure(g) { view.page = nil; view.events = []; view.message = "연결 이력을 불러오지 못했어요." } }
     }
 }
+
+// Read-only delivery records: provider observation is never installation or resolution.
+public struct TeamDeliveryEvidence: Codable, Sendable, Equatable {
+    public struct Package: Codable, Sendable, Equatable { public let sha256, bundle_id, version, build: String; public let size: Int }
+    public struct Observation: Codable, Sendable, Equatable { public let id, attempt: Int; public let workflow_source_sha: String }
+    public struct Apple: Codable, Sendable, Equatable { public let app_id, build_id, group_id, processing, internal_state, expiration_date: String; public let expired, group_contains_build: Bool }
+    public let schema, repository, source_sha: String
+    public let package: Package
+    public let observation_run: Observation
+    public let apple: Apple
+    public let observed_at, observation_started_at, valid_until: Double
+    public let group_build_available: Bool
+    public let target_tester_member, target_tester_invitation_accepted, device_installed, reporter_confirmation: String
+    public func validate() throws {
+        guard schema == "hps-team-delivery-evidence/1", repository == "hypeproof/hypeproof-studio", TeamGitHubDraft.sha(source_sha),
+              package.bundle_id == "ai.hypeproof.studio.mobile", package.sha256.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+              TeamGitHubDraft.number(package.size), package.version.range(of: "^[0-9]+(?:\\.[0-9]+){0,2}$", options: .regularExpression) != nil,
+              package.build.range(of: "^[0-9]+\\.[0-9]+$", options: .regularExpression) != nil, package.version.count <= 32, package.build.count <= 32,
+              TeamGitHubDraft.number(observation_run.id), TeamGitHubDraft.number(observation_run.attempt), TeamGitHubDraft.sha(observation_run.workflow_source_sha),
+              [apple.app_id,apple.build_id,apple.group_id].allSatisfy({ $0.range(of: "^[A-Za-z0-9-]{1,100}$", options: .regularExpression) != nil }),
+              ["PROCESSING","FAILED","INVALID","VALID"].contains(apple.processing),
+              ["PROCESSING","PROCESSING_EXCEPTION","MISSING_EXPORT_COMPLIANCE","READY_FOR_BETA_TESTING","IN_BETA_TESTING","EXPIRED","IN_EXPORT_COMPLIANCE_REVIEW"].contains(apple.internal_state),
+              [observed_at,observation_started_at,valid_until].allSatisfy({ $0.isFinite && $0 > 0 }),
+              observation_started_at <= observed_at, observed_at - observation_started_at <= 600_000,
+              valid_until <= observation_started_at + 900_000,
+              [target_tester_member,target_tester_invitation_accepted,device_installed,reporter_confirmation].allSatisfy({ $0 == "not_observed" }) else { throw SyncFailure.invalidResponse }
+        guard let expiration = expirationInstant, valid_until == min(observation_started_at + 900_000, expiration) else { throw SyncFailure.invalidResponse }
+        if group_build_available { guard apple.processing == "VALID", apple.internal_state == "IN_BETA_TESTING", !apple.expired, apple.group_contains_build, expiration > observed_at else { throw SyncFailure.invalidResponse } }
+    }
+    private var expirationInstant: Double? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: apple.expiration_date) { return date.timeIntervalSince1970 * 1000 }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: apple.expiration_date).map { $0.timeIntervalSince1970 * 1000 }
+    }
+    public func isFresh(at now: Date) -> Bool {
+        let time = now.timeIntervalSince1970 * 1000
+        guard let expiration = expirationInstant else { return false }
+        return observed_at <= time && time < valid_until && time < expiration
+    }
+    public func groupAvailable(at now: Date) -> Bool { group_build_available && isFresh(at: now) }
+    public var observationURL: URL { URL(string: "https://github.com/hypeproof/hypeproof-studio/actions/runs/\(observation_run.id)/attempts/\(observation_run.attempt)")! }
+}
+public struct TeamDeliveryEvent: Codable, Sendable, Equatable, Identifiable {
+    public let id, request_id, github_link_id, availability, reporter_confirmation: String
+    public let revision: Int
+    public let instructions: String?
+    public let evidence: TeamDeliveryEvidence?
+    public let created_at: Double
+    public let redacted_at: Double?
+    public func validate(request: String) throws {
+        guard TeamRequestRecord.validID(request), request_id == request,
+              id.range(of: "^tdl_[a-f0-9]{32}$", options: .regularExpression) != nil,
+              github_link_id.range(of: "^tgl_[a-f0-9]{32}$", options: .regularExpression) != nil,
+              revision > 0, revision < 1_000_000_000, created_at.isFinite, created_at > 0,
+              ["group_available","not_established"].contains(availability), reporter_confirmation == "not_observed" else { throw SyncFailure.invalidResponse }
+        if let redacted_at { guard redacted_at.isFinite, redacted_at >= created_at, instructions == nil, evidence == nil, availability == "not_established" else { throw SyncFailure.invalidResponse } }
+        else { guard let instructions, !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, instructions.utf16.count <= 2000, !instructions.contains("\0"), let evidence else { throw SyncFailure.invalidResponse }; try evidence.validate(); if availability == "group_available" && !evidence.group_build_available { throw SyncFailure.invalidResponse } }
+    }
+}
+public struct TeamDeliveryPage: Codable, Sendable {
+    public let schema, request_id: String
+    public let can_manage: Bool
+    public let current: TeamDeliveryEvent?
+    public let events: [TeamDeliveryEvent]
+    public let next_cursor: String?
+    public func validate(request: String) throws {
+        guard schema == "hps-team-deliveries/1", request_id == request, TeamRequestRecord.validID(request), events.count <= 50 else { throw SyncFailure.invalidResponse }
+        try current?.validate(request: request)
+        var previous = 0; var ids = Set<String>()
+        for event in events { try event.validate(request: request); guard event.revision > previous, event.revision <= (current?.revision ?? 0), ids.insert(event.id).inserted else { throw SyncFailure.invalidResponse }; if event.revision == current?.revision && event != current { throw SyncFailure.invalidResponse }; previous = event.revision }
+        if let next_cursor { guard next_cursor == String(previous), previous > 0, previous < (current?.revision ?? 0) else { throw SyncFailure.invalidResponse } }
+    }
+}
+@MainActor public final class TeamDeliveryController {
+    public struct View { public var page: TeamDeliveryPage?; public var events: [TeamDeliveryEvent] = []; public var busy = false; public var message = ""; public init() {} }
+    public private(set) var view = View()
+    private let requestID: String
+    private let identity: () async throws -> MemberApprovalIdentity?
+    private let fetch: (MemberApprovalIdentity, String?) async throws -> TeamDeliveryPage
+    private let changed: (View) -> Void
+    private var generation = UUID(), binding: MemberApprovalIdentity?
+    public init(requestID: String, identity: @escaping () async throws -> MemberApprovalIdentity?, fetch: @escaping (MemberApprovalIdentity, String?) async throws -> TeamDeliveryPage, changed: @escaping (View) -> Void) { self.requestID = requestID; self.identity = identity; self.fetch = fetch; self.changed = changed }
+    public func invalidate() { generation = UUID(); binding = nil; view = View(); changed(view) }
+    public func open() async { await read(more: false) }
+    public func more() async { await read(more: true) }
+    private func read(more: Bool) async {
+        guard !view.busy else { return }; let after = more ? view.page?.next_cursor : nil
+        guard !more || after != nil else { return }
+        let g = generation; view.busy = true; view.message = ""
+        if !more { view.page = nil; view.events = [] }; changed(view)
+        defer { if g == generation { view.busy = false; changed(view) } }
+        do {
+            guard let account = try await identity(), g == generation else { if g == generation { invalidate() }; return }
+            if more && binding != account { invalidate(); return }; binding = account
+            let page = try await fetch(account, after); try page.validate(request: requestID)
+            guard g == generation else { return }
+            guard try await identity() == account, g == generation else { if g == generation { invalidate() }; return }
+            if more { guard page.events.allSatisfy({ $0.revision > (Int(after ?? "") ?? 0) }), (page.current?.revision ?? 0) >= (view.page?.current?.revision ?? 0) else { throw SyncFailure.invalidResponse }; view.events += page.events }
+            else { view.events = page.events }
+            view.page = page
+        } catch {
+            guard g == generation else { return }
+            let current = try? await identity(); guard g == generation else { return }
+            if let current, current != binding { invalidate(); return }
+            view.page = nil; view.events = []; view.message = "배포 근거를 확인하지 못했어요. 아직 제공되지 않거나 접근 권한이 없을 수 있어요. 다시 확인해 주세요."
+        }
+    }
+}
+
+
+/// Navigation destinations may be evaluated again while StateObject retains an
+/// earlier presentation. Track every live controller without extending its life.
+@MainActor public final class TeamDeliveryControllers {
+    private final class Entry { weak var value: TeamDeliveryController?; init(_ value: TeamDeliveryController) { self.value = value } }
+    private var entries: [Entry] = []
+    public init() {}
+    public func register(_ controller: TeamDeliveryController) {
+        entries.removeAll { $0.value == nil }
+        if !entries.contains(where: { $0.value === controller }) { entries.append(Entry(controller)) }
+    }
+    public func invalidate() {
+        entries.removeAll { $0.value == nil }
+        entries.forEach { $0.value?.invalidate() }
+    }
+}

@@ -10461,6 +10461,15 @@ actionable error, retry, logout, pending-send and unsent-draft warnings. Setting
 may still indicate an in-progress refresh. The intent is to keep attention on
 the conversation while retaining information needed for user judgment.
 
+## iPhone request delivery evidence (#4364)
+
+The request detail provides a read-only delivery record with exact build,
+observation freshness, instructions and history (MTR-12–14). A valid group
+observation cannot imply personal invitation acceptance, installation or
+resolution. Unsupported or inaccessible server capability stays explicitly
+unverified, and account changes remove prior records. No new operator or
+reporter mutation is exposed by this screen.
+
 
 
 ### Durable retry touch target — 2026-11-18

@@ -406,7 +406,7 @@ final class TeamEntryUITests: XCTestCase {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-comment-unsaved-export-and-exit-guard"; shot.lifetime = .keepAlways; add(shot)
     }
 
-    @MainActor private func githubApp(_ flags: [String:String] = [:]) -> XCUIApplication {
+    @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
@@ -418,7 +418,8 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
         githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
-        githubReveal(app, app.buttons["teamGitHubEntry"]); app.buttons["teamGitHubEntry"].tap()
+        let entry = app.buttons[delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
+        githubReveal(app, entry); entry.tap()
         return app
     }
     @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement) {
@@ -479,6 +480,28 @@ final class TeamEntryUITests: XCTestCase {
         githubReveal(app,app.staticTexts["teamGitHubReceipt"])
         let trace = githubTrace(app)
         XCTAssertTrue(trace.contains("\"githubPosts\":2")); XCTAssertTrue(trace.contains("\"githubEvents\":1"))
+    }
+
+    @MainActor func testInternalDeliveryShowsExactBuildAndUnobservedPersonalStatus() throws {
+        let app = githubApp(delivery: true)
+        let build = app.staticTexts["teamDeliveryBuild1"]
+        XCTAssertTrue(build.waitForExistence(timeout: 10)); XCTAssertEqual(build.label, "버전 0.2.0 · 빌드 18.1")
+        XCTAssertEqual(app.staticTexts["teamDeliveryAvailability1"].label, "내부 테스트 그룹에 빌드가 제공된 것을 확인했어요.")
+        let personal = app.staticTexts["teamDeliveryUnobserved1"]; githubReveal(app,personal)
+        XCTAssertTrue(personal.label.contains("아직 확인되지 않았어요"))
+        let instructions = app.staticTexts["teamDeliveryInstructions1"]; githubReveal(app,instructions)
+        XCTAssertTrue(instructions.label.contains("TestFlight"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "delivery-group-evidence-not-installation"; shot.lifetime = .keepAlways; add(shot)
+    }
+    @MainActor func testInternalDeliveryStaleAndUnavailableNeverClaimCurrentAvailability() throws {
+        let stale = githubApp(["HP_TEAM_DELIVERY_STALE":"1"], delivery: true)
+        XCTAssertTrue(stale.staticTexts["teamDeliveryBuild1"].waitForExistence(timeout: 10))
+        XCTAssertEqual(stale.staticTexts["teamDeliveryAvailability1"].label, "현재 그룹의 설치 가능 여부는 확인되지 않았어요.")
+        XCTAssertTrue(stale.staticTexts["teamDeliveryFreshness1"].label.contains("다시 확인이 필요해요")); stale.terminate()
+        let unavailable = githubApp(["HP_TEAM_DELIVERY_UNAVAILABLE":"1"], delivery: true)
+        XCTAssertTrue(unavailable.staticTexts["teamDeliveryUnavailable"].waitForExistence(timeout: 10))
+        XCTAssertFalse(unavailable.staticTexts["teamDeliveryBuild1"].exists)
+        XCTAssertFalse(unavailable.staticTexts["teamDeliveryEmpty"].exists)
     }
 
 }

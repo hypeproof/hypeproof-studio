@@ -20594,6 +20594,45 @@
           "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-DELIVERY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Read-only delivery evidence — Studio #4364"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone request delivery evidence (#4364)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-DELIVERY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-DELIVERY",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Read-only delivery evidence — Studio #4364"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamDeliveryTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }

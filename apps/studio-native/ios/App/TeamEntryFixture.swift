@@ -30,6 +30,21 @@ private final class TeamEntryState: @unchecked Sendable {
             if ProcessInfo.processInfo.environment["HP_TEAM_REQUEST_DENIED"] == "1" { return (403, ["error": "team_product_denied"]) }
             let id = "trq_" + String(repeating: "a", count: 32)
             let path = request.url?.path ?? ""
+            if path == "/v1/me/team-requests/" + id + "/deliveries" {
+                guard request.httpMethod == "GET" else { return (405, ["error":"read_only_fixture"]) }
+                if ProcessInfo.processInfo.environment["HP_TEAM_DELIVERY_UNAVAILABLE"] == "1" { return (503, ["error":"team_deliveries_unavailable"]) }
+                let stale = ProcessInfo.processInfo.environment["HP_TEAM_DELIVERY_STALE"] == "1"
+                let now = Date().timeIntervalSince1970 * 1000, start = now - (stale ? 1_000_000 : 1000)
+                let proof: [String: Any] = ["schema":"hps-team-delivery-evidence/1","repository":"hypeproof/hypeproof-studio","source_sha":String(repeating:"a",count:40),
+                    "package":["sha256":String(repeating:"b",count:64),"size":1000,"bundle_id":"ai.hypeproof.studio.mobile","version":"0.2.0","build":"18.1"],
+                    "observation_run":["id":123,"attempt":1,"workflow_source_sha":String(repeating:"c",count:40)],
+                    "apple":["app_id":"6832914754","build_id":"fixture-build","group_id":"fixture-group","processing":"VALID","internal_state":"IN_BETA_TESTING","expiration_date":"2027-01-01T00:00:00Z","expired":false,"group_contains_build":true],
+                    "observation_started_at":start,"observed_at":start+100,"valid_until":start+900000,"group_build_available":true,
+                    "target_tester_member":"not_observed","target_tester_invitation_accepted":"not_observed","device_installed":"not_observed","reporter_confirmation":"not_observed"]
+                let event: [String:Any] = ["id":"tdl_"+String(repeating:"a",count:32),"request_id":id,"github_link_id":"tgl_"+String(repeating:"b",count:32),"revision":1,
+                    "instructions":"TestFlight에서 이 버전을 설치한 뒤 요청했던 흐름을 확인해 주세요.", "evidence":proof,"availability":stale ? "not_established":"group_available","reporter_confirmation":"not_observed","created_at":start+200,"redacted_at":NSNull()]
+                return (200,["schema":"hps-team-deliveries/1","request_id":id,"can_manage":false,"current":event,"events":[event],"next_cursor":NSNull()])
+            }
             if path == "/v1/me/team-requests/members" {
                 return (200, ["schema": "hps-team-assignment-members/1", "account_id": "journey-account", "product": "studio", "members": [["account_id": "journey-account", "display_name": "내부 테스트 멤버"]]])
             }

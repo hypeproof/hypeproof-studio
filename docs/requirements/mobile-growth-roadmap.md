@@ -571,3 +571,17 @@ This slice consumes Service #567 (source 9e20acf) without activating a productio
 registry, running a migration, publishing GitHub content or changing operator policy.
 The existing 18.1 release contains M0 only; source and simulator results are separate
 from deployed API integration and physical-device acceptance.
+
+### Read-only delivery evidence — Studio #4364
+
+| ID | Requirement |
+|---|---|
+| MTR-12 | Request members can read the exact iOS version/build, observation time, freshness deadline, verification instructions and ordered delivery history. Refresh and pagination are explicit reads through existing account authentication. |
+| MTR-13 | Group availability is a time-bounded provider observation, never personal invitation eligibility, installation or reporter confirmation. Expired evidence loses current-availability wording without a reload. Default-off/unavailable/invalid responses cannot appear as an empty or available delivery. |
+| MTR-14 | Bind every response and history page to its request/account/session; discard late success and failure after account changes. This screen cannot associate raw run IDs, resolve/reopen a request, or confirm delivery. |
+
+Consumes Service #569's `hps-team-deliveries/1` read contract. No production
+feature activation, enrollment, signing/upload or reporter-action contract is
+introduced by this client. The earlier removal of routine conversation status
+labels remains intact. Provider observations, local tests and installed-app
+acceptance are separate evidence.
