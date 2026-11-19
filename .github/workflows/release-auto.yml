@@ -36,7 +36,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: release-auto
+  group: release-promote
   cancel-in-progress: false
 
 jobs:

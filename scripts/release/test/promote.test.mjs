@@ -227,5 +227,7 @@ test('completion wakes only the current same-repository release identity and nev
   const doc = workflow('release-promote.yml');
   assert.deepEqual(doc[true].workflow_run.workflows, ['studio-pr-ci', 'Verify and publish Unified Studio']);
   assert.equal(doc.concurrency.group, 'release-promote');
+  assert.equal(workflow('release-auto.yml').concurrency.group, doc.concurrency.group,
+    'automatic authority and approved completion must not race the same tag or draft');
   assert.match(doc.jobs.promote.steps.find(s => s.name === 'Promote the approved rc').run, /promote.mjs resume/);
 });

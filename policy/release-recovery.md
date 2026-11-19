@@ -10,5 +10,5 @@ an acceptance event must match its candidate parent. Ambiguous candidates stop.
 
 Completion supplies no approval. The existing current-head publication gate,
 release blockers, immutable package checks and final publication gates remain
-mandatory. Manual and completion-driven promotions share one concurrency group.
+mandatory. Manual, completion-driven and release-auto promotions share one concurrency group.
 This does not authorize a new build, change access or weaken merge policy.
