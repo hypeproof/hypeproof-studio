@@ -49,7 +49,7 @@ const STATES = {
   paused: { label: '멈춤', messages: [user], extra: { streaming: false, lastOutcome: 'stopped', stopNotice: '멈췄어요.' } },
   error: { label: '문제가 생겼어요', messages: [user], extra: { streaming: false, lastOutcome: 'error', error: '연결이 끊겼어요' } },
 };
-const view = { scope: 's', revision: 1, activeTaskId: 't1', sourceSelection: null, tasks: [{ id: 't1', title: '내 작업', createdAt: 1, updatedAt: 1, messageCount: 2 }] };
+const view = { scope: 's', revision: 1, activeTaskId: 't1', sourceSelection: null, tasks: [{ id: 't1', title: '아주 긴 작업 제목으로 좁은 창에서도 상태와 겹치지 않는지 확인해요 '.repeat(4), createdAt: 1, updatedAt: 1, messageCount: 2 }] };
 const seats = {
   personal: { config: chatConfig(3, { profile: { ...chatConfig().profile, lesson: null }, activity: { id: 'a1', name: '내 작업', kind: 'personal', workspace: '/w', verified: true }, taskWorkspace: view }), view, header: '.tw-heading' },
   classroom: { config: chatConfig(), view: undefined, header: 'header.hps-header' },
@@ -63,6 +63,7 @@ const MEASURE = (header) => `(()=>{const all=[...document.querySelectorAll('.hps
   return {count:1,key:el.dataset.runState,text:el.textContent,inHeader:!!hd,live:el.getAttribute('aria-live'),role:el.getAttribute('role'),
     iconW:ir.width,iconH:ir.height,iconHidden:icon.getAttribute('aria-hidden'),font:parseFloat(ls.fontSize),
     labelW:lr.width,labelFull:lab.scrollWidth<=lab.clientWidth+0.5,inView:r.left>=0&&r.right<=innerWidth&&r.top>=0,inHeaderBox:!!hr&&r.left>=hr.left-0.5&&r.right<=hr.right+0.5,
+    titleGeometry:hd?(()=>{const title=hd.querySelector('.tw-title-button');if(!title)return null;const tr=title.getBoundingClientRect();return {width:tr.width,inView:tr.left>=0&&tr.right<=innerWidth,overlap:Math.min(tr.right,r.right)-Math.max(tr.left,r.left)>.5&&Math.min(tr.bottom,r.bottom)-Math.max(tr.top,r.top)>.5};})():null,
     clipped,covered:!(hit&&el.contains(hit)),moving,controlRows:hd?(()=>{const cs=[...hd.querySelectorAll('button')].map(b=>b.getBoundingClientRect()).filter(q=>q.width>1&&q.height>1);const mid=cs.map(q=>(q.top+q.bottom)/2);return {spread:mid.length?Math.max(...mid)-Math.min(...mid):0,below:cs.filter(q=>q.top>=r.bottom-1).length}})():null,otherStates:[...document.querySelectorAll('.tw-heading .tw-run-note, .tw-heading .tw-run-chip, header.hps-header .hp-status-chip')].filter(n=>{const b=n.getBoundingClientRect();if(b.width<=1||b.height<=1)return false;const h=document.elementFromPoint((b.left+b.right)/2,(b.top+b.bottom)/2);return !!h&&n.contains(h)}).map(n=>n.textContent),pageScroll:document.documentElement.scrollWidth>innerWidth,color:ls.color}})()`;
 
 let cases = 0;
@@ -98,12 +99,21 @@ try {
       assert.equal(m.moving, false, `${t}: no animation or transition`);
       assert.ok(m.controlRows && m.controlRows.spread <= 4 && m.controlRows.below === 0, `${t}: the header controls stay on one row above or beside the run state ${JSON.stringify(m.controlRows)}`);
       assert.deepEqual(m.otherStates, [], `${t}: no second run state is visible in the heading`);
+      if (seat === 'personal') assert.ok(m.titleGeometry && m.titleGeometry.width > 0 && m.titleGeometry.inView && !m.titleGeometry.overlap, `${t}: #2989 title stays visible without intersecting run state ${JSON.stringify(m.titleGeometry)}`);
       assert.equal(m.pageScroll, false, `${t}: no horizontal page scroll`);
       if (evidence && (width === 800 || key === 'approval' || key === 'searching')) {
         const shot = await browser.send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width, height: 140, scale: 1 } });
         writeFileSync(`${evidence}/${seat}-${dark ? 'dark' : 'light'}-${width}-${key}.png`, Buffer.from(shot.data, 'base64'));
       }
       cases++;
+    }
+    if (seat === 'personal' && width === 320) {
+      // Negative control: deliberately place the state on the title, then restore the exact inline style.
+      await browser.evaluate(`(()=>{const state=document.querySelector('.hps-run-state'),title=document.querySelector('.tw-title-button').getBoundingClientRect();window.__stateStyle=state.style.cssText;state.style.cssText='position:fixed!important;inset:auto!important;top:'+title.top+'px!important;left:'+title.left+'px!important;width:'+title.width+'px!important;height:'+title.height+'px!important';})()`);
+      const injected = await browser.evaluate(MEASURE(header));
+      assert.equal(injected.titleGeometry?.overlap, true, `${tag}: #2989 overlap detector catches a displaced state`);
+      await browser.evaluate(`document.querySelector('.hps-run-state').style.cssText=window.__stateStyle`);
+      assert.equal((await browser.evaluate(MEASURE(header))).titleGeometry?.overlap, false, `${tag}: restored layout remains separate`);
     }
     if (width === 800) {
       await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
