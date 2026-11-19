@@ -663,8 +663,10 @@ private struct SharedCacheFile: Codable {
     var canLogout: Bool { signedIn && account != nil && !busy && !stoppingReflection }
     var pendingGuestDraft: String? { signedIn && !guestDraft.text.isEmpty ? guestDraft.text : nil }
     var canRestoreGuestDraft: Bool {
-        signedIn && accountStorageReady && cacheReadable && guestDraftReadable && isReflection
-            && !busy && !syncing && guestDraft.canRestore(into: cache)
+        // Ordinary history reads preserve the current local draft. A synchronous
+        // explicit restore can safely use the same durable edit path as typing.
+        signedIn && account != nil && accountStorageReady && cacheReadable && guestDraftReadable && isReflection
+            && !busy && !loggingOut && !stoppingReflection && guestDraft.canRestore(into: cache)
     }
     var canRestoreFailedReflectionDraft: Bool {
         // A history GET never owns the local draft. Restore from the current

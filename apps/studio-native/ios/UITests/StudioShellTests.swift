@@ -202,23 +202,28 @@ final class StudioJourneyTests: XCTestCase {
         return element
     }
     @MainActor private func readinessFailure(_ name: String, app: XCUIApplication, queries: [(String, XCUIElement)]) {
-        // Capture the failed observation without another action, wait or assertion.
-        // An unresolved query alone omits the hierarchy needed to distinguish a
-        // stale lookup from a visible element outside the transcript viewport.
-        var observations = ["window=\(app.frame)"]
-        for (label, element) in queries {
-            let exists = element.exists
-            observations.append("\(label): exists=\(exists); query=\(element.debugDescription)")
-            if exists {
-                observations.append("\(label): frame=\(element.frame); enabled=\(element.isEnabled); hittable=\(element.isHittable); label=\(element.label); value=\(String(describing: element.value)); placeholder=\(String(describing: element.placeholderValue))")
+        // Preserve the screen before diagnostics. One AX snapshot supplies all
+        // fields; repeated live queries can consume the entire test allowance
+        // after the original readiness wait has already failed.
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+        var observations = ["failed queries: " + queries.map { $0.0 }.joined(separator: ", ")]
+        var rawTrace = "trace absent from failure snapshot"
+        do {
+            let snapshot = try app.snapshot()
+            var remaining = 2000
+            func collect(_ item: XCUIElementSnapshot, depth: Int) {
+                guard remaining > 0 else { return }; remaining -= 1
+                observations.append("depth=\(depth); type=\(item.elementType.rawValue); id=\(item.identifier); frame=\(item.frame); enabled=\(item.isEnabled); label=\(item.label); value=\(String(describing: item.value))")
+                if item.identifier == "nativeJourneyTrace" { rawTrace = item.value as? String ?? "trace value absent" }
+                for child in item.children { collect(child, depth: depth + 1) }
             }
-        }
-        let traceElement = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
-        let rawTrace = traceElement.exists ? (traceElement.value as? String ?? "trace value absent") : "trace absent"
-        let details = XCTAttachment(string: observations.joined(separator: "\n")); details.name = name + "-queries-and-frames"; details.lifetime = .keepAlways; add(details)
-        let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+            collect(snapshot, depth: 0)
+            if remaining == 0 { observations.append("snapshot truncated after 2000 nodes") }
+        } catch { observations.append("single AX snapshot unavailable: \(error)") }
+        let hierarchy = XCTAttachment(string: observations.joined(separator: "\n"))
+        hierarchy.name = name + "-single-snapshot"; hierarchy.lifetime = .keepAlways; add(hierarchy)
         let trace = XCTAttachment(string: rawTrace); trace.name = name + "-synthetic-trace"; trace.lifetime = .keepAlways; add(trace)
-        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
     @MainActor private func trace(_ app: XCUIApplication) throws -> [String: Any] {
         let element = diagnostic("nativeJourneyTrace", in: app)
@@ -1301,7 +1306,7 @@ final class StudioJourneyTests: XCTestCase {
         try evidence("journey-cancel-first-thought", app: app)
     }
     @MainActor func testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice() throws {
-        let app = launch("draft-collision")
+        let app = launch("draft-collision", arguments: ["--hold-guest-history"])
         let input = field(app); input.tap(); input.typeText("My thought before login")
         signIn(app)
         XCTAssertEqual(field(app).value as? String, "Existing account draft")
@@ -1333,7 +1338,24 @@ final class StudioJourneyTests: XCTestCase {
             ])
         }
         XCTAssertEqual(cleared, .completed, "The account draft must actually be cleared before restoring the separate guest draft.")
+        app.buttons["conversationSettings"].tap()
+        let hold = app.buttons["nativeJourneyHoldHistory"]; enabled(hold); hold.tap()
+        let held = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertEqual(held["history_sync_automatic"] as? Bool, true)
+        XCTAssertEqual(held["accepted_turns"] as? Int, 0)
+        XCTAssertTrue(restore.isEnabled, "An ordinary history GET must not consume or disable explicit guest draft restoration.")
         enabled(restore); restore.tap()
+        XCTAssertEqual(field(app).value as? String, "My thought before login")
+        XCTAssertFalse(restore.exists)
+        XCTAssertEqual(try trace(app)["active_history_reads"] as? Int, 1, "The restore must finish while the same GET is still held.")
+        app.buttons["conversationSettings"].tap()
+        let release = app.buttons["nativeJourneyReleaseHistory"]; enabled(release); release.tap()
+        let after = try waitForTraceCount("history_barrier_completions", atLeast: 1, in: app)
+        XCTAssertEqual(after["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(after["accepted_turns"] as? Int, 0)
+        XCTAssertEqual(after["submitted_ids"] as? [String], [])
+        XCTAssertEqual(field(app).value as? String, "My thought before login", "The completing GET must preserve the locally restored words.")
+        app.terminate(); app.launch()
         XCTAssertEqual(field(app).value as? String, "My thought before login")
         XCTAssertFalse(restore.exists)
         XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)

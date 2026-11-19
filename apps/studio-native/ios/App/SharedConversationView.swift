@@ -83,6 +83,8 @@ struct SharedConversationView: View {
     @State private var timelineLayout: ConversationTimelineLayout?
     @State private var timelineFollowing = true
     @State private var timelineProgrammatic = false
+    @GestureState private var timelineDragging = false
+    @State private var timelineScrollPending = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var textSize
     @Environment(\.colorScheme) private var colorScheme
@@ -294,9 +296,9 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
-                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory {
+                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                     settingsButton("Hold next history read") { leaveSettings(for: .holdHistory) }.accessibilityIdentifier("nativeJourneyHoldHistory")
-                    if NativeJourneyFixture.logoutSync || NativeJourneyFixture.retryHistory {
+                    if NativeJourneyFixture.logoutSync || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                         settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
                     }
                 }
@@ -393,7 +395,7 @@ struct SharedConversationView: View {
         case .holdHistory:
             NativeJourneyFixture.holdNextHistory()
             // The failed-draft journey observes the ordinary periodic GET.
-            if !NativeJourneyFixture.accessDenied && !NativeJourneyFixture.retryHistory { model.refresh() }
+            if !NativeJourneyFixture.accessDenied && !NativeJourneyFixture.retryHistory && !NativeJourneyFixture.guestHistory { model.refresh() }
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
         case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
@@ -534,12 +536,17 @@ struct SharedConversationView: View {
                     // appearance also fences a later account with the same IDs.
                     timelineGeneration = UUID(); timelineLayout = nil
                     timelineFollowing = true; timelineProgrammatic = false
+                    timelineScrollPending = false
                 }
                 .onPreferenceChange(ConversationTimelinePreference.self) { layout in
                     if let layout { positionTimeline(layout, scroll: scroll) }
                 }
-                .simultaneousGesture(DragGesture().onChanged { _ in
+                .simultaneousGesture(DragGesture().updating($timelineDragging) { _, dragging, _ in
+                    dragging = true
+                }.onChanged { _ in
                     timelineProgrammatic = false; timelineFollowing = false
+                }.onEnded { _ in
+                    timelineFollowing = timelineLayout?.atLatest == true
                 })
                 .overlay(alignment: .bottomTrailing) {
                     if !timelineFollowing, timelineLayout?.atLatest == false {
@@ -553,11 +560,28 @@ struct SharedConversationView: View {
         }
     }
     private func latestTimeline(_ scroll: ScrollViewProxy, animated: Bool = false) {
-        timelineFollowing = true; timelineProgrammatic = timelineLayout?.atLatest != true
-        // Automatic following is instant, like the desktop. Only a deliberate
-        // catch-up press may animate, and Reduce Motion always disables it.
-        withAnimation(animated && !reduceMotion ? .easeOut(duration: 0.2) : nil) {
-            scroll.scrollTo("sharedBottom", anchor: .bottom)
+        timelineFollowing = true
+        guard !timelineDragging, timelineLayout?.atLatest != true else {
+            timelineProgrammatic = false
+            return
+        }
+        guard !timelineScrollPending else { return }
+        timelineScrollPending = true
+        let generation = timelineGeneration, conversation = model.selected
+        // Geometry preferences are delivered during layout. Coalesce requests
+        // until the next turn instead of recursively scrolling from layout.
+        DispatchQueue.main.async {
+            guard generation == timelineGeneration else { return }
+            timelineScrollPending = false
+            guard conversation == model.selected else {
+                if timelineFollowing { latestTimeline(scroll) }
+                return
+            }
+            guard timelineFollowing, !timelineDragging, timelineLayout?.atLatest != true else { return }
+            timelineProgrammatic = true
+            withAnimation(animated && !reduceMotion ? .easeOut(duration: 0.2) : nil) {
+                scroll.scrollTo("sharedBottom", anchor: .bottom)
+            }
         }
     }
     private func positionTimeline(_ next: ConversationTimelineLayout, scroll: ScrollViewProxy) {
@@ -566,17 +590,20 @@ struct SharedConversationView: View {
         let old = timelineLayout
         let changedConversation = old == nil || old?.generation != next.generation || old?.conversation != next.conversation
         let sent = next.localRequestID != nil && old?.localRequestID != next.localRequestID
-        let changedContent = old?.tail != next.tail || old?.content.height != next.content.height || old?.viewportHeight != next.viewportHeight
+        let changedContent = old.map {
+            $0.tail != next.tail || abs($0.content.height - next.content.height) > 0.5 || abs($0.viewportHeight - next.viewportHeight) > 0.5
+        } ?? true
         let moved = old.map { abs($0.content.minY - next.content.minY) > 0.5 } ?? false
+        guard changedConversation || sent || changedContent || moved || old?.atLatest != next.atLatest else { return }
         timelineLayout = next
+        guard !timelineDragging else { return }
         if changedConversation || sent { latestTimeline(scroll); return }
         if timelineProgrammatic {
             if next.atLatest { timelineProgrammatic = false }
             else if changedContent { latestTimeline(scroll) }
             return
         }
-        // A stable-layout scroll includes touch, keyboard and accessibility
-        // navigation. Content/keyboard/font changes alone are not reader intent.
+        // Stable-layout movement is reader intent; size changes alone are not.
         if moved && !changedContent { timelineFollowing = next.atLatest }
         if changedContent && timelineFollowing { latestTimeline(scroll) }
         else if next.atLatest { timelineFollowing = true }
@@ -721,7 +748,7 @@ struct SharedConversationView: View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
                 if model.signedIn && TeamEntryFixture.pushEnabled { Button("검증 알림") { TeamEntryFixture.deliverPush() }.font(.caption2).accessibilityIdentifier("teamPushFixtureOpen") }
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

@@ -51,6 +51,7 @@ import CryptoKit
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var accessDenied: Bool { enabled && JourneyConfiguration.scenario == "access-denied" }
     static var retryHistory: Bool { enabled && JourneyConfiguration.scenario == "retry-once" && ProcessInfo.processInfo.arguments.contains("--hold-retry-history") }
+    static var guestHistory: Bool { enabled && JourneyConfiguration.scenario == "draft-collision" && ProcessInfo.processInfo.arguments.contains("--hold-guest-history") }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
     private(set) static var emptyStopBoundary: [String: Any] = [:]
@@ -59,13 +60,13 @@ import CryptoKit
         emptyStopBoundary = ["active": active, "phase": phase]
     }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
-    static func holdNextHistory() { if logoutSync || accessDenied || retryHistory { JourneyTransport.store.armHistory() } }
-    static func releaseHistory() { if logoutSync || retryHistory { JourneyTransport.store.releaseHistory() } }
+    static func holdNextHistory() { if logoutSync || accessDenied || retryHistory || guestHistory { JourneyTransport.store.armHistory() } }
+    static func releaseHistory() { if logoutSync || retryHistory || guestHistory { JourneyTransport.store.releaseHistory() } }
     static func failedDraftRestoreAttempt(eligible: Bool) { if accessDenied { JourneyTransport.store.failedDraftRestoreAttempt(eligible: eligible) } }
     static func failedDraftHistoryApplied() { if accessDenied { JourneyTransport.store.failedDraftHistoryApplied() } }
     static func failedDraftRestored() { if accessDenied { JourneyTransport.store.failedDraftRestored() } }
     static func synchronizationStarted(automatic: Bool) {
-        if periodicVoice || queuedVoice || accessDenied || retryHistory {
+        if periodicVoice || queuedVoice || accessDenied || retryHistory || guestHistory {
             JourneyTransport.store.synchronizationStarted(automatic: automatic)
         }
     }
@@ -282,7 +283,7 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     private func waitForSpeech(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
         guard !cancelled else { Self.store.cancelHistory(historyID); return }
-        if Self.store.historyMayFinish() { complete(historyOutcome: ["logout-sync", "access-denied"].contains(JourneyConfiguration.scenario) ? .explicitRelease : .speech); return }
+        if Self.store.historyMayFinish() { complete(historyOutcome: ["logout-sync", "access-denied", "draft-collision"].contains(JourneyConfiguration.scenario) ? .explicitRelease : .speech); return }
         if ProcessInfo.processInfo.systemUptime >= deadline {
             complete(historyOutcome: .timeout); return
         }
@@ -517,8 +518,11 @@ private final class JourneyStore: @unchecked Sendable {
         let retry = JourneyConfiguration.scenario == "retry-once"
             && ProcessInfo.processInfo.arguments.contains("--hold-retry-history")
             && historyArmed && automaticSynchronization
-        guard queuedVoice || logout || periodicVoice || failedDraft || retry else { return false }
-        if logout || failedDraft || retry { historyArmed = false; historyReleased = false }
+        let guestRestore = JourneyConfiguration.scenario == "draft-collision"
+            && ProcessInfo.processInfo.arguments.contains("--hold-guest-history")
+            && historyArmed && automaticSynchronization
+        guard queuedVoice || logout || periodicVoice || failedDraft || retry || guestRestore else { return false }
+        if logout || failedDraft || retry || guestRestore { historyArmed = false; historyReleased = false }
         if periodicVoice { periodicHistoryHolds += 1 }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
@@ -526,7 +530,7 @@ private final class JourneyStore: @unchecked Sendable {
     func historyMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
         if JourneyConfiguration.scenario == "voice-periodic-poll" { return secondSpeechDelivered }
-        return ["logout-sync", "access-denied", "retry-once"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
+        return ["logout-sync", "access-denied", "retry-once", "draft-collision"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
     }
     func failedDraftRestoreAttempt(eligible: Bool) {
         lock.lock(); defer { lock.unlock() }
