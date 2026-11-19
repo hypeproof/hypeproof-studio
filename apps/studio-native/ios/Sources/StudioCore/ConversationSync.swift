@@ -59,7 +59,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
     }
     public var reflectionStatusLabel: String {
         switch status {
-        case "local": return "이 기기에 저장됨 · 전송 대기"
+        case "local": return "전송 대기"
         case "running", "pending": return "질문을 이어가고 있어요"
         case "completed": return "같은 계정의 대화에 저장됨"
         case "cancelled": return "답변 받기를 중지했어요. 보낸 이야기는 남아 있어요."
@@ -70,7 +70,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
     public var outstanding: Bool { ["local", "pending", "running"].contains(status) }
     public var statusLabel: String {
         switch status {
-        case "local": return "이 iPhone에 저장됨 · 전송 대기"
+        case "local": return "전송 대기"
         case "pending": return "전송됨 · 데스크톱에서 이 대화를 열어 주세요"
         case "running": return "데스크톱에서 답변 중 · 필요한 승인은 컴퓨터에서 확인해 주세요"
         case "completed": return "양쪽 대화에 저장됨"
@@ -206,6 +206,7 @@ public enum SyncFailure: Error, LocalizedError {
 public final class ConversationService: @unchecked Sendable {
     private let session: URLSession
     private let base: URL
+    public var serviceOrigin: String { base.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
     public init(session: URLSession = .shared, base: URL = URL(string: "https://api.hypeproof-ai.xyz")!) { self.session = session; self.base = base }
     private func path(_ id: String) throws -> String {
         guard !id.isEmpty, id.count <= 128, id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
@@ -299,13 +300,18 @@ public final class ConversationService: @unchecked Sendable {
               let reentry = result["reentry"] as? [String: String], reentry["method"] == "GET", reentry["path"] == "/v1/me/cards",
               result["model_calls"] as? Int == 0 else { throw SyncFailure.invalidResponse }
     }
-    public func accountPush(_ id: String, method: String, body: [String: String]?, token: String) async throws {
+    public func accountPush(_ id: String, method: String, body: [String: String]?, token: String, capabilities: [String]? = nil) async throws {
         let parts = id.split(separator: "/", omittingEmptySubsequences: false)
         guard let first = parts.first, UUID(uuidString: String(first))?.uuidString.lowercased() == String(first),
               ["PUT", "DELETE", "POST"].contains(method),
               (method == "POST" ? parts.count == 2 && parts[1] == "opened" : parts.count == 1),
               (method == "DELETE") == (body == nil) else { throw SyncFailure.invalidResponse }
-        let (data, _) = try await request("/v1/me/push-devices/" + id, method: method, body: body, token: token, timeout: 12)
+        var payload: [String: Any]? = body
+        if let capabilities {
+            guard method == "PUT", !capabilities.isEmpty, try TeamPushCapabilities.supported(capabilities) == capabilities else { throw SyncFailure.invalidResponse }
+            payload?["capabilities"] = capabilities
+        }
+        let (data, _) = try await request("/v1/me/push-devices/" + id, method: method, body: payload, token: token, timeout: 12)
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SyncFailure.invalidResponse }
         if method == "POST" {
             guard let recorded = result["recorded"] as? NSNumber, CFGetTypeID(recorded) == CFBooleanGetTypeID(), recorded.boolValue,
@@ -313,6 +319,7 @@ public final class ConversationService: @unchecked Sendable {
         } else {
             guard result["schema"] as? String == "hps-push-device/1", result["id"] as? String == id,
                   let active = result["active"] as? NSNumber, CFGetTypeID(active) == CFBooleanGetTypeID(), active.boolValue == (method == "PUT") else { throw SyncFailure.invalidResponse }
+            if let capabilities { guard result["capabilities"] as? [String] == capabilities else { throw SyncFailure.invalidResponse } }
             if method == "PUT" { guard let generation = result["generation"] as? NSNumber, CFGetTypeID(generation) != CFBooleanGetTypeID(), generation.doubleValue.isFinite, generation.doubleValue.rounded() == generation.doubleValue, generation.doubleValue >= 1 else { throw SyncFailure.invalidResponse } }
         }
     }
@@ -435,10 +442,9 @@ extension ConversationService {
         let (data, _) = try await request("/v1/me/team-requests/" + id + (after.map { "?after=" + $0 } ?? ""), token: token)
         let detail = try JSONDecoder().decode(TeamRequestDetail.self, from: data); try detail.validate(id: id); return detail
     }
-    public func teamRequestComment(id: String, key: String, body: String, token: String) async throws -> String {
-        guard TeamRequestRecord.validID(id), UUID(uuidString: key)?.uuidString.lowercased() == key,
-              !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, body.utf16.count <= 5000, !body.contains("\0") else { throw SyncFailure.invalidResponse }
-        let (data, _) = try await request("/v1/me/team-requests/" + id + "/comments", method: "POST", body: ["schema": "hps-team-comment/1", "client_comment_id": key, "body": body], token: token)
+    public func teamRequestComment(_ draft: TeamCommentDraft, token: String) async throws -> String {
+        let payload = try draft.payload()
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/comments", method: "POST", body: payload, token: token)
         struct Receipt: Decodable { let comment_id: String; let already: Bool }
         let result = try JSONDecoder().decode(Receipt.self, from: data)
         guard result.comment_id.count == 36, result.comment_id.range(of: "^tcm_[a-f0-9]{32}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
@@ -462,5 +468,115 @@ extension ConversationService {
         let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/workflow", method: "POST", body: draft.payload(), token: token)
         let receipt = try JSONDecoder().decode(Receipt.self, from: data)
         try receipt.event.validate(request: draft.requestID); guard receipt.event.matches(draft) else { throw SyncFailure.invalidResponse }; return receipt.event
+    }
+}
+
+extension ConversationService {
+    public func teamGitHubObservations(id: String, after: String? = nil, token: String) async throws -> TeamGitHubObservationPage {
+        guard TeamRequestRecord.validID(id), after.map({ TeamGitHubObservationPage.cursor($0) != nil }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/github-observations" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamGitHubObservationPage.self, from: data)
+        try page.validate(request: id, after: after); return page
+    }
+    public func teamGitHub(id: String, after: String? = nil, token: String) async throws -> TeamGitHubPage {
+        guard TeamRequestRecord.validID(id), after.map({ $0.count <= 9 && !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/github" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamGitHubPage.self, from: data); try page.validate(request: id); return page
+    }
+    public func associateTeamGitHub(_ draft: TeamGitHubDraft, token: String) async throws -> TeamGitHubEvent {
+        struct Receipt: Decodable { let event: TeamGitHubEvent; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/github", method: "POST", body: draft.payload(), token: token)
+        let event = try JSONDecoder().decode(Receipt.self, from: data).event
+        try event.validate(request: draft.requestID); guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
+    }
+}
+
+extension ConversationService {
+    public func teamDeliveries(id: String, after: String? = nil, token: String) async throws -> TeamDeliveryPage {
+        guard TeamRequestRecord.validID(id), after.map({ $0.count <= 9 && !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/deliveries" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamDeliveryPage.self, from: data); try page.validate(request: id); return page
+    }
+}
+
+extension ConversationService {
+    public func teamOutcomes(id: String, after: String? = nil, token: String) async throws -> TeamOutcomePage {
+        guard TeamRequestRecord.validID(id), after.map({ $0.count <= 9 && !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/outcomes" + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamOutcomePage.self, from: data); try page.validate(request: id); return page
+    }
+    public func reportTeamOutcome(_ draft: TeamOutcomeDraft, token: String) async throws -> TeamOutcomeEvent {
+        struct Receipt: Decodable { let event: TeamOutcomeEvent; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/outcomes", method: "POST", body: draft.payload(), token: token)
+        let event = try JSONDecoder().decode(Receipt.self, from: data).event
+        try event.validate(request: draft.requestID); guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
+    }
+}
+
+
+extension ConversationService {
+    public func teamSubscriptions(token: String) async throws -> TeamSubscriptionPage {
+        let (data, _) = try await request("/v1/me/team-requests/subscriptions", token: token)
+        let page = try JSONDecoder().decode(TeamSubscriptionPage.self, from: data); try page.validate(); return page
+    }
+    public func setTeamSubscription(_ mutation: TeamSubscriptionMutation, token: String) async throws -> TeamSubscription {
+        let (data, _) = try await request("/v1/me/team-requests/subscriptions", method: "POST", body: mutation.payload(), token: token)
+        struct Response: Decodable { let subscription: TeamSubscription; let already: Bool }
+        let response = try JSONDecoder().decode(Response.self, from: data); try response.subscription.validate()
+        guard mutation.matches(response.subscription) else { throw SyncFailure.invalidResponse }; return response.subscription
+    }
+    public func teamInbox(after: String?, token: String) async throws -> TeamInboxPage {
+        if let after { guard let value = Int(after), value > 0, String(value) == after else { throw SyncFailure.invalidResponse } }
+        let path = "/v1/me/team-requests/notifications?include_discussion=true" + (after.map { "&after=" + $0 } ?? "")
+        let (data, _) = try await request(path, token: token)
+        let page = try JSONDecoder().decode(TeamInboxPage.self, from: data); try page.validate(after: after); return page
+    }
+    public func readTeamNotification(sequence: Int, token: String) async throws -> Double {
+        guard sequence > 0, sequence <= 9_007_199_254_740_991 else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/notifications/read?include_discussion=true", method: "POST", body: ["schema":"hps-team-notification-read/1", "event_sequence":sequence], token: token)
+        struct Response: Decodable { let schema: String; let event_sequence: Int; let read_at: Double }
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        guard response.schema == "hps-team-notification-read/1", response.event_sequence == sequence, response.read_at.isFinite, response.read_at > 0 else { throw SyncFailure.invalidResponse }
+        return response.read_at
+    }
+}
+
+extension ConversationService {
+    public func openedTeamPush(installation: String, reference: AccountPushReference, token: String) async throws -> TeamPushDestination {
+        guard UUID(uuidString: installation)?.uuidString.lowercased() == installation, reference.kind == "team_request" else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/push-devices/" + installation + "/opened", method: "POST", body: ["schema":"hps-push-open/1", "delivery_id":reference.deliveryID], token: token)
+        guard let response = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SyncFailure.invalidResponse }
+        return try TeamPushDestination(response, reference: reference)
+    }
+}
+
+
+extension ConversationService {
+    public func teamRelations(id: String, target: String? = nil, after: String? = nil, token: String) async throws -> TeamRelationPage {
+        guard TeamRequestRecord.validID(id), target.map({ TeamRequestRecord.validID($0) && $0 != id }) ?? true,
+              after.map({ target == nil ? TeamRequestRecord.validID($0) : TeamRelationPage.historyCursor($0) != nil }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/related" + (target.map { "/" + $0 } ?? "") + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamRelationPage.self, from: data); try page.validate(source: id, target: target, after: after); return page
+    }
+    public func changeTeamRelation(_ draft: TeamRelationDraft, token: String) async throws -> TeamRelationEvent {
+        struct Receipt: Decodable { let event: TeamRelationEvent; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/related", method: "POST", body: draft.payload(), token: token)
+        let event = try JSONDecoder().decode(Receipt.self, from: data).event; try event.validate(source: draft.requestID, target: draft.targetID)
+        guard event.matches(draft) else { throw SyncFailure.invalidResponse }; return event
+    }
+}
+
+
+extension ConversationService {
+    public func teamTextHistory(id: String, target: String, after: String? = nil, token: String) async throws -> TeamTextRevisionPage {
+        guard TeamRequestRecord.validID(id), TeamTextVersion.validTarget(target, request: id), after.map({ TeamTextRevisionPage.cursor($0) != nil }) ?? true else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/team-requests/" + id + "/text/" + target + (after.map { "?after=" + $0 } ?? ""), token: token)
+        let page = try JSONDecoder().decode(TeamTextRevisionPage.self, from: data); try page.validate(request: id, target: target, after: after); return page
+    }
+    public func reviseTeamText(_ draft: TeamTextRevisionDraft, token: String) async throws -> TeamTextVersion {
+        struct Receipt: Decodable { let event: TeamTextVersion; let already: Bool }
+        let (data, _) = try await request("/v1/me/team-requests/" + draft.requestID + "/text/" + draft.targetID, method: "POST", body: draft.payload(), token: token)
+        let receipt = try JSONDecoder().decode(Receipt.self, from: data); try receipt.event.validate(request: draft.requestID, target: draft.targetID)
+        guard receipt.event.matches(draft) else { throw SyncFailure.invalidResponse }; return receipt.event
     }
 }

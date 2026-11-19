@@ -558,3 +558,153 @@ rollout, the source API is disabled and current records stay submitted/unresolve
 
 Existing Lab membership plus separate product enrollment remains the admission
 contract. Operator-policy choice and production activation remain pending.
+
+### Internal GitHub association client — Studio #4349
+
+| ID | Requirement |
+|---|---|
+| MTR-09 | Show verified existing GitHub issue and optional complete PR/source SHA/CI run-attempt records, verification time and ordered association history. Distinguish operator-asserted association from provider records; CI never proves TestFlight availability or reporter confirmation. |
+| MTR-10 | Only server-authorized operators may explicitly associate an existing issue with a reason. Repository selection and provider credentials stay server-side. Never publish private request text or reason to GitHub. |
+| MTR-11 | Preserve protected account-scoped edits and a stable mutation key across unknown outcomes and restart. Cancel sends nothing; definitive conflicts require refresh before explicit rebase. Reject foreign URLs, mismatched receipts and delayed account/session replies. Storage failure preserves export and guards exit. |
+
+This slice consumes Service #567 (source 9e20acf) without activating a production
+registry, running a migration, publishing GitHub content or changing operator policy.
+The existing 18.1 release contains M0 only; source and simulator results are separate
+from deployed API integration and physical-device acceptance.
+
+### Read-only delivery evidence — Studio #4364
+
+| ID | Requirement |
+|---|---|
+| MTR-12 | Request members can read the exact iOS version/build, observation time, freshness deadline, verification instructions and ordered delivery history. Refresh and pagination are explicit reads through existing account authentication. |
+| MTR-13 | Group availability is a time-bounded provider observation, never personal invitation eligibility, installation or reporter confirmation. Expired evidence loses current-availability wording without a reload. Default-off/unavailable/invalid responses cannot appear as an empty or available delivery. |
+| MTR-14 | Bind every response and history page to its request/account/session; discard late success and failure after account changes. This screen cannot associate raw run IDs, resolve/reopen a request, or confirm delivery. |
+
+Consumes Service #569's `hps-team-deliveries/1` read contract. No production
+feature activation, enrollment, signing/upload or reporter-action contract is
+introduced by this client. The earlier removal of routine conversation status
+labels remains intact. Provider observations, local tests and installed-app
+acceptance are separate evidence.
+
+
+### Reporter outcome confirmation — Studio #4366
+
+| ID | Requirement |
+|---|---|
+| MTR-15 | Only the original reporter can explicitly choose resolved or still failing for an exact delivery version/build. Reopening requires a reason. Default to latest; allow explicit prior-result build selection for reopening, including unavailable delivery evidence. |
+| MTR-16 | Persist account-bound draft and mutation key before POST. An ambiguous result remains uncertain across navigation/restart; only explicit same-key recovery resends. Never change an uncertain target or treat an old replay receipt as latest history. After acknowledgement, automatically read current history without resending. Require coherent refreshed current revision before starting another response; label prior snapshots explicitly if reading fails. |
+| MTR-17 | Preserve exportable words on storage failure and block sending; invalidate visible state and discard late replies across account/session boundaries. Read-only members cannot submit. Reporter statements do not prove installation or tester eligibility. |
+
+This child of the read-only delivery slice consumes Service #571 / PR #572.
+It implements PRD VERIFY-01/02 under ST-INT-NATIVE: people explicitly judge and
+own their reported result. A successful receipt is a reporter statement, not
+provider verification. Retention eligibility is 90 days after resolution;
+the client accepts either purge capability and never claims deletion happened.
+No production activation, upload, push notification or installed-device acceptance
+is established by this implementation.
+
+
+### Team inbox and explicit subscriptions — Studio #4368
+
+| ID | Requirement |
+|---|---|
+| MTR-18 | Team notification subscriptions are explicit product or request opt-ins; request mute overrides product settings. Ambiguous writes retain the exact durable mutation and recover only on explicit action. Conflicts require a fresh revision and explicit choice. |
+| MTR-19 | An authenticated in-app unread/read inbox works without OS notification permission, with bounded explicit pagination/catch-up. Opening a row re-fetches current authorized detail before read acknowledgement and navigation. Preserve unsent drafts across navigation. |
+| MTR-20 | Team push capability advertisement intersects implemented formats with freshly admitted server discovery. Missing/unknown support and definitive unsupported responses preserve separately authorized legacy registration; transient discovery failure never falls through to another PUT. Authenticated opened destinations must match request/event identity and re-fetch detail before display. |
+| MTR-21 | New question, reply and discussion labels describe explicit events, never inferred unanswered/resolved state. Discussion inbox reads/acks opt in with include_discussion=true; team_discussion/1 requires team_request/1. Provider acceptance, installed receipt and reporter results remain distinct. |
+
+This source slice consumes Service #573/#576 and the explicitly negotiated #579
+compatibility extension. OS permission/token/envelope fixtures do not establish
+real provider delivery. Comment intent authoring is a separate follow-up; no
+production subscription or feature-flag change is authorized by client tests.
+The product intent remains explicit human notification choice and authorized
+continuation, using the existing account/session and protected local storage.
+
+
+### Explicit question and reply authoring — Studio #4370
+
+| ID | Requirement |
+|---|---|
+| MTR-22 | Fresh authenticated comment-schema discovery is independent of push capability. Missing discovery keeps new legacy discussion drafts; unknown transport failure does not grant support. Existing uncertain drafts retain exact schema, key, text, intent and target across upgrades. |
+| MTR-23 | A member explicitly chooses discussion, question or reply, and replies select this request or a currently loaded comment from this request. Render intent and target context without inferring answered or resolved status. Persist before dispatch; no automatic resend or schema downgrade. |
+| MTR-24 | Only the specific receipt-first missing-target conflict enables an explicit fresh-key choice preserving words; the replacement remains unsendable until a target/type is chosen. Generic conflicts stay uncertain. Retention-expired writes remain unavailable/exportable; server tombstones scrub only matching acknowledged content, never uncertain drafts by elapsed time. |
+
+Uses Service #579 comment/2 semantics and #583 separate authoring discovery, not
+notification capability or notification flags. Existing account/session and
+protected per-request draft storage remain authoritative. No provider delivery,
+production authoring availability or installed-device acceptance is implied.
+
+
+### Current GitHub observations — Studio #4373
+
+| ID | Requirement |
+|---|---|
+| MTR-25 | Show readonly recent GitHub observations separately from immutable association receipts. Issue/PR state and the recorded run's latest attempt never imply newest PR checks, TestFlight availability, installation or reporter resolution. Preserve association drafts. |
+| MTR-26 | Current status requires both server freshness and unexpired device-time bounds. A failed provider check retains clearly historical evidence; unavailable/malformed API responses clear visible data rather than become empty success. Validate normalized sources, match flags, request identity and bounded cursors. |
+| MTR-27 | On association-bound cursor conflict discard accumulated history before first-page reload. Account/session changes invalidate all live views and late responses cannot repaint. Refresh performs only authenticated GETs against stored observations, never provider fetches or writes. |
+
+Consumes Service #581 / PR #582. This implements PRD GH-02 under the existing
+account/session boundary. User decisions and original association evidence remain
+separate from provider observations; no production activation or phone acceptance
+is established by source or synthetic simulator checks.
+
+
+### Explicit related requests — Studio #4375
+
+| ID | Requirement |
+|---|---|
+| MTR-28 | Related requests are explicit same-product undirected links, independent of duplicate status, ownership or resolution. Members can inspect current links/history and open the original; only current operators can link or unlink with a preview and explicit reason. Cancel never sends. |
+| MTR-29 | Persist the account-bound target/action/revision/reason/key before POST. Unknown outcomes retain immutable exact-key recovery across restart. A recognized conflict retains the old key and words; a deliberate fresh choice requires newly fetched authoritative pair history, never an inferred failed commit or automatic rebase. |
+| MTR-30 | Preserve unrelated drafts and request originals through navigation. Bound/validate both list and history pages; permission, unavailable content and account/session changes clear remote data and fence late responses. Retained identities and masked reasons are not evidence of failed commits or physical deletion. |
+
+Consumes Service #589 under existing operator policy and protected per-account
+request storage. Ordinary link triangles do not imply a duplicate representative.
+No provider write, notification or workflow transition is triggered. The broader
+Service #590 hidden-content contract and native cache adoption remain separate
+integration before deployment, not implicit in this source slice.
+
+
+### Hidden retained content — Studio #4377
+
+| ID | Requirement |
+|---|---|
+| MTR-31 | Accept authenticated logical-hidden and physical-purge response metadata without inventing missing private fields. Preserve request, receipt and exact build identity, distinguish deadline hiding from deletion, and keep explicit reporter reopening available. |
+| MTR-32 | Scrub only matching acknowledged local content after validated server evidence, clearing the visible copy before persistence. Failed saves and restarted offline views must not reveal acknowledged content without fresh matching evidence; uncertain and unsent words and keys remain exportable. |
+| MTR-33 | Discard accumulated private pages on a retention-generation change and fence the automatic first-page retry to the observed generation. Explicit fresh reads may observe genuine reopening or a new delivery; this is not a universal cross-refresh watermark. Preserve account/session boundaries and block authoring known-expired content. |
+
+Consumes Service #590 logical hiding and existing retention cleanup. Actual D1
+route fixtures include the additive #593 response metadata, which this slice
+ignores; text revisions remain separate. No server feature activation, deletion
+job execution, TestFlight delivery or installed-phone acceptance is implied.
+
+
+### Author text revisions — Studio #4379
+
+| ID | Requirement |
+|---|---|
+| MTR-34 | Display immutable original, authenticated current text, author and server timestamps with bounded revision history. A failed fetch never promotes original text to current. Latest explicit question is independent of the oldest comment page and does not imply unanswered or resolved status. |
+| MTR-35 | Only the original author may explicitly confirm a supported text edit. Persist words, expected revision and stable mutation key before dispatch; unknown results recover with the exact payload. A definitive revision conflict requires fresh history and a deliberate new edit; never auto-rebase or change intent/reply target. |
+| MTR-36 | Preserve unsent/unknown edits and export on storage failure or account change. Withhold acknowledged local copies until fresh matching history; validated retention may hide acknowledged copies while preserving receipt identity. Navigation preserves unrelated drafts and all live controllers are cleared on account boundaries. |
+
+Uses Service #593 / PR #595 and existing authoring discovery, session binding and
+protected draft storage. No operator proxy edit, automatic edit notification,
+implicit publish, production activation or installed-device acceptance is granted.
+
+
+### Explicit public request summaries — Studio #4381
+
+| ID | Requirement |
+|---|---|
+| MTR-37 | Reuse separate Lab DeviceAuth and the existing Intake MCP publisher. Validate endpoints, expire/cancel authorization and isolate secrets in Keychain; never infer Lab identity from Studio membership. Each operation binds both identities, source revisions, exact approved public summary, destination and durable key. |
+| MTR-38 | Require a visible public-summary preview and explicit confirmation before submit/revise because current policy may publish immediately. Intersect authenticated configured repository with Intake policy, recheck before dispatch, and preserve the exact uncertain operation across restart or explicit same-owner reauthentication. Never automatically publish private history or manufacture an authority decision. |
+| MTR-39 | Keep verified issue creation separate from project linkage and internal association. Reconcile existing proposals/publications; operator-only association requires its own explicit confirmation and cannot erase a published issue on failure. Storage, account, policy and retention failures preserve unsent/unknown summary export and prevent silent rekey or resend. |
+
+Service source contract: `worker/src/routes/intake-device-auth.ts`,
+`worker/src/lib/intake/device-auth.ts`, `worker/src/routes/intake.ts`,
+`worker/src/lib/intake/policy.ts`, `worker/src/lib/intake/service.ts`, and
+`worker/src/lib/team-request-github-links.ts` in `hypeproof/hypeproof-service`.
+Initial runtime audit was d31bb402; configured repository discovery is #596/PR597.
+The native preview covers the submitted structured summary; Service may append
+review annotations. This is not a signed server-side source-revision delegation.
+No remembered login/refresh, new publication authority, provider write during
+validation, production feature activation or installed-device acceptance is granted.

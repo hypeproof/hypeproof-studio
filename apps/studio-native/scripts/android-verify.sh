@@ -22,6 +22,8 @@ capture_failure() {
     # These files were captured by Espresso before ActivityScenario teardown.
     # Keep the original failure even if pulling diagnostics also fails.
     adb -s "$ANDROID_SERIAL" pull /sdcard/Android/data/ai.hypeproof.studio.mobile.preview/files/evidence/failures "$evidence/before-teardown" > "$evidence/before-teardown-pull.log" 2>&1 || true
+    # Espresso's own view-op-error files are written outside the app's evidence folder.
+    adb -s "$ANDROID_SERIAL" pull /sdcard/Android/media/ai.hypeproof.studio.mobile.preview/additionalTestOutputDir "$evidence/espresso-output" > "$evidence/espresso-output-pull.log" 2>&1 || true
     adb -s "$ANDROID_SERIAL" shell dumpsys window > "$evidence/failure-window.txt" 2>&1 || true
     adb -s "$ANDROID_SERIAL" shell dumpsys power > "$evidence/failure-power.txt" 2>&1 || true
     adb -s "$ANDROID_SERIAL" exec-out screencap -p > "$evidence/failure-screen.png" 2>/dev/null || true
