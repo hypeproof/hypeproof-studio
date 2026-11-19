@@ -793,7 +793,17 @@ operating internal request API. Their results do not establish live Lab/D1
 membership, production retention, real-account discussion or installed-iPhone
 acceptance. TestFlight and physical accessibility remain separate acceptance.
 
+### Internal triage client — Studio #4342
 
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MTR-T04 | MTR-06, MTR-07 | Native request detail to triage, cancel preserving exact text, explicit save receipt and refreshed history. Read-only authority must prevent writes and member-picker reads. |
+| MTR-T05 | MTR-08 | Durable unknown outcome with same-key manual retry, storage failure before dispatch, revision conflict requiring refresh/rebase and first-attempt assignee denial versus uncertain retry. |
+
+`TeamWorkflowTests` covers six injected Core scenarios. The actual simulator
+`testInternalWorkflowCancelSaveAndHistory` uses DEBUG-only synthetic transport;
+it does not prove deployed API integration or installed-device acceptance.
+Service owns the insert/read revocation and product membership controls.
 Same-source tool validation at `8c672ec9` on Ubuntu host `snts` passed all 26
 Android bootstrap/environment controls (exit 0). Exact command:
 `python3 -m unittest discover -s apps/studio-native/tests -p 'test_android*.py' -v`.
@@ -816,7 +826,6 @@ the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitte
 twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
 This is local synthetic evidence; remote CI and physical-device acceptance remain
 separate. The prior failing CI evidence is retained.
-
 ### Accessibility evidence collection regression — 2026-11-19
 
 Run44326111986 at source2c6d0f83 failed two of43 UI cases;92 Core cases passed.

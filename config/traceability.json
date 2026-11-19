@@ -20516,6 +20516,45 @@
           "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-TRIAGE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Internal request triage client — Studio #4342"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Internal request triage — MTR-06–08"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-TRIAGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-TRIAGE",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Internal triage client — Studio #4342"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
     }
   ]
 }

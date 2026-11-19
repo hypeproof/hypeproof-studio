@@ -204,6 +204,30 @@ private struct SharedCacheFile: Codable {
             try draft.validate(account: draft.accountID, request: draft.requestID)
             try self.writeTeamDraft(draft, account: draft.accountID, name: draft.requestID + ".json")
         }
+        presentation.makeWorkflow = { [weak self] request, product in
+            let workflow = TeamWorkflowPresentation()
+            workflow.controller = TeamWorkflowController(requestID: request, product: product, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamWorkflow(id: request, after: after, token: self.approvalToken(binding))
+            }, members: { [weak self] binding in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamAssignmentMembers(product: product, account: binding.accountID, token: self.approvalToken(binding))
+            }, targets: { [weak self] binding, before in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamRequestList(product: product, before: before, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.changeTeamWorkflow(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }
+                return try self.readTeamDraft(TeamWorkflowDraft.self, account: account, name: request + "-workflow.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request)
+                try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-workflow.json")
+            }, changed: { [weak workflow] in workflow?.state = $0 })
+            return workflow
+        }
         return presentation
     }()
     private func teamDraftFile(account: String, name: String) throws -> URL {

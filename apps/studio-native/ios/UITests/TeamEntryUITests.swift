@@ -321,6 +321,40 @@ final class TeamEntryUITests: XCTestCase {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-request-synthetic-discussion"; shot.lifetime = .keepAlways; add(shot)
     }
 
+    @MainActor func testInternalWorkflowCancelSaveAndHistory() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        let entry = app.buttons["teamRequestHomeEntry"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<7 { if element.exists && element.isHittable { return }; app.swipeUp() }
+            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
+        }
+        let body = app.textViews["teamRequestBody"]
+        XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("Workflow request 4342")
+        let sendRequest = app.buttons["teamRequestSend"]; reveal(sendRequest); sendRequest.tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        app.buttons["teamRequestClose"].tap(); entry.tap()
+        let discussion = app.buttons["요청과 논의 보기"]; reveal(discussion); discussion.tap()
+        let workflow = app.buttons["teamWorkflowEntry"]; XCTAssertTrue(workflow.waitForExistence(timeout: 10)); reveal(workflow); workflow.tap()
+        let reason = app.textViews["teamWorkflowReason"]
+        XCTAssertTrue(reason.waitForExistence(timeout: 10)); reveal(reason); reason.tap(); reason.typeText("Needs device reproduction")
+        let save = app.buttons["teamWorkflowSend"]; reveal(save); save.tap()
+        XCTAssertTrue(app.alerts.buttons["취소"].waitForExistence(timeout: 5)); app.alerts.buttons["취소"].tap()
+        XCTAssertEqual(reason.value as? String, "Needs device reproduction")
+        save.tap(); app.alerts.buttons["저장"].tap()
+        XCTAssertTrue(app.staticTexts["teamWorkflowReceipt"].waitForExistence(timeout: 10))
+        app.buttons["새로고침"].tap()
+        let history = app.staticTexts["Needs device reproduction"]; reveal(history)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-workflow-synthetic-history"; shot.lifetime = .keepAlways; add(shot)
+    }
+
     @MainActor func testInternalRequestUnknownResultRecoversWithoutReplay() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

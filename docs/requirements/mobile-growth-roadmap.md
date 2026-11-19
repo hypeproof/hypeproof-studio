@@ -547,3 +547,14 @@ No deployment, real-account or physical-iPhone acceptance is implied by this sou
 Assignment/status history, GitHub/build links, notifications, reporter confirmation
 and server resolved-retention execution remain subsequent slices. Until their
 rollout, the source API is disabled and current records stay submitted/unresolved.
+
+### Internal request triage client — Studio #4342
+
+| ID | Requirement |
+|---|---|
+| MTR-06 | Show server-confirmed current status, assignee, priority, next action and paged append-only history; triage never implies delivered or reporter-confirmed resolution. |
+| MTR-07 | Permit edits only with server operator authority; select current product members by name and same-product duplicate requests. Require an explicit confirmation and a change reason. |
+| MTR-08 | Persist an account-bound stable mutation key before dispatch. Unknown outcomes remain locked across restart; only a definitive first-attempt rejection permits correction. Revision conflicts require fresh state and explicit rebase. Preserve unsaved text for export and guard navigation. |
+
+Existing Lab membership plus separate product enrollment remains the admission
+contract. Operator-policy choice and production activation remain pending.
