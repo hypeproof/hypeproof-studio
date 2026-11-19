@@ -43,7 +43,8 @@ ordinary existing first-answer fixtures explicitly return not-enrolled.
 1. On a signed TestFlight build, open **Question notifications** and verify that the enrolled
    account's device is registered. Return to the iOS Home Screen.
 2. Deliver one eligible, clearly marked verification card through the Studio approval channel
-   to that account. Record the repository, PR number and card ID.
+   to that account. Keep the PR pending review until the phone navigation check is complete.
+   Record the repository, PR number and card ID.
 3. Observe the approval alert on the phone and tap it. Verify that **Approval requests** opens
    the matching card and displays the same repository and PR number.
 4. Leave the approval controls untouched. Record the installed build, iOS version, receipt and
