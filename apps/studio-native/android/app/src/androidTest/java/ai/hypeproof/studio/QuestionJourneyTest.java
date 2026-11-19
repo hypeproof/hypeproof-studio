@@ -494,10 +494,51 @@ public class QuestionJourneyTest {
         app.onActivity(a->voice.output.onDone(voice.utterance));drain();assertEquals(1,voice.starts);assertEquals(1,submitted.size());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("답변을 들으며 직접 적은 글")));
         onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());
-        onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.partial("화면을 떠나도 남길 말"));
-        var old=voice.capture;app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
-        app.onActivity(a->old.onResults(VoiceFixture.words("뒤늦은 말")));drain();assertFalse(voice.controller.session.active());assertEquals(2,voice.starts);assertEquals(1,submitted.size());
-        onView(withContentDescription("질문 대화 입력")).check(matches(withText("화면을 떠나도 남길 말")));
+        var previousCapture=voice.capture;
+        java.util.concurrent.atomic.AtomicReference<QuestionActivity> activity=new java.util.concurrent.atomic.AtomicReference<>();app.onActivity(activity::set);
+        var hostField=NativeVoice.class.getDeclaredField("host");hostField.setAccessible(true);NativeVoice.Host host=(NativeVoice.Host)hostField.get(voice.controller);
+        java.util.concurrent.atomic.AtomicReference<android.view.View> target=new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.function.Consumer<String> observe=phase->{
+            if(target.get()==null)return;
+            dictationTouch(phase,activity.get(),target.get(),voice,null);
+            try{dictationTouchEvents.get(dictationTouchEvents.size()-1)
+                .put("conversation_allowed",host.allowed(true)).put("draft_empty",questionModel(activity.get()).draft.trim().isEmpty())
+                .put("new_capture",voice.capture!=null&&voice.capture!=previousCapture);}
+            catch(Exception error){throw new AssertionError(error);}
+        };
+        try{
+            onView(withContentDescription("음성 대화")).perform(new androidx.test.espresso.ViewAction(){
+                public org.hamcrest.Matcher<android.view.View> getConstraints(){return isAssignableFrom(android.view.View.class);}
+                public String getDescription(){return "await second conversation target readiness before one real click";}
+                public void perform(androidx.test.espresso.UiController ui,android.view.View view){
+                    target.set(view);long deadline=android.os.SystemClock.uptimeMillis()+5000;
+                    for(;;){
+                        ReflectionModel model=questionModel(activity.get());android.graphics.Rect visible=new android.graphics.Rect();
+                        boolean ready=host.foreground()&&host.allowed(true)&&model.draft.trim().isEmpty()
+                            &&!model.busy&&!model.readOnly&&view.isAttachedToWindow()&&view.hasWindowFocus()
+                            &&view.isShown()&&view.isEnabled()&&view.isClickable()&&view.getWidth()>0&&view.getHeight()>0
+                            &&view.getGlobalVisibleRect(visible)&&visible.width()==view.getWidth()&&visible.height()==view.getHeight();
+                        if(ready){observe.accept("second_capture_ready");return;}
+                        if(android.os.SystemClock.uptimeMillis()>=deadline){observe.accept("second_capture_readiness_timeout");fail("second conversation target must be ready before its single click");}
+                        ui.loopMainThreadForAtLeast(16);
+                    }
+                }
+            },click());
+            app.onActivity(a->{
+                observe.accept("after_second_click");
+                assertEquals("one second click must start exactly one new capture",2,voice.starts);
+                assertNotNull(voice.capture);assertNotSame("must inject into the new capture, never a stale listener",previousCapture,voice.capture);
+                assertEquals(VoiceSession.Phase.LISTENING,voice.controller.session.phase());
+                voice.partial("화면을 떠나도 남길 말");
+            });
+            var old=voice.capture;app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+            app.onActivity(a->old.onResults(VoiceFixture.words("뒤늦은 말")));drain();assertFalse(voice.controller.session.active());assertEquals(2,voice.starts);assertEquals(1,submitted.size());
+            onView(withContentDescription("질문 대화 입력")).check(matches(withText("화면을 떠나도 남길 말")));
+        }catch(Exception|AssertionError failure){
+            try{app.onActivity(a->observe.accept("second_capture_failure"));saveDictationTouch("FAIL","failures/second-conversation-capture.json");}
+            catch(Exception|AssertionError capture){failure.addSuppressed(capture);}
+            throw failure;
+        }
     }
 
     @Test public void expiredOrReplacedCredentialCannotSendOrReopenTheOldVoiceTurn()throws Exception{

@@ -411,3 +411,196 @@ public struct TeamWorkflowDraft: Codable, Sendable {
     }
 
 }
+
+// GitHub records are provider-verified; their relationship to this request is an operator assertion.
+public struct TeamGitHubEvidence: Codable, Sendable {
+    public struct Issue: Codable, Sendable { public let number: Int; public let node_id, url, state: String }
+    public struct Pull: Codable, Sendable { public let number: Int; public let url: String; public let merged: Bool }
+    public struct CI: Codable, Sendable { public let run_id, attempt: Int; public let url, conclusion: String }
+    public let schema, repo, relationship: String
+    public let issue: Issue
+    public let pull: Pull?
+    public let source_sha: String?
+    public let ci: CI?
+    public let testflight, reporter_confirmation: String?
+    public func validate(repo expected: String, issue number: Int) throws {
+        guard repo == expected, issue.number == number, !issue.node_id.isEmpty, issue.node_id.count <= 256,
+              issue.url == "https://github.com/\(repo)/issues/\(number)", ["open", "closed"].contains(issue.state) else { throw SyncFailure.invalidResponse }
+        if schema == "hps-team-issue-evidence/1" {
+            guard relationship == "provider_record_verified", pull == nil, source_sha == nil, ci == nil else { throw SyncFailure.invalidResponse }
+        } else {
+            guard schema == "hps-team-request-lineage/1", relationship == "provider_records_verified", let pull, let source_sha, let ci,
+                  TeamGitHubDraft.number(pull.number), TeamGitHubDraft.number(ci.run_id), TeamGitHubDraft.number(ci.attempt),
+                  TeamGitHubDraft.sha(source_sha), pull.url == "https://github.com/\(repo)/pull/\(pull.number)",
+                  ci.url == "https://github.com/\(repo)/actions/runs/\(ci.run_id)",
+                  ["success","failure","cancelled","timed_out","action_required","neutral","skipped","stale","startup_failure"].contains(ci.conclusion),
+                  testflight == "not_observed", reporter_confirmation == "not_observed" else { throw SyncFailure.invalidResponse }
+        }
+    }
+}
+public struct TeamGitHubEvent: Codable, Sendable, Identifiable {
+    public let id, request_id, client_mutation_id, repo, association, testflight, reporter_confirmation: String
+    public let actor_account_id, reason: String?
+    public let revision, issue_number: Int
+    public let verified_at: Double
+    public let redacted_at: Double?
+    public let evidence: TeamGitHubEvidence?
+    public func validate(request: String) throws {
+        guard request_id == request, TeamRequestRecord.validID(request), id.count == 36, id.range(of: "^tgl_[a-f0-9]{32}$", options: .regularExpression) != nil,
+              revision > 0, revision < 1_000_000_000, TeamGitHubDraft.number(issue_number),
+              repo.range(of: "^hypeproof/[a-z0-9][a-z0-9-]*$", options: .regularExpression) != nil, !repo.contains("\n"),
+              association == "operator_asserted", testflight == "not_observed", reporter_confirmation == "not_observed",
+              verified_at.isFinite, verified_at > 0 else { throw SyncFailure.invalidResponse }
+        if let redacted_at {
+            guard redacted_at.isFinite, redacted_at >= verified_at, actor_account_id == nil, reason == nil, evidence == nil, client_mutation_id.isEmpty else { throw SyncFailure.invalidResponse }
+        } else {
+            guard let actor_account_id, StoredAccount.validID(actor_account_id), let reason, !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  reason.utf16.count <= 2000, !reason.contains("\0"), !client_mutation_id.isEmpty, client_mutation_id.count <= 64, let evidence else { throw SyncFailure.invalidResponse }
+            try evidence.validate(repo: repo, issue: issue_number)
+        }
+    }
+    public func matches(_ draft: TeamGitHubDraft) -> Bool {
+        actor_account_id == draft.accountID && request_id == draft.requestID && client_mutation_id == draft.key && revision == draft.expectedRevision + 1 &&
+        issue_number == Int(draft.issue) && reason == draft.reason && redacted_at == nil &&
+        evidence?.pull?.number == (draft.lineage ? Int(draft.pull) : nil) && evidence?.source_sha == (draft.lineage ? draft.sourceSHA : nil) &&
+        evidence?.ci?.run_id == (draft.lineage ? Int(draft.run) : nil) && evidence?.ci?.attempt == (draft.lineage ? Int(draft.attempt) : nil)
+    }
+}
+public struct TeamGitHubPage: Decodable, Sendable {
+    public let schema, request_id: String
+    public let can_manage: Bool
+    public let current: TeamGitHubEvent?
+    public let events: [TeamGitHubEvent]
+    public let next_cursor: String?
+    public func validate(request: String) throws {
+        guard schema == "hps-team-github-links/1", request_id == request, events.count <= 50 else { throw SyncFailure.invalidResponse }
+        try current?.validate(request: request)
+        var previous = 0
+        for event in events { try event.validate(request: request); guard event.revision > previous, event.revision <= (current?.revision ?? 0) else { throw SyncFailure.invalidResponse }; previous = event.revision }
+        if let next_cursor { guard Int(next_cursor) == events.last?.revision, previous > 0, previous < (current?.revision ?? 0) else { throw SyncFailure.invalidResponse } }
+    }
+}
+public struct TeamGitHubDraft: Codable, Sendable {
+    public let accountID, requestID: String
+    public var key = UUID().uuidString.lowercased(), expectedRevision: Int
+    public var issue = "", pull = "", sourceSHA = "", run = "", attempt = "", reason = ""
+    public var lineage = false
+    public var phase: TeamWorkflowDraft.Phase = .draft
+    public init(accountID: String, requestID: String, revision: Int) { self.accountID = accountID; self.requestID = requestID; expectedRevision = revision }
+    public static func number(_ n: Int) -> Bool { n > 0 && n <= 9_007_199_254_740_991 }
+    public static func sha(_ s: String) -> Bool { s.count == 40 && s.range(of: "^[a-f0-9]{40}$", options: .regularExpression) != nil }
+    public func validate(account: String, request: String) throws {
+        guard accountID == account, StoredAccount.validID(account), requestID == request, TeamRequestRecord.validID(request),
+              UUID(uuidString: key)?.uuidString.lowercased() == key, expectedRevision >= 0, expectedRevision < 999_999_999,
+              [issue, pull, run, attempt].allSatisfy({ $0.count <= 16 && $0.allSatisfy({ $0.isASCII && $0.isNumber }) }),
+              sourceSHA.count <= 40, reason.utf16.count <= 2000, !reason.contains("\0") else { throw SyncFailure.invalidResponse }
+    }
+    public func payload() throws -> [String: Any] {
+        try validate(account: accountID, request: requestID)
+        guard let issueNumber = Int(issue), Self.number(issueNumber), !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SyncFailure.invalidResponse }
+        var result: [String: Any] = ["schema":"hps-team-github-association/1", "client_mutation_id":key, "expected_revision":expectedRevision, "issue":issueNumber, "reason":reason,
+                                     "pull":NSNull(), "source_sha":NSNull(), "run":NSNull(), "attempt":NSNull()]
+        if lineage {
+            guard let p = Int(pull), let r = Int(run), let a = Int(attempt), Self.number(p), Self.number(r), Self.number(a), Self.sha(sourceSHA) else { throw SyncFailure.invalidResponse }
+            result["pull"] = p; result["source_sha"] = sourceSHA; result["run"] = r; result["attempt"] = a
+        }
+        return result
+    }
+}
+
+@MainActor public final class TeamGitHubController {
+    public struct View {
+        public var page: TeamGitHubPage?, draft: TeamGitHubDraft?
+        public var events: [TeamGitHubEvent] = []
+        public var busy = false, storageReady = true
+        public var message = ""
+        public init() {}
+    }
+    public private(set) var view = View()
+    private let requestID: String
+    private var generation = UUID(), binding: MemberApprovalIdentity?
+    private let identity: () async throws -> MemberApprovalIdentity?
+    private let fetch: (MemberApprovalIdentity, String?) async throws -> TeamGitHubPage
+    private let send: (MemberApprovalIdentity, TeamGitHubDraft) async throws -> TeamGitHubEvent
+    private let load: (String) throws -> TeamGitHubDraft?
+    private let save: (TeamGitHubDraft) throws -> Void
+    private let changed: (View) -> Void
+    public init(requestID: String, identity: @escaping () async throws -> MemberApprovalIdentity?, fetch: @escaping (MemberApprovalIdentity, String?) async throws -> TeamGitHubPage,
+                send: @escaping (MemberApprovalIdentity, TeamGitHubDraft) async throws -> TeamGitHubEvent, load: @escaping (String) throws -> TeamGitHubDraft?,
+                save: @escaping (TeamGitHubDraft) throws -> Void, changed: @escaping (View) -> Void) {
+        self.requestID = requestID; self.identity = identity; self.fetch = fetch; self.send = send; self.load = load; self.save = save; self.changed = changed
+    }
+    public func invalidate() { generation = UUID(); binding = nil; view = View(); changed(view) }
+    private func current(_ g: UUID, _ account: MemberApprovalIdentity) async throws -> Bool { guard g == generation else { return false }; let now = try await identity(); return g == generation && now == account }
+    // Errors are also asynchronous responses: discard them after a known identity change.
+    // If identity verification itself is unavailable, hide server data but retain local exportable words.
+    private func admitFailure(_ g: UUID) async -> Bool {
+        guard g == generation else { return false }
+        guard let account = binding else { return true }
+        do { guard try await current(g, account) else { if g == generation { invalidate() }; return false } }
+        catch { guard g == generation else { return false }; view.page = nil; view.events = [] }
+        return true
+    }
+    private func persist(_ draft: TeamGitHubDraft) throws { do { try save(draft) } catch { view.storageReady = false; throw error } }
+    public func open() async {
+        guard !view.busy, view.storageReady else { return }; generation = UUID(); let g = generation
+        view.busy = true; view.page = nil; view.events = []; view.message = ""; changed(view)
+        defer { if g == generation { view.busy = false; changed(view) } }
+        do {
+            guard let account = try await identity() else { if g == generation { invalidate() }; return }
+            guard g == generation else { return }; if binding != account { view = View(); view.busy = true }; binding = account
+            do { let draft = try load(account.accountID); try draft?.validate(account: account.accountID, request: requestID); view.draft = draft }
+            catch { view.storageReady = false; view.message = "저장된 연결 초안을 읽지 못했어요. 원본을 유지했어요."; return }
+            let page = try await fetch(account, nil); try page.validate(request: requestID)
+            guard try await current(g, account) else { if g == generation { invalidate() }; return }
+            view.page = page; view.events = page.events
+            if page.can_manage, view.draft == nil { let draft = TeamGitHubDraft(accountID: account.accountID, requestID: requestID, revision: page.current?.revision ?? 0); try persist(draft); view.draft = draft }
+            if var draft = view.draft, draft.phase == .draft, draft.expectedRevision != (page.current?.revision ?? 0) { draft.phase = .conflict; try persist(draft); view.draft = draft }
+        } catch { if await admitFailure(g) { view.page = nil; view.events = []; view.message = view.storageReady ? "연결 근거를 불러오지 못했어요. 로그인과 권한을 확인해 주세요." : "기기에 저장하지 못했어요. 초안을 내보내 주세요." } }
+    }
+    public func edit(_ update: (inout TeamGitHubDraft) -> Void) {
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, var draft = view.draft, draft.phase == .draft else { return }
+        update(&draft); guard (try? draft.validate(account: draft.accountID, request: requestID)) != nil else { return }; view.draft = draft
+        do { try persist(draft); view.message = "" } catch { view.message = "기기에 저장하지 못했어요. 초안을 내보내 주세요." }; changed(view)
+    }
+    public func rebase() {
+        guard !view.busy, view.storageReady, let page = view.page, page.can_manage, var draft = view.draft, draft.phase == .conflict else { return }
+        draft.expectedRevision = page.current?.revision ?? 0; draft.key = UUID().uuidString.lowercased(); draft.phase = .draft
+        do { try persist(draft); view.draft = draft; view.message = "제안을 유지했어요. 다시 확인한 뒤 저장해 주세요." } catch { view.message = "초안을 저장하지 못했어요." }; changed(view)
+    }
+    public func newChange() {
+        guard !view.busy, view.storageReady, let page = view.page, page.can_manage, let account = binding, view.draft?.phase == .received else { return }
+        let draft = TeamGitHubDraft(accountID: account.accountID, requestID: requestID, revision: page.current?.revision ?? 0)
+        do { try persist(draft); view.draft = draft } catch { view.message = "초안을 저장하지 못했어요." }; changed(view)
+    }
+    public func submit() async {
+        guard !view.busy, view.storageReady, view.page?.can_manage == true, let account = binding, var draft = view.draft, draft.phase == .draft || draft.phase == .uncertain else { return }
+        let g = generation, first = draft.phase == .draft; view.busy = true; changed(view)
+        defer { if g == generation { view.busy = false; changed(view) } }
+        do {
+            guard try await current(g, account) else { if g == generation { invalidate() }; return }; _ = try draft.payload()
+            draft.phase = .uncertain; try persist(draft); view.draft = draft; changed(view)
+            let event = try await send(account, draft); try event.validate(request: requestID)
+            guard try await current(g, account) else { if g == generation { invalidate() }; return }; guard event.matches(draft) else { throw SyncFailure.invalidResponse }
+            draft.phase = .received; view.draft = draft
+            if let previous = view.page { view.page = TeamGitHubPage(schema: previous.schema, request_id: requestID, can_manage: previous.can_manage, current: event, events: previous.events, next_cursor: previous.next_cursor) }
+            try persist(draft); view.message = "연결이 저장됐어요. 배포·설치·사용자 확인을 뜻하지 않아요."
+        } catch SyncFailure.http(503, "team_github_unverified") {
+            guard (try? await current(g, account)) == true else { if g == generation { invalidate() }; return }
+            // Service returns this only before insertion. Never unlock an earlier uncertain attempt.
+            if first { draft.phase = .draft; view.draft = draft; do { try persist(draft) } catch {} }
+            view.message = first ? "GitHub 기록을 확인하지 못해 저장하지 않았어요. 번호와 근거를 확인해 주세요." : "이전 저장 여부가 불명확해 전송 번호를 유지했어요."
+        } catch SyncFailure.http(409, "team_github_conflict") {
+            guard (try? await current(g, account)) == true else { if g == generation { invalidate() }; return }
+            if first { draft.phase = .conflict; view.draft = draft; view.page = nil; do { try persist(draft) } catch {} }
+            view.message = "연결 변경이 충돌했어요. 최신 상태를 확인해 주세요. 이전 결과가 불명확하면 같은 번호를 유지해요."
+        } catch { if await admitFailure(g) { view.message = view.storageReady ? "저장 여부를 확인하지 못했어요. 초안과 전송 번호를 유지했어요. 자동으로 다시 보내지 않아요." : "기기에 저장하지 못했어요. 초안을 내보내 주세요." } }
+    }
+    public func more() async {
+        guard !view.busy, let account = binding, let after = view.page?.next_cursor else { return }; let g = generation; view.busy = true; changed(view)
+        defer { if g == generation { view.busy = false; changed(view) } }
+        do { let page = try await fetch(account, after); try page.validate(request: requestID); guard try await current(g, account) else { if g == generation { invalidate() }; return }
+            let known = Set(view.events.map(\.revision)); view.events += page.events.filter { !known.contains($0.revision) }; view.events.sort { $0.revision < $1.revision }; view.page = page
+        } catch { if await admitFailure(g) { view.page = nil; view.events = []; view.message = "연결 이력을 불러오지 못했어요." } }
+    }
+}

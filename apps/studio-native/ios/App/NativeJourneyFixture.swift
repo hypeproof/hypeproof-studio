@@ -50,6 +50,7 @@ import CryptoKit
     }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var accessDenied: Bool { enabled && JourneyConfiguration.scenario == "access-denied" }
+    static var retryHistory: Bool { enabled && JourneyConfiguration.scenario == "retry-once" && ProcessInfo.processInfo.arguments.contains("--hold-retry-history") }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
     private(set) static var emptyStopBoundary: [String: Any] = [:]
@@ -58,13 +59,13 @@ import CryptoKit
         emptyStopBoundary = ["active": active, "phase": phase]
     }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
-    static func holdNextHistory() { if logoutSync || accessDenied { JourneyTransport.store.armHistory() } }
-    static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
+    static func holdNextHistory() { if logoutSync || accessDenied || retryHistory { JourneyTransport.store.armHistory() } }
+    static func releaseHistory() { if logoutSync || retryHistory { JourneyTransport.store.releaseHistory() } }
     static func failedDraftRestoreAttempt(eligible: Bool) { if accessDenied { JourneyTransport.store.failedDraftRestoreAttempt(eligible: eligible) } }
     static func failedDraftHistoryApplied() { if accessDenied { JourneyTransport.store.failedDraftHistoryApplied() } }
     static func failedDraftRestored() { if accessDenied { JourneyTransport.store.failedDraftRestored() } }
     static func synchronizationStarted(automatic: Bool) {
-        if periodicVoice || queuedVoice || accessDenied {
+        if periodicVoice || queuedVoice || accessDenied || retryHistory {
             JourneyTransport.store.synchronizationStarted(automatic: automatic)
         }
     }
@@ -504,8 +505,11 @@ private final class JourneyStore: @unchecked Sendable {
         let periodicVoice = JourneyConfiguration.scenario == "voice-periodic-poll"
             && automaticSynchronization && value.accepted.count == 1
             && value.speechCaptures == 2 && periodicHistoryHolds == 0
-        guard queuedVoice || logout || periodicVoice || failedDraft else { return false }
-        if logout || failedDraft { historyArmed = false; historyReleased = false }
+        let retry = JourneyConfiguration.scenario == "retry-once"
+            && ProcessInfo.processInfo.arguments.contains("--hold-retry-history")
+            && historyArmed && automaticSynchronization
+        guard queuedVoice || logout || periodicVoice || failedDraft || retry else { return false }
+        if logout || failedDraft || retry { historyArmed = false; historyReleased = false }
         if periodicVoice { periodicHistoryHolds += 1 }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
@@ -513,7 +517,7 @@ private final class JourneyStore: @unchecked Sendable {
     func historyMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
         if JourneyConfiguration.scenario == "voice-periodic-poll" { return secondSpeechDelivered }
-        return ["logout-sync", "access-denied"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
+        return ["logout-sync", "access-denied", "retry-once"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
     }
     func failedDraftRestoreAttempt(eligible: Bool) {
         lock.lock(); defer { lock.unlock() }

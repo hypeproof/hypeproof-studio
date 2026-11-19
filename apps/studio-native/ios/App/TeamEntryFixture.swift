@@ -17,10 +17,11 @@ private final class TeamEntryState: @unchecked Sendable {
     private var teamRequest: [String: Any]?
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
+    private var githubEvents: [[String: Any]] = [], githubPosts = 0
     private var workflowEvents: [[String: Any]] = []
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+        return String(data: (try? JSONSerialization.data(withJSONObject: ["triggers": triggers, "reads": reads, "shown": shown, "answers": answers, "events": events, "granted": granted, "requestPosts": requestPosts, "commentPosts": commentPosts, "githubPosts": githubPosts, "githubEvents": githubEvents.count], options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func response(_ request: URLRequest, _ body: [String: Any]) throws -> (Int, [String: Any]) {
         lock.lock(); defer { lock.unlock() }
@@ -31,6 +32,28 @@ private final class TeamEntryState: @unchecked Sendable {
             let path = request.url?.path ?? ""
             if path == "/v1/me/team-requests/members" {
                 return (200, ["schema": "hps-team-assignment-members/1", "account_id": "journey-account", "product": "studio", "members": [["account_id": "journey-account", "display_name": "내부 테스트 멤버"]]])
+            }
+            if path == "/v1/me/team-requests/" + id + "/github" {
+                let canManage = ProcessInfo.processInfo.environment["HP_TEAM_GITHUB_READONLY"] != "1"
+                if request.httpMethod == "POST" {
+                    githubPosts += 1
+                    guard canManage else { return (403, ["error": "team_workflow_denied"]) }
+                    if let old = githubEvents.first(where: { $0["client_mutation_id"] as? String == body["client_mutation_id"] as? String }) { return (200, ["event": old, "already": true]) }
+                    guard body["expected_revision"] as? Int == githubEvents.count else { return (409, ["error": "team_github_conflict"]) }
+                    let repo = "hypeproof/hypeproof-studio", number = body["issue"] as? Int ?? 123
+                    var proof: [String: Any] = ["schema":"hps-team-issue-evidence/1", "repo":repo, "issue":["number":number,"node_id":"I_synthetic","url":"https://github.com/\(repo)/issues/\(number)","state":"open"], "relationship":"provider_record_verified"]
+                    if let pull = body["pull"] as? Int, let run = body["run"] as? Int, let attempt = body["attempt"] as? Int, let sha = body["source_sha"] as? String {
+                        proof["schema"] = "hps-team-request-lineage/1"; proof["relationship"] = "provider_records_verified"
+                        proof["pull"] = ["number":pull,"url":"https://github.com/\(repo)/pull/\(pull)","merged":true]
+                        proof["source_sha"] = sha; proof["ci"] = ["run_id":run,"attempt":attempt,"url":"https://github.com/\(repo)/actions/runs/\(run)","conclusion":"success"]
+                        proof["testflight"] = "not_observed"; proof["reporter_confirmation"] = "not_observed"
+                    }
+                    let event: [String: Any] = ["id":"tgl_" + String(repeating:"d",count:32),"request_id":id,"actor_account_id":"journey-account","client_mutation_id":body["client_mutation_id"] ?? "", "revision":githubEvents.count+1,"repo":repo,"issue_number":number,"reason":body["reason"] ?? "", "verified_at":3000,"redacted_at":NSNull(),"evidence":proof,"association":"operator_asserted","testflight":"not_observed","reporter_confirmation":"not_observed"]
+                    githubEvents.append(event)
+                    if ProcessInfo.processInfo.environment["HP_TEAM_GITHUB_UNKNOWN"] == "1" { throw URLError(.timedOut) }
+                    return (200,["event":event,"already":false])
+                }
+                return (200,["schema":"hps-team-github-links/1","request_id":id,"can_manage":canManage,"current":githubEvents.last ?? NSNull(),"events":githubEvents,"next_cursor":NSNull()])
             }
             if path == "/v1/me/team-requests/" + id + "/workflow" {
                 if request.httpMethod == "POST" {

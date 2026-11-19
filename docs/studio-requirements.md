@@ -10439,9 +10439,42 @@ require refresh and explicit rebase. This is internal triage, not completed
 delivery or reporter resolution. Canonical requirements and test cases are in
 `mobile-growth-roadmap.md` and `testing/native-mobile-growth.md` (MTR-06–08,
 MTR-T04–05). Production policy and real-device evidence remain separate gates.
+
+## iPhone internal GitHub association evidence (#4349)
+
+MTR-09/10/11 require operator-authorized existing-issue association from request
+detail, verified provider metadata with canonical repository URLs, complete optional
+PR/SHA/CI run-attempt evidence, ordered history and verification timestamps.
+Association is an operator assertion, not provider-proven issue/PR causality.
+CI never implies TestFlight availability, device installation or reporter acceptance.
+Edits and uncertain mutation keys stay account-scoped and durable; only explicit
+confirmation sends. Cancellation, read-only access and failed storage send nothing.
+Core and native UI controls belong to the mobile roadmap/testing contract.
+
+
+### Native conversation status simplification — 2026-11-18
+
+Under `ST-REQ-NATIVE-MOBILE` / `ST-INT-NATIVE`, Jay requested removal of the
+completed personal-message saved caption, routine same-account explanation, and
+main-conversation syncing spinner. Preserve background synchronization and all
+actionable error, retry, logout, pending-send and unsent-draft warnings. Settings
+may still indicate an in-progress refresh. The intent is to keep attention on
+the conversation while retaining information needed for user judgment.
+
+
+
 ### Durable retry touch target — 2026-11-18
 
 A saved local request's explicit retry action must expose at least a 44pt touch
 area. A single activation retries the preserved request identity and words;
 restart and background history reads must not create an automatic replay.
 This applies the existing native touch-target contract to the outbox action.
+
+
+### Explicit outbox retry during history reconciliation — 2026-11-19
+
+A background history read must not disable the explicit Retry action. One
+activation queues the existing request ID and words until reconciliation ends;
+account, selection, logout and stop fences remain authoritative. A second
+activation cannot enqueue another send. Reads and restart alone never replay.
+Local status says only pending transmission, without device-storage copy.

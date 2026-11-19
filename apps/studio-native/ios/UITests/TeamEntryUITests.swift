@@ -406,4 +406,79 @@ final class TeamEntryUITests: XCTestCase {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-comment-unsaved-export-and-exit-guard"; shot.lifetime = .keepAlways; add(shot)
     }
 
+    @MainActor private func githubApp(_ flags: [String:String] = [:]) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        for (key,value) in flags { app.launchEnvironment[key] = value }; app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10)); app.buttons["teamRequestHomeEntry"].tap()
+        let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("GitHub fixture request")
+        githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
+        githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
+        githubReveal(app, app.buttons["teamGitHubEntry"]); app.buttons["teamGitHubEntry"].tap()
+        return app
+    }
+    @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement) {
+        for _ in 0..<8 { if item.exists && item.isHittable { return }; app.swipeUp() }; XCTAssertTrue(item.isHittable)
+    }
+    @MainActor private func githubTrace(_ app: XCUIApplication) -> String {
+        let trace = app.staticTexts["teamGitHubTrace"]
+        // This diagnostic value is read, never tapped. Asking for an activation
+        // point can fail even when its accessibility value is available.
+        // Stop at the first row. Further downward swipes dismiss the containing sheet.
+        for _ in 0..<8 {
+            if trace.exists { return trace.value as? String ?? "" }
+            app.swipeDown()
+        }
+        XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")
+        return trace.value as? String ?? ""
+    }
+    @MainActor func testInternalGitHubCancelSaveAndHistory() throws {
+        let app = githubApp(), issue = app.textFields["teamGitHubIssue"], reason = app.textViews["teamGitHubReason"]
+        XCTAssertTrue(issue.waitForExistence(timeout: 10)); issue.tap(); issue.typeText("123")
+        githubReveal(app,reason); reason.tap(); reason.typeText("Verified issue rationale")
+        let send = app.buttons["teamGitHubSend"]; githubReveal(app,send); send.tap(); app.alerts.buttons["취소"].tap()
+        XCTAssertEqual(reason.value as? String,"Verified issue rationale")
+        XCTAssertTrue(githubTrace(app).contains("\"githubPosts\":0"))
+        githubReveal(app,send); send.tap(); app.alerts.buttons["저장"].tap()
+        githubReveal(app, app.staticTexts["teamGitHubReceipt"]); app.buttons["새로고침"].tap()
+        let savedTrace = githubTrace(app)
+        XCTAssertTrue(savedTrace.contains("\"githubEvents\":1"))
+        XCTAssertTrue(savedTrace.contains("\"githubPosts\":1"))
+        let history = app.staticTexts["teamGitHubHistoryEntry1"]
+        githubReveal(app,history)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "github-association-verified-metadata-not-delivery"; shot.lifetime = .keepAlways; add(shot)
+    }
+    @MainActor func testInternalGitHubReadOnlyAndUnsavedExitGuard() throws {
+        let readOnly = githubApp(["HP_TEAM_GITHUB_READONLY":"1"])
+        XCTAssertTrue(readOnly.staticTexts["teamGitHubReadOnly"].waitForExistence(timeout: 10)); XCTAssertFalse(readOnly.buttons["teamGitHubSend"].exists); readOnly.terminate()
+        let app = githubApp(["HP_TEAM_DRAFT_SAVE_FAILURE":"github"]), reason = app.textViews["teamGitHubReason"]
+        XCTAssertTrue(reason.waitForExistence(timeout: 10)); githubReveal(app,reason); reason.tap(); reason.typeText("X")
+        XCTAssertEqual(reason.value as? String,"X"); githubReveal(app,app.buttons["연결 초안 내보내기"])
+        XCTAssertTrue(app.buttons["연결 초안 내보내기"].isEnabled); XCTAssertFalse(app.buttons["teamGitHubSend"].isEnabled)
+        app.buttons["teamGitHubBack"].tap(); XCTAssertTrue(app.alerts["저장되지 않은 연결 초안이 있어요"].waitForExistence(timeout: 5)); app.alerts.buttons["계속 작성"].tap()
+        XCTAssertEqual(reason.value as? String,"X")
+    }
+
+    @MainActor func testInternalGitHubUnknownReopenKeepsOneAssociation() throws {
+        let app = githubApp(["HP_TEAM_GITHUB_UNKNOWN":"1"])
+        let issue = app.textFields["teamGitHubIssue"], reason = app.textViews["teamGitHubReason"]
+        XCTAssertTrue(issue.waitForExistence(timeout: 10)); issue.tap(); issue.typeText("123")
+        githubReveal(app,reason); reason.tap(); reason.typeText("Unknown association")
+        let send = app.buttons["teamGitHubSend"]; githubReveal(app,send); send.tap(); app.alerts.buttons["저장"].tap()
+        let retry = app.buttons["같은 번호로 다시 확인·저장"]; githubReveal(app,retry)
+        XCTAssertFalse(app.staticTexts["teamGitHubReceipt"].exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        githubReveal(app,app.buttons["teamGitHubEntry"]); app.buttons["teamGitHubEntry"].tap()
+        XCTAssertTrue(app.staticTexts["teamGitHubTrace"].waitForExistence(timeout: 10))
+        XCTAssertTrue((app.staticTexts["teamGitHubTrace"].value as? String ?? "").contains("\"githubPosts\":1"))
+        githubReveal(app,retry); retry.tap(); app.alerts.buttons["저장"].tap()
+        githubReveal(app,app.staticTexts["teamGitHubReceipt"])
+        let trace = githubTrace(app)
+        XCTAssertTrue(trace.contains("\"githubPosts\":2")); XCTAssertTrue(trace.contains("\"githubEvents\":1"))
+    }
+
 }

@@ -204,6 +204,24 @@ private struct SharedCacheFile: Codable {
             try draft.validate(account: draft.accountID, request: draft.requestID)
             try self.writeTeamDraft(draft, account: draft.accountID, name: draft.requestID + ".json")
         }
+        presentation.makeGitHub = { [weak self] request in
+            let github = TeamGitHubPresentation()
+            github.controller = TeamGitHubController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamGitHub(id: request, after: after, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.associateTeamGitHub(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }
+                return try self.readTeamDraft(TeamGitHubDraft.self, account: account, name: request + "-github.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request)
+                try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-github.json")
+            }, changed: { [weak github] in github?.state = $0 })
+            return github
+        }
         presentation.makeWorkflow = { [weak self] request, product in
             let workflow = TeamWorkflowPresentation()
             workflow.controller = TeamWorkflowController(requestID: request, product: product, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
@@ -242,6 +260,7 @@ private struct SharedCacheFile: Codable {
     }
     private func writeTeamDraft<T: Encodable>(_ value: T, account: String, name: String) throws {
 #if DEBUG
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "github", name.hasSuffix("-github.json"), let draft = value as? TeamGitHubDraft, !draft.reason.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
         if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "comment" && name.hasPrefix("trq_") { throw CocoaError(.fileWriteOutOfSpace) }
 #endif
         let file = try teamDraftFile(account: account, name: name)
@@ -696,7 +715,7 @@ private struct SharedCacheFile: Codable {
             if current == Self.personalID {
                 refreshConversationList(credential, attempt: attempt)
                 error = guestDraftFailure ?? cache.requestFailure
-                notice = "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."
+                notice = ""
                 return
             }
             var list = try await service.list(credential)
@@ -722,7 +741,7 @@ private struct SharedCacheFile: Codable {
                 }
             }
             error = guestDraftFailure ?? cache.requestFailure
-            notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
+            notice = isReflection ? "" : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
         } catch {
             if epoch == attempt {
                 if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
@@ -779,6 +798,19 @@ private struct SharedCacheFile: Codable {
         do { try edit(id) { try $0.enqueue(reflection: id == Self.personalID) } } catch { self.error = error.localizedDescription; return }
         if syncing, let request = entries[id]?.request {
             queuedSend = (id, request.id); notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
+        } else { retry() }
+    }
+    var canRetryLocalRequest: Bool {
+        signedIn && accountStorageReady && cacheReadable && !loggingOut
+            && !stoppingReflection && !sendingCurrentRequest && cache.request?.status == "local"
+    }
+    // An explicit user Retry can wait behind a read just like explicit Send.
+    // Reads/restarts/uncertain results themselves never create a retry intent.
+    func retryFromUser() {
+        guard canRetryLocalRequest, let id = selected, let request = entries[id]?.request else { return }
+        if syncing {
+            queuedSend = (id, request.id)
+            notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
         } else { retry() }
     }
     func retry() {

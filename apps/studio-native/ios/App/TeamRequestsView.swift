@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
     @Published var state = TeamRequestController.View()
+    var makeGitHub: (String) -> TeamGitHubPresentation = { _ in TeamGitHubPresentation() }
     var makeWorkflow: (String, String) -> TeamWorkflowPresentation = { _, _ in TeamWorkflowPresentation() }
     var controller: TeamRequestController?
     var detail: (String, String?) async throws -> TeamRequestDetail = { _, _ in throw CancellationError() }
@@ -101,6 +102,7 @@ private struct TeamRequestDetailView: View {
             if let detail {
                 Section("원문") { Text(detail.request.body).textSelection(.enabled); Text("작성자: \(detail.request.account_id)").font(.caption) }
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
+                Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry") }
                 Section("논의") {
                     ForEach(comments) { comment in VStack(alignment: .leading, spacing: 6) { Text(comment.body).textSelection(.enabled); Text(comment.account_id).font(.caption).foregroundStyle(.secondary) } }
                     if detail.next_comments_cursor != nil { Button("댓글 더 보기") { Task { await refresh(more: true) } }.disabled(busy) }
@@ -272,5 +274,97 @@ private struct TeamWorkflowScreen: View {
             .alert("저장되지 않은 변경이 있어요", isPresented: $confirmLeave) {
                 Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
             } message: { Text("나가기 전에 변경 내용을 내보내 주세요.") }
+    }
+}
+
+@MainActor final class TeamGitHubPresentation: ObservableObject {
+    @Published var state = TeamGitHubController.View()
+    var controller: TeamGitHubController?
+}
+private struct TeamGitHubScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var model: TeamGitHubPresentation
+    @State private var confirmSend = false
+    @State private var confirmLeave = false
+    init(model: TeamGitHubPresentation) { _model = StateObject(wrappedValue: model) }
+    private var editable: Bool { model.state.page?.can_manage == true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
+    private func field(_ title: String, _ key: WritableKeyPath<TeamGitHubDraft, String>, _ identifier: String) -> some View {
+        TextField(title, text: Binding(get: { model.state.draft?[keyPath: key] ?? "" }, set: { value in model.controller?.edit { $0[keyPath: key] = value } }))
+            .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(!editable).accessibilityIdentifier(identifier)
+    }
+    private func evidence(_ event: TeamGitHubEvent, history: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(event.repo) · 이슈 #\(event.issue_number)").accessibilityIdentifier(history ? "teamGitHubHistoryEntry\(event.revision)" : "teamGitHubCurrentIssue")
+            Text("연결 관계: 운영자 지정 · 변경 \(event.revision)").font(.caption)
+            if let proof = event.evidence {
+                Link("확인된 이슈 열기", destination: URL(string: proof.issue.url)!)
+                Text("GitHub에서 확인한 상태: \(proof.issue.state == "closed" ? "닫힘" : "열림")")
+                if let pull = proof.pull { Link("PR #\(pull.number) · \(pull.merged ? "병합됨" : "미병합")", destination: URL(string: pull.url)!) }
+                if let sha = proof.source_sha { Text("소스 SHA: \(sha)").font(.caption).textSelection(.enabled) }
+                if let ci = proof.ci { Link("CI 실행 \(ci.run_id) · 시도 \(ci.attempt) · \(ci.conclusion)", destination: URL(string: ci.url)!) }
+            } else { Text("작성자 삭제로 연결 근거가 제거됐어요.") }
+            if let reason = event.reason { Text(reason).textSelection(.enabled) }
+            Text("확인: \(Date(timeIntervalSince1970: event.verified_at / 1000).formatted())").font(.caption)
+            Text("TestFlight 제공 여부·사용자 해결 확인: 확인되지 않음").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    var body: some View {
+        List {
+#if DEBUG
+            if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic GitHub trace").font(.caption2).accessibilityIdentifier("teamGitHubTrace").accessibilityValue(TeamEntryFixture.trace) } }
+#endif
+
+            if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamGitHubMessage") }
+            if let page = model.state.page {
+                Section("최근 연결") {
+                    if let event = page.current { evidence(event).accessibilityIdentifier("teamGitHubCurrent") }
+                    else { Text("아직 연결된 GitHub 근거가 없어요.") }
+                    if !page.can_manage { Text("조회 권한으로 보고 있어요. 연결 변경은 권한이 있는 운영자만 할 수 있어요.").accessibilityIdentifier("teamGitHubReadOnly") }
+                }
+            }
+            if let draft = model.state.draft {
+                Section {
+                    field("기존 이슈 번호", \.issue, "teamGitHubIssue")
+                    Toggle("PR·소스·CI 근거 함께 확인", isOn: Binding(get: { model.state.draft?.lineage ?? false }, set: { value in model.controller?.edit { $0.lineage = value } })).disabled(!editable)
+                    if draft.lineage {
+                        field("PR 번호", \.pull, "teamGitHubPull")
+                        field("40자리 소스 SHA", \.sourceSHA, "teamGitHubSHA")
+                        field("CI 실행 번호", \.run, "teamGitHubRun")
+                        field("CI 시도 번호", \.attempt, "teamGitHubAttempt")
+                    }
+                    TextEditor(text: Binding(get: { model.state.draft?.reason ?? "" }, set: { value in model.controller?.edit { $0.reason = value } }))
+                        .frame(minHeight: 100).disabled(!editable).accessibilityLabel("연결 사유").accessibilityIdentifier("teamGitHubReason")
+                    Text("연결 사유 \(draft.reason.utf16.count)/2,000단위").font(.caption)
+                    ShareLink("연결 초안 내보내기", item: "이슈: \(draft.issue)\nPR: \(draft.pull)\nSHA: \(draft.sourceSHA)\nCI: \(draft.run), 시도: \(draft.attempt)\n\(draft.reason)")
+                    if draft.phase == .received {
+                        Text("연결이 저장됐어요.").accessibilityIdentifier("teamGitHubReceipt")
+                        Button("다음 연결 작성") { model.controller?.newChange() }.disabled(!model.state.storageReady || model.state.busy || model.state.page?.can_manage != true)
+                    } else if draft.phase == .conflict {
+                        Button("최신 상태 기준으로 제안 유지") { model.controller?.rebase() }.disabled(!model.state.storageReady || model.state.busy || model.state.page?.can_manage != true)
+                    } else {
+                        Button(draft.phase == .uncertain ? "같은 번호로 다시 확인·저장" : "연결 확인·저장") { confirmSend = true }
+                            .disabled(model.state.busy || !model.state.storageReady || model.state.page?.can_manage != true || (try? draft.payload()) == nil).accessibilityIdentifier("teamGitHubSend")
+                    }
+                } header: { Text("기존 GitHub 기록 연결") } footer: { Text("제품 저장소는 서버에서 정해요. 새 공개 이슈를 만들지 않으며, 요청 원문과 연결 사유를 GitHub에 보내지 않아요. CI 성공만으로 배포·설치·해결을 판단하지 않아요.") }
+            }
+            Section("연결 이력") {
+                ForEach(model.state.events) { event in evidence(event, history: true) }
+                if model.state.page?.next_cursor != nil { Button("연결 이력 더 보기") { Task { await model.controller?.more() } }.disabled(model.state.busy) }
+            }
+        }.navigationTitle("GitHub 연결 근거").navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(!model.state.storageReady || model.state.busy)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy || !model.state.storageReady) }
+                ToolbarItem(placement: .topBarLeading) { if !model.state.storageReady || model.state.busy { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { dismiss() } }.accessibilityIdentifier("teamGitHubBack") } }
+            }
+            .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
+            .task { await model.controller?.open() }
+            .onDisappear { model.controller?.invalidate() }
+            .alert("GitHub 기록을 연결할까요?", isPresented: $confirmSend) {
+                Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }
+            } message: { Text("서버가 GitHub 기록을 확인한 뒤 연결 사유와 함께 내부 이력에 저장해요. 공개 GitHub 글을 작성하지 않아요.") }
+            .alert("저장되지 않은 연결 초안이 있어요", isPresented: $confirmLeave) {
+                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
+            } message: { Text("나가기 전에 연결 초안을 내보내 주세요.") }
     }
 }

@@ -804,6 +804,56 @@ acceptance. TestFlight and physical accessibility remain separate acceptance.
 `testInternalWorkflowCancelSaveAndHistory` uses DEBUG-only synthetic transport;
 it does not prove deployed API integration or installed-device acceptance.
 Service owns the insert/read revocation and product membership controls.
+
+### Internal GitHub association client — Studio #4349
+
+Core `TeamGitHubTests` covers durable uncertain-before-send, restart without replay,
+explicit same-key recovery, read-only access, disk failure, refresh-before-rebase,
+late account reply rejection, complete lineage input, foreign URLs and ordered history.
+Actual native `TeamEntryUITests` covers cancel with zero synthetic posts, explicit
+save with one event, refreshed metadata, read-only access and unsaved export/exit guard.
+The DEBUG fixture never contacts GitHub or the production Service and contains no
+provider credentials. Its counters distinguish requests from stored associations.
+
+Focused local validation: seven Core tests passed in
+`artifacts/m1/github-core-3.log`; three native simulator journeys passed in
+`artifacts/m1/github-ui-4.log`. Earlier failed UI attempts remain in
+`github-ui-1.log` (SwiftUI declaration), `github-ui-2.log` (offscreen receipt)
+and `github-ui-3.log` (history accessibility identity). Final UI assertions
+use bounded real scrolling and confirm one stored event, cancellation with
+zero POSTs, and two explicit same-key POSTs with one event after an unknown result. These fixtures do not prove deployed Service #567 integration,
+actual operator grants, Apple processing, TestFlight availability, installation
+or reporter confirmation. Those gates remain NOT RUN.
+
+
+CI run `44298015149` at `558498e3` completed 47 UI cases with one failure:
+repeated downward swipes dismissed the GitHub association sheet before reading
+its counters. The regression now stops scrolling when that row is reachable;
+cancel/save/history and unknown-result recovery retain their original assertions.
+The same job hit its 45-minute execution limit after approximately 34 minutes of
+UI tests plus build/setup overhead. Its bounded limit is now 55 minutes to allow
+result finalization, cleanup and artifact upload. This raises the worst-case
+runner allocation by ten minutes per iOS job, with no added jobs or automatic
+retry; individual case limits remain unchanged. Neither change makes the failed
+run passing. A new exact-source remote run is required.
+
+Both affected simulator journeys passed on 2026-11-18 (2 tests, 0 failures;
+`/tmp/ios-4361-github-regression.xcresult`, log of the same basename).
+This is focused synthetic verification, not a full-suite or installed-device pass.
+
+
+Conversation status simplification (2026-11-18): the existing
+`testPersonalQuestionReadyAndSendWhileDesktopListIsHeld` journey now verifies
+that a successful answer does not display the completed saved caption, routine
+same-account notice, or main syncing spinner while its transport counters still
+prove a real send during a held background request. Existing timeout/retry and
+logout journeys retain their actionable-state assertions. Focused simulator validation passed: both this journey and
+`testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft` completed with zero
+failures (`/tmp/ios-quiet-conversation.log`, `/tmp/ios-quiet-conversation.xcresult`).
+The resource-wrapped runner exited 0; its dedicated simulator was removed.
+This is local synthetic UI evidence, not a new shipped TestFlight build.
+
+
 Same-source tool validation at `8c672ec9` on Ubuntu host `snts` passed all 26
 Android bootstrap/environment controls (exit 0). Exact command:
 `python3 -m unittest discover -s apps/studio-native/tests -p 'test_android*.py' -v`.
@@ -826,6 +876,90 @@ the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitte
 twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
 This is local synthetic evidence; remote CI and physical-device acceptance remain
 separate. The prior failing CI evidence is retained.
+
+
+### Held history without removed status UI — 2026-11-18
+
+CI run44310557985 at2e7de2dc exposed an obsolete positive assertion for the
+removed `sharedSyncing` element. The queued-voice journey now waits for the
+fixture's actual active-history-read barrier and asserts that the removed UI
+stays absent. Existing held-read, voice capture, send-once, reply and resumed
+listening checks remain. Both this case and durable retry passed together in
+`/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
+All remaining references to the removed saved/account/sync labels in native
+journeys were checked; they assert absence, not stale positive visibility.
+
+### Stopped voice response draft input boundary — CI #4361
+
+Run44326288656 on0ea2078b restored `Keep my separate` after the stop-response
+journey immediately terminated following `typeText("Keep my separate draft")`.
+The original recording at
+`/tmp/ios4361-stop-full/A9397026-6036-45C3-9082-4E3D51828601.mp4` does not establish
+complete input before termination: sampled frames show `Ke`, then termination,
+then the partial restored text. This is not proof of a persistence defect.
+
+The journey now requires exact full input before terminating and exact full
+restoration afterwards, each using the existing10s wait. It keeps one typeText,
+no retyping, original cancellation/send-once/no-restart assertions, and records
+each boundary. An incomplete precondition fails the test before termination.
+Independent source review accepted the stronger assertion and failure guard.
+
+Focused native PASS31.469s (Executed1), runner and owned-simulator cleanup exit0:
+`/tmp/ios4361-stop-input-boundary-2.xcresult`. Both equality predicates passed.
+The earlier `/tmp/ios4361-stop-input-boundary.xcresult` selected the wrong class
+and executed0 tests despite exit0; it is NOT validation. Captured AX descriptions
+truncate long values, so the final diagnostic attachment additionally records raw
+`input.value`; that diagnostic-only addition followed the passing run and was not
+claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
+
+
+### Held-history retry regression — 2026-11-19
+
+Run44342724464 attempt3 atb35a2e2c passed105 Core and46of47 UI tests. Real
+Korean playback passed; the single retry-after-relaunch test failed with no
+button-action trace and no second POST. Keep that failed result.
+
+The new MFR-T05 held-history case first releases an ordinary history read after
+restart without Retry and requires no replay. It then holds another read, taps
+Retry exactly once and requires no early POST or duplicate intent, followed by
+the same ID/text, one accepted turn and the original answer assertion after
+release. The reviewed fix and remaining device-copy removal are backported
+from41fa5285; new native execution is pending, not a passing result.
+
+
+### GitHub diagnostic observation — 2026-11-19
+
+Run44383839227 at `0a59f232` completed with 105 Core tests passing and one failure
+among 48 UI journeys. `testInternalGitHubUnknownReopenKeepsOneAssociation` failed
+inside `githubTrace`, asking XCTest for the activation point of the noninteractive
+`teamGitHubTrace` static text. The helper now reads its accessibility value once
+it exists, retaining the same bounded fallback and five-second existence check.
+All three callers were audited: subsequent actions already reveal their own
+button or history target, or end with counter assertions.
+All association counts, exact-key recovery assertions and real button taps remain
+unchanged. The original retry (29.089 seconds), held-history retry (55.193 seconds)
+and Korean speech completion (27.876 seconds) passed on the previous source;
+these partial results do not establish full acceptance of this correction.
+The new helper change is locally runtime NOT RUN while the shared resource slot
+is blocked. Diff and requirement-inventory checks are integrity evidence only.
+
+
+### Android second explicit capture boundary — 2026-11-19
+
+Run44393604967 at `d8563645` failed one of44 Android tests: the background/reopen
+journey expected2 capture starts but observed1. Its second click was followed by
+partial injection through whichever listener remained, without first proving a
+new capture. This establishes a missing start, not a background reopening defect.
+The test now observes actual foreground/allowed conversation, empty draft and
+visible enabled target readiness using the existing five-second readiness budget,
+then performs exactly one real click. Before injecting or backgrounding it requires
+starts2, a new listener and LISTENING. Existing background no-reopen, submitted1 and
+preserved draft assertions remain unchanged. Content-free failure state records
+guards, target readiness and new-listener identity as a boolean; no credentials or
+utterance text are added to diagnostics. No retry, relaxed count or product change.
+A periodic-read race remains a hypothesis until runtime evidence; new execution is
+NOT RUN while shared compute is blocked. Static integrity checks are not acceptance.
+
 ### Accessibility evidence collection regression — 2026-11-19
 
 Run44326111986 at source2c6d0f83 failed two of43 UI cases;92 Core cases passed.

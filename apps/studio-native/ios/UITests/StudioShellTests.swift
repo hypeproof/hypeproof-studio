@@ -362,6 +362,9 @@ final class StudioJourneyTests: XCTestCase {
         send.tap(); answer(app)
         let after = try trace(app)
         XCTAssertEqual(after["submitted_while_desktop_list_held"] as? Int, 1, "The actual POST must start before the unrelated GET settles.")
+        XCTAssertFalse(app.staticTexts["같은 계정의 대화에 저장됨"].exists)
+        XCTAssertFalse(app.staticTexts["같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."].exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch.exists)
         XCTAssertEqual(after["submitted_texts"] as? [String], [words])
         XCTAssertEqual((after["submitted_ids"] as? [String])?.count, 1)
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)
@@ -522,6 +525,10 @@ final class StudioJourneyTests: XCTestCase {
         }, object: trace)
         let result = XCTWaiter.wait(for: [observed], timeout: timeout)
         if result != .completed {
+            // Preserve the selected OS voice and fixture state on the failure
+            // path too. Success-only trace collection cannot diagnose synthesis
+            // that starts but never delivers its completion callback.
+            readinessFailure("voice-handoff-incomplete", app: app, queries: [("timeline", trace)])
             let evidence = XCTAttachment(string: trace.value as? String ?? "voice timeline missing")
             evidence.name = "voice-handoff-incomplete"; evidence.lifetime = .keepAlways; add(evidence)
             let screen = XCTAttachment(screenshot: app.screenshot()); screen.lifetime = .keepAlways; add(screen)
@@ -686,9 +693,20 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(after["held_response_returns"] as? Int, 1, "The original POST transport delivers its error before cancel acknowledgement; actor callback order must not overwrite confirmation.")
         XCTAssertEqual(after["speech_captures"] as? Int, 1); XCTAssertEqual(after["accepted_turns"] as? Int, 0)
         XCTAssertTrue(app.staticTexts["내 메시지. I want to understand my next step"].exists)
-        field(app).tap(); field(app).typeText("Keep my separate draft")
+        let expectedDraft = "Keep my separate draft"
+        func exactDraft(_ stage: String) -> Bool {
+            let input = field(app)
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expectedDraft), object: input)
+            let result = XCTWaiter.wait(for: [expectation], timeout: 10)
+            let observation = XCTAttachment(string: "Observed value: " + (input.value as? String ?? "<non-string>") + "\n" + input.debugDescription)
+            observation.name = "stop-voice-draft-" + stage; observation.lifetime = .keepAlways; add(observation)
+            XCTAssertEqual(result, .completed, "Exact draft must be observed at " + stage + "; incomplete input must not be attributed to persistence.")
+            return result == .completed
+        }
+        field(app).tap(); field(app).typeText(expectedDraft)
+        guard exactDraft("before-termination") else { return }
         app.terminate(); app.launch(); _ = field(app)
-        valueContains(field(app), "Keep my separate draft")
+        guard exactDraft("after-relaunch") else { return }
         XCTAssertTrue(cancelled.waitForExistence(timeout: 5))
         let reopened = try trace(app)
         XCTAssertEqual(reopened["submitted_ids"] as? [String], ids)
@@ -704,7 +722,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(refresh.isHittable); XCTAssertGreaterThanOrEqual(refresh.frame.height, 44)
         refresh.tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertFalse(syncing.exists, "The held history read must not restore the removed conversation spinner.")
         // Refresh may overlap the sheet dismissal. A voice button behind an
         // open settings surface is not yet a usable touch target.
         XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
@@ -714,7 +733,7 @@ final class StudioJourneyTests: XCTestCase {
                 && !voice.frame.isEmpty && app.frame.contains(voice.frame)
         }, object: voice)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
-        XCTAssertTrue(syncing.exists, "The voice action must still overlap the held history read.")
+        XCTAssertFalse(syncing.exists, "History activity is observed through the fixture barrier, not removed UI.")
         let before = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
         XCTAssertEqual(before["history_sync_automatic"] as? Bool, false, "This journey must hold the explicit Settings refresh, not an earlier quiet poll.")
         XCTAssertEqual(before["active_history_reads"] as? Int, 1)
@@ -842,6 +861,53 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(after["submitted_texts"] as? [String], ["Keep my unfinished question", "Keep my unfinished question"])
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)
         try evidence("journey-retry-outbox", app: app)
+    }
+    @MainActor func testSingleExplicitRetryQueuesBehindHeldPeriodicHistoryWithoutAutomaticReplay() throws {
+        let app = launch("retry-once", arguments: ["--hold-retry-history"]); signIn(app)
+        let words = "Keep my unfinished question"
+        field(app).tap(); field(app).typeText(words); app.buttons["sharedSend"].tap()
+        enabled(app.buttons["sharedRetry"])
+        let first = try trace(app), ids = try XCTUnwrap(first["submitted_ids"] as? [String])
+        XCTAssertEqual(ids.count, 1); XCTAssertEqual(first["accepted_turns"] as? Int, 0)
+        app.terminate(); app.launch(); _ = field(app)
+        func armOrdinaryRead() throws {
+            app.buttons["conversationSettings"].tap()
+            let hold = app.buttons["nativeJourneyHoldHistory"]; enabled(hold); hold.tap()
+            _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+            XCTAssertEqual(try trace(app)["history_sync_automatic"] as? Bool, true)
+        }
+        func releaseRead() {
+            app.buttons["conversationSettings"].tap()
+            let release = app.buttons["nativeJourneyReleaseHistory"]; enabled(release); release.tap()
+        }
+        // A read completing after restart without user intent must not replay the POST.
+        try armOrdinaryRead(); releaseRead()
+        _ = try waitForTraceCount("history_barrier_completions", atLeast: 1, in: app)
+        XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], ids)
+        try armOrdinaryRead()
+        let retry = app.buttons["sharedRetry"]
+        XCTAssertTrue(retry.isEnabled, "A background read must not swallow the user's explicit retry.")
+        XCTAssertTrue(retry.isHittable)
+        retry.tap() // Exactly one real tap; keep the original answer and receipt assertions.
+        let node = diagnostic("nativeJourneyTrace", in: app)
+        let touched = XCTNSPredicateExpectation(predicate: NSPredicate { object, _ in
+            guard let raw = (object as? XCUIElement)?.value as? String,
+                  let data = raw.data(using: .utf8),
+                  let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return value["retry_stages"] as? [String] == ["touch"]
+        }, object: node)
+        XCTAssertEqual(XCTWaiter.wait(for: [touched], timeout: 5), .completed)
+        XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], ids)
+        XCTAssertFalse(retry.isEnabled, "One queued intent must prevent a second retry tap.")
+        releaseRead(); answer(app)
+        let after = try trace(app)
+        XCTAssertEqual(after["retry_stages"] as? [String], ["touch", "attempt", "admitted", "post"])
+        XCTAssertEqual(after["submitted_ids"] as? [String], [ids[0], ids[0]])
+        XCTAssertEqual(after["submitted_texts"] as? [String], [words, words])
+        XCTAssertEqual(after["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(after["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(after["history_barrier_completions"] as? Int, 2)
+        try evidence("journey-explicit-retry-during-history", app: app)
     }
     @MainActor func testUnacknowledgedWordsStayVisibleWhenHistoryReusesIDWithDifferentText() throws {
         let app = launch("pending-text-mismatch"); signIn(app)
