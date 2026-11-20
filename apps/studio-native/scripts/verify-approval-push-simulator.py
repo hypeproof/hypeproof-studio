@@ -39,8 +39,11 @@ def main():
     log = evidence / "xcodebuild.log"
     process = None
     try:
+        print(f"Booting the owned iOS Simulator: {device}", flush=True)
         subprocess.run([*simctl, "boot", device], check=True, timeout=60)
-        subprocess.run([*simctl, "bootstatus", device, "-b"], check=True, timeout=120)
+        # A cold GitHub macOS runner can take over two minutes to initialize.
+        subprocess.run([*simctl, "bootstatus", device, "-b"], check=True, timeout=240)
+        print("Simulator booted. Building and running the focused XCUITest.", flush=True)
         command = [
             "xcodebuild", "-project", "HPStudio.xcodeproj", "-scheme", "HPStudio",
             "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={device}",
