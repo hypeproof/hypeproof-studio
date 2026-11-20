@@ -611,12 +611,20 @@ final class TeamEntryUITests: XCTestCase {
         app.buttons["teamTextRefresh"].tap();XCTAssertTrue(app.staticTexts["teamTextCurrent"].waitForExistence(timeout:10));XCTAssertEqual(app.staticTexts["teamTextCurrent"].label,secondWords);XCTAssertEqual(app.staticTexts["teamTextOriginal"].label,"GitHub fixture request")
         let shot=XCTAttachment(screenshot:app.screenshot());shot.name="text-revision-original-current-confirmed-history";shot.lifetime = .keepAlways;add(shot)
     }
+    @MainActor private func openRequestTextHistory(_ app: XCUIApplication) {
+        let entry = app.buttons["teamRequestTextHistory"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "Request details must load before revealing text history.")
+        detailReveal(app, entry)
+        entry.tap()
+    }
+
     @MainActor func testTextHistoryReadonlyAndFailedSavePreservesExport() throws {
         let readonly=githubApp(["HP_TEAM_TEXT":"1","HP_TEAM_TEXT_READONLY":"1","HP_TEAM_RELATED":"1"])
-        githubReveal(readonly,readonly.buttons["teamRequestTextHistory"]);readonly.buttons["teamRequestTextHistory"].tap()
+        openRequestTextHistory(readonly)
         XCTAssertTrue(readonly.staticTexts["teamTextReadOnly"].waitForExistence(timeout:10));XCTAssertFalse(readonly.buttons["teamTextBeginEdit"].exists);XCTAssertEqual(textTrace(readonly)["textPosts"] as? Int,0);readonly.terminate()
         let app=githubApp(["HP_TEAM_TEXT":"1","HP_TEAM_DRAFT_SAVE_FAILURE":"text","HP_TEAM_RELATED":"1"])
-        githubReveal(app,app.buttons["teamRequestTextHistory"]);app.buttons["teamRequestTextHistory"].tap();githubReveal(app,app.buttons["teamTextBeginEdit"]);app.buttons["teamTextBeginEdit"].tap()
+        openRequestTextHistory(app)
+        githubReveal(app,app.buttons["teamTextBeginEdit"]);app.buttons["teamTextBeginEdit"].tap()
         let editor=app.textViews["teamTextBody"];githubReveal(app,editor);XCTAssertEqual(editor.value as? String,"GitHub fixture request");editor.tap();editor.typeText(" Unstored")
         let unsaved=try XCTUnwrap(editor.value as? String);XCTAssertEqual(unsaved.components(separatedBy:" Unstored").count,2);XCTAssertEqual(unsaved.replacingOccurrences(of:" Unstored",with:""),"GitHub fixture request");githubReveal(app,app.buttons["teamTextExport"]);XCTAssertTrue(app.buttons["teamTextExport"].isHittable);XCTAssertFalse(app.buttons["teamTextSend"].isEnabled);XCTAssertEqual(textTrace(app)["textPosts"] as? Int,0)
         app.buttons["뒤로"].tap();XCTAssertTrue(app.alerts.buttons["계속 작성"].waitForExistence(timeout:5));app.alerts.buttons["계속 작성"].tap();githubReveal(app,editor);XCTAssertEqual(editor.value as? String,unsaved)
