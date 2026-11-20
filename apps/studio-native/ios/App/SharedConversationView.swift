@@ -410,6 +410,13 @@ struct SharedConversationView: View {
 #if DEBUG
                 if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
 #endif
+#if DEBUG
+                if NativeJourneyFixture.approvalPushEnabled {
+                    Button("Allow test notifications") {
+                        Task { await NativeJourneyFixture.requestApprovalPushAuthorization() }
+                    }.buttonStyle(.bordered).accessibilityIdentifier("approvalPushFixtureAuthorize")
+                }
+#endif
                 status
             }.padding(.horizontal, 24).padding(.top, 36).padding(.bottom, 20)
                 .frame(maxWidth: 640, alignment: .leading).frame(maxWidth: .infinity)
@@ -729,6 +736,13 @@ struct SharedConversationView: View {
         }
     }
     @ViewBuilder private var status: some View {
+        #if DEBUG
+        if model.signedIn && NativeJourneyFixture.approvalPushEnabled {
+            Button("Register for test notifications") {
+                Task { await NativeJourneyFixture.startApprovalPushRegistration(model.push.controller) }
+            }.buttonStyle(.bordered).accessibilityIdentifier("approvalPushFixtureRegister")
+        }
+        #endif
         if model.loggingOut { ProgressView("계정 확인을 마치고 로그아웃하는 중이에요.").font(.caption).accessibilityIdentifier("sharedLoggingOut") }
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
         if model.signedIn && model.error != nil && !model.syncing && !model.loggingOut {
@@ -748,7 +762,7 @@ struct SharedConversationView: View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
                 if model.signedIn && TeamEntryFixture.pushEnabled { Button("검증 알림") { TeamEntryFixture.deliverPush() }.font(.caption2).accessibilityIdentifier("teamPushFixtureOpen") }
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.approvalPushEnabled || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

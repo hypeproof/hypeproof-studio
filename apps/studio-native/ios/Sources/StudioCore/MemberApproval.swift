@@ -55,8 +55,12 @@ public struct MemberApprovalCard: Codable, Identifiable, Sendable {
                   review.html_url == "https://github.com/\(source.repo)/pull/\(source.pr)#pullrequestreview-\(review.id)" else { throw SyncFailure.invalidResponse }
         }
     }
+    // Service #605 uses a reserved ID and synthetic source for its read-only probe.
+    public var isApprovalPushTest: Bool {
+        id.hasPrefix("SMK-") && source.repo == "hypeproof/approval-push-test"
+    }
     public func canDecide(now: Double) -> Bool {
-        can_decide && ["pending", "delivered"].contains(state) && decision == nil && review == nil && expires_at > now && lease_expires_at > now && lease_expires_at <= now + 60
+        !isApprovalPushTest && can_decide && ["pending", "delivered"].contains(state) && decision == nil && review == nil && expires_at > now && lease_expires_at > now && lease_expires_at <= now + 60
     }
     public var terminal: Bool {
         !can_decide && !["awaiting_processing", "unknown"].contains(decision?.status ?? "") && (["declined", "questioned", "superseded", "expired", "resolved"].contains(state) || (state == "submitted" && review != nil))

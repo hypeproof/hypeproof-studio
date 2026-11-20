@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import CryptoKit
+import UserNotifications
 
 /// Simulator journeys replace external transports, never the app's account,
 /// outbox, persistence or voice state machines. This file has no Release code.
@@ -8,6 +9,9 @@ import CryptoKit
     static var feedbackRequests = 0
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
+    nonisolated static var approvalPushEnabled: Bool {
+        JourneyConfiguration.enabled && JourneyConfiguration.scenario == "approval-push-test"
+    }
     static var trace: String {
         let value = JourneyTransport.store.trace()
         guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty,
@@ -37,6 +41,19 @@ import CryptoKit
     static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
     static var pendingPush: Bool { enabled && JourneyConfiguration.scenario == "push-registration-held" }
     private static var pendingPushStarted = false
+    static func requestApprovalPushAuthorization() async {
+        guard approvalPushEnabled else { return }
+        do {
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            NSLog("Approval push fixture authorization granted: %@", String(granted))
+        } catch {
+            NSLog("Approval push fixture authorization error: %@", error.localizedDescription)
+        }
+    }
+    static func startApprovalPushRegistration(_ controller: AccountPushController?) async {
+        guard approvalPushEnabled, let controller else { return }
+        if controller.enable() { await controller.register(String(repeating: "d", count: 64)) }
+    }
     static func startPendingPushRegistration(_ controller: AccountPushController?) {
         guard pendingPush, !pendingPushStarted, let controller else { return }
         pendingPushStarted = true
@@ -191,7 +208,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held", "approval-push-test"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -688,6 +705,17 @@ private final class JourneyStore: @unchecked Sendable {
                 "expires_at": now + 3600, "lease_expires_at": now + 50, "can_decide": value.approvalDecisionID == nil,
                 "unavailable_reason": NSNull(), "decision": decision, "review": NSNull()]
     }
+    private func approvalPushTestCard() -> [String: Any] {
+        let now = Date().timeIntervalSince1970
+        let sha = String(repeating: "a", count: 40)
+        let digest = String(repeating: "a", count: 64)
+        return ["id": "SMK-11111111-1111-4111-8111-111111111111", "request_digest": digest,
+                "source": ["repo": "hypeproof/approval-push-test", "pr": 1, "head": sha, "base": sha,
+                           "policy_digest": digest, "evidence_digest": digest, "context_digest": digest],
+                "reviewer": "synthetic-reviewer", "brief": ["authored": ["summary: 테스트 · 승인 푸시"], "verified": ["Fixture evidence only"]],
+                "state": "pending", "created_at": now - 1, "expires_at": now + 1200,
+                "lease_expires_at": 0, "can_decide": false, "decision": NSNull(), "review": NSNull()]
+    }
     func respond(_ request: URLRequest) throws -> (Int, [String: Any]) {
         lock.lock(); defer { save(); lock.unlock() }
         guard JourneyConfiguration.enabled, request.url?.host == "native-journey.invalid", request.url?.scheme == "https" else { throw URLError(.unsupportedURL) }
@@ -721,6 +749,21 @@ private final class JourneyStore: @unchecked Sendable {
         default: break
         }
         guard request.value(forHTTPHeaderField: "Authorization") == "Bearer " + accessToken else { return (401, ["error": "account_required"]) }
+        if NativeJourneyFixture.approvalPushEnabled, method == "GET", path == "/v1/me/team-requests/access" {
+            return (404, ["error": "not_found"])
+        }
+        if NativeJourneyFixture.approvalPushEnabled, path.hasPrefix("/v1/me/push-devices/") {
+            let parts = path.split(separator: "/")
+            if method == "PUT", parts.count == 4, body["token"] as? String == String(repeating: "d", count: 64) {
+                pushInstallation = String(parts[3])
+                return (200, ["schema": "hps-push-device/1", "id": String(parts[3]), "active": true, "generation": 1])
+            }
+            if method == "POST", parts.count == 5, parts[4] == "opened", pushInstallation == String(parts[3]),
+               body["delivery_id"] as? String == "22222222-2222-4222-8222-222222222222" {
+                return (200, ["recorded": true, "evidence_kind": "client_observed"])
+            }
+            return (409, ["error": "unexpected_fixture_push_request"])
+        }
         if JourneyConfiguration.scenario == "push-registration-held", path.hasPrefix("/v1/me/push-devices/") {
             let parts = path.split(separator: "/")
             guard parts.count >= 4, UUID(uuidString: String(parts[3]))?.uuidString.lowercased() == String(parts[3]) else { return (400, ["error": "invalid_fixture_installation"]) }
@@ -745,6 +788,10 @@ private final class JourneyStore: @unchecked Sendable {
         case ("GET", "/v1/me"):
             return (200, ["account": ["id": accountID, "status": "active"], "session_id": sessionID])
         case ("GET", "/v1/me/approval-inbox"):
+            if NativeJourneyFixture.approvalPushEnabled {
+                return (200, ["schema": "hps-member-approval-inbox/1", "availability": "ready",
+                              "cards": [approvalCard(), approvalPushTestCard()]])
+            }
             return (200, ["schema": "hps-member-approval-inbox/1", "availability": JourneyConfiguration.scenario == "member-inbox" ? "ready" : "not_enrolled", "cards": JourneyConfiguration.scenario == "member-inbox" ? [approvalCard()] : []])
         case ("GET", "/v1/me/approval-inbox/member-card"): return (200, approvalCard())
         case ("POST", "/v1/me/approval-inbox/member-card/decisions"):
