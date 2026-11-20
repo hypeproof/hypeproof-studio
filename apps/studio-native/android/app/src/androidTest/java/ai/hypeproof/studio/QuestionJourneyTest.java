@@ -146,27 +146,29 @@ public class QuestionJourneyTest {
         app.onActivity(activity::set);
         onView(withContentDescription("질문 대화 입력")).check((v,e)->{if(e!=null)throw e;edit.set(v);});
         onView(withContentDescription("말로 적기")).check((v,e)->{if(e!=null)throw e;target.set(v);
-            v.setOnTouchListener((view,event)->{dictationTouch("touch",activity.get(),view,voice,event);return false;});
+            v.setOnTouchListener((view,event)->{
+                dictationTouch("touch",activity.get(),view,voice,event);
+                if(event.getActionMasked()!=android.view.MotionEvent.ACTION_DOWN)return false;
+                // Deliver this real DOWN to the normal widget exactly once, then
+                // change focus before UP without an instrumentation round trip.
+                assertTrue("the normal mic widget must handle DOWN",view.onTouchEvent(event));
+                dictationTouch("before_focus",activity.get(),view,voice,null);
+                assertTrue("focus change must occur while the actual mic is pressed",view.isPressed());
+                assertTrue("the composer starts focused",edit.get().hasFocus());
+                edit.get().clearFocus();
+                assertFalse("real focus loss completed before UP",edit.get().hasFocus());
+                dictationTouch("after_focus",activity.get(),view,voice,null);
+                return true;
+            });
         });
         try {
         // A focus update may arrive between physical DOWN/UP; it must not eat the tap.
         java.util.concurrent.atomic.AtomicReference<float[]> point=new java.util.concurrent.atomic.AtomicReference<>();
         onView(withContentDescription("말로 적기")).check((v,e)->{if(e!=null)throw e;int[] xy=new int[2];v.getLocationOnScreen(xy);point.set(new float[]{xy[0]+v.getWidth()/2f,xy[1]+v.getHeight()/2f});});
         var instrumentation=InstrumentationRegistry.getInstrumentation();float[] xy=point.get();long downTime=android.os.SystemClock.uptimeMillis();
-        android.view.MotionEvent down=android.view.MotionEvent.obtain(downTime,downTime,android.view.MotionEvent.ACTION_DOWN,xy[0],xy[1],0);down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(down);down.recycle();
-        // Espresso synchronizes before a new interaction. Doing that while DOWN
-        // is held can turn this intended tap into the platform's tooltip long press.
-        // Keep the real focus update in flight, without a second Espresso barrier.
-        try{
-            instrumentation.runOnMainSync(()->{
-                dictationTouch("before_focus",activity.get(),target.get(),voice,null);
-                assertTrue("focus change must occur while the actual mic is pressed",target.get().isPressed());
-                assertTrue("the composer starts focused",edit.get().hasFocus());
-                edit.get().clearFocus();
-                assertFalse("real focus loss completed before UP",edit.get().hasFocus());
-                dictationTouch("after_focus",activity.get(),target.get(),voice,null);
-            });
-        }finally{
+        android.view.MotionEvent down=android.view.MotionEvent.obtain(downTime,downTime,android.view.MotionEvent.ACTION_DOWN,xy[0],xy[1],0);down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        try{instrumentation.sendPointerSync(down);}finally{
+            down.recycle();
             android.view.MotionEvent up=android.view.MotionEvent.obtain(downTime,android.os.SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,xy[0],xy[1],0);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(up);up.recycle();
         }
         drain();
