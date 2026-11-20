@@ -21,15 +21,18 @@ PAYLOAD = {
 }
 
 
-def output(args):
-    return subprocess.check_output(args, text=True, timeout=30).strip()
+def output(args, *, timeout=30):
+    return subprocess.check_output(args, text=True, timeout=timeout).strip()
 
 
 def main():
     evidence = Path(os.environ.get("HP_APPROVAL_PUSH_EVIDENCE", ROOT / "evidence/approval-push")).resolve()
     evidence.mkdir(parents=True, exist_ok=True)
     sdk = output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"])
-    runtimes = output(["xcrun", "simctl", "list", "runtimes", "--json"])
+    # The first simctl call mounts the hosted runner's preinstalled runtime images.
+    # https://github.com/actions/runner-images/issues/15247
+    print(f"Discovering installed iOS {sdk} simulator runtimes.", flush=True)
+    runtimes = output(["xcrun", "simctl", "list", "runtimes", "--json"], timeout=180)
     device_type, runtime = subprocess.check_output(
         ["python3", str(ROOT / "scripts/select-ios-simulator.py"), sdk],
         input=runtimes, text=True, timeout=30,
