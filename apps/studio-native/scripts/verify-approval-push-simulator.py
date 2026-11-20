@@ -39,6 +39,10 @@ def main():
     log = evidence / "xcodebuild.log"
     process = None
     try:
+        devices = json.loads(output([*simctl, "list", "devices", device, "--json"]))["devices"]
+        device_data = next(Path(record["dataPath"]) for records in devices.values() for record in records
+                           if record["udid"] == device)
+        app_containers = device_data / "Containers/Data/Application"
         print(f"Booting the owned iOS Simulator: {device}", flush=True)
         subprocess.run([*simctl, "boot", device], check=True, timeout=60)
         # A cold GitHub macOS runner can take over two minutes to initialize.
@@ -56,17 +60,11 @@ def main():
         with log.open("w") as stream:
             process = subprocess.Popen(command, cwd=ROOT / "ios", stdout=stream, stderr=subprocess.STDOUT,
                                        env={**os.environ, "TEST_RUNNER_HP_APPROVAL_PUSH_SIMULATOR": "1"})
-            marker = None
             deadline = time.monotonic() + 540
             while process.poll() is None and time.monotonic() < deadline:
-                if marker is None:
-                    location = subprocess.run(
-                        [*simctl, "get_app_container", device, BUNDLE + ".uitests.xctrunner", "data"],
-                        text=True, capture_output=True, timeout=15,
-                    )
-                    if location.returncode == 0:
-                        marker = Path(location.stdout.strip()) / "Documents/approval-push-ready"
-                if marker is not None and marker.is_file():
+                # The device is fresh, and only this XCTest writes the marker.
+                # Avoid an IPC request to CoreSimulator while Xcode launches the test.
+                if next(app_containers.glob("*/Documents/approval-push-ready"), None):
                     print("Injecting the OS approval notification into the owned simulator.", flush=True)
                     subprocess.run([*simctl, "push", device, BUNDLE, "-"], input=json.dumps(PAYLOAD),
                                    text=True, check=True, timeout=30)
