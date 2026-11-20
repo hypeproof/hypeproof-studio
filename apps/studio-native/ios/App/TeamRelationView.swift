@@ -82,7 +82,16 @@ struct TeamRelationScreen:View {
                 ToolbarItem(placement:.topBarLeading){if !model.state.storageReady{Button("뒤로"){confirmLeave=true}}}
             }.interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task{await model.controller?.open()}.onDisappear{model.controller?.invalidate()}
-            .alert("관련 요청 연결을 변경할까요?",isPresented:$confirmSend){Button("취소",role:.cancel){};Button("저장"){Task{await model.controller?.submit()}}}message:{if let d=model.state.draft{Text(label(d.targetID)+"\n"+d.targetID+"\n"+(d.action=="link" ? "연결":"연결 해제")+"\n"+d.reason)}}
+            .alert("관련 요청 연결을 변경할까요?", isPresented: $confirmSend) {
+                Button("취소", role: .cancel) {}
+                Button("저장") { Task { await model.controller?.submit() } }
+            } message: {
+                if let draft = model.state.draft {
+                    let title = label(draft.targetID)
+                    let action = draft.action == "link" ? "연결" : "연결 해제"
+                    Text(verbatim: [title, draft.targetID, action, draft.reason].joined(separator: "\n"))
+                }
+            }
             .alert("저장되지 않은 변경이 있어요",isPresented:$confirmLeave){Button("계속 작성",role:.cancel){};Button("나가기",role:.destructive){dismiss()}}message:{Text("나가기 전에 연결 초안을 내보내 주세요.")}
     }
 }
