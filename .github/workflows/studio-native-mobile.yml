@@ -85,6 +85,28 @@ jobs:
           node-version: '22'
       - name: Verify native journey and release casebook agreement before platform builds
         run: node --test scripts/release/test/select-cases.test.mjs scripts/release/test/publish-gate.test.mjs
+  approval-push-simulator:
+    name: iOS approval push simulator
+    if: github.event_name == 'pull_request'
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inject and tap one read-only approval notification
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-approval-push-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/studio-native/evidence/approval-push/xcodebuild.log
+            apps/studio-native/evidence/approval-push/simulator-notifications.log
+            apps/studio-native/evidence/approval-push/ApprovalPush.xcresult
+          retention-days: 14
   ios:
     needs: contract
     runs-on: xcode-27

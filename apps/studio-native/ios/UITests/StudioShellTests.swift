@@ -271,6 +271,70 @@ final class StudioJourneyTests: XCTestCase {
         app.buttons["conversationSettings"].tap()
         XCTAssertFalse(app.buttons["memberApprovalInbox"].exists)
     }
+    @MainActor func testSystemApprovalPushOpensMatchingReadOnlyCard() throws {
+        guard ProcessInfo.processInfo.environment["HP_APPROVAL_PUSH_SIMULATOR"] == "1" ||
+            ProcessInfo.processInfo.environment["TEST_RUNNER_HP_APPROVAL_PUSH_SIMULATOR"] == "1" else {
+            throw XCTSkip("Run with verify-approval-push-simulator.py to inject an OS notification.")
+        }
+        let id = "SMK-11111111-1111-4111-8111-111111111111"
+        let title = "테스트 · 승인 푸시"
+        let app = launch("approval-push-test")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let authorize = app.buttons["approvalPushFixtureAuthorize"]
+        XCTAssertTrue(authorize.waitForExistence(timeout: 5))
+        authorize.tap()
+        let allow = springboard.alerts.buttons["Allow"]
+        // The notification daemon may begin handling authorization late on a fresh simulator.
+        XCTAssertTrue(allow.waitForExistence(timeout: 75), springboard.debugDescription)
+        allow.tap()
+        signIn(app)
+        let register = app.buttons["approvalPushFixtureRegister"]
+        XCTAssertTrue(register.waitForExistence(timeout: 5))
+        register.tap()
+        let registered = XCTNSPredicateExpectation(predicate: NSPredicate(
+            format: "value CONTAINS %@", "push-devices"
+        ), object: diagnostic("nativeJourneyTrace", in: app))
+        let readiness = XCTWaiter.wait(for: [registered], timeout: 10)
+        let diagnostics = try trace(app)
+        let before = try XCTUnwrap(diagnostics["paths"] as? [String])
+        XCTAssertEqual(readiness, .completed, before.joined(separator: "\n"))
+        XCTAssertEqual(before.filter { $0.hasPrefix("PUT /v1/me/push-devices/") }.count, 1)
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
+        let directory = URL.documentsDirectory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("ready".utf8).write(to: directory.appendingPathComponent("approval-push-ready"), options: .atomic)
+        let alert = springboard.staticTexts[title].firstMatch
+        if !alert.waitForExistence(timeout: 4) {
+            let top = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.005))
+            let center = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.68))
+            top.press(forDuration: 0.05, thenDragTo: center)
+        }
+        XCTAssertTrue(alert.waitForExistence(timeout: 15), springboard.debugDescription)
+        let received = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        received.name = "approval-push-system-notification"; received.lifetime = .keepAlways; add(received)
+        alert.tap()
+        let focus = app.staticTexts["approvalFromPush-" + id]
+        XCTAssertTrue(focus.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["approvalChangeSummary-member-card"].exists)
+        XCTAssertEqual(app.staticTexts["approvalChangeSummary-" + id].label, title)
+        XCTAssertTrue(app.staticTexts["approvalPushTestReadOnly-" + id].exists)
+        for action in ["approvalApprove-", "approvalHold-", "approvalQuestion-"] {
+            XCTAssertFalse(app.buttons[action + id].exists, "The read-only card must hide " + action)
+        }
+        for label in ["승인", "보류", "설명 요청"] {
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch.exists)
+        }
+        let head = app.staticTexts["approvalExactHead-" + id]
+        XCTAssertTrue(head.waitForExistence(timeout: 5))
+        XCTAssertEqual(head.label, String(repeating: "a", count: 40))
+        let detail = XCTAttachment(screenshot: app.screenshot())
+        detail.name = "approval-push-matching-read-only-detail"; detail.lifetime = .keepAlways; add(detail)
+        app.buttons["닫기"].tap()
+        let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
+        XCTAssertEqual(paths.filter { $0.hasPrefix("POST /v1/me/push-devices/") && $0.hasSuffix("/opened") }.count, 1)
+        XCTAssertFalse(paths.contains { $0.hasSuffix("/decisions") })
+    }
     @MainActor func testMemberInboxKeepsDraftAndReconcilesUncertainChoiceWithoutResend() throws {
         let app = launch("member-inbox"); signIn(app)
         let draft = field(app); draft.tap(); draft.typeText("Keep my question draft")
