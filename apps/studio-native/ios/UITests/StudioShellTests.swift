@@ -306,7 +306,7 @@ final class StudioJourneyTests: XCTestCase {
         try Data("ready".utf8).write(to: directory.appendingPathComponent("approval-push-ready"), options: .atomic)
         let alert = springboard.staticTexts[title].firstMatch
         // Stay on Home so a delayed hosted push still arrives as a tappable banner.
-        XCTAssertTrue(alert.waitForExistence(timeout: 55), springboard.debugDescription)
+        XCTAssertTrue(alert.waitForExistence(timeout: 135), springboard.debugDescription)
         let received = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         received.name = "approval-push-system-notification"; received.lifetime = .keepAlways; add(received)
         alert.tap()
