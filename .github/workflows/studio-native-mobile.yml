@@ -107,6 +107,7 @@ jobs:
             apps/studio-native/evidence/approval-push/xcodebuild.log
             apps/studio-native/evidence/approval-push/simulator-notifications.log
             apps/studio-native/evidence/approval-push/ApprovalPush.xcresult
+            apps/studio-native/evidence/approval-push/approval-push-*.png
           retention-days: 14
   ios:
     needs: contract

@@ -2,7 +2,9 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
+from tempfile import TemporaryDirectory
 import time
 import uuid
 
@@ -23,6 +25,26 @@ PAYLOAD = {
 
 def output(args, *, timeout=30):
     return subprocess.check_output(args, text=True, timeout=timeout).strip()
+
+
+def export_screenshots(evidence):
+    names = ("approval-push-system-notification", "approval-push-matching-read-only-detail")
+    with TemporaryDirectory() as path:
+        exported = Path(path)
+        subprocess.run(
+            ["xcrun", "xcresulttool", "export", "attachments", "--path", str(evidence / "ApprovalPush.xcresult"),
+             "--output-path", path],
+            check=True, timeout=60, stdout=subprocess.DEVNULL,
+        )
+        manifest = json.loads((exported / "manifest.json").read_text())
+        attachments = [item for test in manifest for item in test["attachments"]]
+        for name in names:
+            matches = [Path(item["exportedFileName"]).name for item in attachments
+                       if item["suggestedHumanReadableName"].startswith(name + "_")
+                       and item["exportedFileName"].endswith(".png")]
+            if len(matches) != 1:
+                raise RuntimeError(f"Expected one screenshot named {name}, found {len(matches)}")
+            shutil.copyfile(exported / matches[0], evidence / f"{name}.png")
 
 
 def main():
@@ -69,10 +91,13 @@ def main():
                 # Avoid an IPC request to CoreSimulator while Xcode launches the test.
                 if next(app_containers.glob("*/Documents/approval-push-ready"), None):
                     print("Injecting the OS approval notification into the owned simulator.", flush=True)
+                    # A hosted simulator may delay accepting the system notification.
+                    # Keep this below the XCTest's Home banner wait.
                     subprocess.run([*simctl, "push", device, BUNDLE, "-"], input=json.dumps(PAYLOAD),
-                                   text=True, check=True, timeout=30)
+                                   text=True, check=True, timeout=120)
                     status = process.wait(timeout=120)
                     if status == 0:
+                        export_screenshots(evidence)
                         print("PASS: system alert tapped, matching read-only card opened.", flush=True)
                         return
                     raise RuntimeError(f"XCUITest failed: exit {status}")
