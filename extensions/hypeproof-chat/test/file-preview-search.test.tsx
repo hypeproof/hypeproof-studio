@@ -1,0 +1,36 @@
+import React, {act} from 'react';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {FileContextChip} from '../webview-ui/src/FileContextChip';
+const {JSDOM}=createRequire(process.cwd()+'/package.json')('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://studio.test',pretendToBeVisual:true});
+Object.assign(globalThis,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,requestAnimationFrame:dom.window.requestAnimationFrame.bind(dom.window),cancelAnimationFrame:dom.window.cancelAnimationFrame.bind(dom.window),IS_REACT_ACT_ENVIRONMENT:true});
+const {createRoot}=require('react-dom/client');
+dom.window.HTMLElement.prototype.scrollIntoView=function(){};
+dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+async function run(){
+ const host=document.getElementById('root')!;const root=createRoot(host);let removed=0;
+ const file={path:'notes.txt',bytes:80,text:'Alpha <script> 안녕 [a.*] alpha 안녕'};
+ const render=async(f= file)=>act(async()=>root.render(<FileContextChip file={f} onRemove={()=>removed++}/>));
+ const click=async(selector:string)=>act(async()=>(host.querySelector(selector) as HTMLElement).click());
+ await render();await click('.hps-file-context-name');
+ const search=()=>host.querySelector('input[aria-label="파일 내용 검색"]') as HTMLInputElement;
+ assert.ok(search(),'file preview offers content search');
+ const query=async(text:string)=>act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value')!.set!.call(search(),text);search().dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
+ const content=()=>host.querySelector('[data-testid="file-attachment-text"]')!;
+ const current=()=>content().querySelector('mark')?.textContent;
+ await query('ALPHA');assert.equal(current(),'Alpha');assert.match(host.textContent!,/1 \/ 2/);
+ await click('button[aria-label="다음 검색 결과"]');assert.equal(current(),'alpha');assert.match(host.textContent!,/2 \/ 2/);
+ await click('button[aria-label="다음 검색 결과"]');assert.equal(current(),'Alpha');
+ await click('button[aria-label="이전 검색 결과"]');assert.equal(current(),'alpha');
+ assert.equal(content().textContent,file.text);assert.equal(content().querySelector('script'),null);
+ await query('[a.*]');assert.equal(current(),'[a.*]');assert.match(host.textContent!,/1 \/ 1/);
+ await query('안녕');assert.equal(current(),'안녕');assert.match(host.textContent!,/1 \/ 2/);
+ await query('missing');assert.equal(current(),undefined);assert.match(host.textContent!,/검색 결과가 없어요/);assert.equal((host.querySelector('button[aria-label="다음 검색 결과"]') as HTMLButtonElement).disabled,true);
+ await query('');assert.equal(content().textContent,file.text);assert.equal(current(),undefined);
+ await query('Alpha');await render({...file,text:'replacement'});assert.equal(search().value,'');assert.equal(host.querySelector('dialog')!.hasAttribute('open'),false);assert.equal(content().textContent,'replacement');
+ await click('.hps-file-context-remove');assert.equal(removed,1);
+ await act(async()=>root.unmount());dom.window.close();console.log('PASS file preview search: literal/case/Korean matches, wrap navigation, original text, no match, reset and remove');
+}
+run().then(()=>process.exit(0)).catch(error=>{console.error(error);dom.window.close();process.exit(1);});
