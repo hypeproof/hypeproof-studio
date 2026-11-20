@@ -305,15 +305,12 @@ final class StudioJourneyTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Data("ready".utf8).write(to: directory.appendingPathComponent("approval-push-ready"), options: .atomic)
         let alert = springboard.staticTexts[title].firstMatch
-        if !alert.waitForExistence(timeout: 4) {
-            let top = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.005))
-            let center = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.68))
-            top.press(forDuration: 0.05, thenDragTo: center)
-        }
-        XCTAssertTrue(alert.waitForExistence(timeout: 15), springboard.debugDescription)
+        // Stay on Home so a delayed hosted push still arrives as a tappable banner.
+        XCTAssertTrue(alert.waitForExistence(timeout: 55), springboard.debugDescription)
         let received = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         received.name = "approval-push-system-notification"; received.lifetime = .keepAlways; add(received)
         alert.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20), "Tapping the iOS banner must foreground Studio.")
         let focus = app.staticTexts["approvalFromPush-" + id]
         XCTAssertTrue(focus.waitForExistence(timeout: 20), app.debugDescription)
         XCTAssertFalse(app.staticTexts["approvalChangeSummary-member-card"].exists)
