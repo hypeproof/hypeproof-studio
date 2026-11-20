@@ -88,9 +88,10 @@ jobs:
   approval-push-simulator:
     name: iOS approval push simulator
     if: github.event_name == 'pull_request'
-    runs-on: xcode-27
+    # The preview xcode-27 image has intermittently lost its iOS runtime during boot.
+    runs-on: macos-26
     env:
-      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
