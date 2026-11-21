@@ -422,11 +422,16 @@ final class TeamEntryUITests: XCTestCase {
     }
     /// One short drag inside the viewport. A drag has no fling, so it cannot
     /// carry a lazily loaded row past the viewport the way a swipe can.
+    /// The drag runs in the List's left margin (8 pt in), outside the inset
+    /// cells. At the centre it started inside the focused teamRequestBody
+    /// TextView {36,396,330x130}, which took the drag, so the List never
+    /// scrolled in run 44857710643 (#4432).
     @MainActor private func revealDrag(_ app: XCUIApplication, _ area: CGRect, _ direction: RevealDirection) {
         let origin = app.coordinate(withNormalizedOffset: .zero)
         let (from, to): (CGFloat, CGFloat) = direction == .towardEnd ? (0.7, 0.3) : (0.3, 0.7)
-        origin.withOffset(CGVector(dx: area.midX, dy: area.minY + area.height * from))
-            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: area.midX, dy: area.minY + area.height * to)))
+        let lane = area.minX + 8
+        origin.withOffset(CGVector(dx: lane, dy: area.minY + area.height * from))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: lane, dy: area.minY + area.height * to)))
     }
     @MainActor private func revealFailure(_ app: XCUIApplication, _ item: XCUIElement, _ steps: [String], file: StaticString, line: UInt) {
         let name = "reveal-failure-" + String(item.description.prefix(60))

@@ -172,14 +172,21 @@ final class StudioJourneyTests: XCTestCase {
     @MainActor private func tapComposerTargetOnce(_ id: String, app: XCUIApplication) {
         let button = app.buttons[id]
         enabled(button, app: app)
-        let frame = button.frame
+        // One snapshot for frame and enabled state, and one read each for
+        // hittability and the window. Each live query took 2-30 s on hosted
+        // runners in run 44860149508; fewer queries reduce that cost (#4432).
+        let snapshot: XCUIElementSnapshot
+        do { snapshot = try button.snapshot() } catch {
+            XCTFail("\(id) passed its enabled wait but no snapshot was available: \(error)"); return
+        }
+        let frame = snapshot.frame, hittable = button.isHittable, window = app.frame
         let point = button.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.15))
-        let observation = XCTAttachment(string: "id=\(id); frame=\(frame); enabled=\(button.isEnabled); hittable=\(button.isHittable); tap=\(point.screenPoint); window=\(app.frame)")
+        let observation = XCTAttachment(string: "id=\(id); frame=\(frame); enabled=\(snapshot.isEnabled); hittable=\(hittable); tap=\(point.screenPoint); window=\(window)")
         observation.name = id + "-single-edge-tap"; observation.lifetime = .keepAlways; add(observation)
         XCTAssertGreaterThanOrEqual(frame.width, 44)
         XCTAssertGreaterThanOrEqual(frame.height, 44)
-        XCTAssertTrue(app.frame.contains(frame), "The complete composer target must stay inside the app window.")
-        XCTAssertTrue(button.isHittable)
+        XCTAssertTrue(window.contains(frame), "The complete composer target must stay inside the app window.")
+        XCTAssertTrue(hittable, "\(id) must be hittable; frame=\(frame); window=\(window)")
         // One real touch in the padded corner, outside the icon or text glyph.
         // The caller must still prove its original draft/reply/continuation result.
         point.tap()
@@ -190,9 +197,18 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func signIn(_ app: XCUIApplication) {
         tapComposerTargetOnce("linkDesktop", app: app)
-        _ = field(app)
-        XCTAssertTrue(app.staticTexts["reflectionOpening"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["accountCancel"].exists, "Successful account adoption must finish the login state.")
+        // One app snapshot per evaluation instead of separate live queries.
+        // The timeouts are the former ones: 7 s for the input (field()'s 2 + 5)
+        // and 5 s for the opening reflection.
+        var latest: XCUIElementSnapshot?
+        func has(_ root: XCUIElementSnapshot, _ id: String, _ types: [XCUIElement.ElementType]) -> Bool {
+            !snapshotNodes(root) { $0.identifier == id && types.contains($0.elementType) }.isEmpty
+        }
+        let input = waitForSnapshot(app, timeout: 7) { root in latest = root; return has(root, "sharedInput", [.textField, .textView]) }
+        XCTAssertTrue(input, "The personal conversation must be usable without a desktop.")
+        let opening = waitForSnapshot(app, timeout: 5) { root in latest = root; return has(root, "reflectionOpening", [.staticText]) }
+        XCTAssertTrue(opening, "reflectionOpening must appear after sign-in.")
+        XCTAssertFalse(latest.map { has($0, "accountCancel", [.button]) } ?? true, "Successful account adoption must finish the login state.")
     }
     /// All nodes of one accessibility snapshot that satisfy `match`.
     @MainActor private func snapshotNodes(_ root: XCUIElementSnapshot, _ match: (XCUIElementSnapshot) -> Bool) -> [XCUIElementSnapshot] {
@@ -230,7 +246,11 @@ final class StudioJourneyTests: XCTestCase {
         guard let snapshot else { return nil }
         XCTAssertLessThanOrEqual(snapshot.frame.width, 2, "Diagnostics must not occupy transcript layout.")
         XCTAssertLessThanOrEqual(snapshot.frame.height, 2)
-        return snapshot.value as? String
+        // The value is read live. XCUIElementSnapshot truncates values to about
+        // 512 characters, which cut the trace JSON in run 44857710643 (#4432).
+        let value = app.descendants(matching: .any).matching(identifier: id).firstMatch.value as? String
+        XCTAssertNotNil(value, "Diagnostic \(id) must expose a string value.")
+        return value
     }
     @MainActor private func diagnostic(_ id: String, in app: XCUIApplication) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
@@ -622,11 +642,12 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func waitForVoiceEvent(_ event: String, in app: XCUIApplication, count: Int = 1, timeout: TimeInterval = 10) {
         let trace = diagnostic("nativeVoiceTimeline", in: app)
-        // One element snapshot per evaluation; the timeout is unchanged (#4432).
+        // One live value read per evaluation; the timeout is unchanged. A snapshot
+        // value is truncated at about 512 characters, so it cannot carry the timeline (#4432).
         let deadline = Date().addingTimeInterval(timeout)
         var reached = false
         repeat {
-            let lines = (((try? trace.snapshot())?.value as? String) ?? "").split(separator: "\n")
+            let lines = ((trace.value as? String) ?? "").split(separator: "\n")
             reached = lines.filter { $0.split(separator: " ").dropFirst().first == Substring(event) }.count >= count
             if !reached { RunLoop.current.run(until: Date().addingTimeInterval(0.2)) }
         } while !reached && Date() < deadline
@@ -711,9 +732,15 @@ final class StudioJourneyTests: XCTestCase {
         // fallback to the generic 400ms journey completion.
         let app = launch("voice-playback-real"); signIn(app)
         enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
-        let reply = app.staticTexts["sharedReply"].firstMatch
-        XCTAssertTrue(reply.waitForExistence(timeout: 10))
-        XCTAssertEqual(reply.label, "HP Studio의 답변. 내일은 어떤 작은 일을 해 보고 싶나요?")
+        // One app snapshot per evaluation while real OS playback runs; live
+        // queries took 9-30 s each in that window in run 44860149508 (#4432).
+        var replyLabel: String?
+        let replied = waitForSnapshot(app, timeout: 10) { root in
+            replyLabel = self.snapshotNodes(root) { $0.identifier == "sharedReply" && $0.elementType == .staticText }.first?.label
+            return replyLabel != nil
+        }
+        XCTAssertTrue(replied, "sharedReply must appear after the voice turn.")
+        XCTAssertEqual(replyLabel, "HP Studio의 답변. 내일은 어떤 작은 일을 해 보고 싶나요?")
         waitForVoiceEvent("playbackStarted", in: app, timeout: 20)
         waitForVoiceEvent("playbackFinished", in: app, timeout: 20)
         waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 2)
@@ -1115,13 +1142,14 @@ final class StudioJourneyTests: XCTestCase {
         // A periodic read may win the same real refresh slot. Usable history
         // deliberately hides its spinner; prove the held HTTP read itself.
         let transport = diagnostic("nativeJourneyTrace", in: app)
-        // One element snapshot per evaluation. A failed run's trace already
-        // showed the held read, but the live-query predicate was evaluated too
-        // rarely inside 5s on a hosted runner (#4432).
+        // One live value read per evaluation. A failed run's trace already
+        // showed the held read, but the four-query predicate was evaluated too
+        // rarely inside 5s on a hosted runner. Snapshot values are truncated at
+        // about 512 characters, so the value is read live (#4432).
         let deadline = Date().addingTimeInterval(5)
         var isHeld = false
         repeat {
-            if let text = (try? transport.snapshot())?.value as? String, let bytes = text.data(using: .utf8),
+            if let text = transport.value as? String, let bytes = text.data(using: .utf8),
                let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] {
                 isHeld = (value["delayed_history_reads"] as? Int) == 1
                     && (value["active_history_reads"] as? Int) == 1
