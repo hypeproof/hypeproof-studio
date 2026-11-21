@@ -268,6 +268,8 @@ Runs43253872173/1 and43321849035/1 retained the same launcher input-dispatch ANR
 
 The bootstrap preserves per-observation hashes, emulator output/configuration and failure window/activity/input/logcat/screenshot evidence. ANRs fail before preparation; absent focus, child exit or timeout cannot start tests. Only its own process groups are terminated and waited for on success, failure or interruption; occupied ports and foreign AVD identities are refused. Stateful SDK-boundary subprocess tests exercise these controls, failure propagation and TERM with a surviving peer. These controls are not real Android or physical-device acceptance.
 
+Studio #4433 moves three environment causes out of the test run without loosening any readiness or test assertion. Gradle builds and unit-tests the app (`android-verify.sh build`) before the emulator boots; the booted device only installs and runs the prebuilt APKs (`android-verify.sh device`), which refuses to start when the build log or either APK is missing. The emulator image changes from API35 Google APIs to the AOSP `default` x86_64 image: on Google APIs, Google Messages raised a foreign ANR after boot (run44374245152) and readiness correctly refused to start tests. The app needs no Play services in CI because push stays unconfigured without google-services resources. The foreign-ANR refusal stays in force on the new image. Whether the AOSP keyboard satisfies the IME journeys is NOT RUN until a source-bound CI receipt exists. apt downloads retry transient archive errors (`Acquire::Retries=5`).
+
 ## Required first-person iPhone journeys — MFR-T01–T06 / Studio #3771
 
 The reported installed-app failures were indefinite account checking, dictated

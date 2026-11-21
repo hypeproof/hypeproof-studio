@@ -65,7 +65,7 @@ class Bootstrap:
         self.receipt = {"schema": "hps-android-bootstrap/1", "state": "starting", "serial": self.serial,
                         "avd": self.name, "work_dir": str(self.work), "verification_started": False,
                         "source_sha": os.environ.get("GITHUB_SHA"), "commands": [],
-                        "recipe": {"api": 35, "target": "google_apis", "arch": "x86_64", "profile": "pixel_6"}}
+                        "recipe": {"api": 35, "target": "default", "arch": "x86_64", "profile": "pixel_6"}}
 
     def command(self, argv, timeout=10, data=None):
         self.receipt["commands"].append([str(v) for v in argv])
@@ -112,9 +112,12 @@ class Bootstrap:
         return result
 
     def start(self):
+        # AOSP "default" image: no Google apps. On google_apis, Google Messages raised a
+        # foreign ANR after boot (run 44374245152). The app needs no Play services in CI:
+        # push stays unconfigured without google-services resources.
         avdmanager = self.sdk / "cmdline-tools/latest/bin/avdmanager"
         code, output = self.command([str(avdmanager), "create", "avd", "--name", self.name,
-                                     "--package", "system-images;android-35;google_apis;x86_64",
+                                     "--package", "system-images;android-35;default;x86_64",
                                      "--device", "pixel_6"], timeout=60, data=b"no\n")
         (self.evidence / "avd-create.log").write_bytes(output)
         if code:
@@ -185,7 +188,7 @@ class Bootstrap:
         self.alive()
         self.receipt["verification_started"] = True
         with (self.evidence / "verification.log").open("wb") as log:
-            process = subprocess.Popen(["bash", str(NATIVE / "scripts/android-verify.sh")], env=self.env,
+            process = subprocess.Popen(["bash", str(NATIVE / "scripts/android-verify.sh"), "device"], env=self.env,
                                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             try:
                 deadline = time.monotonic() + self.args.test_timeout

@@ -158,8 +158,9 @@ jobs:
       - name: Install emulator host library on the disposable runner
         run: |
           # Headless SDK QEMU still links to the PulseAudio client library.
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpulse0
+          # A transient archive 503 failed one run; let apt retry each download.
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends libpulse0
       - name: Enable emulator acceleration on the disposable runner
         run: sudo chmod a+rw /dev/kvm
       - name: Provision the existing Android 35 emulator recipe
@@ -168,7 +169,11 @@ jobs:
           set +o pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           set -o pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platform-tools' 'platforms;android-35' 'emulator' 'system-images;android-35;google_apis;x86_64' --channel=0
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platform-tools' 'platforms;android-35' 'emulator' 'system-images;android-35;default;x86_64' --channel=0
+      # Build and unit-test before the emulator exists, so Gradle and the booting
+      # emulator never compete for the runner's CPUs.
+      - name: Build and unit-test the Android app before the emulator boots
+        run: bash apps/studio-native/scripts/android-verify.sh build
       - name: Native Android record and speech handoff journeys
         run: python3 apps/studio-native/scripts/android-emulator.py --sdk-root "$ANDROID_HOME" --work-dir "$RUNNER_TEMP/studio-native-android"
       - uses: actions/upload-artifact@v4

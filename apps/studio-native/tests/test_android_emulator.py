@@ -52,7 +52,7 @@ elif tool=='adb':
  else:print('retained diagnostic fixture')
 '''
 VERIFY = r'''#!/bin/bash
-printf 'started\n' >> "$MOCK_STATE/verification"
+printf 'started %s\n' "$*" >> "$MOCK_STATE/verification"
 if [ "$MOCK_MODE" = verify_failure ]; then exit 23; fi
 if [ "$MOCK_MODE" = emulator_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = interrupt_test ] || [ "$MOCK_MODE" = test_timeout ]; then sleep 60; fi
@@ -121,7 +121,8 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertGreaterEqual(int((self.state / "windows").read_text()), 6)
         self.assertTrue(receipt["verification_started"])
-        self.assertEqual((self.state / "verification").read_text(), "started\n")
+        # The APKs were built before boot; the booted device only runs the device phase.
+        self.assertEqual((self.state / "verification").read_text(), "started device\n")
         self.assertEqual(receipt["stable_focus_observations"], 3)
         self.assertTrue((self.state / "stopped").exists())
         self.assertIn(["adb", "-s", f"emulator-{self.port}", "shell", "input", "keyevent", "KEYCODE_WAKEUP"], calls)

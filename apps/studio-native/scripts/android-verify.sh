@@ -4,7 +4,34 @@ native_root="$(cd "$(dirname "$0")/.." && pwd)"
 evidence="$native_root/evidence/android"
 mkdir -p "$evidence"
 cd "$native_root/android"
-gradle --no-daemon --max-workers=2 --console=plain :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest > "$evidence/build.log" 2>&1
+# Phases: all (default) builds then tests on the device; build only builds; device only
+# tests prebuilt APKs. CI builds before the emulator boots so Gradle never shares the
+# runner's CPUs with a booting emulator and its background work.
+phase="${1:-all}"
+case "$phase" in
+  all|build|device) ;;
+  *) echo "Unknown phase: $phase (expected all, build or device)." >&2; exit 2 ;;
+esac
+if [[ "$phase" != device ]]; then
+  gradle --no-daemon --max-workers=2 --console=plain :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest > "$evidence/build.log" 2>&1
+fi
+if [[ "$phase" == build ]]; then
+  echo "Android build and unit tests passed; evidence: $evidence/build.log"
+  exit 0
+fi
+if [[ "$phase" == device ]]; then
+  # Never test APKs whose build evidence is missing.
+  if [[ ! -f "$evidence/build.log" ]]; then
+    echo "Prebuilt input missing: $evidence/build.log. Run android-verify.sh build first." >&2
+    exit 2
+  fi
+  for required in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do
+    if [[ ! -s "$required" ]]; then
+      echo "Prebuilt input missing: $required. Run android-verify.sh build first." >&2
+      exit 2
+    fi
+  done
+fi
 if [[ -z "${ANDROID_SERIAL:-}" || "$ANDROID_SERIAL" != emulator-* ]]; then
   echo 'Android UI tests require ANDROID_SERIAL pointing to a disposable emulator.' >&2
   exit 2
@@ -62,6 +89,7 @@ if [[ "$ready" != 1 ]]; then
   echo 'Disposable emulator is not ready; instrumentation was not started. Inspect the retained readiness and failure evidence.' >&2
   exit 2
 fi
+# The guarded expansion keeps an empty array valid under set -u on bash 3.2 (macOS).
 instrumentation_args=()
 if [[ -n "${HPS_ANDROID_FAILURE_PROBE:-}" ]]; then
   if [[ "$HPS_ANDROID_FAILURE_PROBE" != before-teardown ]]; then
@@ -70,7 +98,7 @@ if [[ -n "${HPS_ANDROID_FAILURE_PROBE:-}" ]]; then
   fi
   instrumentation_args=(-e class ai.hypeproof.studio.StudioJourneyTest#reflectionIsOptionalPersistentAndExcludedFromAIContext -e hpsFailureProbe before-teardown)
 fi
-adb -s "$ANDROID_SERIAL" shell am instrument -w -r "${instrumentation_args[@]}" ai.hypeproof.studio.mobile.preview.test/androidx.test.runner.AndroidJUnitRunner > "$evidence/native-ui.log" 2>&1
+adb -s "$ANDROID_SERIAL" shell am instrument -w -r ${instrumentation_args[@]+"${instrumentation_args[@]}"} ai.hypeproof.studio.mobile.preview.test/androidx.test.runner.AndroidJUnitRunner > "$evidence/native-ui.log" 2>&1
 python3 - "$evidence/native-ui.log" <<'PY'
 import re,sys
 log=open(sys.argv[1]).read()
