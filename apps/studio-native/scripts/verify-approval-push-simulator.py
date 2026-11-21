@@ -3,7 +3,8 @@
 Steps, each a separate CI step so the log shows where time goes and where a hang starts:
   build    build-for-testing before any simulator exists (compilation never competes with
            simulator IPC on the runner)
-  boot     create, boot and warm up the owned simulator
+  boot     create and boot the owned simulator, wait for its first-boot work to settle,
+           then warm it up
   run      test-without-building, inject the notification at the test's checkpoint
   cleanup  shut down and delete the owned simulator
 No argument runs all four in order, for local use.
@@ -12,6 +13,13 @@ Every simctl call keeps its existing time limit. When one does not return in tim
 records what the runner was doing (processes, load, samples of the stuck simctl and of
 CoreSimulatorService, the host CoreSimulator log) in simctl-hang-<step>.txt and fails with
 the step's name. Limits are never raised to hide a hang.
+
+`bootstatus -b` returns before a new device finishes its first-boot work: launchd_sim keeps
+starting daemons, widget and index extensions for minutes, and on the 3-CPU hosted runner the
+first `simctl launch` then waits behind them (run 44874729460: load 204, 210 device processes,
+launch over 60 s). The settle wait watches that work with `ps` only, never a CoreSimulator
+request, and lets the warm-up start when it has stopped. If it does not stop in time the step
+fails with the same diagnostics, instead of a slow launch failing later.
 """
 import json
 import os
@@ -38,6 +46,10 @@ PAYLOAD = {
     },
 }
 DIAGNOSTIC_LIMIT = 30
+# A new limit for a new wait, not a raised one: it bounds the settle wait below.
+SETTLE_LIMIT = 240
+SETTLE_INTERVAL = 5
+SETTLE_SAMPLES = 3
 
 
 class SimctlHang(RuntimeError):
@@ -86,13 +98,17 @@ def diagnose(evidence, step, stuck_pid):
     keys = ("CoreSimulator", "simctl", "launchd_sim", "xcodebuild", "XCTest", "SimulatorTrampoline", "xctrunner")
     related = [line for line in processes.splitlines() if any(key in line for key in keys)]
     service = [line.split()[0] for line in related if "CoreSimulatorService" in line]
+    # Host-wide, so a load that is not the simulator's (a build service, indexing) is visible too.
+    busiest = bounded(["ps", "-axro", "pid,ppid,stat,etime,%cpu,%mem,command"]).splitlines()[:41]
     sections = [
         ("step", step),
         ("load", bounded(["sysctl", "-n", "vm.loadavg"])),
         ("memory", bounded(["vm_stat"])),
+        ("busiest host processes", "\n".join(line[:240] for line in busiest)),
         ("simulator-related processes", "\n".join(related)),
-        (f"sample of the stuck simctl ({stuck_pid})", bounded(["sample", str(stuck_pid), "2", "-mayDie"])),
     ]
+    if stuck_pid is not None:
+        sections.append((f"sample of the stuck simctl ({stuck_pid})", bounded(["sample", str(stuck_pid), "2", "-mayDie"])))
     for pid in service[:1]:
         sections.append((f"sample of CoreSimulatorService ({pid})", bounded(["sample", pid, "2", "-mayDie"])))
     log = bounded(["log", "show", "--last", "3m", "--style", "compact",
@@ -126,6 +142,49 @@ def simctl(evidence, step, args, *, timeout, input=None, capture=True, check=Tru
     if check and child.returncode:
         raise subprocess.CalledProcessError(child.returncode, command)
     return (out or "").strip()
+
+
+def device_activity(processes, device):
+    """(processes started by the device's launchd_sim, how many of them are runnable)."""
+    rows = [line.split(None, 3) for line in processes.splitlines()]
+    rows = [row for row in rows if len(row) == 4]
+    launchd = [pid for pid, _, _, command in rows
+               if command.startswith("launchd_sim ") and f"/Devices/{device}/" in command]
+    if len(launchd) != 1:
+        return None
+    children = [stat for _, ppid, stat, _ in rows if ppid == launchd[0]]
+    return len(children), sum(stat.startswith("R") for stat in children)
+
+
+def is_settled(samples, cpus):
+    """Settled: the last samples start no new device process and keep runnable ones within the CPUs."""
+    recent = samples[-SETTLE_SAMPLES:]
+    if len(recent) < SETTLE_SAMPLES or None in recent:
+        return False
+    return len({count for count, _ in recent}) == 1 and all(runnable <= cpus for _, runnable in recent)
+
+
+def settle(evidence, device, *, limit=SETTLE_LIMIT, interval=SETTLE_INTERVAL):
+    """Wait until the new device stops its first-boot work. Reads `ps` only: no simctl call."""
+    cpus = os.cpu_count() or 1
+    started = time.monotonic()
+    samples = []
+    while True:
+        activity = device_activity(bounded(["ps", "-axo", "pid=,ppid=,stat=,command="]), device)
+        samples.append(activity)
+        seconds = round(time.monotonic() - started, 1)
+        record(evidence, step="settle", command="ps", outcome="sample",
+               processes=None if activity is None else activity[0],
+               runnable=None if activity is None else activity[1], seconds=seconds)
+        if is_settled(samples, cpus):
+            record(evidence, step="settle", command="settle", limit=limit, outcome="settled", seconds=seconds)
+            print(f"Simulator first-boot work settled in {seconds}s.", flush=True)
+            return
+        if time.monotonic() - started + interval > limit:
+            record(evidence, step="settle", command="settle", limit=limit, outcome="timeout", seconds=seconds)
+            diagnose(evidence, "settle", None)
+            raise SimctlHang(f"simulator first-boot work did not settle within {limit}s")
+        time.sleep(interval)
 
 
 def state_path(evidence):
@@ -177,6 +236,7 @@ def boot(evidence):
     simctl(evidence, "boot", ["boot", device], timeout=60, capture=False)
     # A cold GitHub macOS runner can take over two minutes to initialize.
     simctl(evidence, "boot", ["bootstatus", device, "-b"], timeout=240, capture=False)
+    settle(evidence, device)
     # Exercise the launch path once with a system app, never the app under test,
     # so the XCUITest still starts from a fresh install.
     simctl(evidence, "warm-up", ["launch", device, "com.apple.Preferences"], timeout=60)

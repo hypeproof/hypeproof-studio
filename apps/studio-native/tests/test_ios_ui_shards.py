@@ -332,6 +332,89 @@ class ApprovalPushHang(unittest.TestCase):
             self.assertFalse(list(evidence.glob('simctl-hang-*')))
             self.assertEqual(json.loads((evidence / 'simulator-steps.jsonl').read_text())['outcome'], 'exit 0')
 
+    DEVICE = 'C0E7C600-E107-428F-8A03-DEDB01894AEF'
+
+    def ps(self, children, runnable, device=None):
+        device = device or self.DEVICE
+        lines = ['    1     0 Ss   /sbin/launchd',
+                 f' 4820     1 S    launchd_sim /Users/runner/Library/Developer/CoreSimulator/Devices/{device}/data/var/run/launchd_bootstrap.plist',
+                 ' 3041     1 R    /Library/.../CoreSimulatorService']
+        for index in range(children):
+            lines.append(f' {5000 + index}  4820 {"Rs" if index < runnable else "Ss"}   /RuntimeRoot/usr/libexec/d{index}')
+        return '\n'.join(lines) + '\n'
+
+    def test_device_activity_counts_only_the_owned_launchd_sim_children(self):
+        self.assertEqual(push.device_activity(self.ps(5, 2), self.DEVICE), (5, 2))
+        other = self.ps(5, 2, device='11111111-1111-1111-1111-111111111111')
+        self.assertIsNone(push.device_activity(other, self.DEVICE))
+        self.assertIsNone(push.device_activity('<ps unavailable>', self.DEVICE))
+
+    def test_settled_needs_stable_count_and_runnable_within_cpus(self):
+        self.assertTrue(push.is_settled([(200, 9), (207, 1), (207, 3), (207, 0)], cpus=3))
+        self.assertFalse(push.is_settled([(207, 0), (207, 0)], cpus=3))           # too few samples
+        self.assertFalse(push.is_settled([(205, 0), (206, 0), (207, 0)], cpus=3))  # still starting processes
+        self.assertFalse(push.is_settled([(207, 0), (207, 4), (207, 0)], cpus=3))  # more runnable than CPUs
+        self.assertFalse(push.is_settled([(207, 0), None, (207, 0)], cpus=3))      # one sample unreadable
+
+    def test_recorded_hang_host_is_not_settled(self):
+        # The process table from run 44874729460, reduced to the columns the settle wait reads.
+        report = Path(__file__).with_name('fixtures') / 'approval-push-settle-44874729460.txt'
+        processes = report.read_text()
+        activity = push.device_activity(processes, self.DEVICE)
+        self.assertEqual(activity, (198, 43))  # 198 device processes, 43 runnable, 3 CPUs
+        self.assertFalse(push.is_settled([activity] * 3, cpus=3))
+
+    def run_settle(self, samples, limit):
+        outputs = iter(samples)
+        def bounded(args, limit=30):
+            if args[0] == 'ps' and args[1] == '-axo':
+                return next(outputs)
+            return 'diagnostic'
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            with mock.patch.object(push, 'bounded', side_effect=bounded), \
+                 mock.patch.object(push.os, 'cpu_count', return_value=3), \
+                 mock.patch.object(push.time, 'sleep'):
+                try:
+                    push.settle(evidence, self.DEVICE, limit=limit, interval=0)
+                    error = None
+                except push.SimctlHang as raised:
+                    error = raised
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+            return error, rows, sorted(path.name for path in evidence.glob('simctl-hang-*'))
+
+    def test_settle_waits_through_the_first_boot_burst_then_passes(self):
+        samples = [self.ps(150, 40), self.ps(207, 43), self.ps(209, 2), self.ps(209, 1), self.ps(209, 0)]
+        error, rows, hangs = self.run_settle(samples, limit=60)
+        self.assertIsNone(error)
+        self.assertEqual([row['outcome'] for row in rows], ['sample'] * 5 + ['settled'])
+        self.assertEqual(hangs, [])
+
+    def test_settle_that_never_stops_fails_with_diagnostics(self):
+        samples = [self.ps(200 + index, 43) for index in range(1000)]
+        with mock.patch.object(push.time, 'monotonic', side_effect=[0] + list(range(0, 2000, 10))):
+            error, rows, hangs = self.run_settle(samples, limit=30)
+        self.assertRegex(str(error), 'did not settle within 30s')
+        self.assertEqual(rows[-1]['outcome'], 'timeout')
+        self.assertEqual(hangs, ['simctl-hang-settle.txt'])
+
+    def test_boot_settles_after_bootstatus_and_before_the_warm_up_launch(self):
+        order = []
+        def simctl(evidence, step, args, **_):
+            order.append(args[0])
+            if args[0] == 'create':
+                return self.DEVICE
+            if args[0] == 'list' and 'devices' in args:
+                return json.dumps({'devices': {'r': [{'udid': self.DEVICE, 'dataPath': '/data'}]}})
+            return '{}'
+        outputs = iter(['26.5', 'type runtime'])
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(push, 'simctl', side_effect=simctl), \
+             mock.patch.object(push, 'settle', side_effect=lambda evidence, device: order.append(f'settle {device}')), \
+             mock.patch.object(push.subprocess, 'check_output', side_effect=lambda *a, **k: next(outputs)):
+            push.boot(Path(directory))
+        self.assertEqual(order, ['list', 'create', 'list', 'boot', 'bootstatus', f'settle {self.DEVICE}', 'launch', 'terminate'])
+
     def test_cleanup_without_a_created_simulator_calls_nothing(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(push, 'simctl') as call:
             push.cleanup(Path(directory))
