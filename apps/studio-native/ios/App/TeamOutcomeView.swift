@@ -9,7 +9,7 @@ struct TeamOutcomeView: View {
     @StateObject private var model: TeamOutcomePresentation
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(model: TeamOutcomePresentation) { _model = StateObject(wrappedValue: model) }
+    init(make: @escaping @MainActor () -> TeamOutcomePresentation) { _model = StateObject(wrappedValue: make()) }
     private var editable: Bool { model.state.page?.can_respond == true && !model.state.busy && model.state.storageReady && model.state.draft?.phase == .draft }
     private func event(_ item: TeamOutcomeEvent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
