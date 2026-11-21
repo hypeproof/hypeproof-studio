@@ -44,7 +44,7 @@ class AndroidEnvironment(unittest.TestCase):
     def test_foreground_error_dialog_is_not_ready(self):
         self.assertEqual(module.inspect(WINDOW.replace("com.google.android.apps.nexuslauncher/.NexusLauncherActivity", "Application Error: fixture.package"), AWAKE)["reason"], "foreground_error_dialog")
 
-    def script_case(self, ready, serial="emulator-5554"):
+    def script_case(self, ready, serial="emulator-5554", phase=None, prebuilt=False):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             scripts = root / "scripts"; scripts.mkdir()
@@ -53,7 +53,7 @@ class AndroidEnvironment(unittest.TestCase):
             for name in ["android-verify.sh", "android-environment.py"]:
                 shutil.copyfile(Path(__file__).parents[1] / "scripts" / name, scripts / name)
             fixtures = {
-                "gradle": "#!/bin/sh\nmkdir -p app/build/outputs/apk/debug\nprintf fixture-not-apk > app/build/outputs/apk/debug/app-debug.apk\n",
+                "gradle": "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FIXTURE_GRADLE\"\nmkdir -p app/build/outputs/apk/debug app/build/outputs/apk/androidTest/debug\nprintf fixture-not-apk > app/build/outputs/apk/debug/app-debug.apk\nprintf fixture-not-apk > app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk\n",
                 "git": "#!/bin/sh\ncase \"$*\" in *rev-parse*) printf '%s\\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;; esac\n",
                 "sleep": "#!/bin/sh\nexit 0\n",
                 "adb": """#!/usr/bin/env python3
@@ -69,11 +69,16 @@ elif args[:3]==['shell','am','instrument']:print('OK (1 test)')
             for name, content in fixtures.items():
                 file = commands / name; file.write_text(content); file.chmod(0o755)
             window = WINDOW if ready else WINDOW.replace("com.google.android.apps.nexuslauncher/.NexusLauncherActivity", "Application Not Responding: com.google.android.apps.nexuslauncher")
-            calls = root / "calls.jsonl"
-            env = dict(os.environ, PATH=str(commands) + os.pathsep + os.environ["PATH"], ANDROID_SERIAL=serial, FIXTURE_CALLS=str(calls), FIXTURE_WINDOW=window)
-            result = subprocess.run(["bash", str(scripts / "android-verify.sh")], env=env, capture_output=True, text=True, timeout=15)
+            calls = root / "calls.jsonl"; gradle = root / "gradle-calls"
+            env = dict(os.environ, PATH=str(commands) + os.pathsep + os.environ["PATH"], ANDROID_SERIAL=serial, FIXTURE_CALLS=str(calls), FIXTURE_WINDOW=window, FIXTURE_GRADLE=str(gradle))
+            if prebuilt:
+                build = subprocess.run(["bash", str(scripts / "android-verify.sh"), "build"], env=env, capture_output=True, text=True, timeout=15)
+                self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
+                gradle.unlink()
+            result = subprocess.run(["bash", str(scripts / "android-verify.sh"), *([phase] if phase else [])], env=env, capture_output=True, text=True, timeout=15)
             observed = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
             diagnostics = root / "evidence/android/failure-environment.json"
+            self.gradle_runs = len(gradle.read_text().splitlines()) if gradle.exists() else 0
             return result, observed, json.loads(diagnostics.read_text()) if diagnostics.exists() else None
 
     def test_actual_shell_will_not_start_instrumentation_behind_foreign_anr(self):
@@ -93,6 +98,36 @@ elif args[:3]==['shell','am','instrument']:print('OK (1 test)')
         result, calls, _ = self.script_case(True, serial="physical-fixture-only")
         self.assertEqual(result.returncode, 2)
         self.assertEqual(calls, [])
+
+    def test_build_phase_builds_once_and_never_touches_a_device(self):
+        result, calls, diagnostic = self.script_case(True, serial="", phase="build")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.gradle_runs, 1)
+        self.assertEqual(calls, [])
+        self.assertIsNone(diagnostic)
+
+    def test_device_phase_tests_prebuilt_apks_without_rebuilding(self):
+        result, calls, _ = self.script_case(True, phase="device", prebuilt=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.gradle_runs, 0)
+        self.assertEqual(sum(call[:3] == ["shell", "am", "instrument"] for call in calls), 1)
+
+    def test_device_phase_refuses_missing_build_before_device_mutation(self):
+        result, calls, _ = self.script_case(True, phase="device")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Prebuilt input missing", result.stderr)
+        self.assertEqual((self.gradle_runs, calls), (0, []))
+
+    def test_unknown_phase_is_refused(self):
+        result, calls, _ = self.script_case(True, phase="install")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual((self.gradle_runs, calls), (0, []))
+
+    def test_device_phase_still_blocks_on_foreign_anr(self):
+        result, calls, diagnostic = self.script_case(False, phase="device", prebuilt=True)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertFalse(any(call[:3] == ["shell", "am", "instrument"] for call in calls))
+        self.assertEqual(diagnostic["reason"], "foreign_anr")
 
 
 if __name__ == "__main__":
