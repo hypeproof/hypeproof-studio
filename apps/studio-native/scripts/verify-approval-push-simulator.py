@@ -8,6 +8,14 @@ Steps, each a separate CI step so the log shows where time goes and where a hang
   cleanup  shut down and delete the owned simulator
 No argument runs all four in order, for local use.
 
+Two more steps cache a simulator that has already booted once (#4432):
+  seed     (separate CI job on main) create, boot, wait until the first-boot work has
+           stopped, shut down, and archive the device folder for actions/cache
+  restore  (approval push job, before any simctl call) unpack a cached device into the
+           CoreSimulator device set. The boot step uses it only when CoreSimulatorService
+           lists it as an available, shut-down device; otherwise it records why and
+           creates a new device exactly as before. A cache never decides the test result.
+
 Every simctl call keeps its existing time limit. When one does not return in time, the step
 records what the runner was doing (processes, load, samples of the stuck simctl and of
 CoreSimulatorService, the host CoreSimulator log) in simctl-hang-<step>.txt and fails with
@@ -46,6 +54,13 @@ DIAGNOSTIC_LIMIT = 30
 # Observation only: a fixed number of samples, never a wait for a condition.
 OBSERVE_SAMPLES = 3
 OBSERVE_INTERVAL = 5
+# The seed job's own wait for first-boot work to stop. A new limit in a new job; the
+# approval push job never waits on it.
+SEED_SETTLE_LIMIT = 900
+SEED_SETTLE_INTERVAL = 5
+SEED_SETTLE_SAMPLES = 3
+SEED_SCHEMA = "hps-ios-sim-seed/1"
+DEVICE_NAME = "HP-Studio-Approval-Push"
 
 
 class SimctlHang(RuntimeError):
@@ -102,8 +117,9 @@ def diagnose(evidence, step, stuck_pid):
         ("memory", bounded(["vm_stat"])),
         ("busiest host processes", "\n".join(line[:240] for line in busiest)),
         ("simulator-related processes", "\n".join(related)),
-        (f"sample of the stuck simctl ({stuck_pid})", bounded(["sample", str(stuck_pid), "2", "-mayDie"])),
     ]
+    if stuck_pid is not None:
+        sections.append((f"sample of the stuck simctl ({stuck_pid})", bounded(["sample", str(stuck_pid), "2", "-mayDie"])))
     for pid in service[:1]:
         sections.append((f"sample of CoreSimulatorService ({pid})", bounded(["sample", pid, "2", "-mayDie"])))
     log = bounded(["log", "show", "--last", "3m", "--style", "compact",
@@ -164,6 +180,54 @@ def observe(evidence, device, *, samples=OBSERVE_SAMPLES, interval=OBSERVE_INTER
                seconds=round(time.monotonic() - started, 1))
 
 
+def is_settled(samples, cpus):
+    """Settled: the last samples start no new device process and keep runnable ones within the CPUs."""
+    recent = samples[-SEED_SETTLE_SAMPLES:]
+    if len(recent) < SEED_SETTLE_SAMPLES or None in recent:
+        return False
+    return len({count for count, _ in recent}) == 1 and all(runnable <= cpus for _, runnable in recent)
+
+
+def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SETTLE_INTERVAL):
+    """Seed job only: wait until the new device stops its first-boot work. Reads `ps` only."""
+    cpus = os.cpu_count() or 1
+    started = time.monotonic()
+    samples = []
+    while True:
+        activity = device_activity(bounded(["ps", "-axo", "pid=,ppid=,stat=,command="]), device)
+        samples.append(activity)
+        seconds = round(time.monotonic() - started, 1)
+        record(evidence, step="seed", command="observe", outcome="sample",
+               processes=None if activity is None else activity[0],
+               runnable=None if activity is None else activity[1], seconds=seconds)
+        if is_settled(samples, cpus):
+            record(evidence, step="seed", command="settle", limit=limit, outcome="settled", seconds=seconds)
+            return seconds, activity
+        if time.monotonic() - started + interval > limit:
+            record(evidence, step="seed", command="settle", limit=limit, outcome="timeout", seconds=seconds)
+            diagnose(evidence, "seed", None)
+            raise SimctlHang(f"seed simulator first-boot work did not settle within {limit}s")
+        time.sleep(interval)
+
+
+def cache_key(environ=os.environ):
+    """One key for the seed job and the approval push job: runner image, Xcode, device choice."""
+    import hashlib
+    digest = hashlib.sha256(SEED_SCHEMA.encode() + (ROOT / "scripts/select-ios-simulator.py").read_bytes()).hexdigest()[:16]
+    xcode = Path(environ.get("DEVELOPER_DIR", "default")).parents[1].name if environ.get("DEVELOPER_DIR") else "default"
+    parts = ["ios-sim-preboot-v1", environ.get("ImageOS", "local"), environ.get("ImageVersion", "local"),
+             os.uname().machine, xcode, digest]
+    return "-".join(part.replace(" ", "_") for part in parts)
+
+
+def seed_dir():
+    return Path(os.environ.get("HP_SIM_SEED_DIR", ROOT / "evidence/sim-seed")).resolve()
+
+
+def devices_root():
+    return Path.home() / "Library/Developer/CoreSimulator/Devices"
+
+
 def state_path(evidence):
     return evidence / "simulator.json"
 
@@ -193,22 +257,61 @@ def build(evidence):
         raise RuntimeError(f"build-for-testing failed: exit {status}")
 
 
-def boot(evidence):
+def listed_device(evidence, step, device):
+    """The device row CoreSimulatorService reports for this UDID, or None."""
+    devices = json.loads(simctl(evidence, step, ["list", "devices", device, "--json"], timeout=30))["devices"]
+    rows = [row for rows in devices.values() for row in rows if row["udid"] == device]
+    return rows[0] if len(rows) == 1 else None
+
+
+def create_device(evidence, step):
     sdk = subprocess.check_output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"], text=True, timeout=30).strip()
     # The first simctl call mounts the hosted runner's preinstalled runtime images.
     # https://github.com/actions/runner-images/issues/15247
     print(f"Discovering installed iOS {sdk} simulator runtimes.", flush=True)
-    runtimes = simctl(evidence, "boot", ["list", "runtimes", "--json"], timeout=180)
+    runtimes = simctl(evidence, step, ["list", "runtimes", "--json"], timeout=180)
     device_type, runtime = subprocess.check_output(
         ["python3", str(ROOT / "scripts/select-ios-simulator.py"), sdk],
         input=runtimes, text=True, timeout=30,
     ).split()
-    device = str(uuid.UUID(simctl(evidence, "boot", ["create", "HP-Studio-Approval-Push", device_type, runtime], timeout=30))).upper()
+    device = str(uuid.UUID(simctl(evidence, step, ["create", DEVICE_NAME, device_type, runtime], timeout=30))).upper()
     # The cleanup step reads this even when a later call in this step hangs.
     state_path(evidence).write_text(json.dumps({"device": device}) + "\n")
-    devices = json.loads(simctl(evidence, "boot", ["list", "devices", device, "--json"], timeout=30))["devices"]
-    data = next(row["dataPath"] for rows in devices.values() for row in rows if row["udid"] == device)
+    data = listed_device(evidence, step, device)["dataPath"]
     state_path(evidence).write_text(json.dumps({"device": device, "data": data}) + "\n")
+    return device, device_type, runtime
+
+
+def adopt_restored(evidence, device):
+    """Use a restored device only when CoreSimulatorService itself lists it as ready to boot."""
+    row = listed_device(evidence, "boot", device)
+    if row is None:
+        reason = "not listed by CoreSimulatorService"
+    elif row.get("isAvailable") is not True:
+        reason = f"listed but unavailable: {row.get('availabilityError', 'no reason given')}"
+    elif row.get("state") != "Shutdown":
+        reason = f"listed in state {row.get('state')}"
+    else:
+        record(evidence, step="boot", command="cache", outcome="accepted", device=device)
+        state_path(evidence).write_text(json.dumps({"device": device, "data": row["dataPath"], "restored": device}) + "\n")
+        print(f"Using the restored once-booted simulator: {device}", flush=True)
+        return True
+    record(evidence, step="boot", command="cache", outcome="rejected", reason=reason, device=device)
+    print(f"Restored simulator not used ({reason}); creating a new one.", flush=True)
+    if row is None:
+        # CoreSimulatorService does not know the folder, so removing it touches no device it owns.
+        shutil.rmtree(devices_root() / device, ignore_errors=True)
+    else:
+        simctl(evidence, "boot", ["delete", device], timeout=30, check=False)
+    return False
+
+
+def boot(evidence):
+    state = load_state(evidence) or {}
+    restored = state.get("restored")
+    if not (restored and adopt_restored(evidence, restored)):
+        create_device(evidence, "boot")
+    device = load_state(evidence)["device"]
     print(f"Booting the owned iOS Simulator: {device}", flush=True)
     simctl(evidence, "boot", ["boot", device], timeout=60, capture=False)
     # A cold GitHub macOS runner can take over two minutes to initialize.
@@ -305,7 +408,7 @@ def run(evidence):
 
 def cleanup(evidence):
     state = load_state(evidence)
-    if not state:
+    if not state or "device" not in state:
         print("No owned simulator to clean up.", flush=True)
         return
     for action in ("shutdown", "delete"):
@@ -317,10 +420,76 @@ def cleanup(evidence):
     state_path(evidence).unlink(missing_ok=True)
 
 
-STEPS = {"build": build, "boot": boot, "run": run, "cleanup": cleanup}
+def restore(evidence, source=None):
+    """Unpack a cached once-booted device before any simctl call. Never fails the job."""
+    source = source or seed_dir()
+    meta_path, archive = source / "seed.json", source / "device.tar"
+    if not (meta_path.is_file() and archive.is_file()):
+        record(evidence, step="restore", command="cache", outcome="miss")
+        print("No cached once-booted simulator; the boot step creates a new one.", flush=True)
+        return
+    meta = json.loads(meta_path.read_text())
+    device = str(uuid.UUID(meta["device"])).upper()
+    # Whether the service already runs decides whether it can discover the folder at start.
+    running = subprocess.run(["pgrep", "-x", "com.apple.CoreSimulator.CoreSimulatorService"],
+                             stdout=subprocess.DEVNULL).returncode == 0
+    target = devices_root() / device
+    if meta.get("schema") != SEED_SCHEMA or target.exists():
+        record(evidence, step="restore", command="cache", outcome="rejected", device=device,
+               reason="unknown seed schema" if meta.get("schema") != SEED_SCHEMA else "device folder already exists")
+        return
+    devices_root().mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    status = subprocess.run(["tar", "-C", str(devices_root()), "-xf", str(archive)], timeout=300).returncode
+    seconds = round(time.monotonic() - started, 1)
+    if status or not (target / "device.plist").is_file():
+        shutil.rmtree(target, ignore_errors=True)
+        record(evidence, step="restore", command="cache", outcome="rejected", device=device,
+               reason=f"tar exit {status}", seconds=seconds)
+        return
+    record(evidence, step="restore", command="cache", outcome="restored", device=device, seconds=seconds,
+           archive_bytes=archive.stat().st_size, service_running_before=running)
+    state_path(evidence).write_text(json.dumps({"restored": device}) + "\n")
+    print(f"Restored once-booted simulator {device} in {seconds}s.", flush=True)
+
+
+def seed(evidence, destination=None):
+    """Seed job: archive a device that has booted once and finished its first-boot work."""
+    destination = destination or seed_dir()
+    device, device_type, runtime = create_device(evidence, "seed")
+    try:
+        simctl(evidence, "seed", ["boot", device], timeout=60, capture=False)
+        simctl(evidence, "seed", ["bootstatus", device, "-b"], timeout=240, capture=False)
+        settle_seconds, activity = wait_settled(evidence, device)
+        simctl(evidence, "seed", ["shutdown", device], timeout=30, capture=False)
+        destination.mkdir(parents=True, exist_ok=True)
+        partial = destination / "device.tar.partial"
+        started = time.monotonic()
+        subprocess.run(["tar", "-C", str(devices_root()), "-cf", str(partial), device], check=True, timeout=600)
+        archive_seconds = round(time.monotonic() - started, 1)
+        partial.rename(destination / "device.tar")
+        meta = {"schema": SEED_SCHEMA, "device": device, "device_type": device_type, "runtime": runtime,
+                "settle_seconds": settle_seconds, "settled_processes": activity[0],
+                "settled_runnable": activity[1], "archive_seconds": archive_seconds,
+                "archive_bytes": (destination / "device.tar").stat().st_size}
+        (destination / "seed.json").write_text(json.dumps(meta, indent=2) + "\n")
+        record(evidence, step="seed", command="archive", outcome="saved", **{k: meta[k] for k in ("archive_bytes", "archive_seconds")})
+        print(f"Seeded {device}: {meta['archive_bytes']} bytes after {settle_seconds}s of settling.", flush=True)
+    finally:
+        cleanup(evidence)
+
+
+STEPS = {"build": build, "boot": boot, "run": run, "cleanup": cleanup, "restore": restore, "seed": seed}
 
 
 def main(argv):
+    if argv == ["cache-key"]:
+        key = cache_key()
+        print(key)
+        if os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+                output.write(f"key={key}\n")
+        return
     evidence = evidence_dir()
     if not argv:
         try:
@@ -330,7 +499,7 @@ def main(argv):
             cleanup(evidence)
         return
     if len(argv) != 1 or argv[0] not in STEPS:
-        raise SystemExit("usage: verify-approval-push-simulator.py [build|boot|run|cleanup]")
+        raise SystemExit("usage: verify-approval-push-simulator.py [build|boot|run|cleanup|restore|seed|cache-key]")
     STEPS[argv[0]](evidence)
 
 
