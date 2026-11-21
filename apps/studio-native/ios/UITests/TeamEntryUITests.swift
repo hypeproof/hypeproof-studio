@@ -974,9 +974,11 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
         XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10)); app.buttons["teamRequestHomeEntry"].tap()
         let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("Lab fixture request")
-        let product = app.buttons["제품"]; XCTAssertTrue(product.waitForExistence(timeout: 10)); githubReveal(app, product); product.tap()
+        // The menu Picker is exposed as one Button labelled "<title>, <selection>" (run 44922434581 hierarchy).
+        let product = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "제품, ")).firstMatch
+        XCTAssertTrue(product.waitForExistence(timeout: 10)); githubReveal(app, product); product.tap()
         XCTAssertTrue(app.buttons["Lab"].waitForExistence(timeout: 5)); app.buttons["Lab"].tap()
-        XCTAssertEqual(app.buttons["제품"].value as? String, "Lab", "The request must be created for Lab, not the Studio default.")
+        XCTAssertEqual(product.label, "제품, Lab", "The request must be created for Lab, not the Studio default.")
         githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
