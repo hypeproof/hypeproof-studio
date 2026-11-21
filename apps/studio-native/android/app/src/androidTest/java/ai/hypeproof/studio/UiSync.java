@@ -13,6 +13,9 @@ import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewTreeObserver;
+import androidx.lifecycle.Lifecycle;
+import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.IdlingRegistry;
 import androidx.test.espresso.IdlingResource;
 import androidx.test.espresso.InjectEventSecurityException;
@@ -28,8 +31,10 @@ import org.hamcrest.Matcher;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -37,7 +42,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayingAtLeast;
 
@@ -392,6 +400,113 @@ final class UiSync {
             int count, total = 0, limit = 1024 * 1024;
             while (total < limit && (count = input.read(buffer, 0, Math.min(buffer.length, limit - total))) != -1) { file.write(buffer, 0, count); total += count; }
         }
+    }
+
+    /**
+     * The device did not give the app's window input focus. This is a device or
+     * window-manager state, not a product result, and every later Espresso lookup
+     * fails the same way, so it carries its own message.
+     */
+    static final class DeviceFocusLost extends AssertionError {
+        DeviceFocusLost(String message, Throwable cause) { super(message, cause); }
+    }
+
+    /**
+     * Moves the scenario to RESUMED and requires its window to gain input focus.
+     * moveToState returns when the activity is resumed; window focus arrives later
+     * from the window manager. Bound: the existing EXPECTATION_MS. The wait is a
+     * focus-change listener, so it returns as soon as focus arrives.
+     */
+    static <A extends Activity> void resumeWithFocus(ActivityScenario<A> scenario, String where) {
+        scenario.moveToState(Lifecycle.State.RESUMED);
+        awaitWindowFocus(scenario, where);
+    }
+
+    static <A extends Activity> void awaitWindowFocus(ActivityScenario<A> scenario, String where) {
+        CountDownLatch focused = new CountDownLatch(1);
+        AtomicReference<View> decor = new AtomicReference<>();
+        ViewTreeObserver.OnWindowFocusChangeListener listener = hasFocus -> { if (hasFocus) focused.countDown(); };
+        scenario.onActivity(activity -> {
+            View root = activity.getWindow().getDecorView();
+            decor.set(root);
+            if (root.hasWindowFocus()) focused.countDown();
+            else root.getViewTreeObserver().addOnWindowFocusChangeListener(listener);
+        });
+        boolean arrived;
+        try {
+            arrived = focused.await(EXPECTATION_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException problem) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(where + ": interrupted while waiting for window focus", problem);
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                View root = decor.get();
+                if (root != null && root.getViewTreeObserver().isAlive()) root.getViewTreeObserver().removeOnWindowFocusChangeListener(listener);
+            });
+        }
+        if (!arrived) throw deviceFocusLost(where + ": the window did not gain input focus after RESUMED", null);
+    }
+
+    /**
+     * Reports a lost device focus as DeviceFocusLost, with the window manager's focus
+     * line in the message and dumpsys window and activity output in evidence/failures.
+     *
+     * At test start it requires that no activity left over from an earlier test is
+     * shown without window focus. A launcher focus before launch is normal, so the
+     * start check cannot see a device that loses focus only on the next launch; the
+     * classification of RootViewWithoutFocusException covers that case. No retry.
+     */
+    static TestRule deviceFocusRule() {
+        return (base, description) -> new Statement() {
+            @Override public void evaluate() throws Throwable {
+                String leftover = leftoverWithoutFocus();
+                if (leftover != null) throw deviceFocusLost(description.getMethodName() + ": at test start " + leftover, null);
+                try {
+                    base.evaluate();
+                } catch (DeviceFocusLost lost) {
+                    throw lost;
+                } catch (Throwable failure) {
+                    if (!lostRootFocus(failure)) throw failure;
+                    throw deviceFocusLost(description.getMethodName() + ": Espresso found no root with window focus", failure);
+                }
+            }
+        };
+    }
+
+    private static String leftoverWithoutFocus() {
+        AtomicReference<String> found = new AtomicReference<>();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            for (Stage stage : new Stage[]{Stage.RESUMED, Stage.PAUSED})
+                for (Activity activity : ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(stage))
+                    // Only app activities; ActivityScenario's own EmptyActivity is not shown to the user.
+                    if (found.get() == null && activity.getClass().getName().startsWith("ai.hypeproof.studio.") && !activity.hasWindowFocus())
+                        found.set(activity.getClass().getSimpleName() + " is " + stage + " without window focus");
+        });
+        return found.get();
+    }
+
+    private static boolean lostRootFocus(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause())
+            if (cause.getClass().getName().endsWith("RootViewWithoutFocusException")) return true;
+        return false;
+    }
+
+    private static DeviceFocusLost deviceFocusLost(String message, Throwable cause) {
+        String focus = "focus unknown";
+        try {
+            Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+            File dir = new File(context.getExternalFilesDir(null), "evidence/failures");
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create failure evidence directory");
+            String base = "device-focus-lost-" + SystemClock.elapsedRealtime();
+            File window = new File(dir, base + "-window.txt");
+            shell("timeout 3 dumpsys window", window);
+            shell("timeout 3 dumpsys activity activities", new File(dir, base + "-activity.txt"));
+            for (String line : Files.readAllLines(window.toPath(), StandardCharsets.UTF_8))
+                if (line.contains("mCurrentFocus=") || line.contains("mFocusedApp=")) focus = focus.equals("focus unknown") ? line.trim() : focus + "; " + line.trim();
+        } catch (Exception | AssertionError problem) {
+            Log.e(TAG, "Device focus evidence capture failed", problem);
+        }
+        return new DeviceFocusLost("device focus lost (device state, not a product result): " + message + " [" + focus + "]", cause);
     }
 
     /** Captures logcat and input state when a test fails outside a tap. */
