@@ -169,13 +169,14 @@ class MergeContracts(unittest.TestCase):
 class ShardShell(unittest.TestCase):
     """The real ios-verify.sh shard mode against stubbed Apple tools."""
 
-    def run_shard(self, index, *, test_exit=0, products=1):
+    def run_shard(self, index, *, test_exit=0, products=1, bootstatus_exit=0):
         temp = tempfile.TemporaryDirectory(prefix='studio-ios-shard-'); self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         scripts, ios, bin_dir, evidence = root / 'scripts', root / 'ios', root / 'bin', root / 'evidence'
         for directory in (scripts, ios, bin_dir, evidence):
             directory.mkdir()
-        for name in ('ios-verify.sh', 'select-ios-simulator.py', 'ios-ui-shards.py'):
+        for name in ('ios-verify.sh', 'select-ios-simulator.py', 'ios-ui-shards.py', 'ios-sim-observe.py',
+                     'verify-approval-push-simulator.py'):
             shutil.copyfile(NATIVE / 'scripts' / name, scripts / name)
         built = ios / 'DerivedData/Build/Products'; built.mkdir(parents=True)
         for number in range(products):
@@ -184,6 +185,10 @@ class ShardShell(unittest.TestCase):
         (evidence / 'ios-ui-shard-plan.json').write_text(json.dumps(plan))
         stub = cleanup_suite.COMMAND_STUB.replace('if "test" in args:', 'if "test" in args or "test-without-building" in args:')
         self.assertNotEqual(stub, cleanup_suite.COMMAND_STUB)
+        marker = '    elif args[:2] == ["simctl", "create"]:'
+        self.assertIn(marker, stub)
+        stub = stub.replace(marker, '    elif args[:2] == ["simctl", "bootstatus"]:\n'
+                            '        raise SystemExit(int(os.environ.get("STUB_BOOTSTATUS_EXIT", "0")))\n' + marker)
         for command in ('xcrun', 'xcodebuild', 'swift', 'codesign', 'sleep'):
             path = bin_dir / command
             path.write_text(stub.replace('__PYTHON__', sys.executable)); path.chmod(0o755)
@@ -193,7 +198,8 @@ class ShardShell(unittest.TestCase):
         env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], GITHUB_SHA=SHA,
                    GITHUB_RUN_ID='shard-test', STUB_CALLS=str(calls), STUB_TIMEOUTS=str(root / 'timeouts.jsonl'),
                    STUB_DEVICE=cleanup_suite.DEVICE, STUB_CLEANUP='{}', STUB_TEST_EXIT=str(test_exit),
-                   STUB_TEST_SIGNAL='', STUB_DESCENDANTS=str(root / 'descendants.txt'), STUB_CREATE_EXIT='')
+                   STUB_TEST_SIGNAL='', STUB_DESCENDANTS=str(root / 'descendants.txt'), STUB_CREATE_EXIT='',
+                   STUB_BOOTSTATUS_EXIT=str(bootstatus_exit))
         result = subprocess.run(['bash', str(scripts / 'ios-verify.sh'), 'shard', str(index)], cwd=root,
                                 env=env, capture_output=True, text=True, timeout=20)
         commands = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
@@ -227,6 +233,33 @@ class ShardShell(unittest.TestCase):
         self.assertEqual([a for a in args if a.startswith('-skip-testing:')],
                          ['-skip-testing:' + case for case in plan['shards'][0]['cases']])
         self.assertEqual(json.loads((evidence / 'shard-result.json').read_text())['test_exit'], 65)
+
+    def test_shard_records_boot_and_warm_up_timing_and_three_samples_without_changing_commands(self):
+        result, commands, _, evidence = self.run_shard(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertEqual([(r['step'], r['command'], r['outcome']) for r in rows],
+                         [('boot', 'xcrun simctl boot', 'exit 0'), ('boot', 'xcrun simctl bootstatus', 'exit 0'),
+                          ('boot', 'observe', 'sample'), ('boot', 'observe', 'sample'), ('boot', 'observe', 'sample'),
+                          ('warm-up', 'xcrun simctl launch', 'exit 0'), ('warm-up', 'xcrun simctl terminate', 'exit 0')])
+        self.assertEqual([r['sample'] for r in rows if r['command'] == 'observe'], [1, 2, 3])
+        self.assertTrue(all(isinstance(r['seconds'], float) for r in rows if r['command'] != 'observe'))
+        for name in ('simulator-ps.txt', 'simulator-vmstat.txt'):
+            headers = [line for line in (evidence / name).read_text().splitlines() if re.fullmatch(r'== sample \d', line)]
+            self.assertEqual(headers, ['== sample 1', '== sample 2', '== sample 3'], name)
+        # The same simctl commands as before, and the only new waits are two fixed 5 s sleeps.
+        boot = [c['args'] for c in commands if c['command'] == 'xcrun' and c['args'][:2] in (['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate'])]
+        # Shard 1 also launches the app after the suite for its screenshot; that launch is not timed.
+        self.assertEqual([a[:2] for a in boot[:4]], [['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate']])
+        self.assertEqual(boot[1][-1], '-b')
+        self.assertEqual([c['args'] for c in commands if c['command'] == 'sleep'][:2], [['5'], ['5']])
+
+    def test_a_failed_bootstatus_still_fails_the_shard_and_is_recorded(self):
+        result, commands, _, evidence = self.run_shard(1, bootstatus_exit=3)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertEqual(rows[-1]['outcome'], 'exit 3')
+        self.assertFalse(any(c['command'] == 'xcodebuild' and 'test-without-building' in c['args'] for c in commands))
 
     def test_shard_refuses_unknown_index_and_ambiguous_products(self):
         result, commands, _, _ = self.run_shard(3)

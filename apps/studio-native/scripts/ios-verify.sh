@@ -120,14 +120,26 @@ PY
   exit "$original_status"
 }
 trap 'cleanup_simulator "$?"' EXIT
+# Shard mode records how long boot and warm-up take and what the new device is doing
+# (ios-sim-observe.py, observation only: same commands, no wait, no limit, no decision).
+timed() {
+  local step=$1; shift
+  if [ "$mode" = shard ]; then python3 ../scripts/ios-sim-observe.py time --evidence ../evidence --step "$step" -- "$@"; else "$@"; fi
+}
 printf 'native verification: simulator boot\n'
-xcrun simctl boot "$device"
-xcrun simctl bootstatus "$device" -b
+timed boot xcrun simctl boot "$device"
+timed boot xcrun simctl bootstatus "$device" -b
+if [ "$mode" = shard ]; then
+  for sample in 1 2 3; do
+    if [ "$sample" -gt 1 ]; then sleep 5; fi
+    python3 ../scripts/ios-sim-observe.py sample --evidence ../evidence --device "$device" --index "$sample" || true
+  done
+fi
 # Warm the booted simulator with a system app, never the app under test: the first UI case
 # must still see a fresh install. A cold first launch has stalled the first case before.
 printf 'native verification: simulator warm-up\n'
-xcrun simctl launch "$device" com.apple.Preferences > /dev/null
-xcrun simctl terminate "$device" com.apple.Preferences || true
+timed warm-up xcrun simctl launch "$device" com.apple.Preferences > /dev/null
+timed warm-up xcrun simctl terminate "$device" com.apple.Preferences || true
 test_status=0
 # Simulator Keychain checks require an actual app identity. No distribution key is used.
 common_test=(-destination "platform=iOS Simulator,id=$device" -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240)
