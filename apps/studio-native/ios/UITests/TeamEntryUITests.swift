@@ -9,13 +9,7 @@ final class TeamEntryUITests: XCTestCase {
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
         app.launch()
-        func reveal(_ element: XCUIElement) {
-            for _ in 0..<4 {
-                if element.exists && element.isHittable { return }
-                app.swipeUp()
-            }
-            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
-        }
+        func reveal(_ element: XCUIElement, line: UInt = #line) { listReveal(app, element, line: line) }
         func openFeedback() {
             let settings = app.buttons["conversationSettings"]
             XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
@@ -85,8 +79,7 @@ final class TeamEntryUITests: XCTestCase {
         app.launch(); openFeedback()
         app.textViews["feedbackText"].tap(); app.textViews["feedbackText"].typeText("Uncertain draft")
         let send = app.buttons["feedbackSend"]
-        for _ in 0..<4 { if send.exists && send.isHittable { break }; app.swipeUp() }
-        XCTAssertTrue(send.isHittable); send.tap(); app.buttons["보내기"].tap()
+        listReveal(app, send); send.tap(); app.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["접수 여부 확인 필요"].waitForExistence(timeout: 5))
         XCTAssertFalse(send.exists)
         app.swipeDown()
@@ -122,8 +115,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertEqual(status.label, "로그인됨")
         XCTAssertFalse(login.exists)
         let logout = app.buttons["로그아웃"]
-        if !logout.isHittable { app.swipeUp() }
-        XCTAssertTrue(logout.isHittable); logout.tap()
+        listReveal(app, logout); logout.tap()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         settings.tap()
         XCTAssertTrue(login.waitForExistence(timeout: 5))
@@ -270,11 +262,7 @@ final class TeamEntryUITests: XCTestCase {
         let experience = app.buttons["productExperienceSettings"]
         // The settings list grows with account and feedback rows. Reveal the
         // real control before tapping; never substitute a direct action.
-        for _ in 0..<3 {
-            if experience.exists && experience.isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(experience.exists); XCTAssertTrue(experience.isHittable)
+        listReveal(app, experience)
         XCTAssertEqual(experience.label, "사용 경험 공유 설정"); experience.tap()
         let allow = app.buttons["productExperienceAllow"]; XCTAssertTrue(allow.waitForExistence(timeout: 10)); allow.tap(); waitTeam(app) { ($0["granted"] as? Bool) == true }
         app.buttons["productExperienceDecline"].tap(); waitTeam(app) { ($0["granted"] as? Bool) == false }
@@ -294,10 +282,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
         let entry = app.buttons["teamRequestHomeEntry"]
         XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
-        func reveal(_ element: XCUIElement) {
-            for _ in 0..<5 { if element.exists && element.isHittable { return }; app.swipeUp() }
-            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
-        }
+        func reveal(_ element: XCUIElement, line: UInt = #line) { listReveal(app, element, line: line) }
         let text = app.textViews["teamRequestBody"]
         XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Internal request 4340")
         let send = app.buttons["teamRequestSend"]; reveal(send); send.tap()
@@ -352,10 +337,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
         let entry = app.buttons["teamRequestHomeEntry"]
         XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
-        func reveal(_ element: XCUIElement) {
-            for _ in 0..<7 { if element.exists && element.isHittable { return }; app.swipeUp() }
-            XCTAssertTrue(element.exists); XCTAssertTrue(element.isHittable)
-        }
+        func reveal(_ element: XCUIElement, line: UInt = #line) { listReveal(app, element, line: line) }
         let body = app.textViews["teamRequestBody"]
         XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("Workflow request 4342")
         let sendRequest = app.buttons["teamRequestSend"]; reveal(sendRequest); sendRequest.tap(); app.alerts.buttons["보내기"].tap()
@@ -388,8 +370,7 @@ final class TeamEntryUITests: XCTestCase {
         let entry = app.buttons["teamRequestHomeEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
         let text = app.textViews["teamRequestBody"]; XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Response lost 4340")
         let send = app.buttons["teamRequestSend"]
-        for _ in 0..<5 { if send.isHittable { break }; app.swipeUp() }
-        XCTAssertTrue(send.isHittable); send.tap(); app.alerts.buttons["보내기"].tap()
+        listReveal(app, send); send.tap(); app.alerts.buttons["보내기"].tap()
         let recover = app.buttons["teamRequestRecover"]
         XCTAssertTrue(recover.waitForExistence(timeout: 10)); XCTAssertFalse(app.staticTexts["teamRequestReceipt"].exists)
         recover.tap(); XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
@@ -411,7 +392,7 @@ final class TeamEntryUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
         let entry = app.buttons["teamRequestHomeEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
-        func reveal(_ element: XCUIElement) { for _ in 0..<5 { if element.exists && element.isHittable { return }; app.swipeUp() }; XCTAssertTrue(element.isHittable) }
+        func reveal(_ element: XCUIElement, line: UInt = #line) { listReveal(app, element, line: line) }
         let text = app.textViews["teamRequestBody"]; XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText("Storage request")
         let send = app.buttons["teamRequestSend"]; reveal(send); send.tap(); app.alerts.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
@@ -424,6 +405,77 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.alerts["저장되지 않은 댓글이 있어요"].waitForExistence(timeout: 5)); app.alerts.buttons["계속 작성"].tap()
         XCTAssertEqual(comment.value as? String, "X"); XCTAssertTrue(export.exists)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "internal-comment-unsaved-export-and-exit-guard"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    enum RevealDirection { case towardEnd, towardStart }
+    private func usableFrame(_ frame: CGRect) -> Bool { !frame.isNull && !frame.isEmpty && !frame.isInfinite }
+    /// The visible scrolling area: the owning List when known, clipped by the
+    /// window and by an on-screen keyboard.
+    @MainActor private func revealViewport(_ app: XCUIApplication, _ container: XCUIElement?) -> CGRect {
+        var area = app.windows.firstMatch.frame
+        if let container, container.exists, usableFrame(container.frame) { area = area.intersection(container.frame) }
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists, usableFrame(keyboard.frame), keyboard.frame.minY < area.maxY {
+            area.size.height = max(0, keyboard.frame.minY - area.minY)
+        }
+        return area
+    }
+    /// One short drag inside the viewport. A drag has no fling, so it cannot
+    /// carry a lazily loaded row past the viewport the way a swipe can.
+    @MainActor private func revealDrag(_ app: XCUIApplication, _ area: CGRect, _ direction: RevealDirection) {
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let (from, to): (CGFloat, CGFloat) = direction == .towardEnd ? (0.7, 0.3) : (0.3, 0.7)
+        origin.withOffset(CGVector(dx: area.midX, dy: area.minY + area.height * from))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: area.midX, dy: area.minY + area.height * to)))
+    }
+    @MainActor private func revealFailure(_ app: XCUIApplication, _ item: XCUIElement, _ steps: [String], file: StaticString, line: UInt) {
+        let name = "reveal-failure-" + String(item.description.prefix(60))
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+        let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        XCTFail("\(item) was not revealed as a hittable control inside its List viewport.\n" + steps.joined(separator: "\n"), file: file, line: line)
+    }
+    /// Scrolls the owning List until `item` is inside the viewport, then proves
+    /// real hittability. XCTest fails a case outright when asked whether an
+    /// offscreen element is hittable ("Activation point invalid"), so
+    /// isHittable is read only once the frame is inside the viewport (#4432).
+    @MainActor private func listReveal(_ app: XCUIApplication, _ item: XCUIElement, in container: XCUIElement? = nil,
+                                       toward preferred: RevealDirection = .towardEnd, file: StaticString = #filePath, line: UInt = #line) {
+        var steps: [String] = []
+        for attempt in 0..<10 {
+            let area = revealViewport(app, container)
+            let frame: CGRect? = item.exists ? item.frame : nil
+            var direction = preferred
+            if let frame, usableFrame(frame) {
+                if area.contains(frame) {
+                    if item.isHittable { return }
+                    steps.append("\(attempt): inside viewport \(area) but not hittable; frame=\(frame)")
+                } else {
+                    steps.append("\(attempt): outside viewport \(area); frame=\(frame)")
+                }
+                if frame.minY < area.minY { direction = .towardStart } else if frame.maxY > area.maxY { direction = .towardEnd }
+            } else {
+                // A lazily loaded List row may be on either side. Search the
+                // preferred side first, then the other one.
+                if attempt >= 5 { direction = preferred == .towardEnd ? .towardStart : .towardEnd }
+                steps.append("\(attempt): \(frame == nil ? "not loaded" : "no usable frame") in viewport \(area); dragging \(direction)")
+            }
+            revealDrag(app, area, direction)
+        }
+        revealFailure(app, item, steps, file: file, line: line)
+    }
+    /// Brings a diagnostic row into the accessibility tree to read its value.
+    /// It is never tapped, so hittability is not requested.
+    @MainActor private func readReveal(_ app: XCUIApplication, _ item: XCUIElement, in container: XCUIElement? = nil,
+                                       toward direction: RevealDirection = .towardStart, file: StaticString = #filePath, line: UInt = #line) {
+        var steps: [String] = []
+        for attempt in 0..<8 {
+            if item.exists { return }
+            let area = revealViewport(app, container)
+            steps.append("\(attempt): not loaded in viewport \(area)")
+            revealDrag(app, area, direction)
+        }
+        if item.exists { return }
+        revealFailure(app, item, steps, file: file, line: line)
     }
 
     @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false, outcome: Bool = false) -> XCUIApplication {
@@ -449,90 +501,47 @@ final class TeamEntryUITests: XCTestCase {
         detailReveal(app, entry); entry.tap()
         return app
     }
-    @MainActor private func detailReveal(_ app: XCUIApplication, _ item: XCUIElement) {
+    @MainActor private func detailReveal(_ app: XCUIApplication, _ item: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         let list = app.collectionViews["teamRequestDetailList"]
-        XCTAssertTrue(list.waitForExistence(timeout: 10))
-        func visibleFrame() -> Bool {
-            guard item.exists else { return false }
-            let frame = item.frame, viewport = list.frame
-            return !frame.isEmpty && !frame.isNull && !frame.isInfinite
-                && !viewport.isEmpty && !viewport.isNull && !viewport.isInfinite
-                && viewport.contains(frame) && app.windows.firstMatch.frame.contains(frame)
-        }
-        // A loaded but offscreen row may have no activation point. Reveal it in
-        // its owning List before requesting actual hittability; never replace tap.
-        for _ in 0..<8 {
-            if visibleFrame() && item.isHittable { return }
-            let frame = item.exists ? item.frame : .zero
-            if !frame.isEmpty && !frame.isNull && !frame.isInfinite && frame.minY < list.frame.minY {
-                list.swipeDown()
-            } else {
-                list.swipeUp()
-            }
-        }
-        let shot = XCTAttachment(screenshot: app.screenshot())
-        shot.name = "detail-reveal-failure-" + item.identifier; shot.lifetime = .keepAlways; add(shot)
-        let hierarchy = XCTAttachment(string: app.debugDescription)
-        hierarchy.name = "detail-reveal-hierarchy-" + item.identifier; hierarchy.lifetime = .keepAlways; add(hierarchy)
-        XCTAssertTrue(visibleFrame(), "The real detail control must be inside its List viewport.")
-        XCTAssertTrue(item.isHittable)
+        XCTAssertTrue(list.waitForExistence(timeout: 10), file: file, line: line)
+        listReveal(app, item, in: list, file: file, line: line)
     }
-    @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement) {
-        for _ in 0..<8 { if item.exists && item.isHittable { return }; app.swipeUp() }; XCTAssertTrue(item.isHittable)
+    @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        listReveal(app, item, file: file, line: line)
     }
     @MainActor private func githubTrace(_ app: XCUIApplication) -> String {
         let trace = app.staticTexts["teamGitHubTrace"]
         // This diagnostic value is read, never tapped. Asking for an activation
         // point can fail even when its accessibility value is available.
-        // Stop at the first row. Further downward swipes dismiss the containing sheet.
-        for _ in 0..<8 {
-            if trace.exists { return trace.value as? String ?? "" }
-            app.swipeDown()
-        }
-        XCTAssertTrue(trace.waitForExistence(timeout: 5), "GitHub diagnostics must remain in the open association screen.")
+        // readReveal stops at the first row; dragging further dismisses the sheet.
+        readReveal(app, trace)
         return trace.value as? String ?? ""
     }
     @MainActor private func relatedTrace(_ app:XCUIApplication)->String{
         let trace=app.staticTexts["teamRelatedTrace"]
-        for _ in 0..<8{if trace.exists{return trace.value as? String ?? ""};app.swipeDown()}
-        XCTFail("Related trace must remain in the open screen");return ""
+        readReveal(app, trace); return trace.value as? String ?? ""
     }
     @MainActor private func textTrace(_ app: XCUIApplication) -> [String:Any] {
         let trace=app.staticTexts["teamTextTrace"]
-        for _ in 0..<5 { if trace.exists { break }; app.swipeDown() }
-        XCTAssertTrue(trace.exists,"The diagnostic row must be revealed before reading its value.")
+        readReveal(app, trace)
         let value=trace.value as? String ?? "{}"
         return (try? JSONSerialization.jsonObject(with:Data(value.utf8))) as? [String:Any] ?? [:]
     }
-    @MainActor private func intakeReveal(_ app:XCUIApplication,_ item:XCUIElement) {
+    @MainActor private func intakeReveal(_ app:XCUIApplication,_ item:XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         if app.keyboards.firstMatch.exists {
             let done = app.buttons["teamIntakeKeyboardDone"]
-            XCTAssertTrue(done.waitForExistence(timeout: 5))
-            XCTAssertTrue(done.isHittable); done.tap()
+            XCTAssertTrue(done.waitForExistence(timeout: 5), file: file, line: line)
+            XCTAssertTrue(done.isHittable, file: file, line: line); done.tap()
             let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
-            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed, file: file, line: line)
         }
         let form = app.collectionViews["teamIntakeForm"]
-        XCTAssertTrue(form.waitForExistence(timeout: 5))
-        if item.exists && item.isHittable { return }
-        let top=app.staticTexts["teamIntakeTrace"]
-        for _ in 0..<6 {
-            if top.exists {
-                let frame = top.frame
-                if !frame.isEmpty && !frame.isInfinite && !frame.isNull && form.frame.contains(frame) { break }
-            }
-            form.swipeDown()
-        }
-        for _ in 0..<8 { if item.exists && item.isHittable { return }; form.swipeUp() }
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "intake-reveal-failure-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
-        let hierarchy = XCTAttachment(string: app.debugDescription)
-        hierarchy.name = "intake-reveal-failure-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
-        XCTAssertTrue(item.isHittable)
+        XCTAssertTrue(form.waitForExistence(timeout: 5), file: file, line: line)
+        listReveal(app, item, in: form, file: file, line: line)
     }
     @MainActor private func intakeTrace(_ app: XCUIApplication) throws -> [String:Any] {
         let item = app.staticTexts["teamIntakeTrace"]
-        for _ in 0..<6 { if item.exists { break }; app.swipeDown() }
+        readReveal(app, item, in: app.collectionViews["teamIntakeForm"])
         return try XCTUnwrap(JSONSerialization.jsonObject(with: Data((item.value as? String ?? "{}").utf8)) as? [String:Any])
     }
     @MainActor func testIntakeExplicitPreviewUnknownRecoveryPreservesPublishedIssue() throws {
@@ -687,7 +696,7 @@ final class TeamEntryUITests: XCTestCase {
         let app=githubApp(["HP_TEAM_RELATED":"1","HP_TEAM_RELATED_READONLY":"1"])
         let comment=app.textViews["teamCommentBody"];githubReveal(app,comment);comment.tap();comment.typeText("Keep my comment draft")
         let entry=app.buttons["teamRelationsEntry"]
-        for _ in 0..<8{if entry.exists && entry.isHittable{break};app.swipeDown()};XCTAssertTrue(entry.isHittable);entry.tap()
+        listReveal(app, entry, toward: .towardStart);entry.tap()
         XCTAssertTrue(app.staticTexts["teamRelatedReadOnly"].waitForExistence(timeout:10));XCTAssertFalse(app.buttons["teamRelatedSend"].exists)
         let inspect=app.buttons["연결 이력 보기"];githubReveal(app,inspect);inspect.tap();githubReveal(app,app.staticTexts["Existing related reason"])
         XCTAssertTrue(relatedTrace(app).contains("\"relationPosts\":0"))
@@ -705,8 +714,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertEqual(issue.value as? String,"77")
         _ = githubTrace(app)
         let open = app.buttons["teamGitHubObservationsOpen"]
-        for _ in 0..<8 { if open.exists && open.isHittable { break }; app.swipeDown() }
-        XCTAssertTrue(open.isHittable); open.tap()
+        listReveal(app, open, toward: .towardStart); open.tap()
         let freshness = app.staticTexts["teamObservationFreshness"]
         XCTAssertTrue(freshness.waitForExistence(timeout:10)); XCTAssertEqual(freshness.label,"확인한 시점에는 아래 상태였어요.")
         let hierarchy = XCTAttachment(string:app.debugDescription); hierarchy.name="GitHub current observation hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
@@ -793,8 +801,7 @@ final class TeamEntryUITests: XCTestCase {
     @MainActor private func outcomeTrace(_ app: XCUIApplication) -> String {
         let trace = app.staticTexts["teamOutcomeTrace"]
         // Diagnostic counters are read, not touch targets.
-        for _ in 0..<8 { if trace.exists { return trace.value as? String ?? "" }; app.swipeDown() }
-        XCTAssertTrue(trace.waitForExistence(timeout: 5)); return trace.value as? String ?? ""
+        readReveal(app, trace); return trace.value as? String ?? ""
     }
     @MainActor func testInternalOutcomeCancelResolveRefreshAndReopen() throws {
         let app = githubApp(outcome: true), resolve = app.buttons["teamOutcomeResolved"]
@@ -808,8 +815,7 @@ final class TeamEntryUITests: XCTestCase {
         app.buttons["다른 결과 작성"].tap()
         _ = outcomeTrace(app)
         let reopened = app.buttons["teamOutcomeReopened"]
-        for _ in 0..<8 { if reopened.exists && reopened.isHittable { break }; app.swipeDown() }
-        XCTAssertTrue(reopened.isHittable); reopened.tap()
+        listReveal(app, reopened, toward: .towardStart); reopened.tap()
         githubReveal(app,send); XCTAssertFalse(send.isEnabled)
         let reason = app.textViews["teamOutcomeResult"]; githubReveal(app,reason); reason.tap(); reason.typeText("Still happens after updating")
         githubReveal(app,send); send.tap(); app.alerts.buttons["보내기"].tap()
@@ -846,7 +852,7 @@ final class TeamEntryUITests: XCTestCase {
         let body = app.textViews["teamCommentBody"]; githubReveal(app, body); body.tap(); body.typeText("Can you confirm this build?")
         let send = app.buttons["teamCommentSend"]; githubReveal(app, send); send.tap(); app.alerts.buttons["보내기"].tap()
         let status = app.staticTexts["teamCommentStatus"]
-        for _ in 0..<8 { if status.exists && status.isHittable { break }; if app.staticTexts["GitHub fixture request"].isHittable { break }; app.swipeDown() }
+        readReveal(app, status)
         let uncertain = XCTNSPredicateExpectation(predicate: NSPredicate(format:"label CONTAINS %@", "접수 여부"), object:status)
         XCTAssertEqual(XCTWaiter.wait(for:[uncertain],timeout:10),.completed)
         XCTAssertFalse(question.exists); githubReveal(app,send); XCTAssertEqual(send.label,"같은 번호로 다시 보내기")
@@ -854,12 +860,7 @@ final class TeamEntryUITests: XCTestCase {
         let next = app.buttons["새 댓글"]; githubReveal(app,next); next.tap()
         app.navigationBars["요청과 논의"].buttons["새로고침"].tap()
         let target = app.buttons["teamReplyTo-tcm_" + String(repeating:"b",count:32)]
-        for _ in 0..<8 {
-            if target.exists && target.isHittable { break }
-            if app.staticTexts["GitHub fixture request"].isHittable { break }
-            app.swipeDown()
-        }
-        XCTAssertTrue(target.isHittable); target.tap()
+        listReveal(app, target, toward: .towardStart); target.tap()
         githubReveal(app,app.staticTexts["teamCommentReplyTarget"])
         XCTAssertTrue(app.staticTexts["teamCommentReplyTarget"].label.contains("Can you confirm this build?"))
         githubReveal(app,body); body.tap(); body.typeText("I checked build 18.1.")
@@ -868,29 +869,12 @@ final class TeamEntryUITests: XCTestCase {
         githubReveal(app,send); XCTAssertFalse(send.isEnabled)
         XCTAssertEqual(body.value as? String,"I checked build 18.1.")
         let rootReply = app.buttons["teamReplyToRequest"]
-        func captureRootReplyBeforeHitTest(_ step: String) {
-            let shot = XCTAttachment(screenshot: app.screenshot())
-            shot.name = "root-reply-before-hit-test-\(step)"; shot.lifetime = .keepAlways; add(shot)
-            let hierarchy = XCTAttachment(string: app.debugDescription)
-            hierarchy.name = "root-reply-hierarchy-before-hit-test-\(step)"; hierarchy.lifetime = .keepAlways; add(hierarchy)
-        }
-        for step in 0..<8 {
-            if rootReply.exists {
-                captureRootReplyBeforeHitTest("scroll-\(step)")
-                if rootReply.isHittable { break }
-            }
-            app.swipeDown()
-        }
-        captureRootReplyBeforeHitTest("final-assertion")
-        XCTAssertTrue(rootReply.isHittable); rootReply.tap()
+        // listReveal attaches the screen and hierarchy if the root reply stays hidden.
+        listReveal(app, rootReply, toward: .towardStart); rootReply.tap()
         detailReveal(app,send); XCTAssertTrue(send.isEnabled); send.tap(); app.alerts.buttons["보내기"].tap(); githubReveal(app,next)
         app.navigationBars["요청과 논의"].buttons["새로고침"].tap()
         let reply = app.staticTexts["teamCommentIntent-tcm_" + String(repeating:"c",count:32)]
-        for _ in 0..<8 {
-            if reply.exists && reply.isHittable { break }
-            if app.staticTexts["GitHub fixture request"].isHittable { break }
-            app.swipeDown()
-        }
+        readReveal(app, reply)
         XCTAssertEqual(reply.label,"답글")
         let shot = XCTAttachment(screenshot:app.screenshot()); shot.name="explicit-question-and-selected-reply"; shot.lifetime = .keepAlways; add(shot)
     }
