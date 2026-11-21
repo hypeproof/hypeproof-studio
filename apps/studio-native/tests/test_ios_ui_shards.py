@@ -84,6 +84,16 @@ class PlanContracts(unittest.TestCase):
                 shards.discover(Path(directory))
 
 
+class WorkflowShardCount(unittest.TestCase):
+    def test_planned_shard_count_equals_the_ui_matrix(self):
+        workflow = (ROOT / '.github/workflows/studio-native-mobile.yml').read_text()
+        planned = re.findall(r"^\s*IOS_UI_SHARDS: '([0-9]+)'$", workflow, re.M)
+        matrix = re.findall(r'^\s*shard: \[([0-9, ]+)\]$', workflow, re.M)
+        self.assertEqual(len(planned), 1)
+        self.assertEqual(len(matrix), 1)
+        self.assertEqual([int(x) for x in matrix[0].split(',')], list(range(1, int(planned[0]) + 1)))
+
+
 class MergeContracts(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)

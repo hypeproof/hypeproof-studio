@@ -135,7 +135,7 @@ jobs:
       - name: Core tests, device build and one simulator build-for-testing
         env:
           # Must equal the ios-ui matrix below; the ios job fails when a planned shard is missing.
-          IOS_UI_SHARDS: '3'
+          IOS_UI_SHARDS: '4'
         run: bash apps/studio-native/scripts/ios-verify.sh build
       - name: Pack the simulator test products
         run: |
@@ -168,7 +168,9 @@ jobs:
       # Every shard finishes and keeps its evidence even when another shard fails.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # With 3 shards the 66 cases took 22-25 min of UI per shard (#4437). 4 shards keep each
+        # job near 27 min, under half of the former 75-min single-job limit, without raising a timeout.
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
