@@ -322,11 +322,41 @@ class SimObserve(unittest.TestCase):
         self.assertTrue(row['utc'].endswith('+00:00'))
         self.assertIn('launchd_sim', ps)
 
+    def daemon_table(self):
+        runtime = '/Library/Developer/CoreSimulator/Volumes/iOS_23B/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.2.simruntime/Contents/Resources/RuntimeRoot'
+        return self.table(children=0) + '\n'.join([
+            f' 5101  4820 Rs      02:58  0.0  1.4 {runtime}/System/Library/PrivateFrameworks/AXAssetLoader.framework/Support/axassetsd',
+            f' 5102  4820 Rs      01:59  0.0  1.1 {runtime}/System/Library/PrivateFrameworks/SiriTTSService.framework/sirittsd',
+            f' 5103  4820 Ss      02:25 16.0  1.4 {runtime}/usr/libexec/mobileassetd',
+            f' 5104  4820 Rs      02:38  0.5  1.0 {runtime}/System/Library/CoreServices/AccessibilityUIServer.app/AccessibilityUIServer -BSServiceDomains x',
+            # A host process with the same name is not the device's.
+            '  700     1 S       16:32  0.0  0.1 /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd',
+            # A name that only starts like a tracked daemon is not one.
+            f' 5105  4820 Rs      01:00  0.0  1.0 {runtime}/usr/libexec/mobileassetd_helper',
+        ]) + '\n'
+
+    def test_speech_daemons_are_read_by_name_for_this_device_only(self):
+        daemons = push.device_daemons(self.daemon_table(), self.DEVICE)
+        self.assertEqual(set(daemons), set(push.SPEECH_DAEMONS))
+        self.assertEqual(daemons['axassetsd'], [{'stat': 'Rs', 'etime': '02:58', 'cpu': 0.0}])
+        self.assertEqual(daemons['sirittsd'], [{'stat': 'Rs', 'etime': '01:59', 'cpu': 0.0}])
+        self.assertEqual(daemons['mobileassetd'], [{'stat': 'Ss', 'etime': '02:25', 'cpu': 16.0}])
+        self.assertEqual(daemons['AccessibilityUIServer'], [{'stat': 'Rs', 'etime': '02:38', 'cpu': 0.5}])
+        self.assertEqual((daemons['corespeechd'], daemons['assistantd']), ([], []))
+        self.assertEqual(push.device_daemons(self.daemon_table(), 'OTHER'), {name: [] for name in push.SPEECH_DAEMONS})
+
+    def test_a_sample_row_names_the_speech_daemons(self):
+        row, _ = self.take(self.daemon_table())
+        self.assertEqual(row['outcome'], 'sample')
+        self.assertEqual(row['daemons']['axassetsd'][0]['stat'], 'Rs')
+        self.assertEqual(row['daemons']['assistantd'], [])
+
     def test_a_ps_that_does_not_return_is_a_timeout_row_not_an_error(self):
         row, ps = self.take('<ps -axro pid,ppid,stat,etime,%cpu,%mem,command did not return within 30s>')
         self.assertEqual(row['outcome'], 'timeout')
         self.assertIn('did not return within 30s', row['detail'])
         self.assertNotIn('processes', row)
+        self.assertNotIn('daemons', row)
         self.assertEqual(row['free_pages'], 4298)
 
     def test_watch_keeps_sampling_until_stopped_and_writes_test_rows(self):
@@ -615,14 +645,17 @@ class PrebootCache(unittest.TestCase):
         calls = []
         with mock.patch.object(push, 'create_device', side_effect=create), \
              mock.patch.object(push, 'simctl', side_effect=lambda evidence, step, args, **_: calls.append(args[0]) or ''), \
-             mock.patch.object(push, 'wait_settled', side_effect=settle):
+             mock.patch.object(push, 'wait_settled', side_effect=settle), \
+             mock.patch.object(push, 'speech_probe', side_effect=lambda evidence, device: calls.append(f'speech-probe {device}') or {'outcome': 'exit 0', 'call_milliseconds': 87}):
             push.seed(self.evidence, self.seed)
         return calls
 
     def test_seed_archives_a_settled_shut_down_device_and_cleans_up(self):
         calls = self.run_seed(lambda evidence, device: (321.0, (240, 2)))
-        self.assertEqual(calls, ['boot', 'bootstatus', 'shutdown', 'shutdown', 'delete'])
+        # The probe runs on the settled, still booted device, before it is shut down and archived.
+        self.assertEqual(calls, ['boot', 'bootstatus', f'speech-probe {self.DEVICE}', 'shutdown', 'shutdown', 'delete'])
         meta = json.loads((self.seed / 'seed.json').read_text())
+        self.assertEqual(meta['speech_probe'], {'outcome': 'exit 0', 'call_milliseconds': 87})
         self.assertEqual((meta['schema'], meta['device'], meta['settle_seconds'], meta['settled_runnable']), (push.SEED_SCHEMA, self.DEVICE, 321.0, 2))
         self.assertEqual(meta['archive_bytes'], (self.seed / 'device.tar').stat().st_size)
         listing = subprocess.run(['tar', '-tf', str(self.seed / 'device.tar')], capture_output=True, text=True, check=True).stdout
@@ -637,6 +670,60 @@ class PrebootCache(unittest.TestCase):
         self.assertFalse((self.seed / 'seed.json').exists())
         self.assertFalse((self.seed / 'device.tar').exists())
         self.assertIsNone(push.load_state(self.evidence))
+
+    def fake_xcrun(self, spawn, build='touch "$out"'):
+        """An xcrun that answers the SDK version, builds by `build` and runs `simctl spawn` by `spawn`."""
+        path = Path(self.tmp.name) / 'xcrun'
+        log = Path(self.tmp.name) / 'xcrun.log'
+        path.write_text('#!/bin/bash\n'
+                        f'echo "$*" >> "{log}"\n'
+                        'if [ "$3" = --show-sdk-version ]; then echo 26.5; exit 0; fi\n'
+                        'if [ "$3" = swiftc ]; then out="${@: -1}"; ' + build + '; exit $?; fi\n'
+                        'if [ "$1 $2" = "simctl spawn" ]; then ' + spawn + '; fi\n')
+        path.chmod(0o755)
+        return str(path), log
+
+    def probe(self, spawn, build='touch "$out"', limit=5):
+        xcrun, log = self.fake_xcrun(spawn, build)
+        diagnosed = []
+        with mock.patch.object(push, 'diagnose', side_effect=lambda evidence, step, pid, label='': diagnosed.append((step, label))):
+            started = time.monotonic()
+            result = push.speech_probe(self.evidence, self.DEVICE, build_limit=5, limit=limit, xcrun=xcrun)
+            elapsed = time.monotonic() - started
+        return result, log.read_text(), diagnosed, elapsed
+
+    def test_speech_probe_records_the_call_on_the_settled_device(self):
+        reply = '{"ko_KR":[{"identifier":"com.apple.voice.compact.ko-KR.Yuna","quality":1}],"milliseconds":87,"voices":68}'
+        result, log, diagnosed, _ = self.probe(f"echo 'probe log line'; echo '{reply}'")
+        self.assertEqual(result, {'outcome': 'exit 0', 'seconds': result['seconds'], 'call_milliseconds': 87, 'voices': 68})
+        build, probe = [r for r in self.rows() if r['command'].startswith('speech-probe')]
+        self.assertEqual((build['command'], build['outcome'], build['limit']), ('speech-probe-build', 'exit 0', 5))
+        self.assertEqual((probe['outcome'], probe['voices'], probe['ko_KR'][0]['quality']), ('exit 0', 68, 1))
+        self.assertIn('daemons_before', probe); self.assertIn('daemons_after', probe)
+        self.assertIn(f'-target {os.uname().machine}-apple-ios26.5-simulator', log)
+        self.assertIn(f'simctl spawn {self.DEVICE} {self.evidence / "ios-speech-probe"}', log)
+        self.assertEqual(diagnosed, [])
+
+    def test_speech_probe_that_does_not_build_is_recorded_and_never_spawned(self):
+        result, log, _, _ = self.probe('echo spawned', build='echo "error: no such module" >&2; false')
+        self.assertEqual(result, {'outcome': 'build exit 1'})
+        self.assertEqual([(r['command'], r['outcome']) for r in self.rows()], [('speech-probe-build', 'exit 1')])
+        self.assertIn('no such module', self.rows()[0]['detail'])
+        self.assertNotIn('simctl spawn', log)
+
+    def test_speech_probe_that_does_not_return_stops_at_its_own_bound_and_never_raises(self):
+        result, _, diagnosed, elapsed = self.probe('sleep 30', limit=1)
+        self.assertEqual(result['outcome'], 'timeout')
+        self.assertLess(elapsed, 15)
+        row = self.rows()[-1]
+        self.assertEqual((row['command'], row['outcome'], row['limit']), ('speech-probe', 'timeout', 1))
+        self.assertIn('daemons_at_limit', row)
+        self.assertEqual(diagnosed, [('speech-probe', 'speech probe')])
+
+    def test_speech_probe_error_is_a_row_not_a_failed_seed(self):
+        result = push.speech_probe(self.evidence, self.DEVICE, xcrun=str(Path(self.tmp.name) / 'missing-xcrun'))
+        self.assertEqual(result['outcome'], 'error')
+        self.assertEqual(self.rows()[-1]['outcome'], 'error')
 
     def test_settle_rule_used_by_the_seed(self):
         self.assertTrue(push.is_settled([(200, 9), (207, 1), (207, 3), (207, 0)], cpus=3))

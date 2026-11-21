@@ -10,7 +10,8 @@ No argument runs all four in order, for local use.
 
 Two more steps cache a simulator that has already booted once (#4432):
   seed     (separate CI job on main) create, boot, wait until the first-boot work has
-           stopped, shut down, and archive the device folder for actions/cache
+           stopped, time one speechVoices() call on it (ios-speech-probe.swift; recorded
+           only), shut down, and archive the device folder for actions/cache
   restore  (approval push job, before any simctl call) unpack a cached device into the
            CoreSimulator device set. The boot step uses it only when CoreSimulatorService
            lists it as an available, shut-down device; otherwise it records why and
@@ -59,7 +60,15 @@ OBSERVE_INTERVAL = 5
 SEED_SETTLE_LIMIT = 900
 SEED_SETTLE_INTERVAL = 5
 SEED_SETTLE_SAMPLES = 3
-SEED_SCHEMA = "hps-ios-sim-seed/1"
+# /2: the seed also times one speechVoices() call on the settled device (ios-speech-probe.swift).
+SEED_SCHEMA = "hps-ios-sim-seed/2"
+# The seed's speech probe: new bounds on a new, measurement-only step. Its result is recorded
+# and never decides the seed (#4432: speechVoices() blocked 160+ s in UI shards).
+SPEECH_PROBE_BUILD_LIMIT = 180
+SPEECH_PROBE_LIMIT = 240
+# Device daemons on the TextToSpeech / accessibility path, read from each observation row.
+SPEECH_DAEMONS = ("axassetsd", "sirittsd", "mobileassetd", "AccessibilityUIServer", "corespeechd", "assistantd")
+PS_TABLE = ["ps", "-axro", "pid,ppid,stat,etime,%cpu,%mem,command"]
 DEVICE_NAME = "HP-Studio-Approval-Push"
 
 
@@ -104,7 +113,7 @@ def bounded(args, limit=DIAGNOSTIC_LIMIT):
         return f"<{' '.join(args)} did not return within {limit}s>"
 
 
-def diagnose(evidence, step, stuck_pid):
+def diagnose(evidence, step, stuck_pid, stuck_label="stuck simctl"):
     processes = bounded(["ps", "-axo", "pid,ppid,stat,etime,%cpu,%mem,command"])
     keys = ("CoreSimulator", "simctl", "launchd_sim", "xcodebuild", "XCTest", "SimulatorTrampoline", "xctrunner")
     related = [line for line in processes.splitlines() if any(key in line for key in keys)]
@@ -119,7 +128,7 @@ def diagnose(evidence, step, stuck_pid):
         ("simulator-related processes", "\n".join(related)),
     ]
     if stuck_pid is not None:
-        sections.append((f"sample of the stuck simctl ({stuck_pid})", bounded(["sample", str(stuck_pid), "2", "-mayDie"])))
+        sections.append((f"sample of the {stuck_label} ({stuck_pid})", bounded(["sample", str(stuck_pid), "2", "-mayDie"])))
     for pid in service[:1]:
         sections.append((f"sample of CoreSimulatorService ({pid})", bounded(["sample", pid, "2", "-mayDie"])))
     log = bounded(["log", "show", "--last", "3m", "--style", "compact",
@@ -167,6 +176,27 @@ def device_activity(processes, device):
     return len(children), sum(stat.startswith("R") for stat in children)
 
 
+def device_daemons(table, device):
+    """State, elapsed time and %CPU of each SPEECH_DAEMONS process the device's launchd_sim started.
+
+    `table` is PS_TABLE output. Every name is present; an empty list means not running.
+    """
+    rows = [line.split(None, 6) for line in table.splitlines()]
+    rows = [row for row in rows if len(row) == 7 and row[0].isdigit()]
+    launchd = [row[0] for row in rows if row[6].startswith("launchd_sim ") and f"/Devices/{device}/" in row[6]]
+    found = {name: [] for name in SPEECH_DAEMONS}
+    if len(launchd) != 1:
+        return found
+    for pid, ppid, stat, etime, cpu, _, command in rows:
+        if ppid != launchd[0]:
+            continue
+        # The runtime path can hold spaces ("iOS 27.2.simruntime"), so match the executable's name.
+        name = command.split("/RuntimeRoot/", 1)[-1].split(" -", 1)[0].rsplit("/", 1)[-1].strip()
+        if name in found:
+            found[name].append({"stat": stat, "etime": etime, "cpu": float(cpu)})
+    return found
+
+
 def observe(evidence, device, *, samples=OBSERVE_SAMPLES, interval=OBSERVE_INTERVAL):
     """Record the device's first-boot activity with `ps` only. Waits for nothing, decides nothing."""
     started = time.monotonic()
@@ -210,10 +240,76 @@ def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SET
         time.sleep(interval)
 
 
+def speech_probe(evidence, device, *, build_limit=SPEECH_PROBE_BUILD_LIMIT, limit=SPEECH_PROBE_LIMIT, xcrun="xcrun"):
+    """Seed job only: time one speechVoices() call on the settled device. Recorded only; never raises."""
+    try:
+        return _speech_probe(evidence, device, build_limit, limit, xcrun)
+    except Exception as error:  # A probe failure never decides the seed.
+        row = {"step": "seed", "command": "speech-probe", "outcome": "error", "detail": str(error)[:400]}
+        record(evidence, **row)
+        return row
+
+
+def _speech_probe(evidence, device, build_limit, limit, xcrun):
+    sdk = subprocess.check_output([xcrun, "--sdk", "iphonesimulator", "--show-sdk-version"], text=True, timeout=30).strip()
+    binary = evidence / "ios-speech-probe"
+    started = time.monotonic()
+    try:
+        built = subprocess.run([xcrun, "--sdk", "iphonesimulator", "swiftc", "-target", f"{os.uname().machine}-apple-ios{sdk}-simulator",
+                                "-O", str(ROOT / "scripts/ios-speech-probe.swift"), "-o", str(binary)],
+                               capture_output=True, text=True, timeout=build_limit)
+        outcome = f"exit {built.returncode}"
+    except subprocess.TimeoutExpired:
+        built, outcome = None, "timeout"
+    record(evidence, step="seed", command="speech-probe-build", limit=build_limit, outcome=outcome,
+           seconds=round(time.monotonic() - started, 1),
+           **({"detail": (built.stderr or "")[-400:]} if built is not None and built.returncode else {}))
+    if outcome != "exit 0":
+        return {"outcome": f"build {outcome}"}
+    before = device_daemons(bounded(PS_TABLE), device)
+    started = time.monotonic()
+    child = subprocess.Popen([xcrun, "simctl", "spawn", device, str(binary)], stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    try:
+        out, _ = child.communicate(timeout=limit)
+    except subprocess.TimeoutExpired:
+        seconds = round(time.monotonic() - started, 1)
+        # The probe runs under the device's launchd_sim, not under simctl: sample it by name.
+        stuck = bounded(["pgrep", "-x", binary.name]).split()
+        stuck = stuck[0] if stuck and stuck[0].isdigit() else None
+        row = {"step": "seed", "command": "speech-probe", "limit": limit, "outcome": "timeout", "seconds": seconds,
+               "daemons_before": before, "daemons_at_limit": device_daemons(bounded(PS_TABLE), device)}
+        record(evidence, **row)
+        diagnose(evidence, "speech-probe", stuck, "speech probe")
+        stop_group(child)
+        child.stdout.close()
+        if stuck:
+            try:
+                os.kill(int(stuck), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        return {"outcome": "timeout", "seconds": seconds}
+    seconds = round(time.monotonic() - started, 1)
+    lines = [line for line in (out or "").splitlines() if line.startswith("{")]
+    try:
+        reading = json.loads(lines[-1]) if lines else {}
+    except ValueError:
+        reading = {}
+    row = {"step": "seed", "command": "speech-probe", "limit": limit, "outcome": f"exit {child.returncode}",
+           "seconds": seconds, "call_milliseconds": reading.get("milliseconds"), "voices": reading.get("voices"),
+           "ko_KR": reading.get("ko_KR"), "daemons_before": before, "daemons_after": device_daemons(bounded(PS_TABLE), device)}
+    if not reading:
+        row["detail"] = (out or "")[-400:]
+    record(evidence, **row)
+    print(f"seed: speechVoices() probe {row['outcome']} in {seconds}s ({row['voices']} voices)", flush=True)
+    return {k: row[k] for k in ("outcome", "seconds", "call_milliseconds", "voices")}
+
+
 def cache_key(environ=os.environ):
     """One key for the seed job and the approval push job: runner image, Xcode, device choice."""
     import hashlib
-    digest = hashlib.sha256(SEED_SCHEMA.encode() + (ROOT / "scripts/select-ios-simulator.py").read_bytes()).hexdigest()[:16]
+    digest = hashlib.sha256(SEED_SCHEMA.encode() + (ROOT / "scripts/select-ios-simulator.py").read_bytes()
+                            + (ROOT / "scripts/ios-speech-probe.swift").read_bytes()).hexdigest()[:16]
     xcode = Path(environ.get("DEVELOPER_DIR", "default")).parents[1].name if environ.get("DEVELOPER_DIR") else "default"
     parts = ["ios-sim-preboot-v1", environ.get("ImageOS", "local"), environ.get("ImageVersion", "local"),
              os.uname().machine, xcode, digest]
@@ -461,6 +557,7 @@ def seed(evidence, destination=None):
         simctl(evidence, "seed", ["boot", device], timeout=60, capture=False)
         simctl(evidence, "seed", ["bootstatus", device, "-b"], timeout=240, capture=False)
         settle_seconds, activity = wait_settled(evidence, device)
+        probe = speech_probe(evidence, device)
         simctl(evidence, "seed", ["shutdown", device], timeout=30, capture=False)
         destination.mkdir(parents=True, exist_ok=True)
         partial = destination / "device.tar.partial"
@@ -471,7 +568,7 @@ def seed(evidence, destination=None):
         meta = {"schema": SEED_SCHEMA, "device": device, "device_type": device_type, "runtime": runtime,
                 "settle_seconds": settle_seconds, "settled_processes": activity[0],
                 "settled_runnable": activity[1], "archive_seconds": archive_seconds,
-                "archive_bytes": (destination / "device.tar").stat().st_size}
+                "archive_bytes": (destination / "device.tar").stat().st_size, "speech_probe": probe}
         (destination / "seed.json").write_text(json.dumps(meta, indent=2) + "\n")
         record(evidence, step="seed", command="archive", outcome="saved", **{k: meta[k] for k in ("archive_bytes", "archive_seconds")})
         print(f"Seeded {device}: {meta['archive_bytes']} bytes after {settle_seconds}s of settling.", flush=True)

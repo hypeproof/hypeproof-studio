@@ -3,8 +3,9 @@
 
 `time` runs one command unchanged (same arguments, no limit added), passes its exit code
 through, and records its duration. `sample` takes one reading: the device's process and
-runnable counts, its age since boot (launchd_sim elapsed time), wall-clock time, load and
-free memory, from one `ps` call and `vm_stat`. `watch` takes a reading every interval until
+runnable counts, its age since boot (launchd_sim elapsed time), the state, elapsed time and
+%CPU of the speech/accessibility daemons (push.SPEECH_DAEMONS), wall-clock time, load and free
+memory, from one `ps` call and `vm_stat`. `watch` takes a reading every interval until
 it is stopped; the shard starts it beside the test and stops it when the test ends, so the
 test never waits for it. A reading that cannot be taken is recorded as `timeout` or
 `no device`, never raised.
@@ -26,7 +27,7 @@ push = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(push)
 
 # One ps call per reading, sorted by CPU, so the busiest processes come first.
-PS = ["ps", "-axro", "pid,ppid,stat,etime,%cpu,%mem,command"]
+PS = push.PS_TABLE
 BUSIEST = 40
 
 
@@ -70,7 +71,10 @@ def take(evidence, device, *, step, sample, full_table):
         if reading is None:
             row.update(outcome="no device")
         else:
-            row.update(outcome="sample", processes=reading[0], runnable=reading[1], device_age_seconds=reading[2])
+            # The speech/accessibility daemons are often runnable at 0 % CPU, so they never reach
+            # the busiest-process table; each row names their state directly.
+            row.update(outcome="sample", processes=reading[0], runnable=reading[1], device_age_seconds=reading[2],
+                       daemons=push.device_daemons(table, device))
     push.record(evidence, **row)
     lines = table.splitlines()
     with (evidence / "simulator-ps.txt").open("a") as target:
