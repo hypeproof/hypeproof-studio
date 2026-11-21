@@ -65,7 +65,7 @@ class Bootstrap:
         self.receipt = {"schema": "hps-android-bootstrap/1", "state": "starting", "serial": self.serial,
                         "avd": self.name, "work_dir": str(self.work), "verification_started": False,
                         "source_sha": os.environ.get("GITHUB_SHA"), "commands": [],
-                        "recipe": {"api": 35, "target": "default", "arch": "x86_64", "profile": "pixel_6"}}
+                        "recipe": {"api": 35, "target": "google_apis", "arch": "x86_64", "profile": "pixel_6"}}
 
     def command(self, argv, timeout=10, data=None):
         self.receipt["commands"].append([str(v) for v in argv])
@@ -111,13 +111,30 @@ class Bootstrap:
             raise Stopped(result["reason"])
         return result
 
+    # Google Messages raised a foreign ANR after boot on this image (run 44374245152).
+    # The journeys never use it. The AOSP image has no Google apps, but the tests'
+    # disposable-emulator guard accepts only sdk_gphone/generic builds (run 44857179737).
+    DISABLED_PACKAGES = ("com.google.android.apps.messaging",)
+
+    def disable_background_apps(self, deadline):
+        """Record every result; a failed disable is kept visible, never retried or hidden."""
+        results = self.receipt["disabled_packages"] = []
+        for package in self.DISABLED_PACKAGES:
+            code, output = self.adb("shell", "pm", "disable-user", "--user", "0", package,
+                                    timeout=self.remaining(deadline))
+            text = output.decode(errors="replace").strip()
+            if code == 0 and "new state: disabled-user" in text:
+                result = "disabled"
+            elif "Unknown package" in text or "not found" in text.lower():
+                result = "not_installed"
+            else:
+                result = "failed"
+            results.append({"package": package, "result": result, "exit_code": code, "output": text[-500:]})
+
     def start(self):
-        # AOSP "default" image: no Google apps. On google_apis, Google Messages raised a
-        # foreign ANR after boot (run 44374245152). The app needs no Play services in CI:
-        # push stays unconfigured without google-services resources.
         avdmanager = self.sdk / "cmdline-tools/latest/bin/avdmanager"
         code, output = self.command([str(avdmanager), "create", "avd", "--name", self.name,
-                                     "--package", "system-images;android-35;default;x86_64",
+                                     "--package", "system-images;android-35;google_apis;x86_64",
                                      "--device", "pixel_6"], timeout=60, data=b"no\n")
         (self.evidence / "avd-create.log").write_bytes(output)
         if code:
@@ -165,6 +182,7 @@ class Bootstrap:
             raise Stopped("device_properties_unavailable")
         # Read before preparation as well: never conceal an existing error dialog.
         self.observe(0, deadline)
+        self.disable_background_apps(deadline)
         for command in [("shell", "input", "keyevent", "KEYCODE_WAKEUP"),
                         ("shell", "wm", "dismiss-keyguard"),
                         ("shell", "settings", "put", "global", "window_animation_scale", "0.0"),

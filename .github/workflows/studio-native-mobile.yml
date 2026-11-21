@@ -169,7 +169,7 @@ jobs:
           set +o pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           set -o pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platform-tools' 'platforms;android-35' 'emulator' 'system-images;android-35;default;x86_64' --channel=0
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platform-tools' 'platforms;android-35' 'emulator' 'system-images;android-35;google_apis;x86_64' --channel=0
       # Build and unit-test before the emulator exists, so Gradle and the booting
       # emulator never compete for the runner's CPUs.
       - name: Build and unit-test the Android app before the emulator boots
