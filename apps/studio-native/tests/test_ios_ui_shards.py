@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -169,13 +170,14 @@ class MergeContracts(unittest.TestCase):
 class ShardShell(unittest.TestCase):
     """The real ios-verify.sh shard mode against stubbed Apple tools."""
 
-    def run_shard(self, index, *, test_exit=0, products=1):
+    def run_shard(self, index, *, test_exit=0, products=1, bootstatus_exit=0):
         temp = tempfile.TemporaryDirectory(prefix='studio-ios-shard-'); self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         scripts, ios, bin_dir, evidence = root / 'scripts', root / 'ios', root / 'bin', root / 'evidence'
         for directory in (scripts, ios, bin_dir, evidence):
             directory.mkdir()
-        for name in ('ios-verify.sh', 'select-ios-simulator.py', 'ios-ui-shards.py'):
+        for name in ('ios-verify.sh', 'select-ios-simulator.py', 'ios-ui-shards.py', 'ios-sim-observe.py',
+                     'verify-approval-push-simulator.py'):
             shutil.copyfile(NATIVE / 'scripts' / name, scripts / name)
         built = ios / 'DerivedData/Build/Products'; built.mkdir(parents=True)
         for number in range(products):
@@ -184,6 +186,10 @@ class ShardShell(unittest.TestCase):
         (evidence / 'ios-ui-shard-plan.json').write_text(json.dumps(plan))
         stub = cleanup_suite.COMMAND_STUB.replace('if "test" in args:', 'if "test" in args or "test-without-building" in args:')
         self.assertNotEqual(stub, cleanup_suite.COMMAND_STUB)
+        marker = '    elif args[:2] == ["simctl", "create"]:'
+        self.assertIn(marker, stub)
+        stub = stub.replace(marker, '    elif args[:2] == ["simctl", "bootstatus"]:\n'
+                            '        raise SystemExit(int(os.environ.get("STUB_BOOTSTATUS_EXIT", "0")))\n' + marker)
         for command in ('xcrun', 'xcodebuild', 'swift', 'codesign', 'sleep'):
             path = bin_dir / command
             path.write_text(stub.replace('__PYTHON__', sys.executable)); path.chmod(0o755)
@@ -193,7 +199,8 @@ class ShardShell(unittest.TestCase):
         env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], GITHUB_SHA=SHA,
                    GITHUB_RUN_ID='shard-test', STUB_CALLS=str(calls), STUB_TIMEOUTS=str(root / 'timeouts.jsonl'),
                    STUB_DEVICE=cleanup_suite.DEVICE, STUB_CLEANUP='{}', STUB_TEST_EXIT=str(test_exit),
-                   STUB_TEST_SIGNAL='', STUB_DESCENDANTS=str(root / 'descendants.txt'), STUB_CREATE_EXIT='')
+                   STUB_TEST_SIGNAL='', STUB_DESCENDANTS=str(root / 'descendants.txt'), STUB_CREATE_EXIT='',
+                   STUB_BOOTSTATUS_EXIT=str(bootstatus_exit))
         result = subprocess.run(['bash', str(scripts / 'ios-verify.sh'), 'shard', str(index)], cwd=root,
                                 env=env, capture_output=True, text=True, timeout=20)
         commands = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
@@ -228,6 +235,41 @@ class ShardShell(unittest.TestCase):
                          ['-skip-testing:' + case for case in plan['shards'][0]['cases']])
         self.assertEqual(json.loads((evidence / 'shard-result.json').read_text())['test_exit'], 65)
 
+    def test_shard_records_boot_and_warm_up_timing_and_three_samples_without_changing_commands(self):
+        result, commands, _, evidence = self.run_shard(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        # The stubbed simulator has no launchd_sim, so each boot reading says so instead of guessing.
+        before_test = [r for r in rows if r['step'] != 'test']
+        self.assertEqual([(r['step'], r['command'], r['outcome']) for r in before_test],
+                         [('boot', 'xcrun simctl boot', 'exit 0'), ('boot', 'xcrun simctl bootstatus', 'exit 0'),
+                          ('boot', 'observe', 'no device'), ('boot', 'observe', 'no device'), ('boot', 'observe', 'no device'),
+                          ('warm-up', 'xcrun simctl launch', 'exit 0'), ('warm-up', 'xcrun simctl terminate', 'exit 0')])
+        self.assertEqual([r['sample'] for r in before_test if r['command'] == 'observe'], [1, 2, 3])
+        self.assertTrue(all(isinstance(r['seconds'], float) for r in before_test if r['command'] != 'observe'))
+        self.assertTrue(all(r['utc'].endswith('+00:00') for r in before_test))
+        for name in ('simulator-ps.txt', 'simulator-vmstat.txt'):
+            headers = [line.split(' sample ')[1].split()[0] for line in (evidence / name).read_text().splitlines()
+                       if re.match(r'== boot sample \d ', line)]
+            self.assertEqual(headers, ['1', '2', '3'], name)
+        # The background sampler was started beside the test and is gone when the shard ends.
+        self.assertTrue(all(r['command'] == 'observe' for r in rows if r['step'] == 'test'))
+        alive = subprocess.run(['pgrep', '-f', f'ios-sim-observe.py watch --evidence ../evidence --device {cleanup_suite.DEVICE}'], capture_output=True)
+        self.assertNotEqual(alive.returncode, 0, alive.stdout)
+        # The same simctl commands as before, and the only new waits are two fixed 5 s sleeps.
+        boot = [c['args'] for c in commands if c['command'] == 'xcrun' and c['args'][:2] in (['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate'])]
+        # Shard 1 also launches the app after the suite for its screenshot; that launch is not timed.
+        self.assertEqual([a[:2] for a in boot[:4]], [['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate']])
+        self.assertEqual(boot[1][-1], '-b')
+        self.assertEqual([c['args'] for c in commands if c['command'] == 'sleep'][:2], [['5'], ['5']])
+
+    def test_a_failed_bootstatus_still_fails_the_shard_and_is_recorded(self):
+        result, commands, _, evidence = self.run_shard(1, bootstatus_exit=3)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertEqual(rows[-1]['outcome'], 'exit 3')
+        self.assertFalse(any(c['command'] == 'xcodebuild' and 'test-without-building' in c['args'] for c in commands))
+
     def test_shard_refuses_unknown_index_and_ambiguous_products(self):
         result, commands, _, _ = self.run_shard(3)
         self.assertNotEqual(result.returncode, 0)
@@ -237,6 +279,105 @@ class ShardShell(unittest.TestCase):
         self.assertIn('Expected one .xctestrun', result.stderr)
         self.assertFalse(any(c['args'][:2] == ['simctl', 'create'] for c in commands))
 
+
+
+OBSERVE_SPEC = importlib.util.spec_from_file_location('ios_sim_observe', NATIVE / 'scripts/ios-sim-observe.py')
+observe = importlib.util.module_from_spec(OBSERVE_SPEC); OBSERVE_SPEC.loader.exec_module(observe)
+
+
+class SimObserve(unittest.TestCase):
+    """ios-sim-observe.py readings: device age, timeouts, and the background sampler."""
+    DEVICE = 'C0E7C600-E107-428F-8A03-DEDB01894AEF'
+
+    def table(self, age='04:45', children=3, runnable=2):
+        lines = ['  PID  PPID STAT ELAPSED  %CPU %MEM COMMAND',
+                 f' 4820     1 S    {age}  0.4  0.2 launchd_sim /Users/runner/Library/Developer/CoreSimulator/Devices/{self.DEVICE}/data/var/run/launchd_bootstrap.plist']
+        for index in range(children):
+            lines.append(f' {5000 + index}  4820 {"Rs" if index < runnable else "Ss"}   {age}  1.0  0.1 /RuntimeRoot/usr/libexec/d{index} --flag')
+        return '\n'.join(lines) + '\n'
+
+    def test_elapsed_time_formats(self):
+        self.assertEqual([observe.etime_seconds(v) for v in ('00:07', '04:45', '1:02:03', '2-01:00:00', 'x')],
+                         [7, 285, 3723, 176400, None])
+
+    def test_device_reading_counts_children_and_reads_age(self):
+        self.assertEqual(observe.device_reading(self.table(), self.DEVICE), (3, 2, 285))
+        self.assertIsNone(observe.device_reading(self.table().replace(self.DEVICE, 'OTHER'), self.DEVICE))
+
+    def take(self, table):
+        outputs = {'ps': table, 'vm_stat': 'Pages free:                               4298.\n', 'sysctl': '{ 353.66 142.08 64.21 }\n'}
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(observe.push, 'bounded', side_effect=lambda args, limit=30: outputs[args[0]]):
+            evidence = Path(directory)
+            observe.take(evidence, self.DEVICE, step='boot', sample=1, full_table=True)
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+            ps = (evidence / 'simulator-ps.txt').read_text()
+        return row, ps
+
+    def test_a_reading_records_age_wall_clock_load_and_free_memory(self):
+        row, ps = self.take(self.table())
+        self.assertEqual({k: row[k] for k in ('outcome', 'processes', 'runnable', 'device_age_seconds', 'free_pages', 'loadavg')},
+                         {'outcome': 'sample', 'processes': 3, 'runnable': 2, 'device_age_seconds': 285,
+                          'free_pages': 4298, 'loadavg': '{ 353.66 142.08 64.21 }'})
+        self.assertTrue(row['utc'].endswith('+00:00'))
+        self.assertIn('launchd_sim', ps)
+
+    def daemon_table(self):
+        runtime = '/Library/Developer/CoreSimulator/Volumes/iOS_23B/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.2.simruntime/Contents/Resources/RuntimeRoot'
+        return self.table(children=0) + '\n'.join([
+            f' 5101  4820 Rs      02:58  0.0  1.4 {runtime}/System/Library/PrivateFrameworks/AXAssetLoader.framework/Support/axassetsd',
+            f' 5102  4820 Rs      01:59  0.0  1.1 {runtime}/System/Library/PrivateFrameworks/SiriTTSService.framework/sirittsd',
+            f' 5103  4820 Ss      02:25 16.0  1.4 {runtime}/usr/libexec/mobileassetd',
+            f' 5104  4820 Rs      02:38  0.5  1.0 {runtime}/System/Library/CoreServices/AccessibilityUIServer.app/AccessibilityUIServer -BSServiceDomains x',
+            # A host process with the same name is not the device's.
+            '  700     1 S       16:32  0.0  0.1 /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd',
+            # A name that only starts like a tracked daemon is not one.
+            f' 5105  4820 Rs      01:00  0.0  1.0 {runtime}/usr/libexec/mobileassetd_helper',
+        ]) + '\n'
+
+    def test_speech_daemons_are_read_by_name_for_this_device_only(self):
+        daemons = push.device_daemons(self.daemon_table(), self.DEVICE)
+        self.assertEqual(set(daemons), set(push.SPEECH_DAEMONS))
+        self.assertEqual(daemons['axassetsd'], [{'stat': 'Rs', 'etime': '02:58', 'cpu': 0.0}])
+        self.assertEqual(daemons['sirittsd'], [{'stat': 'Rs', 'etime': '01:59', 'cpu': 0.0}])
+        self.assertEqual(daemons['mobileassetd'], [{'stat': 'Ss', 'etime': '02:25', 'cpu': 16.0}])
+        self.assertEqual(daemons['AccessibilityUIServer'], [{'stat': 'Rs', 'etime': '02:38', 'cpu': 0.5}])
+        self.assertEqual((daemons['corespeechd'], daemons['assistantd']), ([], []))
+        self.assertEqual(push.device_daemons(self.daemon_table(), 'OTHER'), {name: [] for name in push.SPEECH_DAEMONS})
+
+    def test_a_sample_row_names_the_speech_daemons(self):
+        row, _ = self.take(self.daemon_table())
+        self.assertEqual(row['outcome'], 'sample')
+        self.assertEqual(row['daemons']['axassetsd'][0]['stat'], 'Rs')
+        self.assertEqual(row['daemons']['assistantd'], [])
+
+    def test_a_ps_that_does_not_return_is_a_timeout_row_not_an_error(self):
+        row, ps = self.take('<ps -axro pid,ppid,stat,etime,%cpu,%mem,command did not return within 30s>')
+        self.assertEqual(row['outcome'], 'timeout')
+        self.assertIn('did not return within 30s', row['detail'])
+        self.assertNotIn('processes', row)
+        self.assertNotIn('daemons', row)
+        self.assertEqual(row['free_pages'], 4298)
+
+    def test_watch_keeps_sampling_until_stopped_and_writes_test_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            child = subprocess.Popen([sys.executable, str(NATIVE / 'scripts/ios-sim-observe.py'), 'watch', '--evidence', str(evidence),
+                                      '--device', self.DEVICE, '--interval', '0.2'])
+            try:
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    path = evidence / 'simulator-steps.jsonl'
+                    if path.exists() and len(path.read_text().splitlines()) >= 2:
+                        break
+                    time.sleep(0.1)
+            finally:
+                child.terminate(); child.wait(timeout=10)
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertGreaterEqual(len(rows), 2)
+        self.assertEqual({(r['step'], r['command']) for r in rows}, {('test', 'observe')})
+        self.assertEqual([r['sample'] for r in rows[:2]], [1, 2])
+        self.assertIn(rows[0]['outcome'], ('no device', 'timeout'))
 
 class CollectShell(unittest.TestCase):
     """The real ios-collect.sh with the real journey and sign-in collectors."""
@@ -390,6 +531,236 @@ class ApprovalPushHang(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(push, 'simctl') as call:
             push.cleanup(Path(directory))
             call.assert_not_called()
+
+
+
+class PrebootCache(unittest.TestCase):
+    """The once-booted simulator cache (#4432): restore, adopt or fall back, and seed."""
+    DEVICE = 'C0E7C600-E107-428F-8A03-DEDB01894AEF'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.evidence = base / 'evidence'; self.evidence.mkdir()
+        self.devices = base / 'Devices'; self.devices.mkdir()
+        self.seed = base / 'seed'
+        patcher = mock.patch.object(push, 'devices_root', return_value=self.devices)
+        patcher.start(); self.addCleanup(patcher.stop)
+
+    def rows(self):
+        path = self.evidence / 'simulator-steps.jsonl'
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def make_seed(self, schema=None, plist=True):
+        source = Path(self.tmp.name) / 'source' / self.DEVICE
+        (source / 'data').mkdir(parents=True)
+        if plist:
+            (source / 'device.plist').write_text('<plist/>')
+        (source / 'data/marker').write_text('booted once')
+        self.seed.mkdir()
+        subprocess.run(['tar', '-C', str(source.parent), '-cf', str(self.seed / 'device.tar'), self.DEVICE], check=True)
+        (self.seed / 'seed.json').write_text(json.dumps({'schema': schema or push.SEED_SCHEMA, 'device': self.DEVICE}))
+
+    def test_restore_without_a_cache_records_a_miss_and_leaves_no_state(self):
+        push.restore(self.evidence, self.seed)
+        self.assertEqual([(r['command'], r['outcome']) for r in self.rows()], [('cache', 'miss')])
+        self.assertIsNone(push.load_state(self.evidence))
+
+    def test_restore_unpacks_the_device_into_the_device_set(self):
+        self.make_seed()
+        push.restore(self.evidence, self.seed)
+        self.assertEqual((self.devices / self.DEVICE / 'data/marker').read_text(), 'booted once')
+        row = self.rows()[-1]
+        self.assertEqual((row['outcome'], row['device']), ('restored', self.DEVICE))
+        self.assertIn('service_running_before', row)
+        self.assertEqual(push.load_state(self.evidence), {'restored': self.DEVICE})
+
+    def test_restore_rejects_unknown_schema_existing_folder_and_incomplete_archive(self):
+        cases = {'unknown seed schema': dict(schema='other/1'), 'device folder already exists': {}, 'tar exit 0': dict(plist=False)}
+        for reason, options in cases.items():
+            with self.subTest(reason=reason):
+                shutil.rmtree(self.seed, ignore_errors=True); shutil.rmtree(Path(self.tmp.name) / 'source', ignore_errors=True)
+                for child in self.devices.iterdir(): shutil.rmtree(child)
+                (self.evidence / 'simulator-steps.jsonl').unlink(missing_ok=True)
+                self.make_seed(**options)
+                if reason == 'device folder already exists':
+                    (self.devices / self.DEVICE).mkdir()
+                push.restore(self.evidence, self.seed)
+                row = self.rows()[-1]
+                self.assertEqual((row['outcome'], row['reason']), ('rejected', reason))
+                self.assertIsNone(push.load_state(self.evidence))
+                if reason == 'tar exit 0':
+                    self.assertFalse((self.devices / self.DEVICE).exists())
+
+    def run_boot(self, listed):
+        """Run boot with a restored device; `listed` is the row CoreSimulatorService reports, or None."""
+        push.state_path(self.evidence).write_text(json.dumps({'restored': self.DEVICE}))
+        (self.devices / self.DEVICE).mkdir()
+        calls = []
+        def simctl(evidence, step, args, **_):
+            calls.append(args[0] if args[0] != 'list' else 'list devices')
+            if args[0] == 'list':
+                return json.dumps({'devices': {'r': [listed] if listed else []}})
+            return ''
+        def create(evidence, step):
+            calls.append('create')
+            push.state_path(evidence).write_text(json.dumps({'device': 'NEW', 'data': '/new'}))
+            return 'NEW', 'type', 'runtime'
+        with mock.patch.object(push, 'simctl', side_effect=simctl), mock.patch.object(push, 'create_device', side_effect=create), \
+             mock.patch.object(push, 'observe', side_effect=lambda evidence, device: calls.append(f'observe {device}')):
+            push.boot(self.evidence)
+        return calls
+
+    def row(self, **changes):
+        value = {'udid': self.DEVICE, 'state': 'Shutdown', 'isAvailable': True, 'dataPath': '/restored'}
+        value.update(changes); return value
+
+    def test_boot_adopts_a_restored_device_the_service_lists_as_shut_down(self):
+        calls = self.run_boot(self.row())
+        self.assertEqual(calls, ['list devices', 'boot', 'bootstatus', f'observe {self.DEVICE}', 'launch', 'terminate'])
+        self.assertEqual(push.load_state(self.evidence), {'device': self.DEVICE, 'data': '/restored', 'restored': self.DEVICE})
+        self.assertEqual(self.rows()[-1]['outcome'], 'accepted')
+
+    def test_boot_falls_back_to_a_new_device_when_the_restored_one_is_not_usable(self):
+        cases = {'not listed by CoreSimulatorService': (None, ['list devices', 'create']),
+                 'listed but unavailable: runtime missing': (self.row(isAvailable=False, availabilityError='runtime missing'), ['list devices', 'delete', 'create']),
+                 'listed in state Booted': (self.row(state='Booted'), ['list devices', 'delete', 'create'])}
+        for reason, (listed, before_boot) in cases.items():
+            with self.subTest(reason=reason):
+                for child in self.devices.iterdir(): shutil.rmtree(child)
+                (self.evidence / 'simulator-steps.jsonl').unlink(missing_ok=True)
+                calls = self.run_boot(listed)
+                self.assertEqual(calls, before_boot + ['boot', 'bootstatus', 'observe NEW', 'launch', 'terminate'])
+                self.assertEqual([(r['outcome'], r['reason']) for r in self.rows()], [('rejected', reason)])
+                self.assertEqual(push.load_state(self.evidence)['device'], 'NEW')
+                if listed is None:
+                    self.assertFalse((self.devices / self.DEVICE).exists())
+
+    def run_seed(self, settle):
+        folder = self.devices / self.DEVICE
+        def create(evidence, step):
+            (folder / 'data').mkdir(parents=True); (folder / 'device.plist').write_text('<plist/>')
+            push.state_path(evidence).write_text(json.dumps({'device': self.DEVICE, 'data': str(folder / 'data')}))
+            return self.DEVICE, 'iPhone', 'iOS-26-5'
+        calls = []
+        with mock.patch.object(push, 'create_device', side_effect=create), \
+             mock.patch.object(push, 'simctl', side_effect=lambda evidence, step, args, **_: calls.append(args[0]) or ''), \
+             mock.patch.object(push, 'wait_settled', side_effect=settle), \
+             mock.patch.object(push, 'speech_probe', side_effect=lambda evidence, device: calls.append(f'speech-probe {device}') or {'outcome': 'exit 0', 'call_milliseconds': 87}):
+            push.seed(self.evidence, self.seed)
+        return calls
+
+    def test_seed_archives_a_settled_shut_down_device_and_cleans_up(self):
+        calls = self.run_seed(lambda evidence, device: (321.0, (240, 2)))
+        # The probe runs on the settled, still booted device, before it is shut down and archived.
+        self.assertEqual(calls, ['boot', 'bootstatus', f'speech-probe {self.DEVICE}', 'shutdown', 'shutdown', 'delete'])
+        meta = json.loads((self.seed / 'seed.json').read_text())
+        self.assertEqual(meta['speech_probe'], {'outcome': 'exit 0', 'call_milliseconds': 87})
+        self.assertEqual((meta['schema'], meta['device'], meta['settle_seconds'], meta['settled_runnable']), (push.SEED_SCHEMA, self.DEVICE, 321.0, 2))
+        self.assertEqual(meta['archive_bytes'], (self.seed / 'device.tar').stat().st_size)
+        listing = subprocess.run(['tar', '-tf', str(self.seed / 'device.tar')], capture_output=True, text=True, check=True).stdout
+        self.assertIn(f'{self.DEVICE}/device.plist', listing)
+        self.assertFalse((self.seed / 'device.tar.partial').exists())
+
+    def test_seed_that_never_settles_saves_nothing_and_still_cleans_up(self):
+        def never(evidence, device):
+            raise push.SimctlHang('seed simulator first-boot work did not settle within 900s')
+        with self.assertRaises(push.SimctlHang):
+            calls = self.run_seed(never)
+        self.assertFalse((self.seed / 'seed.json').exists())
+        self.assertFalse((self.seed / 'device.tar').exists())
+        self.assertIsNone(push.load_state(self.evidence))
+
+    def fake_xcrun(self, spawn, build='touch "$out"'):
+        """An xcrun that answers the SDK version, builds by `build` and runs `simctl spawn` by `spawn`."""
+        path = Path(self.tmp.name) / 'xcrun'
+        log = Path(self.tmp.name) / 'xcrun.log'
+        path.write_text('#!/bin/bash\n'
+                        f'echo "$*" >> "{log}"\n'
+                        'if [ "$3" = --show-sdk-version ]; then echo 26.5; exit 0; fi\n'
+                        'if [ "$3" = swiftc ]; then out="${@: -1}"; ' + build + '; exit $?; fi\n'
+                        'if [ "$1 $2" = "simctl spawn" ]; then ' + spawn + '; fi\n')
+        path.chmod(0o755)
+        return str(path), log
+
+    def probe(self, spawn, build='touch "$out"', limit=5):
+        xcrun, log = self.fake_xcrun(spawn, build)
+        diagnosed = []
+        with mock.patch.object(push, 'diagnose', side_effect=lambda evidence, step, pid, label='': diagnosed.append((step, label))):
+            started = time.monotonic()
+            result = push.speech_probe(self.evidence, self.DEVICE, build_limit=5, limit=limit, xcrun=xcrun)
+            elapsed = time.monotonic() - started
+        return result, log.read_text(), diagnosed, elapsed
+
+    def test_speech_probe_records_the_call_on_the_settled_device(self):
+        reply = '{"ko_KR":[{"identifier":"com.apple.voice.compact.ko-KR.Yuna","quality":1}],"milliseconds":87,"voices":68}'
+        result, log, diagnosed, _ = self.probe(f"echo 'probe log line'; echo '{reply}'")
+        self.assertEqual(result, {'outcome': 'exit 0', 'seconds': result['seconds'], 'call_milliseconds': 87, 'voices': 68})
+        build, probe = [r for r in self.rows() if r['command'].startswith('speech-probe')]
+        self.assertEqual((build['command'], build['outcome'], build['limit']), ('speech-probe-build', 'exit 0', 5))
+        self.assertEqual((probe['outcome'], probe['voices'], probe['ko_KR'][0]['quality']), ('exit 0', 68, 1))
+        self.assertIn('daemons_before', probe); self.assertIn('daemons_after', probe)
+        self.assertIn(f'-target {os.uname().machine}-apple-ios26.5-simulator', log)
+        self.assertIn(f'simctl spawn {self.DEVICE} {self.evidence / "ios-speech-probe"}', log)
+        self.assertEqual(diagnosed, [])
+
+    def test_speech_probe_that_does_not_build_is_recorded_and_never_spawned(self):
+        result, log, _, _ = self.probe('echo spawned', build='echo "error: no such module" >&2; false')
+        self.assertEqual(result, {'outcome': 'build exit 1'})
+        self.assertEqual([(r['command'], r['outcome']) for r in self.rows()], [('speech-probe-build', 'exit 1')])
+        self.assertIn('no such module', self.rows()[0]['detail'])
+        self.assertNotIn('simctl spawn', log)
+
+    def test_speech_probe_that_does_not_return_stops_at_its_own_bound_and_never_raises(self):
+        result, _, diagnosed, elapsed = self.probe('sleep 30', limit=1)
+        self.assertEqual(result['outcome'], 'timeout')
+        self.assertLess(elapsed, 15)
+        row = self.rows()[-1]
+        self.assertEqual((row['command'], row['outcome'], row['limit']), ('speech-probe', 'timeout', 1))
+        self.assertIn('daemons_at_limit', row)
+        self.assertEqual(diagnosed, [('speech-probe', 'speech probe')])
+
+    def test_speech_probe_error_is_a_row_not_a_failed_seed(self):
+        result = push.speech_probe(self.evidence, self.DEVICE, xcrun=str(Path(self.tmp.name) / 'missing-xcrun'))
+        self.assertEqual(result['outcome'], 'error')
+        self.assertEqual(self.rows()[-1]['outcome'], 'error')
+
+    def test_settle_rule_used_by_the_seed(self):
+        self.assertTrue(push.is_settled([(200, 9), (207, 1), (207, 3), (207, 0)], cpus=3))
+        self.assertFalse(push.is_settled([(207, 0), (207, 0)], cpus=3))
+        self.assertFalse(push.is_settled([(205, 0), (206, 0), (207, 0)], cpus=3))
+        self.assertFalse(push.is_settled([(207, 0), (207, 4), (207, 0)], cpus=3))
+        self.assertFalse(push.is_settled([(207, 0), None, (207, 0)], cpus=3))
+
+    def test_cache_key_names_the_runner_image_and_xcode(self):
+        environ = {'ImageOS': 'macos26', 'ImageVersion': '20261115.1', 'DEVELOPER_DIR': '/Applications/Xcode_26.5.app/Contents/Developer'}
+        key = push.cache_key(environ)
+        self.assertTrue(key.startswith('ios-sim-preboot-v1-macos26-20261115.1-'), key)
+        self.assertIn('-Xcode_26.5.app-', key)
+        self.assertNotEqual(key, push.cache_key({**environ, 'ImageVersion': '20261122.1'}))
+
+    @staticmethod
+    def job_block(text, name):
+        """The lines of one top-level job; the contract job runs without PyYAML, so this reads text."""
+        lines = text.splitlines()
+        first = lines.index(f'  {name}:')
+        rest = next((i for i in range(first + 1, len(lines)) if re.match(r'^  [A-Za-z0-9_-]+:$', lines[i])), len(lines))
+        return '\n'.join(lines[first:rest])
+
+    def test_workflow_restores_before_any_simctl_or_build_and_seeds_only_off_pull_requests(self):
+        text = (ROOT / '.github/workflows/studio-native-mobile.yml').read_text()
+        push_job, seed_job = self.job_block(text, 'approval-push-simulator'), self.job_block(text, 'ios-sim-seed')
+        self.assertLess(push_job.index('verify-approval-push-simulator.py restore'), push_job.index('verify-approval-push-simulator.py build'))
+        self.assertLess(push_job.index('actions/cache/restore@'), push_job.index('verify-approval-push-simulator.py restore'))
+        self.assertIn("    if: github.event_name != 'pull_request'\n", seed_job + '\n')
+        # Same runner, Xcode, key command and path, so the seed's entry is the one the push job asks for.
+        for line in ('    runs-on: macos-26', '      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer',
+                     '        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py cache-key',
+                     '          path: ${{ runner.temp }}/ios-sim-preboot', '          key: ${{ steps.preboot.outputs.key }}'):
+            with self.subTest(line=line):
+                self.assertIn(line, push_job.splitlines()); self.assertIn(line, seed_job.splitlines())
+        self.assertIn('lookup-only: true', seed_job)
+        self.assertNotIn('ios-sim-seed', self.job_block(text, 'acceptance'))
 
 
 if __name__ == '__main__':
