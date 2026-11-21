@@ -234,9 +234,9 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.accessibilityIdentifier("teamRequestDetailList").navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $showIntake) { TeamIntakeScreen(make: { teamRenderCount("make.intake"); return model.makeIntake(requestID, intakeProduct) }) }
-            .navigationDestination(isPresented: $showTextHistory) { TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, textTarget, textProduct) }) }
-            .navigationDestination(isPresented: $showRelated) { TeamRelationScreen(make: { teamRenderCount("make.relations"); return model.makeRelations(requestID, relatedProduct) }, requests: model) }
+            .navigationDestination(isPresented: $showIntake) { let product = intakeProduct; TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }) }
+            .navigationDestination(isPresented: $showTextHistory) { let target = textTarget, product = textProduct; TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) }) }
+            .navigationDestination(isPresented: $showRelated) { let product = relatedProduct; TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model) }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

@@ -5,7 +5,7 @@ import Foundation
     static private(set) var keys: [String] = []
     static private var proposal: IntakeJSON?
     static private var starts = 0, polls = 0
-    static var trace: String { String(data: (try? JSONSerialization.data(withJSONObject: ["posts":keys.count,"keys":keys,"starts":starts,"polls":polls])) ?? Data(), encoding:.utf8) ?? "" }
+    static var trace: String { TeamRenderTrace.merged(into: String(data: (try? JSONSerialization.data(withJSONObject: ["posts":keys.count,"keys":keys,"starts":starts,"polls":polls])) ?? Data(), encoding:.utf8) ?? "") }
     static func send(_ url: URL, headers: [String:String], body: Data) async throws -> IntakeHTTPResponse {
         let value = try JSONDecoder().decode(IntakeJSON.self, from:body)
         func response(_ value:IntakeJSON, _ status:Int = 200)throws->IntakeHTTPResponse { .init(status:status,url:url,body:try IntakeWire.encode(value)) }
