@@ -1,8 +1,19 @@
 import XCTest
+
+/// Every launch of the app under test goes through here (#4432).
+/// In run 44874729460 the app main thread sat in XCTest's in-app query
+/// evaluation, inside `_os_log_impl_mirror_to_stderr` -> `writev`, blocked in
+/// the kernel, so queries hit their 31 s timeout. `OS_ACTIVITY_DT_MODE=NO` is a
+/// candidate to stop mirroring os_log to stderr; it is not yet verified.
+@MainActor func studioApp() -> XCUIApplication {
+    let app = XCUIApplication()
+    app.launchEnvironment["OS_ACTIVITY_DT_MODE"] = "NO"
+    return app
+}
 import AVFoundation
 final class StudioShellTests: XCTestCase {
     @MainActor func testFirstInstallExplainsAccountStorageWithoutASeparateForm() {
-        let app = XCUIApplication(); app.launchArguments = ["--verify-account-storage"]; app.launch()
+        let app = studioApp(); app.launchArguments = ["--verify-account-storage"]; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["accountStorageVerified"].exists, "The app must create, read, update and delete an isolated Keychain item before account readiness passes.")
         XCTAssertFalse(app.staticTexts["sharedError"].exists, "A storage failure must not pass as a ready sign-in screen.")
@@ -75,7 +86,7 @@ final class StudioShellTests: XCTestCase {
     }
     @MainActor func testNativeCaptureConfirmAndRelaunch() {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launch()
+        let app = studioApp(); app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         openNotebook(app)
         notebookNavigationIsUsable(app)
@@ -130,7 +141,7 @@ final class StudioShellTests: XCTestCase {
 final class StudioJourneyTests: XCTestCase {
     @MainActor private func launch(_ scenario: String, arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"] + arguments
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = scenario
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -1541,7 +1552,7 @@ final class StudioSignInBoundaryTests: XCTestCase {
     }
     @MainActor func testSystemBrowserOpensLiveSignInPageAndCancelReturnsToApp() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "sign-in-live-boundary"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
