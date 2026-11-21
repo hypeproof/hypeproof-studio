@@ -19,6 +19,39 @@ import SwiftUI
 }
 private func productLabel(_ id: String) -> String { ["studio": "Studio", "lab": "Lab", "foundry": "Foundry"][id] ?? id }
 
+/// Counts one body pass, destination factory call or trace tick (#4432). A no-op outside DEBUG.
+func teamRenderCount(_ key: String) {
+#if DEBUG
+    TeamRenderTrace.shared.count(key)
+#endif
+}
+#if DEBUG
+/// DEBUG-only render counters for #4432. Each key keeps its count and the first and last
+/// system uptime in ms, so a reader can tell bounded ticker work from an unbounded update loop.
+final class TeamRenderTrace: @unchecked Sendable {
+    static let shared = TeamRenderTrace()
+    private let lock = NSLock()
+    private var rows: [String: (count: Int, first: Int, last: Int)] = [:]
+    func count(_ key: String) {
+        let now = Int(ProcessInfo.processInfo.systemUptime * 1000)
+        lock.lock(); defer { lock.unlock() }
+        let row = rows[key] ?? (0, now, now)
+        rows[key] = (row.count + 1, row.first, now)
+    }
+    func snapshot() -> [String: [String: Int]] {
+        lock.lock(); defer { lock.unlock() }
+        return rows.mapValues { ["count": $0.count, "first_ms": $0.first, "last_ms": $0.last] }
+    }
+    /// Adds the counters to a trace JSON object under "render"; other keys stay unchanged.
+    static func merged(into trace: String) -> String {
+        guard var object = (try? JSONSerialization.jsonObject(with: Data(trace.utf8))) as? [String: Any] else { return trace }
+        object["render"] = shared.snapshot()
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return trace }
+        return String(data: data, encoding: .utf8) ?? trace
+    }
+}
+#endif
+
 struct TeamRequestsView: View {
     @ObservedObject var model: TeamRequestPresentation
     @Environment(\.dismiss) private var dismiss
@@ -28,7 +61,7 @@ struct TeamRequestsView: View {
         NavigationStack {
             List {
 #if DEBUG
-                if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic request trace").font(.caption2).accessibilityIdentifier("teamRequestTrace").accessibilityValue(TeamEntryFixture.trace) } }
+                if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in let _ = teamRenderCount("tick.requests"); Text("Synthetic request trace").font(.caption2).accessibilityIdentifier("teamRequestTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
                 if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamRequestStatus") }
                 if let draft = model.state.draft {
@@ -116,6 +149,7 @@ struct TeamRequestDetailView: View {
     @State private var message = ""
     @State private var generation = UUID()
     var body: some View {
+        let _ = teamRenderCount("body.detail")
         List {
             if !message.isEmpty { Text(message).accessibilityIdentifier("teamCommentStatus") }
             if let detail {
@@ -132,14 +166,14 @@ struct TeamRequestDetailView: View {
                         Text("작성 시각 기준이에요. 답변 여부나 해결 상태를 뜻하지 않아요.").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(model: model.makeWorkflow(requestID, detail.request.product), requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
-                Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(model: model.makeOutcome(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
-                Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(model: model.makeDelivery(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
+                Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, detail.request.product) }, requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
+                Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
+                Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { Button("공개 요청으로 제안") {
                     commentFocused = false; intakeProduct = detail.request.product; let expected = generation
                     DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { showIntake = true } }
                 }.disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
-                Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(model: model.makeGitHub(requestID)) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
+                Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
                     Button("관련 요청") {
                         commentFocused = false; relatedProduct = detail.request.product
                         let expected = generation
@@ -200,9 +234,9 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.accessibilityIdentifier("teamRequestDetailList").navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $showIntake) { TeamIntakeScreen(model: model.makeIntake(requestID, intakeProduct)) }
-            .navigationDestination(isPresented: $showTextHistory) { TeamTextRevisionScreen(model: model.makeTextHistory(requestID, textTarget, textProduct)) }
-            .navigationDestination(isPresented: $showRelated) { TeamRelationScreen(model: model.makeRelations(requestID, relatedProduct), requests: model) }
+            .navigationDestination(isPresented: $showIntake) { let product = intakeProduct; TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }) }
+            .navigationDestination(isPresented: $showTextHistory) { let target = textTarget, product = textProduct; TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) }) }
+            .navigationDestination(isPresented: $showRelated) { let product = relatedProduct; TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model) }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -329,7 +363,7 @@ private struct TeamWorkflowScreen: View {
     let requests: TeamRequestPresentation
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(model: TeamWorkflowPresentation, requests: TeamRequestPresentation) { _model = StateObject(wrappedValue: model); self.requests = requests }
+    init(make: @escaping @MainActor () -> TeamWorkflowPresentation, requests: TeamRequestPresentation) { _model = StateObject(wrappedValue: make()); self.requests = requests }
     private var editable: Bool { model.state.page?.can_manage == true && model.state.page?.retention?.hidden != true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
     private func memberName(_ id: String?) -> String {
         guard let id else { return "담당 미정" }
@@ -427,7 +461,8 @@ struct TeamGitHubScreen: View {
     @StateObject private var model: TeamGitHubPresentation
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(model: TeamGitHubPresentation) { _model = StateObject(wrappedValue: model) }
+    init(make: @escaping @MainActor () -> TeamGitHubPresentation) { _model = StateObject(wrappedValue: make()) }
+    init(model: TeamGitHubPresentation) { self.init(make: { model }) }
     private var editable: Bool { model.state.page?.can_manage == true && model.state.page?.retention?.hidden != true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<TeamGitHubDraft, String>, _ identifier: String) -> some View {
         TextField(title, text: Binding(get: { model.state.draft?[keyPath: key] ?? "" }, set: { value in model.controller?.edit { $0[keyPath: key] = value } }))
@@ -522,7 +557,7 @@ struct TeamGitHubScreen: View {
 }
 private struct TeamDeliveryScreen: View {
     @StateObject private var model: TeamDeliveryPresentation
-    init(model: TeamDeliveryPresentation) { _model = StateObject(wrappedValue: model) }
+    init(make: @escaping @MainActor () -> TeamDeliveryPresentation) { _model = StateObject(wrappedValue: make()) }
     private func date(_ time: Double) -> String { Date(timeIntervalSince1970: time / 1000).formatted(date: .abbreviated, time: .shortened) }
     @ViewBuilder private func record(_ event: TeamDeliveryEvent, now: Date) -> some View {
         if let proof = event.evidence {

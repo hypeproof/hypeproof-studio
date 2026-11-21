@@ -87,7 +87,7 @@ struct TeamIntakeScreen: View {
     @State private var association = false
     @FocusState private var focused: String?
     @Environment(\.dismiss) private var dismiss
-    init(model: TeamIntakePresentation) { _model = StateObject(wrappedValue: model) }
+    init(make: @escaping @MainActor () -> TeamIntakePresentation) { _model = StateObject(wrappedValue: make()) }
     private var locked: Bool { model.state.busy || !model.storageReady || !model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<IntakeProposal, String>, _ id: String) -> some View {
         TextField(title, text: Binding(get: { model.summary[keyPath: key] }, set: { text in model.edit { $0[keyPath: key] = text } }), axis: .vertical)

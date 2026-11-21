@@ -9,7 +9,7 @@ import Foundation
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [TeamEntryTransport.self]
         return ConversationService(session: URLSession(configuration: config), base: URL(string: "https://team-entry.invalid")!)
     }
-    static var trace: String { TeamEntryTransport.state.trace() }
+    static var trace: String { TeamRenderTrace.merged(into: TeamEntryTransport.state.trace()) }
     static var inboxEnabled: Bool { enabled && ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" }
     static var pushEnabled: Bool { inboxEnabled && ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] != nil }
     static var permissionGranted: Bool { ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] != "denied" }
