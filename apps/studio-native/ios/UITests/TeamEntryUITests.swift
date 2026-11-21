@@ -410,18 +410,33 @@ final class TeamEntryUITests: XCTestCase {
     enum RevealDirection { case towardEnd, towardStart }
     private func usableFrame(_ frame: CGRect) -> Bool { !frame.isNull && !frame.isEmpty && !frame.isInfinite }
     /// The visible scrolling area: the owning List when known, clipped by the
-    /// window and by an on-screen keyboard.
+    /// window, the navigation bar and an on-screen keyboard.
     @MainActor private func revealViewport(_ app: XCUIApplication, _ container: XCUIElement?) -> CGRect {
         var area = app.windows.firstMatch.frame
         if let container, container.exists, usableFrame(container.frame) { area = area.intersection(container.frame) }
-        // One snapshot for the keyboard. A live exists + frame pair raced the
-        // keyboard closing after "저장" and threw "No matches found" (run
-        // 44874729460). A failed snapshot means no keyboard.
-        if let keyboard = try? app.keyboards.firstMatch.snapshot().frame,
-           usableFrame(keyboard), keyboard.minY < area.maxY {
+        // A row scrolled under the navigation bar is not tappable: the tap at
+        // (53, 76.5) landed on the bar and "원문에 답글" stayed unselected
+        // (run 44879419945 shard 4). Such a row is now outside the viewport,
+        // so listReveal drags once more.
+        if let bar = presentFrame(app.navigationBars.firstMatch),
+           bar.maxY > area.minY, bar.maxY < area.maxY {
+            area.size.height = area.maxY - bar.maxY
+            area.origin.y = bar.maxY
+        }
+        if let keyboard = presentFrame(app.keyboards.firstMatch), keyboard.minY < area.maxY {
             area.size.height = max(0, keyboard.minY - area.minY)
         }
         return area
+    }
+    /// The frame of an element that is on screen now, read from one snapshot.
+    /// `exists` comes first: a snapshot of an absent element retries twice,
+    /// about 2.8 s per call (47.7 s in one test, run 44879419945 shard 3).
+    /// The snapshot is kept because a live exists + frame pair raced the
+    /// keyboard closing after "저장" and threw "No matches found" (run
+    /// 44874729460). A snapshot that fails in that race means absent.
+    @MainActor private func presentFrame(_ element: XCUIElement) -> CGRect? {
+        guard element.exists, let frame = try? element.snapshot().frame, usableFrame(frame) else { return nil }
+        return frame
     }
     /// One short drag inside the viewport. A drag has no fling, so it cannot
     /// carry a lazily loaded row past the viewport the way a swipe can.
