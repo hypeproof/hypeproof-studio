@@ -4,7 +4,7 @@ import XCTest
 final class TeamEntryUITests: XCTestCase {
     @MainActor func testFeedbackDraftIsolationCancelAndReceiptSurviveReopen() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -65,7 +65,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testUncertainFeedbackRestartsWithoutResending() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -93,7 +93,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testSettingsLoginShowsActualAccountAndLogoutClearsIdentity() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -125,7 +125,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testNotificationReceivedDuringRegistrationOpensOnceWhenRegistrationFinishes() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "push-registration-held"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
         app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
@@ -165,7 +165,7 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor func testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
         app.launch(); let login = app.buttons["linkDesktop"]; XCTAssertTrue(login.waitForExistence(timeout: 10)); login.tap()
         XCTAssertTrue(app.staticTexts["accountGreeting"].waitForExistence(timeout: 10))
@@ -193,7 +193,7 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor func testExplicitStartingChoiceRendersRealCardAndAnswerWithoutSharingConsent() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
         app.launch(); let login = app.buttons["linkDesktop"]; XCTAssertTrue(login.waitForExistence(timeout: 10)); login.tap()
         let entry = app.buttons["accountQuestionsEntry"]; XCTAssertTrue(entry.waitForExistence(timeout: 10)); XCTAssertTrue(entry.isHittable)
@@ -255,7 +255,7 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor func testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
         app.launch(); let login = app.buttons["linkDesktop"]; XCTAssertTrue(login.waitForExistence(timeout: 10)); login.tap()
         let settings = app.buttons["conversationSettings"]; XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
@@ -273,7 +273,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testInternalRequestCancelReceiptAndDiscussion() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -328,7 +328,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testInternalWorkflowCancelSaveAndHistory() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -359,7 +359,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testInternalRequestUnknownResultRecoversWithoutReplay() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -382,7 +382,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor func testInternalCommentSaveFailureKeepsExportAndGuardsLeaving() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -414,9 +414,12 @@ final class TeamEntryUITests: XCTestCase {
     @MainActor private func revealViewport(_ app: XCUIApplication, _ container: XCUIElement?) -> CGRect {
         var area = app.windows.firstMatch.frame
         if let container, container.exists, usableFrame(container.frame) { area = area.intersection(container.frame) }
-        let keyboard = app.keyboards.firstMatch
-        if keyboard.exists, usableFrame(keyboard.frame), keyboard.frame.minY < area.maxY {
-            area.size.height = max(0, keyboard.frame.minY - area.minY)
+        // One snapshot for the keyboard. A live exists + frame pair raced the
+        // keyboard closing after "저장" and threw "No matches found" (run
+        // 44874729460). A failed snapshot means no keyboard.
+        if let keyboard = try? app.keyboards.firstMatch.snapshot().frame,
+           usableFrame(keyboard), keyboard.minY < area.maxY {
+            area.size.height = max(0, keyboard.minY - area.minY)
         }
         return area
     }
@@ -485,7 +488,7 @@ final class TeamEntryUITests: XCTestCase {
 
     @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false, outcome: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
         for (key,value) in flags { app.launchEnvironment[key] = value }; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
@@ -893,7 +896,7 @@ final class TeamEntryUITests: XCTestCase {
     }
     @MainActor private func inboxApp(_ permission: String) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launchArguments = ["--native-journey"]
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
         app.launchEnvironment["HP_TEAM_ENTRY"] = "1"; app.launchEnvironment["HP_TEAM_INBOX"] = "1"; app.launchEnvironment["HP_TEAM_PUSH"] = permission
         if permission == "warm" { app.launchEnvironment["HP_TEAM_PUSH_CONTEXT"] = "1" }
