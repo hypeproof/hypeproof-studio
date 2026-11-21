@@ -69,13 +69,14 @@ requirements and physical acceptance are in the [mobile roadmap](../../docs/requ
 - Core controls: `swift test --package-path apps/studio-native/ios`.
 - Android: JDK 17, Android SDK 35, Gradle 8.9. In `android`, `gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug`. Debug APK installs independently; release signing/Play distribution remains separate.
 - CI: `.github/workflows/studio-native-mobile.yml`; artifacts identify exact source SHA. Fixture/unit/simulator evidence is never physical-device acceptance.
+- iOS CI runs in three stages. `iOS build` runs `ios-verify.sh build`: core tests, the device build and one simulator `build-for-testing`, plus a shard plan from `scripts/ios-ui-shards.py`. Each `iOS UI shard <i>` job runs `ios-verify.sh shard <i>` (`test-without-building`) on its own simulator. The `ios` job runs `ios-collect.sh`: it merges the shard logs and attachments into the single `evidence/` layout and writes `native-journeys.json` and `signin-journey.json` once. It fails unless the build and every shard succeeded and every planned case started in exactly its own shard (`evidence/ios-ui-shards.json`). The last shard skips the other shards' cases instead of listing its own, so a case the plan parser misses still runs. To add capacity, raise `IOS_UI_SHARDS` and the `ios-ui` matrix together; do not raise a timeout.
 
 ### Check the iOS approval push without a phone
 
 1. On a Studio PR, open **Checks** and select **iOS approval push simulator** for the current commit.
 2. In the workflow run's **Artifacts**, download `studio-ios-approval-push-<run>-<attempt>`. Open `approval-push-system-notification.png` and `approval-push-matching-read-only-detail.png` on any computer. A successful job has both images.
 3. The passing test injects an iOS system notification, taps its Home banner, opens the matching test card directly, and verifies that the approve, hold and explanation-request buttons are absent. It uses a simulated account and card. No phone, TestFlight install, or production credentials are needed.
-4. If the job fails, read `xcodebuild.log` and the simulator notification log when present. For a runner timeout, contributors with repository write access can rerun just this job for the same commit. [GitHub job rerun instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-a-specific-job-in-a-workflow)
+4. If the job fails, read `build.log`, `xcodebuild.log`, `simulator-steps.jsonl` (each simctl call, its limit and its duration) and the simulator notification log when present. A `simctl-hang-<step>.txt` file means a simctl call did not return within its limit; it records the runner's simulator processes, load, samples of the stuck call and of CoreSimulatorService, and the host CoreSimulator log. For a runner timeout, contributors with repository write access can rerun just this job for the same commit. [GitHub job rerun instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-a-specific-job-in-a-workflow)
 
 To run the focused check locally on a Mac with Xcode and its matching iOS Simulator, run from the repository root:
 
@@ -85,7 +86,7 @@ python3 apps/studio-native/scripts/verify-approval-push-simulator.py
 printf '%s\n' "$HP_APPROVAL_PUSH_EVIDENCE"
 ```
 
-The script creates its own temporary simulator and prints the result. The logs, Xcode result bundle, and PNGs are written to the chosen evidence directory.
+With no argument the script runs its four CI steps in order: `build`, `boot`, `run`, `cleanup`. It creates its own temporary simulator and prints the result. The logs, Xcode result bundle, and PNGs are written to the chosen evidence directory.
 
 ## iPhone installation gate
 

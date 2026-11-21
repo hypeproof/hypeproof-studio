@@ -1,13 +1,27 @@
 #!/bin/bash
+# Modes:
+#   (none)          full local run: core tests, device build, then every UI case on one simulator.
+#   build           CI stage 1: core tests, device build, and one simulator build-for-testing.
+#                   No simulator is created. Products go to DerivedData for the shard jobs.
+#   shard <i>       CI stage 2: run plan shard <i> with test-without-building on its own simulator.
+#                   Needs DerivedData/Build/Products and ../evidence/ios-ui-shard-plan.json.
 set -euo pipefail
+mode=${1:-full}
+shard_index=${2:-}
+case "$mode" in
+  full|build) ;;
+  shard) [[ "$shard_index" =~ ^[1-9]$ ]] || { echo "usage: ios-verify.sh shard <index>" >&2; exit 2; } ;;
+  *) echo "usage: ios-verify.sh [build | shard <index>]" >&2; exit 2 ;;
+esac
 cd "$(dirname "$0")/../ios"
 mkdir -p ../evidence
 xcodebuild -version | tee ../evidence/xcode-version.txt
 sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
 if [ "${sdk%%.*}" -lt 27 ]; then echo "Xcode 27+ / iOS 27+ SDK is required for App Store Connect" >&2; exit 2; fi
+build_status=0
+if [ "$mode" != shard ]; then
 printf 'native verification: Swift core tests\n'
 swift test 2>&1 | tee ../evidence/swift-tests.log
-build_status=0
 printf 'native verification: iPhone device build\n'
 xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Release -destination 'generic/platform=iOS' -derivedDataPath DerivedData-device CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ../evidence/device-build.log || build_status=$?
 if [ "$build_status" -ne 0 ]; then
@@ -18,6 +32,26 @@ printf 'native verification: actual app and real Xcode push metadata controls\n'
 python3 ../scripts/check-ios-push-metadata.py \
   --app-info DerivedData-device/Build/Products/Release-iphoneos/HPStudio.app/Info.plist \
   --evidence ../evidence/push-metadata.json
+fi
+if [ "$mode" = build ]; then
+  # One simulator build for every shard, for the runner's architecture only: a generic
+  # destination has no active architecture, so ARCHS names it. Simulator Keychain checks
+  # require an actual app identity, so the products are ad-hoc signed as in the full run.
+  printf 'native verification: iPhone simulator build-for-testing\n'
+  xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build-for-testing 2>&1 | tee ../evidence/simulator-build.log
+  python3 ../scripts/ios-ui-shards.py plan --ui-tests UITests --shards "${IOS_UI_SHARDS:-3}" --output ../evidence/ios-ui-shard-plan.json
+  exit 0
+fi
+shard_arguments=()
+xctestrun=
+if [ "$mode" = shard ]; then
+  # The plan and products come from the build job; refuse to run a shard against anything else.
+  while IFS= read -r argument; do shard_arguments+=("$argument"); done < <(python3 ../scripts/ios-ui-shards.py arguments --plan ../evidence/ios-ui-shard-plan.json --index "$shard_index")
+  [ "${#shard_arguments[@]}" -gt 0 ] || { echo "Shard $shard_index has no cases" >&2; exit 2; }
+  xctestruns=(DerivedData/Build/Products/*.xctestrun)
+  [ "${#xctestruns[@]}" -eq 1 ] && [ -f "${xctestruns[0]}" ] || { echo "Expected one .xctestrun from build-for-testing" >&2; exit 2; }
+  xctestrun=${xctestruns[0]}
+fi
 # Use only a phone advertised by an installed matching runtime.
 selection=$(xcrun simctl list runtimes --json | python3 ../scripts/select-ios-simulator.py "$sdk")
 read -r device_type runtime <<< "$selection"
@@ -86,12 +120,24 @@ PY
   exit "$original_status"
 }
 trap 'cleanup_simulator "$?"' EXIT
+printf 'native verification: simulator boot\n'
 xcrun simctl boot "$device"
 xcrun simctl bootstatus "$device" -b
+# Warm the booted simulator with a system app, never the app under test: the first UI case
+# must still see a fresh install. A cold first launch has stalled the first case before.
+printf 'native verification: simulator warm-up\n'
+xcrun simctl launch "$device" com.apple.Preferences > /dev/null
+xcrun simctl terminate "$device" com.apple.Preferences || true
 test_status=0
 # Simulator Keychain checks require an actual app identity. No distribution key is used.
-printf 'native verification: iPhone simulator journeys\n'
-xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -destination "platform=iOS Simulator,id=$device" -derivedDataPath DerivedData -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
+common_test=(-destination "platform=iOS Simulator,id=$device" -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240)
+if [ "$mode" = shard ]; then
+  printf 'native verification: iPhone simulator journeys, shard %s\n' "$shard_index"
+  xcodebuild -xctestrun "$xctestrun" "${common_test[@]}" "${shard_arguments[@]}" test-without-building 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
+else
+  printf 'native verification: iPhone simulator journeys\n'
+  xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -derivedDataPath DerivedData "${common_test[@]}" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
+fi
 # Export the actual per-journey screenshots, including failed attempts, so review
 # does not substitute the unrelated post-suite relaunch image for first use.
 attachment_status=0
@@ -99,6 +145,20 @@ xcrun xcresulttool export attachments --path ../evidence/Studio.xcresult --outpu
 printf 'attachment_export_exit=%s\n' "$attachment_status" >> ../evidence/attachment-export.log
 sim_app=DerivedData/Build/Products/Debug-iphonesimulator/HPStudio.app
 codesign -d --entitlements :- "$sim_app" > ../evidence/simulator-entitlements.plist 2> ../evidence/simulator-signature.log || true
+if [ "$mode" = shard ]; then
+  # Journey and sign-in records are written once, by the ios job, from every shard's log.
+  printf '{"shard": %s, "test_exit": %s, "attachment_exit": %s}\n' "$shard_index" "$test_status" "$attachment_status" > ../evidence/shard-result.json
+  if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
+  if [ "$attachment_status" -ne 0 ]; then exit "$attachment_status"; fi
+  codesign --verify --strict "$sim_app" >> ../evidence/simulator-signature.log 2>&1
+  if [ "$shard_index" = 1 ]; then
+    xcrun simctl launch "$device" ai.hypeproof.studio.mobile
+    sleep 2
+    xcrun simctl io "$device" screenshot ../evidence/native-iphone.png
+  fi
+  printf '%s\n' "source=${GITHUB_SHA:-local}" "runtime=$runtime" "device=$device" "shard=$shard_index" "physical_iphone=NOT_RUN" "testflight=NOT_RUN_BY_THIS_CHECK" > ../evidence/identity.txt
+  exit 0
+fi
 journey_status=0
 python3 ../scripts/collect-native-journeys.py --source-sha "${GITHUB_SHA:-$(git rev-parse HEAD)}" --build-log ../evidence/device-build.log --build-exit "$build_status" --simulator-log ../evidence/simulator-test.log --test-exit "$test_status" --output ../evidence/native-journeys.json || journey_status=$?
 # Hop-by-hop signed-in journey record for this exact source. Always written, never fatal here:
