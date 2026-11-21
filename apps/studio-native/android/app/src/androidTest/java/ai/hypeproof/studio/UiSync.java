@@ -95,6 +95,24 @@ final class UiSync {
         }
     }
 
+    /**
+     * Taps the menu icon once when idle and requires menu() to have shown its dialog.
+     * The icon carries a tooltip, so a stretched tap would show the tooltip instead.
+     */
+    static void openMenu() {
+        java.util.function.Consumer<JSONObject> previous = QuestionActivity.testMenuObservation;
+        java.util.concurrent.atomic.AtomicInteger shown = new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testMenuObservation = value -> {
+            if (previous != null) previous.accept(value);
+            if ("shown".equals(value.optString("phase"))) shown.incrementAndGet();
+        };
+        try {
+            tap(androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withContentDescription("메뉴")), "menu", activity -> shown.get() > 0);
+        } finally {
+            QuestionActivity.testMenuObservation = previous;
+        }
+    }
+
     /** Waits for QuestionActivity to be idle with the same rule tap() uses. */
     static void awaitIdle(ViewInteraction anyView) {
         JSONArray trace = new JSONArray();

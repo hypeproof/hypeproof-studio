@@ -211,17 +211,20 @@ public class TeamEntryJourneyTest {
     }
     private void selectMenu(String title)throws Exception {
         boolean observe=Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("observeTeamMenu","false"));
-        if(observe){
-        QuestionActivity.testMenuObservation=value->{if(menuObservations.length()<40)menuObservations.put(value);};
-        onView(withContentDescription("메뉴")).perform(new androidx.test.espresso.ViewAction(){
-            public org.hamcrest.Matcher<android.view.View> getConstraints(){return isDisplayed();}
-            public String getDescription(){return "observe the one actual menu touch without changing its listener";}
-            public void perform(androidx.test.espresso.UiController ui,android.view.View view){
-                observeMenu("before",view);view.setOnTouchListener((v,event)->{if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN||event.getActionMasked()==android.view.MotionEvent.ACTION_UP)observeMenu(event.getActionMasked()==0?"down":"up",v);return false;});
-                click().perform(ui,view);view.setOnTouchListener(null);
-            }
-        });
-        }else onView(withContentDescription("메뉴")).perform(click());
+        // The menu icon carries a tooltip (QuestionActivity.iconButton), so a tap that
+        // Espresso stretches past the long-press timeout shows the tooltip instead.
+        // UiSync taps once when idle and requires menu() to have shown its dialog.
+        AtomicInteger menuShown=new AtomicInteger();
+        QuestionActivity.testMenuObservation=value->{if(observe&&menuObservations.length()<40)menuObservations.put(value);if("shown".equals(value.optString("phase")))menuShown.incrementAndGet();};
+        try{
+            if(observe)onView(withContentDescription("메뉴")).check((v,e)->{if(e!=null)throw e;observeMenu("before",v);});
+            UiSync.tap(onView(withContentDescription("메뉴")),"menu",true,new UiSync.Hook(){
+                @Override public void touched(android.view.View view,android.view.MotionEvent event){
+                    int action=event.getActionMasked();
+                    if(observe&&(action==android.view.MotionEvent.ACTION_DOWN||action==android.view.MotionEvent.ACTION_UP))observeMenu(action==android.view.MotionEvent.ACTION_DOWN?"down":"up",view);
+                }
+            },a->menuShown.get()>0);
+        }finally{QuestionActivity.testMenuObservation=null;}
         long deadline=System.currentTimeMillis()+5000;boolean visible=false;
         while(System.currentTimeMillis()<deadline){android.view.accessibility.AccessibilityNodeInfo root=InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null){visible=!root.findAccessibilityNodeInfosByText(title).isEmpty();root.recycle();}if(visible)break;Thread.sleep(25);}
         if(observe)writeMenuObservations();

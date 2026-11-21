@@ -375,7 +375,7 @@ public class StudioJourneyTest {
         intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
         try(ActivityScenario<QuestionActivity> question=ActivityScenario.launch(QuestionActivity.class)) {
             java.util.concurrent.atomic.AtomicReference<QuestionActivity> original=new java.util.concurrent.atomic.AtomicReference<>();question.onActivity(original::set);
-            onView(withContentDescription("메뉴")).perform(click());onView(withText("기기 기록")).perform(click());
+            UiSync.openMenu();onView(withText("기기 기록")).perform(click());
             onView(withText("기기 기록")).check(matches(isDisplayed()));
             onView(withContentDescription("생각 입력")).check(matches(withText("기기에 남긴 초안")));
             onView(withText("무료 AI 연결하고 질문 받기")).check(doesNotExist());onView(withText("음성 대화")).check(doesNotExist());
@@ -404,7 +404,7 @@ public class StudioJourneyTest {
             onView(withContentDescription("질문 대화 입력")).check(matches(withText("질문 화면에 남겨 둔 초안")));
             question.onActivity(a->assertSame(original.get(),a));assertEquals(0,calls.get());assertNull(storage.loadCredentials());
             assertEquals("preserved-old-installation",context.getSharedPreferences("installation",Context.MODE_PRIVATE).getString("id",null));
-            onView(withContentDescription("메뉴")).perform(click());onView(withText("기기 기록")).perform(click());
+            UiSync.openMenu();onView(withText("기기 기록")).perform(click());
             onView(withContentDescription("생각 입력")).check(matches(withText("편집한 기기 초안")));
             androidx.test.espresso.Espresso.pressBack();
             onView(withContentDescription("질문 대화 입력")).check(matches(withText("질문 화면에 남겨 둔 초안")));assertEquals(0,calls.get());

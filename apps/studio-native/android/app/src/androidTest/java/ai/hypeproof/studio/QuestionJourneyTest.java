@@ -374,7 +374,7 @@ public class QuestionJourneyTest {
         screen("android-voice-admission-denial");
     }
     private void confirmFailedTurn()throws Exception{
-        onView(withContentDescription("메뉴")).perform(click());onView(withText("대화 다시 확인")).perform(click());ready();drain();
+        UiSync.openMenu();onView(withText("대화 다시 확인")).perform(click());ready();drain();
         onView(withText("입력란에 가져오기")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;assertTrue(v.getHeight()>=48*v.getResources().getDisplayMetrics().density);});
     }
     @Test public void confirmedFailedQuestionRestoresAfterRestartAndSendsOnlyOnLaterTap()throws Exception{
