@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -238,15 +239,23 @@ class ShardShell(unittest.TestCase):
         result, commands, _, evidence = self.run_shard(1)
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
-        self.assertEqual([(r['step'], r['command'], r['outcome']) for r in rows],
+        # The stubbed simulator has no launchd_sim, so each boot reading says so instead of guessing.
+        before_test = [r for r in rows if r['step'] != 'test']
+        self.assertEqual([(r['step'], r['command'], r['outcome']) for r in before_test],
                          [('boot', 'xcrun simctl boot', 'exit 0'), ('boot', 'xcrun simctl bootstatus', 'exit 0'),
-                          ('boot', 'observe', 'sample'), ('boot', 'observe', 'sample'), ('boot', 'observe', 'sample'),
+                          ('boot', 'observe', 'no device'), ('boot', 'observe', 'no device'), ('boot', 'observe', 'no device'),
                           ('warm-up', 'xcrun simctl launch', 'exit 0'), ('warm-up', 'xcrun simctl terminate', 'exit 0')])
-        self.assertEqual([r['sample'] for r in rows if r['command'] == 'observe'], [1, 2, 3])
-        self.assertTrue(all(isinstance(r['seconds'], float) for r in rows if r['command'] != 'observe'))
+        self.assertEqual([r['sample'] for r in before_test if r['command'] == 'observe'], [1, 2, 3])
+        self.assertTrue(all(isinstance(r['seconds'], float) for r in before_test if r['command'] != 'observe'))
+        self.assertTrue(all(r['utc'].endswith('+00:00') for r in before_test))
         for name in ('simulator-ps.txt', 'simulator-vmstat.txt'):
-            headers = [line for line in (evidence / name).read_text().splitlines() if re.fullmatch(r'== sample \d', line)]
-            self.assertEqual(headers, ['== sample 1', '== sample 2', '== sample 3'], name)
+            headers = [line.split(' sample ')[1].split()[0] for line in (evidence / name).read_text().splitlines()
+                       if re.match(r'== boot sample \d ', line)]
+            self.assertEqual(headers, ['1', '2', '3'], name)
+        # The background sampler was started beside the test and is gone when the shard ends.
+        self.assertTrue(all(r['command'] == 'observe' for r in rows if r['step'] == 'test'))
+        alive = subprocess.run(['pgrep', '-f', f'ios-sim-observe.py watch --evidence ../evidence --device {cleanup_suite.DEVICE}'], capture_output=True)
+        self.assertNotEqual(alive.returncode, 0, alive.stdout)
         # The same simctl commands as before, and the only new waits are two fixed 5 s sleeps.
         boot = [c['args'] for c in commands if c['command'] == 'xcrun' and c['args'][:2] in (['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate'])]
         # Shard 1 also launches the app after the suite for its screenshot; that launch is not timed.
@@ -270,6 +279,75 @@ class ShardShell(unittest.TestCase):
         self.assertIn('Expected one .xctestrun', result.stderr)
         self.assertFalse(any(c['args'][:2] == ['simctl', 'create'] for c in commands))
 
+
+
+OBSERVE_SPEC = importlib.util.spec_from_file_location('ios_sim_observe', NATIVE / 'scripts/ios-sim-observe.py')
+observe = importlib.util.module_from_spec(OBSERVE_SPEC); OBSERVE_SPEC.loader.exec_module(observe)
+
+
+class SimObserve(unittest.TestCase):
+    """ios-sim-observe.py readings: device age, timeouts, and the background sampler."""
+    DEVICE = 'C0E7C600-E107-428F-8A03-DEDB01894AEF'
+
+    def table(self, age='04:45', children=3, runnable=2):
+        lines = ['  PID  PPID STAT ELAPSED  %CPU %MEM COMMAND',
+                 f' 4820     1 S    {age}  0.4  0.2 launchd_sim /Users/runner/Library/Developer/CoreSimulator/Devices/{self.DEVICE}/data/var/run/launchd_bootstrap.plist']
+        for index in range(children):
+            lines.append(f' {5000 + index}  4820 {"Rs" if index < runnable else "Ss"}   {age}  1.0  0.1 /RuntimeRoot/usr/libexec/d{index} --flag')
+        return '\n'.join(lines) + '\n'
+
+    def test_elapsed_time_formats(self):
+        self.assertEqual([observe.etime_seconds(v) for v in ('00:07', '04:45', '1:02:03', '2-01:00:00', 'x')],
+                         [7, 285, 3723, 176400, None])
+
+    def test_device_reading_counts_children_and_reads_age(self):
+        self.assertEqual(observe.device_reading(self.table(), self.DEVICE), (3, 2, 285))
+        self.assertIsNone(observe.device_reading(self.table().replace(self.DEVICE, 'OTHER'), self.DEVICE))
+
+    def take(self, table):
+        outputs = {'ps': table, 'vm_stat': 'Pages free:                               4298.\n', 'sysctl': '{ 353.66 142.08 64.21 }\n'}
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(observe.push, 'bounded', side_effect=lambda args, limit=30: outputs[args[0]]):
+            evidence = Path(directory)
+            observe.take(evidence, self.DEVICE, step='boot', sample=1, full_table=True)
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+            ps = (evidence / 'simulator-ps.txt').read_text()
+        return row, ps
+
+    def test_a_reading_records_age_wall_clock_load_and_free_memory(self):
+        row, ps = self.take(self.table())
+        self.assertEqual({k: row[k] for k in ('outcome', 'processes', 'runnable', 'device_age_seconds', 'free_pages', 'loadavg')},
+                         {'outcome': 'sample', 'processes': 3, 'runnable': 2, 'device_age_seconds': 285,
+                          'free_pages': 4298, 'loadavg': '{ 353.66 142.08 64.21 }'})
+        self.assertTrue(row['utc'].endswith('+00:00'))
+        self.assertIn('launchd_sim', ps)
+
+    def test_a_ps_that_does_not_return_is_a_timeout_row_not_an_error(self):
+        row, ps = self.take('<ps -axro pid,ppid,stat,etime,%cpu,%mem,command did not return within 30s>')
+        self.assertEqual(row['outcome'], 'timeout')
+        self.assertIn('did not return within 30s', row['detail'])
+        self.assertNotIn('processes', row)
+        self.assertEqual(row['free_pages'], 4298)
+
+    def test_watch_keeps_sampling_until_stopped_and_writes_test_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            child = subprocess.Popen([sys.executable, str(NATIVE / 'scripts/ios-sim-observe.py'), 'watch', '--evidence', str(evidence),
+                                      '--device', self.DEVICE, '--interval', '0.2'])
+            try:
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    path = evidence / 'simulator-steps.jsonl'
+                    if path.exists() and len(path.read_text().splitlines()) >= 2:
+                        break
+                    time.sleep(0.1)
+            finally:
+                child.terminate(); child.wait(timeout=10)
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertGreaterEqual(len(rows), 2)
+        self.assertEqual({(r['step'], r['command']) for r in rows}, {('test', 'observe')})
+        self.assertEqual([r['sample'] for r in rows[:2]], [1, 2])
+        self.assertIn(rows[0]['outcome'], ('no device', 'timeout'))
 
 class CollectShell(unittest.TestCase):
     """The real ios-collect.sh with the real journey and sign-in collectors."""

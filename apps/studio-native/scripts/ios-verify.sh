@@ -57,9 +57,19 @@ selection=$(xcrun simctl list runtimes --json | python3 ../scripts/select-ios-si
 read -r device_type runtime <<< "$selection"
 
 device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" "$device_type" "$runtime")
+sampler_pid=
+# The shard's background sampler (ios-sim-observe.py watch) never outlives the test.
+stop_sampler() {
+  if [ -n "$sampler_pid" ]; then
+    kill "$sampler_pid" 2> /dev/null || true
+    wait "$sampler_pid" 2> /dev/null || true
+    sampler_pid=
+  fi
+}
 cleanup_simulator() {
   local original_status=$1 cleanup_status=0
   trap - EXIT
+  stop_sampler
   # Only the simulator this invocation created; neither cleanup may consume the job's
   # remaining time indefinitely or replace the build/test result.
   python3 - "$device" <<'PY' || cleanup_status=$?
@@ -145,7 +155,11 @@ test_status=0
 common_test=(-destination "platform=iOS Simulator,id=$device" -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240)
 if [ "$mode" = shard ]; then
   printf 'native verification: iPhone simulator journeys, shard %s\n' "$shard_index"
+  # One reading a minute beside the test, for observation only; the test never waits for it.
+  python3 ../scripts/ios-sim-observe.py watch --evidence ../evidence --device "$device" --interval 60 &
+  sampler_pid=$!
   xcodebuild -xctestrun "$xctestrun" "${common_test[@]}" "${shard_arguments[@]}" test-without-building 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
+  stop_sampler
 else
   printf 'native verification: iPhone simulator journeys\n'
   xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -derivedDataPath DerivedData "${common_test[@]}" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
