@@ -72,7 +72,9 @@ public class StudioJourneyTest {
             }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
             captureCommand("window.txt","timeout 3 dumpsys window",state);
             captureCommand("power.txt","timeout 3 dumpsys power",state);
-            captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
+            // 150 lines held only the teardown; keep the onset of a lost input focus too.
+            captureCommand("recent-logcat.txt","timeout 5 logcat -d -v threadtime -b main -b system -b crash -t 2000",state);
+            captureCommand("input.txt","timeout 3 dumpsys input",state);
             state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
         }catch(Throwable problem){Log.e("StudioFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
     }
