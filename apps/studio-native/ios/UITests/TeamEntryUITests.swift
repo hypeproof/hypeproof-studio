@@ -501,10 +501,17 @@ final class TeamEntryUITests: XCTestCase {
         revealFailure(app, item, steps, file: file, line: line)
     }
 
-    @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false, outcome: Bool = false) -> XCUIApplication {
+    /// `composeEntry: false` (the default) starts from one request the synthetic
+    /// Service already acknowledged (`HP_TEAM_SEED_SENT`, DEBUG fixture only).
+    /// Every case below is about a later step and repeated compose → send →
+    /// receipt → close → reopen, about 30 s each on hosted runners (#4432).
+    /// The real entry stays proven: testInternalGitHubCancelSaveAndHistory passes
+    /// `composeEntry: true`, and the request cases above never seed.
+    @MainActor private func githubApp(_ flags: [String:String] = [:], delivery: Bool = false, outcome: Bool = false, composeEntry: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = studioApp(); app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        if !composeEntry { app.launchEnvironment["HP_TEAM_SEED_SENT"] = "GitHub fixture request" }
         for (key,value) in flags { app.launchEnvironment[key] = value }; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
         XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10))
@@ -513,10 +520,15 @@ final class TeamEntryUITests: XCTestCase {
             XCTAssertTrue(app.navigationBars["팀 알림함"].waitForExistence(timeout:10)); app.navigationBars["팀 알림함"].buttons["닫기"].tap()
         }
         XCTAssertTrue(app.buttons["teamRequestHomeEntry"].isHittable); app.buttons["teamRequestHomeEntry"].tap()
-        let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("GitHub fixture request")
-        githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
-        XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
-        app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
+        if composeEntry {
+            let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("GitHub fixture request")
+            githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
+            XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+            app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
+        }
+        // Seeded or composed, the reopened screen must show the acknowledged receipt.
+        let receipt = app.staticTexts["teamRequestReceipt"]; XCTAssertTrue(receipt.waitForExistence(timeout: 10))
+        XCTAssertEqual(receipt.label, "접수 번호: trq_" + String(repeating: "a", count: 32))
         githubReveal(app,app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
         if flags["HP_TEAM_DISCUSSION"] == "1" || flags["HP_TEAM_RELATED"] == "1" { return app }
         let entry = app.buttons[outcome ? "teamOutcomeEntry" : delivery ? "teamDeliveryEntry" : "teamGitHubEntry"]
@@ -755,7 +767,7 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(githubTrace(app).contains("\"githubPosts\":0"))
     }
     @MainActor func testInternalGitHubCancelSaveAndHistory() throws {
-        let app = githubApp(), issue = app.textFields["teamGitHubIssue"], reason = app.textViews["teamGitHubReason"]
+        let app = githubApp(composeEntry: true), issue = app.textFields["teamGitHubIssue"], reason = app.textViews["teamGitHubReason"]
         XCTAssertTrue(issue.waitForExistence(timeout: 10)); issue.tap(); issue.typeText("123")
         githubReveal(app,reason); reason.tap(); reason.typeText("Verified issue rationale")
         let send = app.buttons["teamGitHubSend"]; githubReveal(app,send); send.tap(); app.alerts.buttons["취소"].tap()
