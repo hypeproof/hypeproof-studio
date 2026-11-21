@@ -1,0 +1,396 @@
+"""iOS UI sharding: every case runs once, in its own shard, and the merged record says so.
+
+Runs the real plan/merge code, the real ios-verify.sh shard mode (with Apple tools stubbed),
+the real ios-collect.sh with the real journey collectors, and the approval push simctl hang
+path. Planted defects (a missing shard, an unstarted case, a case in two shards, a failed
+shard, an attachment collision) must each fail; a complete set must pass.
+"""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+NATIVE = Path(__file__).resolve().parents[1]
+ROOT = NATIVE.parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_ios_cleanup as cleanup_suite  # noqa: E402  (reuse the shipped Apple-tool stubs)
+
+SPEC = importlib.util.spec_from_file_location('ios_ui_shards', NATIVE / 'scripts/ios-ui-shards.py')
+shards = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(shards)
+PUSH_SPEC = importlib.util.spec_from_file_location('approval_push', NATIVE / 'scripts/verify-approval-push-simulator.py')
+push = importlib.util.module_from_spec(PUSH_SPEC); PUSH_SPEC.loader.exec_module(push)
+
+SHA = 'a' * 40
+
+
+def started(case, outcome='passed'):
+    _, cls, name = case.split('/')
+    return (f"Test Case '-[HPStudioUITests.{cls} {name}]' started.\n"
+            f"Test Case '-[HPStudioUITests.{cls} {name}]' {outcome} (1.000 seconds).\n")
+
+
+def write_shard(root, index, cases, *, test_exit=0, attachment_exit=0, attachments=(), extra=''):
+    directory = root / f'shard-{index}'
+    directory.mkdir(parents=True)
+    (directory / 'simulator-test.log').write_text(''.join(started(case) for case in cases) + extra)
+    (directory / 'shard-result.json').write_text(json.dumps(
+        {'shard': index, 'test_exit': test_exit, 'attachment_exit': attachment_exit}))
+    export = directory / 'journey-attachments'; export.mkdir()
+    rows = []
+    for case, name in attachments:
+        (export / name).write_bytes(b'png')
+        rows.append({'testIdentifier': case.split('/', 1)[1] + '()', 'attachments': [{'exportedFileName': name}]})
+    (export / 'manifest.json').write_text(json.dumps(rows))
+    return directory
+
+
+class PlanContracts(unittest.TestCase):
+    def test_real_suite_assigns_every_declared_case_to_exactly_one_shard(self):
+        declared = []
+        for source in sorted((NATIVE / 'ios/UITests').glob('*.swift')):
+            declared += re.findall(r'^\s*(?:@MainActor\s+)?func (test[A-Za-z0-9_]*)\(\)', source.read_text(), re.M)
+        doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 3)
+        every = [case.rsplit('/', 1)[1] for row in doc['shards'] for case in row['cases']]
+        self.assertEqual(sorted(every), sorted(declared))
+        self.assertEqual(len(every), len(set(every)))
+        sizes = [len(row['cases']) for row in doc['shards']]
+        self.assertLessEqual(max(sizes) - min(sizes), 1)
+        first, second, last = doc['shards']
+        self.assertEqual(first['xcodebuild_arguments'], ['-only-testing:' + c for c in first['cases']])
+        # The last shard skips the others instead of naming its own, so an unparsed case still runs.
+        self.assertEqual(last['xcodebuild_arguments'],
+                         ['-skip-testing:' + c for c in first['cases'] + second['cases']])
+
+    def test_discovery_reads_attributes_and_ignores_helpers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, 'A.swift').write_text(
+                'final class AlphaTests: XCTestCase {\n'
+                '    @MainActor func testOne() throws {}\n'
+                '    func testTwo() async {}\n'
+                '    private func testHelper(_ value: Int) {}\n'
+                '    func helper() {}\n'
+                '}\nclass BetaTests: XCTestCase {\n    override func setUp() {}\n    func testThree() {}\n}\n')
+            self.assertEqual(shards.discover(Path(directory)),
+                             {'AlphaTests': ['testOne', 'testTwo'], 'BetaTests': ['testThree']})
+            Path(directory, 'B.swift').write_text('final class AlphaTests: XCTestCase {}\n')
+            with self.assertRaisesRegex(ValueError, 'declared twice'):
+                shards.discover(Path(directory))
+
+
+class WorkflowShardCount(unittest.TestCase):
+    def test_planned_shard_count_equals_the_ui_matrix(self):
+        workflow = (ROOT / '.github/workflows/studio-native-mobile.yml').read_text()
+        planned = re.findall(r"^\s*IOS_UI_SHARDS: '([0-9]+)'$", workflow, re.M)
+        matrix = re.findall(r'^\s*shard: \[([0-9, ]+)\]$', workflow, re.M)
+        self.assertEqual(len(planned), 1)
+        self.assertEqual(len(matrix), 1)
+        self.assertEqual([int(x) for x in matrix[0].split(',')], list(range(1, int(planned[0]) + 1)))
+
+
+class MergeContracts(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.plan = shards.plan({'AlphaTests': ['testA', 'testB', 'testC'], 'BetaTests': ['testD', 'testE', 'testF']}, 3)
+        self.cases = {row['index']: row['cases'] for row in self.plan['shards']}
+
+    def merge(self):
+        return shards.merge(self.plan, self.root / 'shards', self.root / 'evidence')
+
+    def complete(self, changes=None, skip=None):
+        changes = changes or {}
+        for index, cases in self.cases.items():
+            if index != skip:
+                write_shard(self.root / 'shards', index, cases, **changes.get(index, {}))
+
+    def test_positive_control_complete_shards_pass_with_one_merged_attachment_export(self):
+        self.complete({1: {'attachments': [(self.cases[1][0], 'one.png')]},
+                         3: {'attachments': [(self.cases[3][0], 'three.png')]}})
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'PASS', doc['problems'])
+        self.assertEqual((doc['test_exit'], doc['attachment_exit'], doc['started_cases']), (0, 0, 6))
+        manifest = json.loads((self.root / 'evidence/journey-attachments/manifest.json').read_text())
+        self.assertEqual(len(manifest), 2)
+        self.assertTrue((self.root / 'evidence/journey-attachments/three.png').is_file())
+        log = (self.root / 'evidence/simulator-test.log').read_text()
+        for case in sum(self.cases.values(), []):
+            self.assertIn(case.rsplit('/', 1)[1] + "]' passed", log)
+
+    def test_missing_shard_fails_with_did_not_run_exit(self):
+        self.complete(skip=2)
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'FAIL')
+        self.assertEqual(doc['test_exit'], 125)
+        self.assertEqual(doc['not_run'], sorted(self.cases[2]))
+
+    def test_unstarted_case_fails_even_when_every_shard_exits_zero(self):
+        self.cases[1] = self.cases[1][1:]
+        self.complete()
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'FAIL')
+        self.assertEqual(len(doc['not_run']), 1)
+
+    def test_case_in_two_shards_fails(self):
+        self.cases[2] = self.cases[2] + [self.cases[1][0]]
+        self.complete()
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'FAIL')
+        self.assertEqual(doc['misplaced'], [self.cases[1][0]])
+
+    def test_failed_shard_keeps_its_exit_code(self):
+        self.complete({2: {'test_exit': 65}})
+        doc = self.merge()
+        self.assertEqual((doc['verdict'], doc['test_exit']), ('FAIL', 65))
+
+    def test_attachment_collision_is_refused(self):
+        self.complete({1: {'attachments': [(self.cases[1][0], 'same.png')]},
+                         2: {'attachments': [(self.cases[2][0], 'same.png')]}})
+        with self.assertRaisesRegex(ValueError, 'exported by shards 1 and 2'):
+            self.merge()
+
+    def test_unplanned_case_is_accepted_only_in_the_last_shard(self):
+        extra = started('HPStudioUITests/AlphaTests/testUnparsed')
+        self.complete({3: {'extra': extra}})
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'PASS', doc['problems'])
+        self.assertEqual(doc['unplanned_in_last_shard'], ['HPStudioUITests/AlphaTests/testUnparsed'])
+        shutil.rmtree(self.root / 'shards'); shutil.rmtree(self.root / 'evidence')
+        self.complete({1: {'extra': extra}})
+        self.assertEqual(self.merge()['verdict'], 'FAIL')
+
+
+class ShardShell(unittest.TestCase):
+    """The real ios-verify.sh shard mode against stubbed Apple tools."""
+
+    def run_shard(self, index, *, test_exit=0, products=1):
+        temp = tempfile.TemporaryDirectory(prefix='studio-ios-shard-'); self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        scripts, ios, bin_dir, evidence = root / 'scripts', root / 'ios', root / 'bin', root / 'evidence'
+        for directory in (scripts, ios, bin_dir, evidence):
+            directory.mkdir()
+        for name in ('ios-verify.sh', 'select-ios-simulator.py', 'ios-ui-shards.py'):
+            shutil.copyfile(NATIVE / 'scripts' / name, scripts / name)
+        built = ios / 'DerivedData/Build/Products'; built.mkdir(parents=True)
+        for number in range(products):
+            (built / f'HPStudio_iphonesimulator{number}.xctestrun').write_text('fixture')
+        plan = shards.plan({'AlphaTests': ['testA', 'testB', 'testC', 'testD']}, 2)
+        (evidence / 'ios-ui-shard-plan.json').write_text(json.dumps(plan))
+        stub = cleanup_suite.COMMAND_STUB.replace('if "test" in args:', 'if "test" in args or "test-without-building" in args:')
+        self.assertNotEqual(stub, cleanup_suite.COMMAND_STUB)
+        for command in ('xcrun', 'xcodebuild', 'swift', 'codesign', 'sleep'):
+            path = bin_dir / command
+            path.write_text(stub.replace('__PYTHON__', sys.executable)); path.chmod(0o755)
+        (bin_dir / 'python3').write_text(cleanup_suite.PYTHON_STUB.replace('__PYTHON__', sys.executable))
+        (bin_dir / 'python3').chmod(0o755)
+        calls = root / 'calls.jsonl'
+        env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], GITHUB_SHA=SHA,
+                   GITHUB_RUN_ID='shard-test', STUB_CALLS=str(calls), STUB_TIMEOUTS=str(root / 'timeouts.jsonl'),
+                   STUB_DEVICE=cleanup_suite.DEVICE, STUB_CLEANUP='{}', STUB_TEST_EXIT=str(test_exit),
+                   STUB_TEST_SIGNAL='', STUB_DESCENDANTS=str(root / 'descendants.txt'), STUB_CREATE_EXIT='')
+        result = subprocess.run(['bash', str(scripts / 'ios-verify.sh'), 'shard', str(index)], cwd=root,
+                                env=env, capture_output=True, text=True, timeout=20)
+        commands = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
+        return result, commands, plan, evidence
+
+    def test_shard_runs_only_prebuilt_products_with_its_own_cases_and_cleans_its_simulator(self):
+        result, commands, plan, evidence = self.run_shard(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        xcodebuild = [c['args'] for c in commands if c['command'] == 'xcodebuild' and c['args'] != ['-version']]
+        self.assertEqual(len(xcodebuild), 1, xcodebuild)
+        args = xcodebuild[0]
+        self.assertEqual(args[-1], 'test-without-building')
+        self.assertIn('-xctestrun', args)
+        self.assertNotIn('-project', args)
+        self.assertEqual([a for a in args if a.startswith('-only-testing:') or a.startswith('-skip-testing:')],
+                         plan['shards'][0]['xcodebuild_arguments'])
+        self.assertFalse(any(c['command'] == 'swift' for c in commands))
+        simctl = [c['args'][:2] for c in commands if c['command'] == 'xcrun' and c['args'][:1] == ['simctl']]
+        # Boot, then a system-app warm-up, before the test; owned cleanup after it.
+        self.assertLess(simctl.index(['simctl', 'bootstatus']), simctl.index(['simctl', 'launch']))
+        self.assertEqual(simctl[-2:], [['simctl', 'shutdown'], ['simctl', 'delete']])
+        warm = next(c['args'] for c in commands if c['args'][:2] == ['simctl', 'launch'])
+        self.assertEqual(warm[-1], 'com.apple.Preferences')
+        self.assertEqual(json.loads((evidence / 'shard-result.json').read_text()),
+                         {'shard': 1, 'test_exit': 0, 'attachment_exit': 0})
+
+    def test_last_shard_skips_the_others_and_failure_is_recorded_and_returned(self):
+        result, commands, plan, evidence = self.run_shard(2, test_exit=65)
+        self.assertEqual(result.returncode, 65, result.stderr)
+        args = next(c['args'] for c in commands if c['command'] == 'xcodebuild' and 'test-without-building' in c['args'])
+        self.assertEqual([a for a in args if a.startswith('-skip-testing:')],
+                         ['-skip-testing:' + case for case in plan['shards'][0]['cases']])
+        self.assertEqual(json.loads((evidence / 'shard-result.json').read_text())['test_exit'], 65)
+
+    def test_shard_refuses_unknown_index_and_ambiguous_products(self):
+        result, commands, _, _ = self.run_shard(3)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Shard 3 has no cases', result.stderr)
+        result, commands, _, _ = self.run_shard(1, products=2)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Expected one .xctestrun', result.stderr)
+        self.assertFalse(any(c['args'][:2] == ['simctl', 'create'] for c in commands))
+
+
+class CollectShell(unittest.TestCase):
+    """The real ios-collect.sh with the real journey and sign-in collectors."""
+
+    def run_collect(self, *, build='success', ui='success', shard_changes=None, plan=True):
+        temp = tempfile.TemporaryDirectory(prefix='studio-ios-collect-'); self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        native = root / 'apps/studio-native'
+        (native / 'scripts').mkdir(parents=True); (native / 'ios').mkdir(); (native / 'evidence').mkdir()
+        for name in ('ios-collect.sh', 'ios-ui-shards.py', 'collect-native-journeys.py', 'collect-signin-journey.py'):
+            shutil.copyfile(NATIVE / 'scripts' / name, native / 'scripts' / name)
+        (native / 'evidence/device-build.log').write_text('** BUILD SUCCEEDED **\n')
+        doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 3)
+        if plan:
+            (native / 'evidence/ios-ui-shard-plan.json').write_text(json.dumps(doc))
+        artifacts = root / 'artifacts'
+        for row in doc['shards']:
+            changes = (shard_changes or {}).get(row['index'], {})
+            if changes == 'missing':
+                continue
+            directory = write_shard(artifacts, row['index'], row['cases'], **changes)
+            directory.rename(artifacts / f'studio-ios-ui-shard-{row["index"]}-77-2')
+        env = dict(os.environ, GITHUB_SHA=SHA, NATIVE_SOURCE_HEAD=SHA, GITHUB_RUN_ID='77', GITHUB_RUN_ATTEMPT='2',
+                   IOS_BUILD_RESULT=build, IOS_UI_RESULT=ui, IOS_SHARD_ARTIFACTS=str(artifacts))
+        result = subprocess.run(['bash', str(native / 'scripts/ios-collect.sh')], cwd=root, env=env,
+                                capture_output=True, text=True, timeout=30)
+        return result, native / 'evidence'
+
+    def test_positive_control_complete_shards_produce_passing_journeys_and_signin_record(self):
+        result, evidence = self.run_collect()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        journeys = json.loads((evidence / 'native-journeys.json').read_text())
+        self.assertEqual(journeys['simulator_journeys']['status'], 'PASS')
+        self.assertEqual(journeys['test_candidate_eligibility'], 'PASS')
+        signin = json.loads((evidence / 'signin-journey.json').read_text())
+        self.assertEqual(signin['hops']['cancel_returns_to_app']['status'], 'PASS')
+        self.assertEqual((signin['run_id'], signin['run_attempt']), (77, 2))
+        # Exactly one attachment manifest, as the release evidence reader requires.
+        manifests = list(evidence.rglob('journey-attachments/manifest.json'))
+        self.assertEqual(manifests, [evidence / 'journey-attachments/manifest.json'])
+        self.assertEqual(sorted(p.name for p in (evidence / 'shards').iterdir()), ['shard-1', 'shard-2', 'shard-3'])
+
+    def test_missing_shard_fails_and_journeys_are_not_a_pass(self):
+        result, evidence = self.run_collect(shard_changes={2: 'missing'}, ui='failure')
+        self.assertNotEqual(result.returncode, 0)
+        journeys = json.loads((evidence / 'native-journeys.json').read_text())
+        self.assertNotEqual(journeys['simulator_journeys']['status'], 'PASS')
+        self.assertEqual(json.loads((evidence / 'ios-ui-shards.json').read_text())['verdict'], 'FAIL')
+
+    def test_failed_shard_exit_fails_the_ios_job(self):
+        result, evidence = self.run_collect(shard_changes={3: {'test_exit': 65}}, ui='failure')
+        self.assertEqual(result.returncode, 65, result.stdout)
+
+    def test_shard_job_failure_without_other_evidence_still_fails(self):
+        result, _ = self.run_collect(ui='failure')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_build_failure_without_plan_records_not_run_and_fails(self):
+        result, evidence = self.run_collect(build='failure', plan=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('No UI shard plan', result.stdout)
+        journeys = json.loads((evidence / 'native-journeys.json').read_text())
+        self.assertEqual(journeys['simulator_journeys']['exit_code'], 125)
+
+
+class ApprovalPushHang(unittest.TestCase):
+    def test_stuck_simctl_keeps_its_limit_records_diagnostics_and_fails_by_step(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            bin_dir = evidence / 'bin'; bin_dir.mkdir()
+            xcrun = bin_dir / 'xcrun'
+            xcrun.write_text(f'#!{sys.executable}\nimport time\ntime.sleep(30)\n'); xcrun.chmod(0o755)
+            seen = []
+            with mock.patch.dict(os.environ, {'PATH': str(bin_dir) + os.pathsep + os.environ['PATH']}), \
+                 mock.patch.object(push, 'bounded', side_effect=lambda args, limit=30: seen.append(args) or 'ok'):
+                with self.assertRaisesRegex(push.SimctlHang, 'bootstatus did not return within 0.3s during boot'):
+                    push.simctl(evidence, 'boot', ['bootstatus', 'X', '-b'], timeout=0.3, capture=False)
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+            self.assertEqual((rows[0]['step'], rows[0]['outcome'], rows[0]['limit']), ('boot', 'timeout', 0.3))
+            report = (evidence / 'simctl-hang-boot.txt').read_text()
+            self.assertIn('sample of the stuck simctl', report)
+            self.assertIn('host CoreSimulator log', report)
+            self.assertTrue(any(args[0] == 'sample' for args in seen))
+
+    def test_returning_simctl_is_timed_and_not_diagnosed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            bin_dir = evidence / 'bin'; bin_dir.mkdir()
+            xcrun = bin_dir / 'xcrun'
+            xcrun.write_text(f'#!{sys.executable}\nprint("ok")\n'); xcrun.chmod(0o755)
+            with mock.patch.dict(os.environ, {'PATH': str(bin_dir) + os.pathsep + os.environ['PATH']}):
+                self.assertEqual(push.simctl(evidence, 'warm-up', ['launch', 'X', 'com.apple.Preferences'], timeout=5), 'ok')
+            self.assertFalse(list(evidence.glob('simctl-hang-*')))
+            self.assertEqual(json.loads((evidence / 'simulator-steps.jsonl').read_text())['outcome'], 'exit 0')
+
+    DEVICE = 'C0E7C600-E107-428F-8A03-DEDB01894AEF'
+
+    def ps(self, children, runnable, device=None):
+        device = device or self.DEVICE
+        lines = ['    1     0 Ss   /sbin/launchd',
+                 f' 4820     1 S    launchd_sim /Users/runner/Library/Developer/CoreSimulator/Devices/{device}/data/var/run/launchd_bootstrap.plist',
+                 ' 3041     1 R    /Library/.../CoreSimulatorService']
+        for index in range(children):
+            lines.append(f' {5000 + index}  4820 {"Rs" if index < runnable else "Ss"}   /RuntimeRoot/usr/libexec/d{index}')
+        return '\n'.join(lines) + '\n'
+
+    def test_device_activity_counts_only_the_owned_launchd_sim_children(self):
+        self.assertEqual(push.device_activity(self.ps(5, 2), self.DEVICE), (5, 2))
+        other = self.ps(5, 2, device='11111111-1111-1111-1111-111111111111')
+        self.assertIsNone(push.device_activity(other, self.DEVICE))
+        self.assertIsNone(push.device_activity('<ps unavailable>', self.DEVICE))
+
+    def test_recorded_hang_host_reads_as_its_real_counts(self):
+        # The process table from run 44874729460, reduced to the columns the observation reads.
+        report = Path(__file__).with_name('fixtures') / 'approval-push-processes-44874729460.txt'
+        self.assertEqual(push.device_activity(report.read_text(), self.DEVICE), (198, 43))  # 3 CPUs
+
+    def test_observe_records_a_fixed_count_and_never_fails_or_waits_for_a_condition(self):
+        # A host that never settles and a ps that cannot be read: still three rows, no error, no hang file.
+        outputs = iter([self.ps(250, 180), '<ps -axo did not return within 30s>', self.ps(260, 170)])
+        sleeps = []
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(push, 'bounded', side_effect=lambda args, limit=30: next(outputs)), \
+             mock.patch.object(push.time, 'sleep', side_effect=sleeps.append):
+            evidence = Path(directory)
+            push.observe(evidence, self.DEVICE)
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+            self.assertFalse(list(evidence.glob('simctl-hang-*')))
+        self.assertEqual([(row['command'], row['processes'], row['runnable']) for row in rows],
+                         [('observe', 250, 180), ('observe', None, None), ('observe', 260, 170)])
+        self.assertEqual(sleeps, [push.OBSERVE_INTERVAL] * (push.OBSERVE_SAMPLES - 1))
+
+    def test_boot_observes_after_bootstatus_and_before_the_warm_up_launch(self):
+        order = []
+        def simctl(evidence, step, args, **_):
+            order.append(args[0])
+            if args[0] == 'create':
+                return self.DEVICE
+            if args[0] == 'list' and 'devices' in args:
+                return json.dumps({'devices': {'r': [{'udid': self.DEVICE, 'dataPath': '/data'}]}})
+            return '{}'
+        outputs = iter(['26.5', 'type runtime'])
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(push, 'simctl', side_effect=simctl), \
+             mock.patch.object(push, 'observe', side_effect=lambda evidence, device: order.append(f'observe {device}')), \
+             mock.patch.object(push.subprocess, 'check_output', side_effect=lambda *a, **k: next(outputs)):
+            push.boot(Path(directory))
+        self.assertEqual(order, ['list', 'create', 'list', 'boot', 'bootstatus', f'observe {self.DEVICE}', 'launch', 'terminate'])
+
+    def test_cleanup_without_a_created_simulator_calls_nothing(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(push, 'simctl') as call:
+            push.cleanup(Path(directory))
+            call.assert_not_called()
+
+
+if __name__ == '__main__':
+    unittest.main()
