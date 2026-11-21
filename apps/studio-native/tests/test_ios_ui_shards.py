@@ -725,6 +725,38 @@ class PrebootCache(unittest.TestCase):
         self.assertEqual(result['outcome'], 'error')
         self.assertEqual(self.rows()[-1]['outcome'], 'error')
 
+    def seed_ps(self, runnable, cpu_busy='9.0'):
+        """A CPU-sorted PS_TABLE: one busy host process, the device's launchd_sim and 3 device children."""
+        lines = ['  PID  PPID STAT ELAPSED  %CPU %MEM COMMAND',
+                 f'  900     1 R       10:00 {cpu_busy}  1.0 /usr/libexec/hostbusy',
+                 f' 4820     1 S       04:00  0.4  0.2 launchd_sim /Users/runner/Library/Developer/CoreSimulator/Devices/{self.DEVICE}/data/var/run/launchd_bootstrap.plist']
+        for index in range(3):
+            stat = 'Rs' if index < runnable else 'Ss'
+            lines.append(f' {5000 + index}  4820 {stat}      03:00  0.0  0.1 /RuntimeRoot/usr/libexec/{"sirittsd" if index == 0 else f"d{index}"}')
+        return '\n'.join(lines) + '\n'
+
+    def test_seed_wait_writes_tables_about_once_a_minute_and_at_the_end(self):
+        tables = iter([self.seed_ps(3), self.seed_ps(3), self.seed_ps(2), self.seed_ps(0), self.seed_ps(0), self.seed_ps(0)])
+        # Readings at 0, 30, 61, 90, 125 and 130 s: the clock moves only when the seed sleeps.
+        now, steps = [0], iter([30, 31, 29, 35, 5])
+        with mock.patch.object(push, 'bounded', side_effect=lambda args, limit=30: next(tables)), \
+             mock.patch.object(push.time, 'monotonic', side_effect=lambda: now[0]), \
+             mock.patch.object(push.time, 'sleep', side_effect=lambda _: now.__setitem__(0, now[0] + next(steps))), \
+             mock.patch.object(push.os, 'cpu_count', return_value=1):
+            seconds, activity = push.wait_settled(self.evidence, self.DEVICE, limit=900, interval=5, table_every=60)
+        self.assertEqual((seconds, activity), (130, (3, 0)))
+        observe = [r for r in self.rows() if r['command'] == 'observe']
+        self.assertEqual([(r['processes'], r['runnable']) for r in observe], [(3, 3), (3, 3), (3, 2), (3, 0), (3, 0), (3, 0)])
+        self.assertEqual(observe[0]['daemons']['sirittsd'], [{'stat': 'Rs', 'etime': '03:00', 'cpu': 0.0}])
+        ps = (self.evidence / 'simulator-ps.txt').read_text()
+        # The first reading, each first one at least 60 s after the last table (61 s, 125 s), and the settled one.
+        self.assertEqual(re.findall(r'^== seed sample (\d+) ', ps, re.M), ['1', '3', '5', '6'])
+        self.assertIn('hostbusy', ps)
+        self.assertEqual(re.findall(r'^-- runnable device processes: (\d+)$', ps, re.M), ['3', '2', '0', '0'])
+        first = ps.split('== seed sample 3 ')[0]
+        self.assertNotIn('/usr/libexec/hostbusy', first.split('-- runnable')[1])
+        self.assertIn('/RuntimeRoot/usr/libexec/sirittsd', first.split('-- runnable')[1])
+
     def test_settle_rule_used_by_the_seed(self):
         self.assertTrue(push.is_settled([(200, 9), (207, 1), (207, 3), (207, 0)], cpus=3))
         self.assertFalse(push.is_settled([(207, 0), (207, 0)], cpus=3))
@@ -760,6 +792,9 @@ class PrebootCache(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertIn(line, push_job.splitlines()); self.assertIn(line, seed_job.splitlines())
         self.assertIn('lookup-only: true', seed_job)
+        # The seed's process tables and hang files go up with its rows.
+        for path in ('sim-seed-run/simulator-steps.jsonl', 'sim-seed-run/simctl-hang-*.txt', 'sim-seed-run/simulator-ps.txt'):
+            self.assertIn(f'apps/studio-native/evidence/{path}', seed_job)
         self.assertNotIn('ios-sim-seed', self.job_block(text, 'acceptance'))
 
 

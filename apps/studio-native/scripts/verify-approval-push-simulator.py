@@ -60,6 +60,10 @@ OBSERVE_INTERVAL = 5
 SEED_SETTLE_LIMIT = 900
 SEED_SETTLE_INTERVAL = 5
 SEED_SETTLE_SAMPLES = 3
+# While the seed waits, the 40 busiest processes go to simulator-ps.txt about once a minute, so
+# a long tail of first-boot work (run 44936067384: 40-90 runnable for 4+ minutes) has names.
+SEED_TABLE_EVERY = 60
+SEED_TABLE_ROWS = 40
 # /2: the seed also times one speechVoices() call on the settled device (ios-speech-probe.swift).
 SEED_SCHEMA = "hps-ios-sim-seed/2"
 # The seed's speech probe: new bounds on a new, measurement-only step. Its result is recorded
@@ -218,19 +222,43 @@ def is_settled(samples, cpus):
     return len({count for count, _ in recent}) == 1 and all(runnable <= cpus for _, runnable in recent)
 
 
-def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SETTLE_INTERVAL):
+def seed_table(evidence, table, device, sample, seconds):
+    """Append one seed reading to simulator-ps.txt: the busiest host processes, then every
+    runnable process of the device (starved ones sit at 0 % CPU and miss the busiest list)."""
+    lines = table.splitlines()
+    rows = [line.split(None, 6) for line in lines]
+    launchd = [r[0] for r in rows if len(r) == 7 and r[6].startswith("launchd_sim ") and f"/Devices/{device}/" in r[6]]
+    runnable = [line for line, r in zip(lines, rows)
+                if launchd and len(r) == 7 and r[1] == launchd[0] and r[2].startswith("R")]
+    with (evidence / "simulator-ps.txt").open("a") as target:
+        target.write(f"== seed sample {sample} {seconds}s\n")
+        target.write("\n".join(lines[:SEED_TABLE_ROWS + 1]) + "\n")
+        target.write(f"-- runnable device processes: {len(runnable)}\n")
+        target.write("".join(line + "\n" for line in runnable))
+
+
+def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SETTLE_INTERVAL, table_every=SEED_TABLE_EVERY):
     """Seed job only: wait until the new device stops its first-boot work. Reads `ps` only."""
     cpus = os.cpu_count() or 1
     started = time.monotonic()
     samples = []
+    table_at = None
     while True:
-        activity = device_activity(bounded(["ps", "-axo", "pid=,ppid=,stat=,command="]), device)
+        table = bounded(PS_TABLE)
+        # The same reading as before, from the CPU-sorted table: pid, ppid, stat and command.
+        rows = [line.split(None, 6) for line in table.splitlines()]
+        activity = device_activity("\n".join(f"{r[0]} {r[1]} {r[2]} {r[6]}" for r in rows if len(r) == 7), device)
         samples.append(activity)
         seconds = round(time.monotonic() - started, 1)
         record(evidence, step="seed", command="observe", outcome="sample",
                processes=None if activity is None else activity[0],
-               runnable=None if activity is None else activity[1], seconds=seconds)
-        if is_settled(samples, cpus):
+               runnable=None if activity is None else activity[1], seconds=seconds,
+               daemons=device_daemons(table, device))
+        settled = is_settled(samples, cpus)
+        if table_at is None or seconds - table_at >= table_every or settled:
+            seed_table(evidence, table, device, len(samples), seconds)
+            table_at = seconds
+        if settled:
             record(evidence, step="seed", command="settle", limit=limit, outcome="settled", seconds=seconds)
             return seconds, activity
         if time.monotonic() - started + interval > limit:

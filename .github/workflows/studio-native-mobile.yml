@@ -175,6 +175,7 @@ jobs:
           path: |
             apps/studio-native/evidence/sim-seed-run/simulator-steps.jsonl
             apps/studio-native/evidence/sim-seed-run/simctl-hang-*.txt
+            apps/studio-native/evidence/sim-seed-run/simulator-ps.txt
             ${{ runner.temp }}/ios-sim-preboot/seed.json
           if-no-files-found: ignore
           retention-days: 14
