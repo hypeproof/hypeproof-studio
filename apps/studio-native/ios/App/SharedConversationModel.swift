@@ -258,7 +258,12 @@ private struct SharedCacheFile: Codable {
             return try await self.teamService.recoverTeamRequest(draft, token: self.approvalToken(identity))
         }, load: { [weak self] account in
             guard let self else { throw CancellationError() }
-            return try self.readTeamDraft(TeamRequestDraft.self, account: account, name: "request.json")
+            let stored = try self.readTeamDraft(TeamRequestDraft.self, account: account, name: "request.json")
+#if DEBUG
+            // Synthetic journey only: an already-acknowledged request (#4432).
+            if stored == nil, let seeded = TeamEntryFixture.seededRequest(account: account) { return seeded }
+#endif
+            return stored
         }, save: { [weak self] draft in
             guard let self else { throw CancellationError() }
             try draft.validate(account: draft.accountID); try self.writeTeamDraft(draft, account: draft.accountID, name: "request.json")
