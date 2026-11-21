@@ -49,10 +49,15 @@ elif tool=='adb':
   print('mCurrentFocus='+focus+'\nisKeyguardShowing=false')
  elif args==['shell','dumpsys','power']:print('mWakefulness=Awake')
  elif args==['shell','getprop','ro.build.fingerprint']:print('fixture fingerprint')
+ elif args[:3]==['shell','pm','disable-user']:
+  pkg=args[-1]
+  if mode=='messaging_absent':print('Exception occurred while executing \'disable-user\':\njava.lang.IllegalArgumentException: Unknown package: '+pkg);sys.exit(255)
+  elif mode=='disable_fails':print('Error: java.lang.SecurityException: Shell cannot change component state');sys.exit(1)
+  else:print('Package '+pkg+' new state: disabled-user')
  else:print('retained diagnostic fixture')
 '''
 VERIFY = r'''#!/bin/bash
-printf 'started\n' >> "$MOCK_STATE/verification"
+printf 'started %s\n' "$*" >> "$MOCK_STATE/verification"
 if [ "$MOCK_MODE" = verify_failure ]; then exit 23; fi
 if [ "$MOCK_MODE" = emulator_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = interrupt_test ] || [ "$MOCK_MODE" = test_timeout ]; then sleep 60; fi
@@ -121,10 +126,44 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertGreaterEqual(int((self.state / "windows").read_text()), 6)
         self.assertTrue(receipt["verification_started"])
-        self.assertEqual((self.state / "verification").read_text(), "started\n")
+        # The APKs were built before boot; the booted device only runs the device phase.
+        self.assertEqual((self.state / "verification").read_text(), "started device\n")
         self.assertEqual(receipt["stable_focus_observations"], 3)
         self.assertTrue((self.state / "stopped").exists())
         self.assertIn(["adb", "-s", f"emulator-{self.port}", "shell", "input", "keyevent", "KEYCODE_WAKEUP"], calls)
+
+    def disabled(self, receipt):
+        return [(r["package"], r["result"]) for r in receipt["disabled_packages"]]
+
+    def test_messaging_is_disabled_after_first_observation_and_before_tests(self):
+        code, receipt, calls = self.finish(self.start("unstable"))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.disabled(receipt), [("com.google.android.apps.messaging", "disabled")])
+        disable = ["adb", "-s", f"emulator-{self.port}", "shell", "pm", "disable-user", "--user", "0", "com.google.android.apps.messaging"]
+        self.assertEqual(calls.count(disable), 1)
+        window = ["adb", "-s", f"emulator-{self.port}", "shell", "dumpsys", "window"]
+        # The first observation precedes the disable, so an existing ANR is never concealed.
+        self.assertLess(calls.index(window), calls.index(disable))
+        self.assertEqual(receipt["recipe"]["target"], "google_apis")
+
+    def test_absent_messaging_is_recorded_and_tests_still_run(self):
+        code, receipt, _ = self.finish(self.start("messaging_absent"))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.disabled(receipt), [("com.google.android.apps.messaging", "not_installed")])
+        self.assertTrue(receipt["verification_started"])
+
+    def test_failed_disable_is_recorded_not_hidden_or_retried(self):
+        code, receipt, calls = self.finish(self.start("disable_fails"))
+        self.assertEqual(code, 0)
+        [entry] = receipt["disabled_packages"]
+        self.assertEqual((entry["result"], entry["exit_code"]), ("failed", 1))
+        self.assertIn("SecurityException", entry["output"])
+        self.assertEqual(sum(c[4:6] == ["pm", "disable-user"] for c in calls), 1)
+
+    def test_foreign_anr_before_disable_still_blocks(self):
+        code, receipt, calls = self.finish(self.start("foreign_anr"))
+        self.assertEqual((code, receipt["reason"]), (2, "foreign_anr"))
+        self.assertFalse(any("disable-user" in c for c in calls))
 
     def test_absent_focus_blocks_tests_and_retains_observations(self):
         code, receipt, _ = self.finish(self.start("no_focus", boot=.7))
