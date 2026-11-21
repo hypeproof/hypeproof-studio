@@ -207,8 +207,20 @@ final class StudioJourneyTests: XCTestCase {
         let input = waitForSnapshot(app, timeout: 7) { root in latest = root; return has(root, "sharedInput", [.textField, .textView]) }
         XCTAssertTrue(input, "The personal conversation must be usable without a desktop.")
         let opening = waitForSnapshot(app, timeout: 5) { root in latest = root; return has(root, "reflectionOpening", [.staticText]) }
+        if !input || !opening { signInFailureEvidence(app) }
         XCTAssertTrue(opening, "reflectionOpening must appear after sign-in.")
         XCTAssertFalse(latest.map { has($0, "accountCancel", [.button]) } ?? true, "Successful account adoption must finish the login state.")
+    }
+    /// Diagnostics only, after a sign-in wait has already failed: the screen and
+    /// the full live trace. Snapshot values stop at about 512 characters and
+    /// hid `paths` (whether POST /v1/auth/native/start was sent) in run
+    /// 44866066162 (#4432). No wait, retry or assertion is added.
+    @MainActor private func signInFailureEvidence(_ app: XCUIApplication) {
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "sign-in-wait-failure-screen"; screen.lifetime = .keepAlways; add(screen)
+        let node = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+        let trace = XCTAttachment(string: node.exists ? (node.value as? String ?? "trace value is not a string") : "trace element absent")
+        trace.name = "sign-in-wait-failure-full-trace"; trace.lifetime = .keepAlways; add(trace)
     }
     /// All nodes of one accessibility snapshot that satisfy `match`.
     @MainActor private func snapshotNodes(_ root: XCUIElementSnapshot, _ match: (XCUIElementSnapshot) -> Bool) -> [XCUIElementSnapshot] {
