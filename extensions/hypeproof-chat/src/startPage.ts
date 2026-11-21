@@ -113,6 +113,8 @@ export class StartPage {
   private freeSeatNow = false;
   /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
   private offerWaited = false;
+  /** #4193 — a re-read of the offer the learner asked for is in flight. */
+  private offerRechecking = false;
   /** REQ-STUDIO-JOIN-LINK — the class a join link named, until a code is confirmed or the learner drops it. */
   private joinLink?: { classId: string; seq: number };
   private useGrantAfterSignIn = false;
@@ -566,8 +568,29 @@ export class StartPage {
   // ── Free start (SPEC iteration 4 §2; TUX-SP-14/15/16) ────────────────────────────────────────
   /** Advertised by the Service and not switched off on this machine. */
   private freeStartOn(): boolean {
-    const setting = vscode.workspace.getConfiguration("hypeproofChat").get<string>("freeStart", "service");
-    return setting !== "off" && freeStartAdvertised(this.trialOffer);
+    return !this.freeStartSwitchedOff() && freeStartAdvertised(this.trialOffer);
+  }
+  private freeStartSwitchedOff(): boolean {
+    return vscode.workspace.getConfiguration("hypeproofChat").get<string>("freeStart", "service") === "off";
+  }
+  /**
+   * #4193 — free start is not on screen although this machine allows it: the offer is still being
+   * read ("checking"), or the read failed or did not advertise free start ("unavailable"). The start
+   * page then says so and offers a re-check beside the class code entry; there is no trial-code
+   * entry. Absent while the free card is drawn, and when this machine switched free start off.
+   */
+  private freeStartCheck(): StartState["freeStartCheck"] {
+    if (this.freeStartSwitchedOff() || this.freeStartOn()) return undefined;
+    return this.trialOffer === undefined || this.offerRechecking ? "checking" : "unavailable";
+  }
+  /** #4193 — "다시 확인": read the offer again, once at a time. A failed read stays "unavailable". */
+  private async recheckTrialOffer(): Promise<void> {
+    if (this.offerRechecking || this.freeStartSwitchedOff() || this.freeStartOn()) return;
+    this.offerRechecking = true;
+    await this.refresh();
+    try { this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl); }
+    finally { this.offerRechecking = false; }
+    await this.refresh();
   }
   /**
    * D19/REQ-I15 — the free-start signal the update checker reads (`registerPublicUpdateSignal`).
@@ -916,6 +939,7 @@ export class StartPage {
       ...(this.memberApprovals ? {memberApprovals:this.memberApprovals.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
+      ...(this.freeStartCheck() ? { freeStartCheck: this.freeStartCheck() } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
       ...(this.joinLink ? { joinLink: { ...this.joinLink } } : {}),
       settings: await this.settingsView(p),
@@ -1059,6 +1083,7 @@ export class StartPage {
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
     if (msg.type === "freeStartClaim") { await this.freeStartClaim(); return; }
     if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }
+    if (msg.type === "freeStartRecheck") { await this.recheckTrialOffer(); return; }
     if (msg.type === "freeStartUpdate") { await vscode.commands.executeCommand("hypeproof-chat.checkForUpdates"); return; }
     if (msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }

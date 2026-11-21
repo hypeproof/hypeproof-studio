@@ -285,9 +285,12 @@ export function freeDailyCapReached(err: unknown): boolean {
   return typeof m === "string" && (FREE_DAILY_CAP_SERVICE.test(m) || /open_trial_daily_cap:/.test(m));
 }
 
-/** Trial endings in 해요체, like the purchase copy. The files stay (CU-14); nothing is charged or opened. */
-export const TRIAL_EXHAUSTED_FRIENDLY = "체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
-export const TRIAL_EXPIRED_FRIENDLY = "체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
+/**
+ * Endings of a seat that is not free (a code-issued seat), in 해요체 like the purchase copy. The files
+ * stay (CU-14); nothing is charged or opened. #4193: no 체험 — the seat is named only as 이 활동.
+ */
+export const TRIAL_EXHAUSTED_FRIENDLY = "이 활동에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
+export const TRIAL_EXPIRED_FRIENDLY = "이 활동의 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
 /**
  * `refillPending`: a free seat whose next daily allowance is still ahead (`freeRefillPending`).
  * No pass is named: passes are not sold and the app has no purchase view (2026-11-13).

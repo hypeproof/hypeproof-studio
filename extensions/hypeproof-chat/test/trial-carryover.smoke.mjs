@@ -59,10 +59,11 @@ assert.deepEqual(readableTranscript(trialHistory).map((m) => m.role), ['user', '
 console.log('PASS the offer shows only while pending, advertised, unanswered and with something to read');
 
 const summary = carryoverSummary(trialHistory);
-assert.match(summary, /체험에서 하던 대화를 이어서 해요/);
+assert.match(summary, /^이전 활동에서 하던 대화를 이어서 해요/);
+assert.doesNotMatch(summary, /체험/, '#4193: the seed never says 체험');
 assert.match(summary, /- 우리 치과 홈페이지 첫 화면을 만들어 줘/);
 assert.match(summary, /- 진료 시간 표를 넣어 줘/);
-assert.match(summary, /체험의 마지막 답변: 진료 시간 표를 추가했어요\./);
+assert.match(summary, /이전 활동의 마지막 답변: 진료 시간 표를 추가했어요\./);
 assert.doesNotMatch(summary, /Write\(index\.html\)/, 'tool lines never reach the seed');
 const long = carryoverSummary([{role: 'user', content: '가'.repeat(500)}]);
 assert.ok(long.split('\n').every((line) => line.length <= 400), 'requests are clipped');
@@ -227,7 +228,8 @@ const status = rendererStatus();
 if (!status.available) console.log('NOT RUN TrialCarryover render: ' + status.reason);
 else {
   const offerText = visibleText(await renderComponent('TrialCarryover', {view: {status: 'offer', fromName: '무료 체험'}, onDecide() {}}));
-  assert.match(offerText, /체험에서 하던 대화 이어가기/);
+  assert.match(offerText, /이전 활동에서 하던 대화 이어가기/);
+  assert.doesNotMatch(offerText.replaceAll('무료 체험', ''), /체험/, '#4193: only the fixture name says 체험');
   assert.match(offerText, /이어가기/); assert.match(offerText, /새 대화로 시작하기/);
   const acceptedHtml = await renderComponent('TrialCarryover', {view: {status: 'accepted', fromName: '무료 체험', transcript: readableTranscript(trialHistory)}, onDecide() {}});
   const acceptedText = visibleText(acceptedHtml);

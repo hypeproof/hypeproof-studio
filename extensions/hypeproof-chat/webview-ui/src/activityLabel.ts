@@ -4,14 +4,17 @@ import { FREE_REFILL_ENDED, FREE_REFILL_WAITING, freeRefillPending } from "../..
 type Kind = "trial" | "personal" | "classroom" | undefined;
 
 /**
- * REQ-L12 — a bought pass is served as a trial seat, so the kind alone would call a paid pass
- * "AI 체험" (in-app purchase rehearsal, 2026-10-14). The Service's `pass` block decides.
+ * REQ-L12 — a bought pass is served as a trial seat, so the kind alone cannot name it
+ * (in-app purchase rehearsal, 2026-10-14). The Service's `pass` block decides.
+ * #4193 — trial mode is gone from what people see: any other `trial` seat or saved record
+ * (a code-issued seat, an account seat, a free record saved before the `free` flag) reads
+ * 개인 작업. The wire value stays `trial`.
  */
 export function activityLabel(kind: Kind, pass?: unknown, fallback = "개인 작업", free = false): string {
   if (pass) return "이용권";
   // Free start (SPEC iteration 4 §2.4) — the free allowance is not called a 체험.
   if (free) return "무료 사용";
-  return kind === "trial" ? "AI 체험" : kind === "classroom" ? "수업" : kind === "personal" ? "개인 작업" : fallback;
+  return kind === "trial" ? "개인 작업" : kind === "classroom" ? "수업" : kind === "personal" ? "개인 작업" : fallback;
 }
 
 /** What is left on a pass, in the purchase copy's 해요체. The count is as of the last profile read. */
@@ -91,8 +94,8 @@ export function trialSummary(trial: TrialStatus | undefined | unknown, now = Dat
 /** The passive line in the chat header. Text only; it never carries a button (CU-13, no upgrade pressure). */
 export function trialHeaderLine(trial: TrialStatus | undefined | unknown, now = Date.now(), free = false): string | null {
   const ended = trialEnded(trial, now);
-  if (ended === "expired") return free ? "무료 사용 시간 끝남" : "체험 시간 끝남";
-  if (ended === "exhausted") return free ? "무료 AI 요청을 모두 사용함" : "체험 요청을 모두 사용함";
+  if (ended === "expired") return free ? "무료 사용 시간 끝남" : "사용 시간 끝남";
+  if (ended === "exhausted") return free ? "무료 AI 요청을 모두 사용함" : "AI 요청을 모두 사용함";
   // A free seat counts nothing down while it is in use (Jay 2026-10-19); the end card speaks at the end.
   return free ? null : trialSummary(trial, now, free);
 }
@@ -109,8 +112,8 @@ export function trialEndedFacts(trial: TrialStatus | undefined | unknown, now = 
     ? { reason, title: "무료 사용이 끝났습니다", description: `무료 AI 요청을 모두 사용했습니다. ${kept}`, row: `무료 AI 요청 ${t.limit.toLocaleString("ko-KR")}번 모두 사용` }
     : { reason, title: "무료 사용이 끝났습니다", description: `무료 사용 시간이 끝났습니다. ${kept}`, row: t.end ? `${clock(t.end, now)}에 끝남` : "무료 사용 시간 끝남" };
   return reason === "exhausted"
-    ? { reason, title: "체험이 끝났습니다", description: `AI 요청을 모두 사용했습니다. ${kept}`, row: `AI 요청 ${t.limit.toLocaleString("ko-KR")}번 모두 사용` }
-    : { reason, title: "체험이 끝났습니다", description: `체험 시간이 끝났습니다. ${kept}`, row: t.end ? `${clock(t.end, now)}에 끝남` : "체험 시간 끝남" };
+    ? { reason, title: "사용이 끝났습니다", description: `AI 요청을 모두 사용했습니다. ${kept}`, row: `AI 요청 ${t.limit.toLocaleString("ko-KR")}번 모두 사용` }
+    : { reason, title: "사용이 끝났습니다", description: `사용 시간이 끝났습니다. ${kept}`, row: t.end ? `${clock(t.end, now)}에 끝남` : "사용 시간 끝남" };
 }
 
 /** The chat header's detail after the activity name: a pass's end date, or a trial's remaining line. A pass always wins. */

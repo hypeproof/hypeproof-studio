@@ -114,14 +114,16 @@ try{for(const run of runs){
   // ── 4. The ordinary start page uses the same field ───────────────────────────────────────────
   ok(await click('시작 방법 다시 선택'),'back to the choices: '+label0);
   await state({});
-  ok(await click('AI 체험하기'),'the trial form opens: '+label0);
-  await waitFor(`document.activeElement?.id==='course-code'`,'the trial code field');
-  m=await measure();label=`${label0} trial form: ${JSON.stringify(m)}`;
-  ok(m.focused&&m.value===''&&m.type==='password'&&Math.abs(m.field.height-FLOOR)<0.5&&m.fontPx>=TYPE_FLOOR&&m.link===null,'the trial form has the same empty, focused, 44px password field and no class line: '+label);
+  // #4193 — there is no trial-code form any more; the class form without a join link is the ordinary one.
+  ok(!(await click('AI 체험하기')),'no trial-code choice: '+label0);
+  ok(await click('수업에 참여하기'),'the class form opens: '+label0);
+  await waitFor(`document.activeElement?.id==='course-code'`,'the class code field');
+  m=await measure();label=`${label0} class form: ${JSON.stringify(m)}`;
+  ok(m.focused&&m.value===''&&m.type==='password'&&Math.abs(m.field.height-FLOOR)<0.5&&m.fontPx>=TYPE_FLOOR&&m.link===null,'the class form without a link has the same empty, focused, 44px password field and no class line: '+label);
   await state({error:'인증에 실패했습니다. 참여 코드를 다시 확인하세요.',errorAt:'code'});
-  await waitFor(`!!document.getElementById('connection-error')`,'the trial refusal');
-  m=await measure();label=`${label0} trial refused: ${JSON.stringify(m)}`;
-  ok(m.errors===1&&m.errorInForm&&m.fieldBeforeError&&m.errorBeforeSubmit&&m.error.top>=m.field.bottom-0.5&&m.error.top-m.field.bottom<=GAP_MAX,'a refused trial code is said under the field too: '+label);
+  await waitFor(`!!document.getElementById('connection-error')`,'the class refusal');
+  m=await measure();label=`${label0} class refused: ${JSON.stringify(m)}`;
+  ok(m.errors===1&&m.errorInForm&&m.fieldBeforeError&&m.errorBeforeSubmit&&m.error.top>=m.field.bottom-0.5&&m.error.top-m.field.bottom<=GAP_MAX,'a refused code is said under the field too: '+label);
   // Leaving the form keeps the message on screen, in the card's error area.
   ok(await click('시작 방법 다시 선택'),'back to the choices again: '+label0);
   await waitFor(`!document.getElementById('course-code')`,'the choices');
@@ -131,8 +133,8 @@ try{for(const run of runs){
   // ── 5. An open IME composition owns Enter (CGP-DS-R-027) ─────────────────────────────────────
   // The password type keeps the OS IME out on the shipped platforms; if a composition is open anyway,
   // Enter commits the syllable and must not submit the half-typed code. Forced through CDP here.
-  ok(await click('AI 체험하기'),'the trial form opens again: '+label0);
-  await waitFor(`document.activeElement?.id==='course-code'&&document.getElementById('course-code').value===''`,'the empty trial code field');
+  ok(await click('수업에 참여하기'),'the class form opens again: '+label0);
+  await waitFor(`document.activeElement?.id==='course-code'&&document.getElementById('course-code').value===''`,'the empty class code field');
   const enter=async()=>{for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13,...(type==='keyDown'?{text:'\r',unmodifiedText:'\r'}:{})});};
   const submits=()=>ev(`window.sent.filter(m=>m.type==='connectCourse').length`);
   const before=await submits();

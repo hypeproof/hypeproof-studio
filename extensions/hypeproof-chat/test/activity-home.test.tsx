@@ -268,7 +268,7 @@ t("D-002: the tabs sit right under the activity title, an h2 with the activity's
     await other.unmount();
   }
   const blank = await mountApp(config({ activity: { id: "p1", name: " \u202e\u200b\t ", kind: "trial", workspace: "/tmp/p", verified: true } }));
-  eq(blank.all((e) => cls(e, "tw-activity-title"))[0]?.textContent, "AI 체험", "a blank name falls back to the activity kind");
+  eq(blank.all((e) => cls(e, "tw-activity-title"))[0]?.textContent, "개인 작업", "a blank name falls back to the activity kind (#4193: never AI 체험)");
   await blank.unmount();
 });
 

@@ -24,7 +24,7 @@ export interface CarryoverOffer {
   status: "pending" | "accepted" | "declined";
   decidedAt?: number;
 }
-/** `free`: the source was the free allowance, so the visible strings say 무료 사용 instead of 체험 (SPEC iteration 4 §2.4). */
+/** `free`: the source was the free allowance, so the visible strings say 무료 사용; otherwise 이전 활동 (SPEC iteration 4 §2.4, #4193). */
 export type CarryoverView =
   | { status: "offer"; fromName: string; free?: boolean }
   | { status: "accepted"; fromName: string; free?: boolean; transcript: Array<{ role: "user" | "assistant"; content: string }> };
@@ -109,9 +109,9 @@ export function carryoverSummary(trialHistory: readonly CarryoverMessage[], opts
   const lastReply = [...t].reverse().find((m) => m.role === "assistant");
   const lines = free
     ? ["무료 사용 중 하던 대화를 이어서 해요. 아래는 무료 사용 대화를 줄인 내용이에요. 무료 사용 대화 전체는 위에서 읽기만 할 수 있어요."]
-    : ["체험에서 하던 대화를 이어서 해요. 아래는 체험 대화를 줄인 내용이에요. 체험 대화 전체는 위에서 읽기만 할 수 있어요."];
-  if (asks.length) lines.push("", free ? "무료 사용 중 요청한 것:" : "체험에서 요청한 것:", ...asks);
-  if (lastReply) lines.push("", (free ? "무료 사용의 마지막 답변: " : "체험의 마지막 답변: ") + clip(lastReply.content, replyChars));
+    : ["이전 활동에서 하던 대화를 이어서 해요. 아래는 이전 활동 대화를 줄인 내용이에요. 이전 활동 대화 전체는 위에서 읽기만 할 수 있어요."];
+  if (asks.length) lines.push("", free ? "무료 사용 중 요청한 것:" : "이전 활동에서 요청한 것:", ...asks);
+  if (lastReply) lines.push("", (free ? "무료 사용의 마지막 답변: " : "이전 활동의 마지막 답변: ") + clip(lastReply.content, replyChars));
   return lines.join("\n");
 }
 

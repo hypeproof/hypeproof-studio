@@ -9,10 +9,11 @@ import type { CarryoverView } from "../../src/trialCarryoverHelpers";
 export function TrialCarryover(props: { view: CarryoverView | null | undefined; busy?: boolean; onDecide: (decision: "confirm" | "decline") => void }) {
   const { view } = props;
   if (!view) return null;
-  // Free start (SPEC iteration 4 §2.4) — a free-allowance source says 무료 사용; a code-issued trial keeps 체험.
-  const word = view.free ? "무료 사용" : "체험";
+  // Free start (SPEC iteration 4 §2.4) — a free-allowance source says 무료 사용; any other source
+  // (a code-issued seat) is 이전 활동 (#4193: no 체험).
+  const word = view.free ? "무료 사용" : "이전 활동";
   if (view.status === "offer") {
-    const title = view.free ? "무료 사용 중 하던 대화 이어가기" : "체험에서 하던 대화 이어가기";
+    const title = view.free ? "무료 사용 중 하던 대화 이어가기" : "이전 활동에서 하던 대화 이어가기";
     return (
       <section className="hps-carryover" aria-label={title}>
         <p className="hps-carryover-title"><strong>{title}</strong></p>

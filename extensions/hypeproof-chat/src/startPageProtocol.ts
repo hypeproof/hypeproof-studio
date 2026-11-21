@@ -53,6 +53,13 @@ export interface StartState {
    */
   freeStart?: FreeStartView;
   /**
+   * #4193 — free start is allowed on this machine but not on screen: the offer is being read
+   * ("checking") or the read failed or did not advertise free start ("unavailable"). The start page
+   * offers a re-check (`freeStartRecheck`) beside the class code entry. Absent while `freeStart`
+   * is drawn and when the machine setting `hypeproofChat.freeStart` is "off".
+   */
+  freeStartCheck?: "checking" | "unavailable";
+  /**
    * REQ-STUDIO-JOIN-LINK — a class join link brought the join form forward for this class.
    * Only the class id: a link never carries a code. `seq` changes on every link press so the
    * webview reopens and refocuses the empty code field.
@@ -149,6 +156,8 @@ export type StartRequest =
   | { type: "freeStartClaim" }
   | { type: "freeStartGuardian" }
   | { type: "freeStartUpdate" }
+  /** #4193 — read the free-start offer again after a failed or incomplete read. */
+  | { type: "freeStartRecheck" }
   /** REQ-L12 ⑤ — recovery of an order an older build started. There is no intent that starts an order. */
   | { type: "purchaseReopen" }
   | { type: "purchaseRetry" }

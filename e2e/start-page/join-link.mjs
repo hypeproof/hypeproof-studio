@@ -70,10 +70,14 @@ try {
  let before=await dismisses();
  await p.getByRole('button',{name:'시작 방법 다시 선택'}).click();
  assert.equal(await dismisses(),before+1,'시작 방법 다시 선택 drops the link');
- await p.getByRole('button',{name:'AI 체험하기',exact:true}).click();
- await p.locator('#course-code').fill('synthetic-trial-code');await p.getByRole('button',{name:'코드 확인하기'}).click();
- const trial=(await p.evaluate(()=>window.sent.filter(m=>m.type==='connectCourse'))).at(-1);
- assert.deepEqual(Object.keys(trial).sort(),['token','type'],'a code from the trial form carries no class');
+ // The host drops the link; the class form opened afterwards is the ordinary one (#4193: there is no
+ // trial-code form, so this is the only other code form) and its code carries no class.
+ await state({profile});await p.getByRole('button',{name:'다른 활동 선택'}).click();
+ assert.equal(await p.getByRole('button',{name:'AI 체험하기',exact:true}).count(),0,'no trial-code choice');
+ await p.getByRole('button',{name:'수업에 참여하기',exact:true}).click();assert.equal(await p.getByText('참여 링크로 연 수업').count(),0);
+ await p.locator('#course-code').fill('synthetic-issued-code');await p.getByRole('button',{name:'코드 확인하기'}).click();
+ const plain=(await p.evaluate(()=>window.sent.filter(m=>m.type==='connectCourse'))).at(-1);
+ assert.deepEqual(Object.keys(plain).sort(),['token','type'],'a code from the form without a link carries no class');
  await state({profile,joinLink:{classId:'dental-0729',seq:3}});await p.getByText('참여 링크로 연 수업').waitFor();
  before=await dismisses();
  await p.getByRole('button',{name:'기존 활동으로 돌아가기'}).click();
