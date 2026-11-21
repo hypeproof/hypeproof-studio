@@ -194,9 +194,14 @@ import UserNotifications
                     // Continue revising partial recognition like ongoing speech.
                     // Stop/background must cancel this producer; a delayed test
                     // must not accidentally let silence submit the held draft.
-                    for revision in 1...50 {
+                    // A fixed 50-revision (20s) budget ran out on hosted runners
+                    // before the UI Stop landed; silence then sent a second turn
+                    // (#4432). Keep revising until Stop/background cancels.
+                    var revision = 0
+                    while true {
                         try await Task.sleep(nanoseconds: 400_000_000)
-                        try Task.checkCancellation(); deliver(text + String(repeating: ".", count: revision), false)
+                        try Task.checkCancellation(); revision = revision % 50 + 1
+                        deliver(text + String(repeating: ".", count: revision), false)
                     }
                 }
             } catch { /* Stopping/backgrounding invalidates this capture. */ }
@@ -256,8 +261,12 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         } catch { client?.urlProtocol(self, didFailWithError: error); return }
         guard Self.store.holdHistory(request, id: historyID) else { complete(); return }
         // UI-driven logout has several real controls before explicit release.
-        // Its DEBUG-only read budget is 90s; all other scenarios keep 20s/25s.
-        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + (JourneyConfiguration.scenario == "logout-sync" ? 60 : 20))
+        // A 60s fixture clock expired on hosted runners (10-14s per AX query)
+        // and let logout proceed (#4432). Hold until the explicit release; the
+        // app's DEBUG-only 90s read budget, stopLoading or app teardown still
+        // end it. All other scenarios keep the 20s fixture clock.
+        let fixtureBudget: TimeInterval = JourneyConfiguration.scenario == "logout-sync" ? .infinity : 20
+        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + fixtureBudget)
     }
     private func holdDesktopListIfNeeded() throws -> Bool {
         stopLock.lock(); defer { stopLock.unlock() }
