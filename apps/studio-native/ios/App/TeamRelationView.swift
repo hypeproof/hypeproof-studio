@@ -26,7 +26,7 @@ struct TeamRelationScreen:View {
         let _=teamRenderCount("body.related")
         List{
 #if DEBUG
-            if TeamEntryFixture.enabled{TimelineView(.periodic(from:.now,by:0.25)){_ in let _=teamRenderCount("tick.related");Text("Synthetic related trace").font(.caption2).accessibilityIdentifier("teamRelatedTrace").accessibilityValue(TeamEntryFixture.trace)}}
+            if TeamEntryFixture.enabled{TimelineView(.periodic(from:.now,by:0.25)){_ in Text("Synthetic related trace").font(.caption2).accessibilityIdentifier("teamRelatedTrace").accessibilityValue(TeamEntryFixture.trace)}}
 #endif
             if !model.state.message.isEmpty{Text(model.state.message).accessibilityIdentifier("teamRelatedMessage")}
             if let page=model.state.list{

@@ -19,7 +19,7 @@ import SwiftUI
 }
 private func productLabel(_ id: String) -> String { ["studio": "Studio", "lab": "Lab", "foundry": "Foundry"][id] ?? id }
 
-/// Counts one body pass, destination factory call or trace tick (#4432). A no-op outside DEBUG.
+/// Counts one body pass, destination factory call or factory argument (#4432). A no-op outside DEBUG.
 func teamRenderCount(_ key: String) {
 #if DEBUG
     TeamRenderTrace.shared.count(key)
@@ -27,7 +27,9 @@ func teamRenderCount(_ key: String) {
 }
 #if DEBUG
 /// DEBUG-only render counters for #4432. Each key keeps its count and the first and last
-/// system uptime in ms, so a reader can tell bounded ticker work from an unbounded update loop.
+/// system uptime in ms, so a reader can tell bounded render work from an unbounded update loop.
+/// Trace tickers are deliberately not counted: the trace is an accessibility value, and a count that
+/// changed on every 0.25 s tick flooded testmanagerd with accessibility notifications while idle.
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
     private let lock = NSLock()
@@ -61,7 +63,7 @@ struct TeamRequestsView: View {
         NavigationStack {
             List {
 #if DEBUG
-                if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in let _ = teamRenderCount("tick.requests"); Text("Synthetic request trace").font(.caption2).accessibilityIdentifier("teamRequestTrace").accessibilityValue(TeamEntryFixture.trace) } }
+                if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic request trace").font(.caption2).accessibilityIdentifier("teamRequestTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
                 if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamRequestStatus") }
                 if let draft = model.state.draft {

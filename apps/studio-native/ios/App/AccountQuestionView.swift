@@ -57,7 +57,7 @@ struct AccountQuestionView: View {
                         if let note = card.note { Text(note).font(.caption).foregroundStyle(.secondary) }
                     }
 #if DEBUG
-                    if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in let _ = teamRenderCount("tick.account"); Text("Team entry trace").font(.caption2).accessibilityIdentifier("teamEntryTrace").accessibilityValue(TeamEntryFixture.trace) } }
+                    if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Team entry trace").font(.caption2).accessibilityIdentifier("teamEntryTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
                 }.padding().task(id: model.state.card.map { $0.key + ":" + String($0.attempt) }) {
                     if let key = model.state.card?.key { await model.controller?.presented(key) }

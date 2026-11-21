@@ -22,7 +22,7 @@ struct ProductExperienceView: View {
                 }
                 Button("설정 다시 확인") { Task { await model.controller?.refresh() } }.disabled(model.state.busy)
 #if DEBUG
-                if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in let _ = teamRenderCount("tick.product"); Text("Team entry trace").font(.caption2).accessibilityIdentifier("teamEntryTrace").accessibilityValue(TeamEntryFixture.trace) } }
+                if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Team entry trace").font(.caption2).accessibilityIdentifier("teamEntryTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
             }.navigationTitle("사용 경험 공유").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() } } }
