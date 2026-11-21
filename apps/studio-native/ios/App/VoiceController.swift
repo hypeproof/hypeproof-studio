@@ -52,7 +52,8 @@ private struct VoiceInventory: @unchecked Sendable {
     private var emptyCaptureRetries = 0
     private var automaticContinuation = false
     private var nextTurn: (() -> Void)?
-    private var voiceInventory: Task<VoiceInventory, Never>?
+    /// The one voice inventory read in flight; cleared when it returns.
+    private var voiceInventoryRead: Task<VoiceInventory, Never>?
     private var playbackSetup: Task<Void, Never>?
 #if DEBUG
     private var fixtureSpeech: Task<Void, Never>?
@@ -88,9 +89,6 @@ private struct VoiceInventory: @unchecked Sendable {
         emptyCaptureRetries = retries
         self.nextTurn = mode == .conversation ? nextTurn : nil
         let token = turn.start(projectID: projectID, mode: mode)
-        // Refresh the voice inventory per conversation turn, off the main
-        // thread, so a voice installed meanwhile is still used.
-        if mode == .conversation { voiceInventory = Self.loadVoiceInventory() }
         record(.start)
         authorizeSpeech(token)
     }
@@ -376,14 +374,19 @@ private struct VoiceInventory: @unchecked Sendable {
         // Run 44913710488 (#4432): TextToSpeech blocked the main thread here
         // for 163 s, inside SwiftUI's onChange dispatch, so the reply text was
         // never drawn. Playback setup now starts after this update returns and
-        // reads the voice inventory loaded off the main thread. Each step is a
+        // reads the voice inventory off the main thread. Each step is a
         // separate non-inlined function, so a hang spindump names the step.
+        // Run 44930704524: speechVoices() itself blocked for over 160 s on a
+        // background thread too. Only this real-synthesis path reads it, one
+        // read at a time, on a dedicated queue rather than the Swift pool.
         let token = turn.token
-        let inventory = voiceInventory ?? Self.loadVoiceInventory()
-        voiceInventory = inventory
+        let read = voiceInventoryRead ?? Self.loadVoiceInventory()
+        voiceInventoryRead = read
         playbackSetup = Task { [weak self] in
-            let loaded = await inventory.value
-            guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .speaking else { return }
+            let loaded = await read.value
+            guard let self else { return }
+            if self.voiceInventoryRead == read { self.voiceInventoryRead = nil }
+            guard !Task.isCancelled, self.turn.token == token, self.turn.phase == .speaking else { return }
             self.startPlayback(text, inventory: loaded)
         }
     }
@@ -403,9 +406,15 @@ private struct VoiceInventory: @unchecked Sendable {
             speak(utterance)
         } catch { fail("답변을 읽지 못했어요. 화면에서 확인해 주세요.") }
     }
-    /// Reads installed voices and picks the Korean voice off the main thread.
+    /// Reads installed voices and picks the Korean voice on a dedicated serial
+    /// queue. A blocked read holds that queue's thread, not a Swift pool thread.
+    nonisolated private static let voiceInventoryQueue = DispatchQueue(label: "ai.hypeproof.studio.voice-inventory", qos: .userInitiated)
     @inline(never) nonisolated private static func loadVoiceInventory() -> Task<VoiceInventory, Never> {
-        Task.detached(priority: .userInitiated) { VoiceController.readVoiceInventory() }
+        Task {
+            await withCheckedContinuation { continuation in
+                VoiceController.voiceInventoryQueue.async { continuation.resume(returning: VoiceController.readVoiceInventory()) }
+            }
+        }
     }
     @inline(never) nonisolated private static func readVoiceInventory() -> VoiceInventory {
         let installed = AVSpeechSynthesisVoice.speechVoices()
