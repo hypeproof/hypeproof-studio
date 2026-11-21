@@ -1,8 +1,27 @@
-# HypeProof Studio ownership.
-# All active HypeProof members are code owners — any member's review satisfies the gate.
-* @jayleekr @JeHyeong2 @ico1036 @xoqhdgh1002 @JinyongShin @TJ-kr @rabqatab @J3llyBe4n
+# HypeProof Studio ownership — 도메인별 1차 담당자.
+#
+# 모든 줄에 @jayleekr 을 남긴다: 어느 경로든 Jay 또는 그 도메인 담당자의 리뷰로
+# 게이트를 통과한다. 멤버 정본은 hypeproof-harness 의 policy/members.yaml 이고,
+# 이 파일은 그 명단 위에서 "누가 그 영역을 1차로 보는가"만 적는다.
+#
+# 규칙은 아래로 갈수록 우선한다(CODEOWNERS 는 마지막으로 매칭된 줄이 이긴다).
 
-# Build/release surfaces are high-blast-radius.
-/.github/workflows/ @jayleekr @JeHyeong2 @ico1036 @xoqhdgh1002 @JinyongShin @TJ-kr @rabqatab @J3llyBe4n
-/scripts/ @jayleekr @JeHyeong2 @ico1036 @xoqhdgh1002 @JinyongShin @TJ-kr @rabqatab @J3llyBe4n
-/worker/ @jayleekr @JeHyeong2 @ico1036 @xoqhdgh1002 @JinyongShin @TJ-kr @rabqatab @J3llyBe4n
+# 기본값 — 도메인 줄에 없는 경로.
+* @jayleekr @JeHyeong2
+
+# 마크다운 문서는 어느 디렉터리에 있든 문서 담당자가 본다.
+*.md @ico1036 @jayleekr
+
+/docs/ @ico1036 @jayleekr
+
+# 빌드·배포·스크립트 — blast radius 가 큰 표면.
+/.github/workflows/ @JinyongShin @J3llyBe4n @JeHyeong2 @jayleekr
+/scripts/ @JinyongShin @J3llyBe4n @JeHyeong2 @jayleekr
+
+# 서버·인프라
+/worker/ @JinyongShin @J3llyBe4n @JeHyeong2 @jayleekr
+
+# 제품 코드
+/extensions/ @TJ-kr @xoqhdgh1002 @jayleekr
+/apps/ @TJ-kr @jayleekr
+/chalk/ @TJ-kr @jayleekr
