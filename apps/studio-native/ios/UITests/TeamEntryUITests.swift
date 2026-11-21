@@ -964,4 +964,46 @@ final class TeamEntryUITests: XCTestCase {
         closeInboxDetail(app); XCTAssertEqual(draft.value as? String, "Keep my push draft")
     }
 
+    // #4432: destination models are built lazily, so their arguments must be the values the detail
+    // screen set before navigating, not the @State defaults ("studio"). A Lab request makes a stale read visible.
+    @MainActor private func labRequestDetail(_ flags: [String:String]) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = studioApp(); app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "member-inbox"; app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString; app.launchEnvironment["HP_TEAM_ENTRY"] = "1"
+        for (key,value) in flags { app.launchEnvironment[key] = value }; app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
+        XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10)); app.buttons["teamRequestHomeEntry"].tap()
+        let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("Lab fixture request")
+        // The menu Picker is exposed as one Button labelled "<title>, <selection>" (run 44922434581 hierarchy).
+        let product = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "제품, ")).firstMatch
+        XCTAssertTrue(product.waitForExistence(timeout: 10)); githubReveal(app, product); product.tap()
+        XCTAssertTrue(app.buttons["Lab"].waitForExistence(timeout: 5)); app.buttons["Lab"].tap()
+        XCTAssertEqual(product.label, "제품, Lab", "The request must be created for Lab, not the Studio default.")
+        githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
+        XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
+        app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
+        githubReveal(app, app.buttons["요청과 논의 보기"]); app.buttons["요청과 논의 보기"].tap()
+        return app
+    }
+    private func renderKeys(_ trace: String) throws -> [String:Any] {
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(trace.utf8)) as? [String:Any])
+        return try XCTUnwrap(object["render"] as? [String:Any], "The DEBUG trace must carry render counters.")
+    }
+
+    @MainActor func testNonStudioRequestPassesItsProductToIntakeAndRelatedScreens() throws {
+        let intake = labRequestDetail(["HP_TEAM_INTAKE":"normal","HP_TEAM_TEXT":"1","HP_TEAM_RELATED":"1"])
+        let intakeEntry = intake.buttons["teamIntakeEntry"]; XCTAssertTrue(intakeEntry.waitForExistence(timeout: 10)); detailReveal(intake, intakeEntry); intakeEntry.tap()
+        XCTAssertTrue(intake.buttons["teamIntakeLogin"].waitForExistence(timeout: 10))
+        let intakeRender = try XCTUnwrap(intakeTrace(intake)["render"] as? [String:Any])
+        XCTAssertNotNil(intakeRender["arg.intake.lab"], "Intake must be built for the request's product.")
+        XCTAssertNil(intakeRender["arg.intake.studio"], "Intake must not be built with the Studio default.")
+        intake.terminate()
+        let related = labRequestDetail(["HP_TEAM_RELATED":"1"])
+        let relatedEntry = related.buttons["teamRelationsEntry"]; XCTAssertTrue(relatedEntry.waitForExistence(timeout: 10)); detailReveal(related, relatedEntry); relatedEntry.tap()
+        XCTAssertTrue(related.staticTexts["teamRelatedTrace"].waitForExistence(timeout: 10))
+        let relatedRender = try renderKeys(relatedTrace(related))
+        XCTAssertNotNil(relatedRender["arg.relations.lab"], "Related requests must be built for the request's product.")
+        XCTAssertNil(relatedRender["arg.relations.studio"], "Related requests must not be built with the Studio default.")
+    }
+
 }
