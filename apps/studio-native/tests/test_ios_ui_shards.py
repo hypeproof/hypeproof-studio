@@ -349,56 +349,27 @@ class ApprovalPushHang(unittest.TestCase):
         self.assertIsNone(push.device_activity(other, self.DEVICE))
         self.assertIsNone(push.device_activity('<ps unavailable>', self.DEVICE))
 
-    def test_settled_needs_stable_count_and_runnable_within_cpus(self):
-        self.assertTrue(push.is_settled([(200, 9), (207, 1), (207, 3), (207, 0)], cpus=3))
-        self.assertFalse(push.is_settled([(207, 0), (207, 0)], cpus=3))           # too few samples
-        self.assertFalse(push.is_settled([(205, 0), (206, 0), (207, 0)], cpus=3))  # still starting processes
-        self.assertFalse(push.is_settled([(207, 0), (207, 4), (207, 0)], cpus=3))  # more runnable than CPUs
-        self.assertFalse(push.is_settled([(207, 0), None, (207, 0)], cpus=3))      # one sample unreadable
+    def test_recorded_hang_host_reads_as_its_real_counts(self):
+        # The process table from run 44874729460, reduced to the columns the observation reads.
+        report = Path(__file__).with_name('fixtures') / 'approval-push-processes-44874729460.txt'
+        self.assertEqual(push.device_activity(report.read_text(), self.DEVICE), (198, 43))  # 3 CPUs
 
-    def test_recorded_hang_host_is_not_settled(self):
-        # The process table from run 44874729460, reduced to the columns the settle wait reads.
-        report = Path(__file__).with_name('fixtures') / 'approval-push-settle-44874729460.txt'
-        processes = report.read_text()
-        activity = push.device_activity(processes, self.DEVICE)
-        self.assertEqual(activity, (198, 43))  # 198 device processes, 43 runnable, 3 CPUs
-        self.assertFalse(push.is_settled([activity] * 3, cpus=3))
-
-    def run_settle(self, samples, limit):
-        outputs = iter(samples)
-        def bounded(args, limit=30):
-            if args[0] == 'ps' and args[1] == '-axo':
-                return next(outputs)
-            return 'diagnostic'
-        with tempfile.TemporaryDirectory() as directory:
+    def test_observe_records_a_fixed_count_and_never_fails_or_waits_for_a_condition(self):
+        # A host that never settles and a ps that cannot be read: still three rows, no error, no hang file.
+        outputs = iter([self.ps(250, 180), '<ps -axo did not return within 30s>', self.ps(260, 170)])
+        sleeps = []
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(push, 'bounded', side_effect=lambda args, limit=30: next(outputs)), \
+             mock.patch.object(push.time, 'sleep', side_effect=sleeps.append):
             evidence = Path(directory)
-            with mock.patch.object(push, 'bounded', side_effect=bounded), \
-                 mock.patch.object(push.os, 'cpu_count', return_value=3), \
-                 mock.patch.object(push.time, 'sleep'):
-                try:
-                    push.settle(evidence, self.DEVICE, limit=limit, interval=0)
-                    error = None
-                except push.SimctlHang as raised:
-                    error = raised
+            push.observe(evidence, self.DEVICE)
             rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
-            return error, rows, sorted(path.name for path in evidence.glob('simctl-hang-*'))
+            self.assertFalse(list(evidence.glob('simctl-hang-*')))
+        self.assertEqual([(row['command'], row['processes'], row['runnable']) for row in rows],
+                         [('observe', 250, 180), ('observe', None, None), ('observe', 260, 170)])
+        self.assertEqual(sleeps, [push.OBSERVE_INTERVAL] * (push.OBSERVE_SAMPLES - 1))
 
-    def test_settle_waits_through_the_first_boot_burst_then_passes(self):
-        samples = [self.ps(150, 40), self.ps(207, 43), self.ps(209, 2), self.ps(209, 1), self.ps(209, 0)]
-        error, rows, hangs = self.run_settle(samples, limit=60)
-        self.assertIsNone(error)
-        self.assertEqual([row['outcome'] for row in rows], ['sample'] * 5 + ['settled'])
-        self.assertEqual(hangs, [])
-
-    def test_settle_that_never_stops_fails_with_diagnostics(self):
-        samples = [self.ps(200 + index, 43) for index in range(1000)]
-        with mock.patch.object(push.time, 'monotonic', side_effect=[0] + list(range(0, 2000, 10))):
-            error, rows, hangs = self.run_settle(samples, limit=30)
-        self.assertRegex(str(error), 'did not settle within 30s')
-        self.assertEqual(rows[-1]['outcome'], 'timeout')
-        self.assertEqual(hangs, ['simctl-hang-settle.txt'])
-
-    def test_boot_settles_after_bootstatus_and_before_the_warm_up_launch(self):
+    def test_boot_observes_after_bootstatus_and_before_the_warm_up_launch(self):
         order = []
         def simctl(evidence, step, args, **_):
             order.append(args[0])
@@ -410,10 +381,10 @@ class ApprovalPushHang(unittest.TestCase):
         outputs = iter(['26.5', 'type runtime'])
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(push, 'simctl', side_effect=simctl), \
-             mock.patch.object(push, 'settle', side_effect=lambda evidence, device: order.append(f'settle {device}')), \
+             mock.patch.object(push, 'observe', side_effect=lambda evidence, device: order.append(f'observe {device}')), \
              mock.patch.object(push.subprocess, 'check_output', side_effect=lambda *a, **k: next(outputs)):
             push.boot(Path(directory))
-        self.assertEqual(order, ['list', 'create', 'list', 'boot', 'bootstatus', f'settle {self.DEVICE}', 'launch', 'terminate'])
+        self.assertEqual(order, ['list', 'create', 'list', 'boot', 'bootstatus', f'observe {self.DEVICE}', 'launch', 'terminate'])
 
     def test_cleanup_without_a_created_simulator_calls_nothing(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(push, 'simctl') as call:
