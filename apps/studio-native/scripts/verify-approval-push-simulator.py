@@ -449,11 +449,28 @@ def boot(evidence):
     # A cold GitHub macOS runner can take over two minutes to initialize.
     simctl(evidence, "boot", ["bootstatus", device, "-b"], timeout=240, capture=False)
     observe(evidence, device)
-    # Exercise the launch path once with a system app, never the app under test,
-    # so the XCUITest still starts from a fresh install.
-    simctl(evidence, "warm-up", ["launch", device, "com.apple.Preferences"], timeout=60)
-    simctl(evidence, "warm-up", ["terminate", device, "com.apple.Preferences"], timeout=30, check=False)
-    print("Simulator booted and warmed up.", flush=True)
+    warm_up(evidence, device)
+
+
+def warm_up(evidence, device):
+    """Exercise the launch path once with a system app, never the app under test,
+    so the XCUITest still starts from a fresh install.
+
+    The test does not use this app. A launch that hangs past its limit is recorded and
+    diagnosed like any simctl hang, then the XCUITest runs and alone decides the job: it
+    launches its own app within the run step's checkpoint limit and fails on a real
+    problem. Preferences took 44-49 s in the runs where it returned (#4437) and timed out
+    at 60 s in runs 44998769449, 45007325327 and 45009736395 without ever starting. A
+    launch that returns an error still fails here."""
+    warmed = True
+    for args, limit, check in ((["launch", device, "com.apple.Preferences"], 60, True),
+                               (["terminate", device, "com.apple.Preferences"], 30, False)):
+        try:
+            simctl(evidence, "warm-up", args, timeout=limit, check=check)
+        except SimctlHang as error:
+            warmed = False
+            print(f"::warning::warm-up: {error}; the XCUITest runs and decides the job", flush=True)
+    print("Simulator booted and warmed up." if warmed else "Simulator booted; warm-up did not finish.", flush=True)
 
 
 def export_screenshots(evidence):

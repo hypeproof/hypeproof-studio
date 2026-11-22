@@ -5,7 +5,9 @@ the real ios-collect.sh with the real journey collectors, and the approval push 
 path. Planted defects (a missing shard, an unstarted case, a case in two shards, a failed
 shard, an attachment collision) must each fail; a complete set must pass.
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -686,6 +688,63 @@ class ApprovalPushHang(unittest.TestCase):
              mock.patch.object(push.subprocess, 'check_output', side_effect=lambda *a, **k: next(outputs)):
             push.boot(Path(directory))
         self.assertEqual(order, ['list', 'create', 'list', 'boot', 'bootstatus', f'observe {self.DEVICE}', 'launch', 'terminate'])
+
+    def run_warm_up(self, hang=(), error=()):
+        """warm_up with simctl stubbed: `hang` commands raise SimctlHang, `error` ones exit 1."""
+        calls = []
+        def simctl(evidence, step, args, *, timeout, check=True, **_):
+            calls.append((step, args[0], args[-1], timeout, check))
+            if args[0] in hang:
+                raise push.SimctlHang(f'simctl {args[0]} did not return within {timeout}s during {step}')
+            if args[0] in error and check:
+                raise subprocess.CalledProcessError(1, ['xcrun', 'simctl', *args])
+            return ''
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(push, 'simctl', side_effect=simctl), \
+             contextlib.redirect_stdout(out):
+            push.warm_up(Path(directory), self.DEVICE)
+        return calls, out.getvalue()
+
+    def test_warm_up_launches_and_terminates_preferences_with_unchanged_limits(self):
+        calls, out = self.run_warm_up()
+        self.assertEqual(calls, [('warm-up', 'launch', 'com.apple.Preferences', 60, True),
+                                 ('warm-up', 'terminate', 'com.apple.Preferences', 30, False)])
+        self.assertIn('Simulator booted and warmed up.', out)
+        self.assertNotIn('::warning::', out)
+
+    def test_a_hung_warm_up_is_a_warning_and_the_xcuitest_still_decides(self):
+        # Runs 44998769449, 45007325327, 45009736395: launch hit 60 s and Preferences never started.
+        for hang in (('launch',), ('terminate',), ('launch', 'terminate')):
+            with self.subTest(hang=hang):
+                calls, out = self.run_warm_up(hang=hang)
+                self.assertEqual([c[1] for c in calls], ['launch', 'terminate'])
+                self.assertEqual(out.count('::warning::warm-up: simctl '), len(hang))
+                self.assertIn('the XCUITest runs and decides the job', out)
+                self.assertIn('warm-up did not finish', out)
+
+    def test_a_warm_up_launch_that_returns_an_error_still_fails(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_warm_up(error=('launch',))
+        calls, _ = self.run_warm_up(error=('terminate',))  # terminate keeps check=False
+        self.assertEqual([c[1] for c in calls], ['launch', 'terminate'])
+
+    def test_a_hung_bootstatus_still_fails_boot_before_the_warm_up(self):
+        def simctl(evidence, step, args, **_):
+            if args[0] == 'bootstatus':
+                raise push.SimctlHang('simctl bootstatus did not return within 240s during boot')
+            if args[0] == 'create':
+                return self.DEVICE
+            if args[0] == 'list' and 'devices' in args:
+                return json.dumps({'devices': {'r': [{'udid': self.DEVICE, 'dataPath': '/data'}]}})
+            return '{}'
+        outputs = iter(['26.5', 'type runtime'])
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(push, 'simctl', side_effect=simctl), \
+             mock.patch.object(push, 'warm_up') as warm, \
+             mock.patch.object(push.subprocess, 'check_output', side_effect=lambda *a, **k: next(outputs)):
+            with self.assertRaises(push.SimctlHang):
+                push.boot(Path(directory))
+        warm.assert_not_called()
 
     def test_cleanup_without_a_created_simulator_calls_nothing(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(push, 'simctl') as call:
