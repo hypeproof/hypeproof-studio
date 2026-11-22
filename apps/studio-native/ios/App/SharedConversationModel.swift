@@ -267,7 +267,7 @@ private struct SharedCacheFile: Codable {
         }, save: { [weak self] draft in
             guard let self else { throw CancellationError() }
             try draft.validate(account: draft.accountID); try self.writeTeamDraft(draft, account: draft.accountID, name: "request.json")
-        }, changed: { [weak presentation] in presentation?.state = $0 })
+        }, changed: { [weak presentation] in teamOffMainCheck("TeamRequestPresentation.state"); presentation?.state = $0 })
         presentation.detail = { [weak self] id, after in
             guard let self, let binding = try await self.approvalIdentity() else { throw CancellationError() }
             let result = try await self.teamService.teamRequestDetail(id: id, after: after, token: self.approvalToken(binding))
