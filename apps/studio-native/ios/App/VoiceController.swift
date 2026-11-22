@@ -26,6 +26,12 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     func finish() -> Data? { lock.lock(); defer { lock.unlock() }; return clip.wav }
 }
 
+/// Installed voices and the preferred Korean voice, read off the main thread.
+private struct VoiceInventory: @unchecked Sendable {
+    let voices: [AVSpeechSynthesisVoice]
+    let preferred: Int?
+}
+
 @MainActor final class VoiceController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     @Published private(set) var turn = VoiceTurn()
     @Published private(set) var status = ""
@@ -46,6 +52,9 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     private var emptyCaptureRetries = 0
     private var automaticContinuation = false
     private var nextTurn: (() -> Void)?
+    /// The one voice inventory read in flight; cleared when it returns.
+    private var voiceInventoryRead: Task<VoiceInventory, Never>?
+    private var playbackSetup: Task<Void, Never>?
 #if DEBUG
     private var fixtureSpeech: Task<Void, Never>?
     private var fixtureEndpointTime: Double?
@@ -362,39 +371,82 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             return
         }
 #endif
-        let installed = AVSpeechSynthesisVoice.speechVoices()
-        let catalog = installed.map {
-            KoreanVoiceSelection.Candidate(language: $0.language, quality: Self.quality($0),
-                                           isNovelty: $0.voiceTraits.contains(.isNoveltyVoice),
-                                           isPersonal: $0.voiceTraits.contains(.isPersonalVoice))
+        // Run 44913710488 (#4432): TextToSpeech blocked the main thread here
+        // for 163 s, inside SwiftUI's onChange dispatch, so the reply text was
+        // never drawn. Playback setup now starts after this update returns and
+        // reads the voice inventory off the main thread. Each step is a
+        // separate non-inlined function, so a hang spindump names the step.
+        // Run 44930704524: speechVoices() itself blocked for over 160 s on a
+        // background thread too. Only this real-synthesis path reads it, one
+        // read at a time, on a dedicated queue rather than the Swift pool.
+        let token = turn.token
+        let read = voiceInventoryRead ?? Self.loadVoiceInventory()
+        voiceInventoryRead = read
+        playbackSetup = Task { [weak self] in
+            let loaded = await read.value
+            guard let self else { return }
+            if self.voiceInventoryRead == read { self.voiceInventoryRead = nil }
+            guard !Task.isCancelled, self.turn.token == token, self.turn.phase == .speaking else { return }
+            self.startPlayback(text, inventory: loaded)
         }
-        guard let index = KoreanVoiceSelection.preferredIndex(in: catalog) else {
+    }
+    @inline(never) private func startPlayback(_ text: String, inventory: VoiceInventory) {
+        guard let index = inventory.preferred else {
             fail("한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요."); return
         }
-        let voice = installed[index]
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-            try AVAudioSession.sharedInstance().setActive(true)
-            let utterance = AVSpeechUtterance(string: text)
-            utterance.voice = voice; utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-            utterance.prefersAssistiveTechnologySettings = true
+            try activatePlaybackSession()
+            let utterance = makeUtterance(text, voice: inventory.voices[index])
 #if DEBUG
-            if NativeJourneyFixture.realPlayback {
-                // This is the requested utterance voice, not proof of the
-                // effective accessibility output or what a person heard.
-                NativeJourneyFixture.recordRequestedPlaybackVoice(
-                    inventory: installed.filter { $0.language == "ko-KR" }.map { ["identifier": $0.identifier, "language": $0.language, "platform_quality_raw": String($0.quality.rawValue), "platform_traits_raw": String($0.voiceTraits.rawValue)] },
-                    requested: utterance.voice.map { ["identifier": $0.identifier, "language": $0.language, "platform_quality_raw": String($0.quality.rawValue), "platform_traits_raw": String($0.voiceTraits.rawValue)] },
-                    prefersAssistiveTechnologySettings: utterance.prefersAssistiveTechnologySettings)
-            }
+            if NativeJourneyFixture.realPlayback { recordRequestedVoice(inventory.voices, utterance: utterance) }
 #endif
             utteranceID = ObjectIdentifier(utterance)
             status = "답변을 읽고 있어요. 마이크는 꺼져 있어요."
             record(.playbackQueued)
-            speaker.speak(utterance)
+            speak(utterance)
         } catch { fail("답변을 읽지 못했어요. 화면에서 확인해 주세요.") }
     }
-    private static func quality(_ voice: AVSpeechSynthesisVoice) -> KoreanVoiceSelection.Quality {
+    /// Reads installed voices and picks the Korean voice on a dedicated serial
+    /// queue. A blocked read holds that queue's thread, not a Swift pool thread.
+    nonisolated private static let voiceInventoryQueue = DispatchQueue(label: "ai.hypeproof.studio.voice-inventory", qos: .userInitiated)
+    @inline(never) nonisolated private static func loadVoiceInventory() -> Task<VoiceInventory, Never> {
+        Task {
+            await withCheckedContinuation { continuation in
+                VoiceController.voiceInventoryQueue.async { continuation.resume(returning: VoiceController.readVoiceInventory()) }
+            }
+        }
+    }
+    @inline(never) nonisolated private static func readVoiceInventory() -> VoiceInventory {
+        let installed = AVSpeechSynthesisVoice.speechVoices()
+        let catalog = installed.map {
+            KoreanVoiceSelection.Candidate(language: $0.language, quality: quality($0),
+                                           isNovelty: $0.voiceTraits.contains(.isNoveltyVoice),
+                                           isPersonal: $0.voiceTraits.contains(.isPersonalVoice))
+        }
+        return VoiceInventory(voices: installed, preferred: KoreanVoiceSelection.preferredIndex(in: catalog))
+    }
+    @inline(never) private func activatePlaybackSession() throws {
+        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+        try AVAudioSession.sharedInstance().setActive(true)
+    }
+    @inline(never) private func makeUtterance(_ text: String, voice: AVSpeechSynthesisVoice) -> AVSpeechUtterance {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice; utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.prefersAssistiveTechnologySettings = true
+        return utterance
+    }
+    @inline(never) private func speak(_ utterance: AVSpeechUtterance) { speaker.speak(utterance) }
+#if DEBUG
+    @inline(never) private func recordRequestedVoice(_ installed: [AVSpeechSynthesisVoice], utterance: AVSpeechUtterance) {
+        // This is the requested utterance voice, not proof of the
+        // effective accessibility output or what a person heard.
+        NativeJourneyFixture.recordRequestedPlaybackVoice(
+            inventory: installed.filter { $0.language == "ko-KR" }.map { ["identifier": $0.identifier, "language": $0.language, "platform_quality_raw": String($0.quality.rawValue), "platform_traits_raw": String($0.voiceTraits.rawValue)] },
+            requested: utterance.voice.map { ["identifier": $0.identifier, "language": $0.language, "platform_quality_raw": String($0.quality.rawValue), "platform_traits_raw": String($0.voiceTraits.rawValue)] },
+            prefersAssistiveTechnologySettings: utterance.prefersAssistiveTechnologySettings)
+    }
+#endif
+    nonisolated private static func quality(_ voice: AVSpeechSynthesisVoice) -> KoreanVoiceSelection.Quality {
         switch voice.quality {
         case .premium: return .premium
         case .enhanced: return .enhanced
@@ -419,6 +471,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
 #if DEBUG
         fixtureSpeech?.cancel(); fixtureSpeech = nil; fixtureEndpointTime = nil
 #endif
+        playbackSetup?.cancel(); playbackSetup = nil
         utteranceID = nil; speaker.stopSpeaking(at: .immediate)
         stopInput(); request?.endAudio(); recognition?.cancel(); request = nil; recognition = nil
         reviewPlayer?.stop(); reviewPlayer = nil; reviewData = nil; reviewCapture = nil; canReplayOwnVoice = false; reviewEnabled = false
