@@ -98,6 +98,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # A once-booted simulator from the ios-sim-seed job (#4432). It is restored before any
+      # simctl or xcodebuild call; the boot step uses it only if CoreSimulatorService lists it.
+      - name: Key for the once-booted simulator
+        id: preboot
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py cache-key
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ios-sim-preboot
+          key: ${{ steps.preboot.outputs.key }}
+      - name: Restore the once-booted simulator
+        env:
+          HP_SIM_SEED_DIR: ${{ runner.temp }}/ios-sim-preboot
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py restore
       # Build before a simulator exists, so compilation never competes with simulator IPC.
       - name: Build the focused XCUITest
         run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py build
@@ -120,6 +133,51 @@ jobs:
             apps/studio-native/evidence/approval-push/simulator-notifications.log
             apps/studio-native/evidence/approval-push/ApprovalPush.xcresult
             apps/studio-native/evidence/approval-push/approval-push-*.png
+          retention-days: 14
+  # Seeds the approval push job's once-booted simulator (#4432). Runs on main and on dispatch,
+  # only when the cache has no entry for this runner image and Xcode, so a cache miss never
+  # slows a PR. Its settle wait has its own limit; no approval push limit depends on it.
+  ios-sim-seed:
+    name: iOS simulator seed
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Key for the once-booted simulator
+        id: preboot
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py cache-key
+      - uses: actions/cache/restore@v4
+        id: existing
+        with:
+          path: ${{ runner.temp }}/ios-sim-preboot
+          key: ${{ steps.preboot.outputs.key }}
+          lookup-only: true
+      - name: Boot once, wait for first-boot work to stop, archive the device
+        if: steps.existing.outputs.cache-hit != 'true'
+        env:
+          HP_SIM_SEED_DIR: ${{ runner.temp }}/ios-sim-preboot
+          HP_APPROVAL_PUSH_EVIDENCE: ${{ github.workspace }}/apps/studio-native/evidence/sim-seed-run
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py seed
+      - uses: actions/cache/save@v4
+        if: steps.existing.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/ios-sim-preboot
+          key: ${{ steps.preboot.outputs.key }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-sim-seed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/studio-native/evidence/sim-seed-run/simulator-steps.jsonl
+            apps/studio-native/evidence/sim-seed-run/simctl-hang-*.txt
+            apps/studio-native/evidence/sim-seed-run/simulator-ps.txt
+            ${{ runner.temp }}/ios-sim-preboot/seed.json
+          if-no-files-found: ignore
           retention-days: 14
   ios-build:
     name: iOS build
