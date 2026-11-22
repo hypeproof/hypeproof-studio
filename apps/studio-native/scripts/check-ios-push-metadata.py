@@ -57,10 +57,15 @@ def run(command: list[str], log: Path) -> int:
         try:
             return child.wait(timeout=180)
         except subprocess.TimeoutExpired:
+            # A group that has already exited gives ESRCH, or EPERM on macOS when only the
+            # unreaped leader is left (run 44990830847); the leader is then killed directly.
             try:
                 os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            except (ProcessLookupError, PermissionError):
+                try:
+                    child.kill()
+                except (ProcessLookupError, PermissionError):
+                    pass
             child.wait()
             raise MetadataError("xcode_control_timed_out") from None
 
