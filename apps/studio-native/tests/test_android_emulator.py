@@ -15,13 +15,16 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 MOCK = r'''#!/usr/bin/env python3
 import json,os,pathlib,signal,subprocess,sys,time
 s=pathlib.Path(os.environ['MOCK_STATE']); mode=os.environ['MOCK_MODE']
+def put(name,value,delay=0):
+ # Readers see no file or the whole value, never an empty one (os.replace is atomic).
+ t=s/(name+'.tmp');t.write_text(value);time.sleep(delay);os.replace(t,s/name)
 tool=pathlib.Path(sys.argv[0]).name; args=sys.argv[1:]
 with (s/'calls.jsonl').open('a') as f: f.write(json.dumps([tool,*args])+'\n')
 if tool=='avdmanager':
  name=args[args.index('--name')+1]; p=pathlib.Path(os.environ['ANDROID_AVD_HOME'])/(name+'.avd');p.mkdir()
  (p/'config.ini').write_text('fixture=1\n')
 elif tool=='emulator':
- (s/'name').write_text(args[args.index('-avd')+1]);(s/'pid').write_text(str(os.getpid()))
+ put('pid',str(os.getpid()));put('name',args[args.index('-avd')+1],float(os.environ.get('MOCK_NAME_DELAY','0')))
  def stop(*_):
   (s/'stopped').write_text('owned emulator terminated');sys.exit(0)
  signal.signal(signal.SIGTERM,stop)
@@ -99,13 +102,13 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
             except ProcessLookupError: pass
         self.temp.cleanup()
 
-    def start(self, mode, boot=3, test=3):
+    def start(self, mode, boot=3, test=3, name_delay=0):
         p = subprocess.Popen([sys.executable, str(self.native / "scripts/android-emulator.py"),
                               "--sdk-root", str(self.sdk), "--work-dir", str(self.root / "work"),
                               "--port", str(self.port), "--boot-timeout", str(boot),
                               "--test-timeout", str(test), "--poll-interval", ".01"],
                              env=dict(os.environ, MOCK_STATE=str(self.state), MOCK_MODE=mode,
-                                      PYTHONDONTWRITEBYTECODE="1"), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                      MOCK_NAME_DELAY=str(name_delay), PYTHONDONTWRITEBYTECODE="1"), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.children.append(p)
         return p
 
@@ -171,6 +174,15 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertFalse(receipt["verification_started"])
         self.assertFalse((self.state / "verification").exists())
         self.assertTrue(list((self.native / "evidence/android/bootstrap").glob("readiness-*-window.txt")))
+
+    def test_slow_emulator_name_write_is_not_read_as_another_avd(self):
+        # Run 45002166166 got 2 instead of 124: the fake emulator created the name file
+        # before writing it, adb printed an empty name, and the bootstrap saw another AVD.
+        # Hold the write open longer than any runner would; the outcome must not change.
+        code, receipt, _ = self.finish(self.start("no_focus", boot=.7, name_delay=.2))
+        self.assertEqual(code, 124)
+        # The deadline ends either between polls or inside the adb call it bounds.
+        self.assertTrue(receipt["reason"].startswith(("boot_or_focus_timeout", "command_timeout")), receipt["reason"])
 
     def test_anr_blocks_before_preparation_and_preserves_diagnostics(self):
         code, receipt, calls = self.finish(self.start("foreign_anr"))
