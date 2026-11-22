@@ -98,7 +98,7 @@ public class TeamEntryJourneyTest {
     @Before public void setup()throws Exception {
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-        Espresso.setFailureHandler((error,matcher)->{ captureFailure(error); TeamEntryJourneyTest.<RuntimeException>rethrowOriginal(error); });
+        Espresso.setFailureHandler(UiSync.focusAware((error,matcher)->{ captureFailure(error); TeamEntryJourneyTest.<RuntimeException>rethrowOriginal(error); }));
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("team-account","team-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         ReflectionState state=new ReflectionState("team-account");state.draft="아직 보내지 않은 내 생각";store.save(state);

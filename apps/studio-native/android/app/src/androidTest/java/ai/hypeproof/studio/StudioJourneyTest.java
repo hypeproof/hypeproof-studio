@@ -102,10 +102,10 @@ public class StudioJourneyTest {
         for (String name:new String[]{"studio-notebook-v1.json","studio-notebook-v1.json.bak","studio-notebook-v1.json.new"})
             Files.deleteIfExists(new File(context.getFilesDir(),name).toPath());
         Intents.init();
-        Espresso.setFailureHandler((error,matcher)->{
+        Espresso.setFailureHandler(UiSync.focusAware((error,matcher)->{
             captureFailure(error);
             StudioJourneyTest.<RuntimeException>rethrowOriginal(error);
-        });
+        }));
         app=ActivityScenario.launch(MainActivity.class);
     }
     @After public void stop() {

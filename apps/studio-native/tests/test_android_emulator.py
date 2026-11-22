@@ -52,6 +52,9 @@ elif tool=='adb':
   print('mCurrentFocus='+focus+'\nisKeyguardShowing=false')
  elif args==['shell','dumpsys','power']:print('mWakefulness=Awake')
  elif args==['shell','getprop','ro.build.fingerprint']:print('fixture fingerprint')
+ elif args==['shell','device_config','set_sync_disabled_for_tests','persistent']:
+  if mode!='sync_not_disabled':(s/'sync').write_text('persistent')
+ elif args==['shell','device_config','get_sync_disabled_for_tests']:print((s/'sync').read_text() if (s/'sync').exists() else 'none')
  elif args[:3]==['shell','pm','disable-user']:
   pkg=args[-1]
   if mode=='messaging_absent':print('Exception occurred while executing \'disable-user\':\njava.lang.IllegalArgumentException: Unknown package: '+pkg);sys.exit(255)
@@ -134,6 +137,22 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertEqual(receipt["stable_focus_observations"], 3)
         self.assertTrue((self.state / "stopped").exists())
         self.assertIn(["adb", "-s", f"emulator-{self.port}", "shell", "input", "keyevent", "KEYCODE_WAKEUP"], calls)
+
+    def test_device_config_sync_is_frozen_and_read_back_before_tests(self):
+        code, receipt, calls = self.finish(self.start("unstable"))
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["device_config_sync_disabled"], "persistent")
+        adb = [c[3:] for c in calls if c[:1] == ["adb"]]
+        freeze = adb.index(["shell", "device_config", "set_sync_disabled_for_tests", "persistent"])
+        self.assertLess(freeze, adb.index(["shell", "device_config", "get_sync_disabled_for_tests"]))
+        self.assertLess(adb.index(["shell", "settings", "put", "global", "animator_duration_scale", "0.0"]), freeze)
+
+    def test_unconfirmed_device_config_freeze_never_starts_tests(self):
+        code, receipt, calls = self.finish(self.start("sync_not_disabled"))
+        self.assertNotEqual(code, 0)
+        self.assertEqual(receipt["device_config_sync_disabled"], "none")
+        self.assertFalse(receipt["verification_started"])
+        self.assertFalse((self.state / "verification").exists())
 
     def disabled(self, receipt):
         return [(r["package"], r["result"]) for r in receipt["disabled_packages"]]
