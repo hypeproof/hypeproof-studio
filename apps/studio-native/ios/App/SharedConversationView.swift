@@ -76,11 +76,15 @@ struct SharedConversationView: View {
     @State private var showSettings = false
     @State private var showFeedback = false
     @State private var showTeamRequests = false
+    @State private var showTeamInbox = false
+    @State private var pendingTeamRequest: String?
     @State private var settingsDestination: SettingsDestination?
     @State private var timelineGeneration = UUID()
     @State private var timelineLayout: ConversationTimelineLayout?
     @State private var timelineFollowing = true
     @State private var timelineProgrammatic = false
+    @GestureState private var timelineDragging = false
+    @State private var timelineScrollPending = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var textSize
     @Environment(\.colorScheme) private var colorScheme
@@ -120,7 +124,8 @@ struct SharedConversationView: View {
                         Image(systemName: "sidebar.left").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel("대화 기록").accessibilityIdentifier("conversationHistory")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if model.signedIn { Button("팀 알림") { voice.stop(); focused = false; pendingTeamRequest = nil; showTeamInbox = true }.disabled(model.loggingOut).accessibilityIdentifier("teamInboxHomeEntry") }
                     if model.signedIn { Button("팀 요청") { voice.stop(); focused = false; showTeamRequests = true }.disabled(model.loggingOut).accessibilityIdentifier("teamRequestHomeEntry") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -174,9 +179,14 @@ struct SharedConversationView: View {
             // on the next MainActor turn, retaining all current-session guards.
             Task { @MainActor in openPendingNotification() }
         }
-        .task { openPendingNotification() }
-        .sheet(isPresented: $showPush) { AccountPushView(model: model.push) }
-        .sheet(isPresented: $showExperience) { ProductExperienceView(model: model.experience) }
+        .task {
+#if DEBUG
+            TeamEntryFixture.deliverColdPush()
+#endif
+            openPendingNotification()
+        }
+        .sheet(isPresented: $showPush, onDismiss: drainTeamNotifications) { AccountPushView(model: model.push) }
+        .sheet(isPresented: $showExperience, onDismiss: drainTeamNotifications) { ProductExperienceView(model: model.experience) }
         .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
         .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false; showPush = false } else { openPendingNotification() } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
@@ -199,23 +209,25 @@ struct SharedConversationView: View {
     var body: some View {
         lifecycleContent
         .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
-        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals, push: model.push) }
-        .sheet(isPresented: $showQuestions) { AccountQuestionView(model: model.questions) }
+        .sheet(isPresented: $showApprovals, onDismiss: drainTeamNotifications) { MemberApprovalView(model: model.approvals, push: model.push) }
+        .sheet(isPresented: $showQuestions, onDismiss: drainTeamNotifications) { AccountQuestionView(model: model.questions) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
-        .sheet(isPresented: $showTeamRequests) { TeamRequestsView(model: model.teamRequests).id(model.feedbackScope) }
-        .sheet(isPresented: $showFeedback) { ProductFeedbackView(scope: model.feedbackScope).id(model.feedbackScope) }
-        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false; showTeamRequests = false }
+        .sheet(isPresented: $showTeamInbox, onDismiss: { pendingTeamRequest = nil; openPendingNotification() }) { TeamInboxView(model: model.teamInbox, requests: model.teamRequests, initialRequest: pendingTeamRequest).id(model.feedbackScope) }
+        .sheet(isPresented: $showTeamRequests, onDismiss: drainTeamNotifications) { TeamRequestsView(model: model.teamRequests).id(model.feedbackScope) }
+        .sheet(isPresented: $showFeedback, onDismiss: drainTeamNotifications) { ProductFeedbackView(scope: model.feedbackScope).id(model.feedbackScope) }
+        .onChange(of: model.feedbackScope) { _, _ in showFeedback = false; showTeamRequests = false; showTeamInbox = false; pendingTeamRequest = nil }
         .sheet(isPresented: $showSettings, onDismiss: finishSettingsDismissal) { settingsSheet }
-        .sheet(isPresented: $showContext) { contextSheet }
+        .sheet(isPresented: $showContext, onDismiss: drainTeamNotifications) { contextSheet }
         .sheet(isPresented: $showHistory, onDismiss: {
             if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
+            drainTeamNotifications()
         }) { historySheet }
-        .sheet(isPresented: $showNotebook) {
+        .sheet(isPresented: $showNotebook, onDismiss: drainTeamNotifications) {
             StudioHome(onReturnToConversation: { showNotebook = false })
         }
-        .sheet(isPresented: $showPrivacy) {
+        .sheet(isPresented: $showPrivacy, onDismiss: drainTeamNotifications) {
             NavigationStack {
                 List {
                     Text("보내기 전의 글은 이 기기에 보관해요. 로그인만으로 AI에 보내지 않아요.")
@@ -225,7 +237,10 @@ struct SharedConversationView: View {
                     .toolbar { Button("닫기") { showPrivacy = false } }
             }
         }
-        .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
+        .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } }), onDismiss: drainTeamNotifications) { if let exportURL { ShareSheet(url: exportURL) } }
+        .onChange(of: clearCache) { _, shown in
+            if !shown { Task { @MainActor in await Task.yield(); drainTeamNotifications() } }
+        }
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {
             Button("이 기기의 사본 삭제", role: .destructive) { voice.stop(); model.clearCache() }
         } message: { Text("서버의 계정 대화와 데스크톱의 기록은 남아요. 서버 기록은 계정의 데이터 관리 대상입니다.") }
@@ -281,9 +296,9 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
-                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied {
+                if NativeJourneyFixture.logoutSync || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                     settingsButton("Hold next history read") { leaveSettings(for: .holdHistory) }.accessibilityIdentifier("nativeJourneyHoldHistory")
-                    if NativeJourneyFixture.logoutSync {
+                    if NativeJourneyFixture.logoutSync || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                         settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
                     }
                 }
@@ -329,19 +344,31 @@ struct SharedConversationView: View {
         }
         settingsDestination = destination; showSettings = false
     }
+    private var teamNotificationModalOccupied: Bool { showSettings || settingsDestination != nil || showTeamRequests || showTeamInbox || showFeedback || showQuestions || showApprovals || showExperience || showPush || showContext || showHistory || showNotebook || showPrivacy || exportURL != nil || notebookAfterHistory || clearCache }
+    private func drainTeamNotifications() { showPendingTeamDestination(); openPendingNotification() }
+    private func showPendingTeamDestination() {
+        guard pendingTeamRequest != nil, model.signedIn, !model.loggingOut, !teamNotificationModalOccupied else { return }
+        voice.stop(); focused = false; showTeamInbox = true
+    }
     private func openPendingNotification() {
         guard model.signedIn, !model.loggingOut, model.push.controller?.enabled == true,
               !model.push.state.busy, let reference = pushCenter.reference else { return }
+        if reference.kind == "team_request", teamNotificationModalOccupied { return }
+        let scope = model.feedbackScope
         pushCenter.consume()
-        Task { if let destination = await model.push.controller?.open(reference), model.signedIn && !model.loggingOut {
+        Task { if let destination = await model.push.controller?.openDestination(reference), model.signedIn && !model.loggingOut {
             voice.stop(); focused = false
-            if destination == "approval" { model.approvals.focusID = reference.id; showApprovals = true } else { showQuestions = true }
+            if destination.kind == "team_request" {
+                guard let target = destination.team, target.requestID == reference.id, target.eventSequence == reference.revision,
+                      let request = await model.authorizedTeamPushRequest(target), model.feedbackScope == scope else { return }
+                pendingTeamRequest = request; showPendingTeamDestination()
+            } else if destination.kind == "approval" { model.approvals.focusID = reference.id; showApprovals = true } else { showQuestions = true }
         } }
     }
     private func finishSettingsDismissal() {
         // Dismiss the first presentation before opening another one. Consume
         // the destination first; swipe/Close without a choice has no effect.
-        guard let destination = settingsDestination else { return }
+        guard let destination = settingsDestination else { drainTeamNotifications(); return }
         settingsDestination = nil
         switch destination {
         case .push:
@@ -368,11 +395,12 @@ struct SharedConversationView: View {
         case .holdHistory:
             NativeJourneyFixture.holdNextHistory()
             // The failed-draft journey observes the ordinary periodic GET.
-            if !NativeJourneyFixture.accessDenied { model.refresh() }
+            if !NativeJourneyFixture.accessDenied && !NativeJourneyFixture.retryHistory && !NativeJourneyFixture.guestHistory { model.refresh() }
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
         case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
         }
+        drainTeamNotifications()
     }
     private var welcome: some View {
         ScrollView {
@@ -381,6 +409,13 @@ struct SharedConversationView: View {
                 if !model.accountStorageReady { Button("계정 저장소 다시 확인") { model.restoreAccount() }.accessibilityIdentifier("retryAccountStorage") }
 #if DEBUG
                 if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
+#endif
+#if DEBUG
+                if NativeJourneyFixture.approvalPushEnabled {
+                    Button("Allow test notifications") {
+                        Task { await NativeJourneyFixture.requestApprovalPushAuthorization() }
+                    }.buttonStyle(.bordered).accessibilityIdentifier("approvalPushFixtureAuthorize")
+                }
 #endif
                 status
             }.padding(.horizontal, 24).padding(.top, 36).padding(.bottom, 20)
@@ -451,13 +486,21 @@ struct SharedConversationView: View {
                                 .accessibilityLabel("HP Studio의 답변. \(message.content)")
                         }
                     }
-                    if let request = model.cache.request {
+                    if let request = model.cache.request, !model.isReflection || request.status != "completed" {
                         VStack(alignment: .leading, spacing: 8) {
                             if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" && $0.content == request.text })) {
                                 Text(request.text).textSelection(.enabled)
                             }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
-                            if request.status == "local" { Button("다시 보내기") { model.retry() }.disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry") }
+                            if request.status == "local" {
+                                Button {
+#if DEBUG
+                                    NativeJourneyFixture.recordRetry("touch")
+#endif
+                                    model.retryFromUser()
+                                } label: { Text("다시 보내기").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
+                                .buttonStyle(.bordered).disabled(!model.canRetryLocalRequest).accessibilityIdentifier("sharedRetry")
+                            }
                             if model.isReflection && request.status == "failed" {
                                 Button { voice.stop(); if model.restoreFailedReflectionDraft() { focused = true } } label: {
                                     Text("입력란에 가져오기").frame(minHeight: 44)
@@ -500,12 +543,17 @@ struct SharedConversationView: View {
                     // appearance also fences a later account with the same IDs.
                     timelineGeneration = UUID(); timelineLayout = nil
                     timelineFollowing = true; timelineProgrammatic = false
+                    timelineScrollPending = false
                 }
                 .onPreferenceChange(ConversationTimelinePreference.self) { layout in
                     if let layout { positionTimeline(layout, scroll: scroll) }
                 }
-                .simultaneousGesture(DragGesture().onChanged { _ in
+                .simultaneousGesture(DragGesture().updating($timelineDragging) { _, dragging, _ in
+                    dragging = true
+                }.onChanged { _ in
                     timelineProgrammatic = false; timelineFollowing = false
+                }.onEnded { _ in
+                    timelineFollowing = timelineLayout?.atLatest == true
                 })
                 .overlay(alignment: .bottomTrailing) {
                     if !timelineFollowing, timelineLayout?.atLatest == false {
@@ -519,11 +567,28 @@ struct SharedConversationView: View {
         }
     }
     private func latestTimeline(_ scroll: ScrollViewProxy, animated: Bool = false) {
-        timelineFollowing = true; timelineProgrammatic = timelineLayout?.atLatest != true
-        // Automatic following is instant, like the desktop. Only a deliberate
-        // catch-up press may animate, and Reduce Motion always disables it.
-        withAnimation(animated && !reduceMotion ? .easeOut(duration: 0.2) : nil) {
-            scroll.scrollTo("sharedBottom", anchor: .bottom)
+        timelineFollowing = true
+        guard !timelineDragging, timelineLayout?.atLatest != true else {
+            timelineProgrammatic = false
+            return
+        }
+        guard !timelineScrollPending else { return }
+        timelineScrollPending = true
+        let generation = timelineGeneration, conversation = model.selected
+        // Geometry preferences are delivered during layout. Coalesce requests
+        // until the next turn instead of recursively scrolling from layout.
+        DispatchQueue.main.async {
+            guard generation == timelineGeneration else { return }
+            timelineScrollPending = false
+            guard conversation == model.selected else {
+                if timelineFollowing { latestTimeline(scroll) }
+                return
+            }
+            guard timelineFollowing, !timelineDragging, timelineLayout?.atLatest != true else { return }
+            timelineProgrammatic = true
+            withAnimation(animated && !reduceMotion ? .easeOut(duration: 0.2) : nil) {
+                scroll.scrollTo("sharedBottom", anchor: .bottom)
+            }
         }
     }
     private func positionTimeline(_ next: ConversationTimelineLayout, scroll: ScrollViewProxy) {
@@ -532,17 +597,20 @@ struct SharedConversationView: View {
         let old = timelineLayout
         let changedConversation = old == nil || old?.generation != next.generation || old?.conversation != next.conversation
         let sent = next.localRequestID != nil && old?.localRequestID != next.localRequestID
-        let changedContent = old?.tail != next.tail || old?.content.height != next.content.height || old?.viewportHeight != next.viewportHeight
+        let changedContent = old.map {
+            $0.tail != next.tail || abs($0.content.height - next.content.height) > 0.5 || abs($0.viewportHeight - next.viewportHeight) > 0.5
+        } ?? true
         let moved = old.map { abs($0.content.minY - next.content.minY) > 0.5 } ?? false
+        guard changedConversation || sent || changedContent || moved || old?.atLatest != next.atLatest else { return }
         timelineLayout = next
+        guard !timelineDragging else { return }
         if changedConversation || sent { latestTimeline(scroll); return }
         if timelineProgrammatic {
             if next.atLatest { timelineProgrammatic = false }
             else if changedContent { latestTimeline(scroll) }
             return
         }
-        // A stable-layout scroll includes touch, keyboard and accessibility
-        // navigation. Content/keyboard/font changes alone are not reader intent.
+        // Stable-layout movement is reader intent; size changes alone are not.
         if moved && !changedContent { timelineFollowing = next.atLatest }
         if changedContent && timelineFollowing { latestTimeline(scroll) }
         else if next.atLatest { timelineFollowing = true }
@@ -571,7 +639,7 @@ struct SharedConversationView: View {
                 }.disabled(!model.canEditDraft)
             }
             VStack(alignment: .leading, spacing: 8) {
-                TextField("메시지를 입력하세요", text: Binding(get: { model.draftText }, set: model.editDraft), axis: .vertical)
+                TextField("메시지를 입력하세요", text: Binding(get: { model.draftText }, set: { model.editDraft($0) }), axis: .vertical)
                     .font(.body).lineLimit(1...(textSize.isAccessibilitySize ? 2 : 5)).padding(.horizontal, 4).padding(.top, 4)
                     .focused($focused).disabled(voice.isCapturing || !model.canEditDraft).accessibilityIdentifier("sharedInput")
                     .accessibilityLabel("메시지")
@@ -657,14 +725,24 @@ struct SharedConversationView: View {
                 }
                 status
             }.navigationTitle("내 상황과 의도").navigationBarTitleDisplayMode(.inline).toolbar { Button("닫기") { showContext = false } }
+#if DEBUG
+            .onAppear { TeamEntryFixture.deliverContextPush() }
+#endif
         }
     }
     private func contextField(_ key: String, title: String) -> some View {
         Section(title) {
-            TextField("비워 두어도 괜찮아요", text: Binding(get: { model.cache.context?[key] ?? "" }, set: { model.editContext(key, value: $0) }), axis: .vertical).lineLimit(2...5)
+            TextField("비워 두어도 괜찮아요", text: Binding(get: { model.cache.context?[key] ?? "" }, set: { model.editContext(key, value: $0) }), axis: .vertical).lineLimit(2...5).accessibilityIdentifier("context-" + key)
         }
     }
     @ViewBuilder private var status: some View {
+        #if DEBUG
+        if model.signedIn && NativeJourneyFixture.approvalPushEnabled {
+            Button("Register for test notifications") {
+                Task { await NativeJourneyFixture.startApprovalPushRegistration(model.push.controller) }
+            }.buttonStyle(.bordered).accessibilityIdentifier("approvalPushFixtureRegister")
+        }
+        #endif
         if model.loggingOut { ProgressView("계정 확인을 마치고 로그아웃하는 중이에요.").font(.caption).accessibilityIdentifier("sharedLoggingOut") }
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
         if model.signedIn && model.error != nil && !model.syncing && !model.loggingOut {
@@ -675,7 +753,6 @@ struct SharedConversationView: View {
             .accessibilityIdentifier("retryConversationSync")
         }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
-        if model.showsSyncProgress { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
     }
 #if DEBUG
     // Overlay diagnostics never participate in transcript/composer measurement.
@@ -684,7 +761,8 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.accessDenied {
+                if model.signedIn && TeamEntryFixture.pushEnabled { Button("검증 알림") { TeamEntryFixture.deliverPush() }.font(.caption2).accessibilityIdentifier("teamPushFixtureOpen") }
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice || NativeJourneyFixture.queuedVoice || NativeJourneyFixture.pendingPush || NativeJourneyFixture.approvalPushEnabled || NativeJourneyFixture.accessDenied || NativeJourneyFixture.retryHistory || NativeJourneyFixture.guestHistory {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

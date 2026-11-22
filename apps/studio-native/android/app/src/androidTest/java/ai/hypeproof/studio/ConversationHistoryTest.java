@@ -35,6 +35,7 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 public class ConversationHistoryTest {
     private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
     @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
     private File failureDirectory;
     private Throwable firstFailure;
     private final JSONArray imeObservations=new JSONArray();
@@ -92,7 +93,9 @@ public class ConversationHistoryTest {
             captureCommand("window.txt","timeout 3 dumpsys window",state);
             captureCommand("power.txt","timeout 3 dumpsys power",state);
             captureCommand("input-method.txt","timeout 3 dumpsys input_method",state);
-            captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
+            // 150 lines held only the teardown; keep the onset of a lost input focus too.
+            captureCommand("recent-logcat.txt","timeout 5 logcat -d -v threadtime -b main -b system -b crash -t 2000",state);
+            captureCommand("input.txt","timeout 3 dumpsys input",state);
             state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
         }catch(Throwable problem){Log.e("StudioFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
     }
@@ -124,10 +127,10 @@ public class ConversationHistoryTest {
     @Before public void setup()throws Exception{
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-        Espresso.setFailureHandler((error,matcher)->{
+        Espresso.setFailureHandler(UiSync.focusAware((error,matcher)->{
             captureFailure(error);
             ConversationHistoryTest.<RuntimeException>rethrowOriginal(error);
-        });
+        }));
         QuestionActivity.testMenuObservation=details->observeRefresh("menu_"+details.optString("phase"),details);
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("history-account","history-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
@@ -285,7 +288,7 @@ public class ConversationHistoryTest {
     @Test public void latestActionAndDraftStayUsableAboveKeyboard()throws Exception{
         if(InstrumentationRegistry.getArguments().getString("largeDark", "false").equals("true")){assertTrue(context.getResources().getConfiguration().fontScale>=1.9f);assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_YES,context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK);}
         launch();onView(withContentDescription("대화 기록")).perform(swipeDown(),swipeDown());
-        String draft="키보드에서 쓰던 글\n둘째 줄";observeIme("before_click");onView(withContentDescription("질문 대화 입력")).perform(click());observeIme("after_click");awaitIme();
+        String draft="키보드에서 쓰던 글\n둘째 줄";observeIme("before_click");UiSync.tap(onView(withContentDescription("질문 대화 입력")),"history-composer",a->((View)UiSync.field(a,"composer")).hasFocus());observeIme("after_click");awaitIme();
         onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft));observeIme("after_replace");
         onView(withText("최신 메시지")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;float d=v.getResources().getDisplayMetrics().density;assertTrue(v.getHeight()>=48*d);assertTrue(v.getWidth()>=48*d);assertTrue(v.createAccessibilityNodeInfo().isClickable());assertEquals("최신 메시지",v.createAccessibilityNodeInfo().getText().toString());});
         app.onActivity(a->{View decor=a.getWindow().getDecorView();WindowInsets insets=decor.getRootWindowInsets();assertNotNull(insets);assertTrue("actual IME is visible",insets.isVisible(WindowInsets.Type.ime()));});

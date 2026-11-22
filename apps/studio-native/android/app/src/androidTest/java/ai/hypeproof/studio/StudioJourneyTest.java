@@ -40,6 +40,7 @@ public class StudioJourneyTest {
     private ActivityScenario<MainActivity> app;
     private Context context;
     @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
     private File failureDirectory;
     private Throwable firstFailure;
 
@@ -72,7 +73,9 @@ public class StudioJourneyTest {
             }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
             captureCommand("window.txt","timeout 3 dumpsys window",state);
             captureCommand("power.txt","timeout 3 dumpsys power",state);
-            captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
+            // 150 lines held only the teardown; keep the onset of a lost input focus too.
+            captureCommand("recent-logcat.txt","timeout 5 logcat -d -v threadtime -b main -b system -b crash -t 2000",state);
+            captureCommand("input.txt","timeout 3 dumpsys input",state);
             state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
         }catch(Throwable problem){Log.e("StudioFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
     }
@@ -99,10 +102,10 @@ public class StudioJourneyTest {
         for (String name:new String[]{"studio-notebook-v1.json","studio-notebook-v1.json.bak","studio-notebook-v1.json.new"})
             Files.deleteIfExists(new File(context.getFilesDir(),name).toPath());
         Intents.init();
-        Espresso.setFailureHandler((error,matcher)->{
+        Espresso.setFailureHandler(UiSync.focusAware((error,matcher)->{
             captureFailure(error);
             StudioJourneyTest.<RuntimeException>rethrowOriginal(error);
-        });
+        }));
         app=ActivityScenario.launch(MainActivity.class);
     }
     @After public void stop() {
@@ -304,7 +307,7 @@ public class StudioJourneyTest {
         }catch(Exception e){throw new AssertionError(e);}});
         app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
         assertFalse(controller.get().session.matches(oldTicket[0],id[0]));
-        app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+        UiSync.resumeWithFocus(app,"voice background");
         onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각\n아직 인식 중인 말")));
         app.recreate();onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각\n아직 인식 중인 말")));
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
@@ -373,7 +376,7 @@ public class StudioJourneyTest {
         intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
         try(ActivityScenario<QuestionActivity> question=ActivityScenario.launch(QuestionActivity.class)) {
             java.util.concurrent.atomic.AtomicReference<QuestionActivity> original=new java.util.concurrent.atomic.AtomicReference<>();question.onActivity(original::set);
-            onView(withContentDescription("메뉴")).perform(click());onView(withText("기기 기록")).perform(click());
+            UiSync.openMenu();onView(withText("기기 기록")).perform(click());
             onView(withText("기기 기록")).check(matches(isDisplayed()));
             onView(withContentDescription("생각 입력")).check(matches(withText("기기에 남긴 초안")));
             onView(withText("무료 AI 연결하고 질문 받기")).check(doesNotExist());onView(withText("음성 대화")).check(doesNotExist());
@@ -402,7 +405,7 @@ public class StudioJourneyTest {
             onView(withContentDescription("질문 대화 입력")).check(matches(withText("질문 화면에 남겨 둔 초안")));
             question.onActivity(a->assertSame(original.get(),a));assertEquals(0,calls.get());assertNull(storage.loadCredentials());
             assertEquals("preserved-old-installation",context.getSharedPreferences("installation",Context.MODE_PRIVATE).getString("id",null));
-            onView(withContentDescription("메뉴")).perform(click());onView(withText("기기 기록")).perform(click());
+            UiSync.openMenu();onView(withText("기기 기록")).perform(click());
             onView(withContentDescription("생각 입력")).check(matches(withText("편집한 기기 초안")));
             androidx.test.espresso.Espresso.pressBack();
             onView(withContentDescription("질문 대화 입력")).check(matches(withText("질문 화면에 남겨 둔 초안")));assertEquals(0,calls.get());

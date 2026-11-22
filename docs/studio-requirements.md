@@ -10428,3 +10428,135 @@ ST-REQ-NATIVE-MOBILE: settings must show signed-in or guest state and the
 locally authenticated account ID when available. Guest settings offer Login using
 the existing device sign-in flow after settings dismissal. Never send the account
 ID to the conversational model just to answer an account question.
+
+### Internal request triage — MTR-06–08
+
+The signed-in iOS request detail exposes current classification, assignee,
+priority, next action and immutable change history. Changes require server
+operator authority, an explicit confirmation and durable account-isolated drafts.
+Unknown delivery never permits a new-key replay; definitive stale revisions
+require refresh and explicit rebase. This is internal triage, not completed
+delivery or reporter resolution. Canonical requirements and test cases are in
+`mobile-growth-roadmap.md` and `testing/native-mobile-growth.md` (MTR-06–08,
+MTR-T04–05). Production policy and real-device evidence remain separate gates.
+
+## iPhone internal GitHub association evidence (#4349)
+
+MTR-09/10/11 require operator-authorized existing-issue association from request
+detail, verified provider metadata with canonical repository URLs, complete optional
+PR/SHA/CI run-attempt evidence, ordered history and verification timestamps.
+Association is an operator assertion, not provider-proven issue/PR causality.
+CI never implies TestFlight availability, device installation or reporter acceptance.
+Edits and uncertain mutation keys stay account-scoped and durable; only explicit
+confirmation sends. Cancellation, read-only access and failed storage send nothing.
+Core and native UI controls belong to the mobile roadmap/testing contract.
+
+
+### Native conversation status simplification — 2026-11-18
+
+Under `ST-REQ-NATIVE-MOBILE` / `ST-INT-NATIVE`, Jay requested removal of the
+completed personal-message saved caption, routine same-account explanation, and
+main-conversation syncing spinner. Preserve background synchronization and all
+actionable error, retry, logout, pending-send and unsent-draft warnings. Settings
+may still indicate an in-progress refresh. The intent is to keep attention on
+the conversation while retaining information needed for user judgment.
+Local outbox status likewise says only pending transmission; it does not repeat
+the device-storage explanation.
+
+## iPhone request delivery evidence (#4364)
+
+The request detail provides a read-only delivery record with exact build,
+observation freshness, instructions and history (MTR-12–14). A valid group
+observation cannot imply personal invitation acceptance, installation or
+resolution. Unsupported or inaccessible server capability stays explicitly
+unverified, and account changes remove prior records. No new operator or
+reporter mutation is exposed by this screen.
+
+
+## iPhone reporter outcome confirmation (#4366)
+
+MTR-15–17 adds an explicit reporter-only result flow from request detail,
+separate from read-only delivery evidence. Exact build choice, required reopen
+reason, cancel-before-send, protected drafts, uncertain same-key recovery,
+and refreshed revisions preserve human judgment and prevent duplicate results.
+After a saved receipt, an automatic read updates current history. Failed reads
+preserve the receipt and label the older snapshot instead of presenting it as
+the latest result; they never resend the result.
+History is explicitly self-reported; server capability failures remain visible.
+### Durable retry touch target — 2026-11-18
+
+A saved local request's explicit retry action must expose at least a 44pt touch
+area. A single activation retries the preserved request identity and words;
+restart and background history reads must not create an automatic replay.
+This applies the existing native touch-target contract to the outbox action.
+An ordinary background history read must not disable this explicit action.
+One activation during the read queues the existing request identity; only that
+intent may dispatch after reconciliation, with the existing account, selection,
+logout and stop fences. A second activation cannot enqueue another send.
+
+
+## iPhone team notification inbox (#4368)
+
+MTR-18–21 adds a permission-independent team inbox, explicit product/request
+notification preferences, and server-authorized cold/warm push destinations.
+Uncertain subscription outcomes never replay automatically. Existing question
+and approval registration remains independent of internal-product entitlement.
+Notification entry preserves current drafts and does not switch accounts or
+replace an occupied composition screen. Discussion labels are descriptive.
+
+
+## iPhone explicit question and reply authoring (#4370)
+
+Members choose whether their text is a discussion, question or reply. A reply
+identifies the request or selected comment; labels describe the posted event
+without deciding whether a question is answered or a problem resolved.
+Uncertain drafts keep their exact pre-upgrade payload and transmission key.
+A definitive missing-target rejection permits an explicit new choice; unknown
+results never automatically change schema or resend. Authoring support is
+discovered separately from push permission and notification capability.
+
+
+## iPhone current GitHub observations (#4373)
+
+The existing request GitHub screen links to readonly current observations while
+preserving the association draft. Historical linkage evidence remains explicitly
+historical. Display checked time, expiry, source mismatch and provider failure;
+never infer build availability or resolution. See MTR-25–27 in
+[mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone related requests (#4375)
+
+Related-request navigation and explicit operator link/unlink use existing product
+membership and account drafts. Every change previews target/action/reason; unknown
+outcomes retain the same mutation. Related originals remain independent. See
+MTR-28–30 in [mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone hidden retained content (#4377)
+
+Expired server content remains navigable through minimal request and build
+identity. Logical hiding and completed physical cleanup have different labels.
+Fresh authoritative receipts scrub acknowledged copies; unknown sends keep their
+words and stable keys. See MTR-31–33 in
+[mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone author text revisions (#4379)
+
+Members read original and current request/comment text separately, with server
+byline/time and explicit revision history. Only the original author confirms an
+edit. Latest posted questions are visible independently of comment pagination;
+no answer/resolution judgment is inferred. See MTR-34–36 in
+[mobile growth requirements](requirements/mobile-growth-roadmap.md).
+
+
+## iPhone explicit public summaries (#4381)
+
+Internal members can explicitly sign in to Lab and preview a separately authored
+public summary for the product's configured repository. Submission reuses Intake
+and may publish immediately under existing policy. Unknown results retain the
+original approval/key; existing verified issue and board/association states remain
+separate. Only current operators may associate the published issue with an
+internal request. Implementation evidence and installed-device acceptance are
+tracked separately; see MTR-37–39 in the mobile growth roadmap.

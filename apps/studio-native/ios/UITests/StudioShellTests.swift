@@ -1,8 +1,19 @@
 import XCTest
+
+/// Every launch of the app under test goes through here (#4432).
+/// In run 44874729460 the app main thread sat in XCTest's in-app query
+/// evaluation, inside `_os_log_impl_mirror_to_stderr` -> `writev`, blocked in
+/// the kernel, so queries hit their 31 s timeout. `OS_ACTIVITY_DT_MODE=NO` is a
+/// candidate to stop mirroring os_log to stderr; it is not yet verified.
+@MainActor func studioApp() -> XCUIApplication {
+    let app = XCUIApplication()
+    app.launchEnvironment["OS_ACTIVITY_DT_MODE"] = "NO"
+    return app
+}
 import AVFoundation
 final class StudioShellTests: XCTestCase {
     @MainActor func testFirstInstallExplainsAccountStorageWithoutASeparateForm() {
-        let app = XCUIApplication(); app.launchArguments = ["--verify-account-storage"]; app.launch()
+        let app = studioApp(); app.launchArguments = ["--verify-account-storage"]; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["accountStorageVerified"].exists, "The app must create, read, update and delete an isolated Keychain item before account readiness passes.")
         XCTAssertFalse(app.staticTexts["sharedError"].exists, "A storage failure must not pass as a ready sign-in screen.")
@@ -75,7 +86,7 @@ final class StudioShellTests: XCTestCase {
     }
     @MainActor func testNativeCaptureConfirmAndRelaunch() {
         continueAfterFailure = false
-        let app = XCUIApplication(); app.launch()
+        let app = studioApp(); app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         openNotebook(app)
         notebookNavigationIsUsable(app)
@@ -130,7 +141,7 @@ final class StudioShellTests: XCTestCase {
 final class StudioJourneyTests: XCTestCase {
     @MainActor private func launch(_ scenario: String, arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"] + arguments
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = scenario
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
@@ -146,22 +157,47 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(text.waitForExistence(timeout: 5), "The personal conversation must be usable without a desktop.")
         return text
     }
-    @MainActor private func enabled(_ element: XCUIElement, timeout: TimeInterval = 10) {
-        XCTAssertTrue(element.waitForExistence(timeout: timeout))
+    @MainActor private func enabled(_ element: XCUIElement, timeout: TimeInterval = 10, app: XCUIApplication? = nil) {
+        let exists = element.waitForExistence(timeout: timeout)
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
+        let result = exists ? XCTWaiter.wait(for: [expectation], timeout: timeout) : .timedOut
+        if !exists || result != .completed {
+            // Keep the failed wait authoritative. One failure-time snapshot
+            // distinguishes an actually disabled control from an unresolved
+            // accessibility query without retrying the user's action.
+            let details: String
+            do {
+                let snapshot = try element.snapshot()
+                details = "exists=\(exists); wait=\(result.rawValue); enabled=\(snapshot.isEnabled); frame=\(snapshot.frame); identifier=\(snapshot.identifier)"
+            } catch { details = "exists=\(exists); wait=\(result.rawValue); snapshot unavailable: \(error)" }
+            let observation = XCTAttachment(string: details)
+            observation.name = "enabled-wait-failure"; observation.lifetime = .keepAlways; add(observation)
+            if let app {
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "enabled-wait-failure-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+            }
+        }
+        XCTAssertTrue(exists)
+        XCTAssertEqual(result, .completed)
     }
     @MainActor private func tapComposerTargetOnce(_ id: String, app: XCUIApplication) {
         let button = app.buttons[id]
-        enabled(button)
-        let frame = button.frame
+        enabled(button, app: app)
+        // One snapshot for frame and enabled state, and one read each for
+        // hittability and the window. Each live query took 2-30 s on hosted
+        // runners in run 44860149508; fewer queries reduce that cost (#4432).
+        let snapshot: XCUIElementSnapshot
+        do { snapshot = try button.snapshot() } catch {
+            XCTFail("\(id) passed its enabled wait but no snapshot was available: \(error)"); return
+        }
+        let frame = snapshot.frame, hittable = button.isHittable, window = app.frame
         let point = button.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.15))
-        let observation = XCTAttachment(string: "id=\(id); frame=\(frame); enabled=\(button.isEnabled); hittable=\(button.isHittable); tap=\(point.screenPoint); window=\(app.frame)")
+        let observation = XCTAttachment(string: "id=\(id); frame=\(frame); enabled=\(snapshot.isEnabled); hittable=\(hittable); tap=\(point.screenPoint); window=\(window)")
         observation.name = id + "-single-edge-tap"; observation.lifetime = .keepAlways; add(observation)
         XCTAssertGreaterThanOrEqual(frame.width, 44)
         XCTAssertGreaterThanOrEqual(frame.height, 44)
-        XCTAssertTrue(app.frame.contains(frame), "The complete composer target must stay inside the app window.")
-        XCTAssertTrue(button.isHittable)
+        XCTAssertTrue(window.contains(frame), "The complete composer target must stay inside the app window.")
+        XCTAssertTrue(hittable, "\(id) must be hittable; frame=\(frame); window=\(window)")
         // One real touch in the padded corner, outside the icon or text glyph.
         // The caller must still prove its original draft/reply/continuation result.
         point.tap()
@@ -172,9 +208,73 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func signIn(_ app: XCUIApplication) {
         tapComposerTargetOnce("linkDesktop", app: app)
-        _ = field(app)
-        XCTAssertTrue(app.staticTexts["reflectionOpening"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["accountCancel"].exists, "Successful account adoption must finish the login state.")
+        // One app snapshot per evaluation instead of separate live queries.
+        // The timeouts are the former ones: 7 s for the input (field()'s 2 + 5)
+        // and 5 s for the opening reflection.
+        var latest: XCUIElementSnapshot?
+        func has(_ root: XCUIElementSnapshot, _ id: String, _ types: [XCUIElement.ElementType]) -> Bool {
+            !snapshotNodes(root) { $0.identifier == id && types.contains($0.elementType) }.isEmpty
+        }
+        let input = waitForSnapshot(app, timeout: 7) { root in latest = root; return has(root, "sharedInput", [.textField, .textView]) }
+        XCTAssertTrue(input, "The personal conversation must be usable without a desktop.")
+        let opening = waitForSnapshot(app, timeout: 5) { root in latest = root; return has(root, "reflectionOpening", [.staticText]) }
+        if !input || !opening { waitFailureEvidence(app, "sign-in-wait-failure") }
+        XCTAssertTrue(opening, "reflectionOpening must appear after sign-in.")
+        XCTAssertFalse(latest.map { has($0, "accountCancel", [.button]) } ?? true, "Successful account adoption must finish the login state.")
+    }
+    /// Diagnostics only, after a wait has already failed: the screen and the
+    /// full live trace, as "<name>-screen" and "<name>-full-trace". Snapshot
+    /// values stop at about 512 characters and hid `paths` (whether POST
+    /// /v1/auth/native/start was sent) in run 44866066162 (#4432). No wait,
+    /// retry or assertion is added.
+    @MainActor private func waitFailureEvidence(_ app: XCUIApplication, _ name: String) {
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = name + "-screen"; screen.lifetime = .keepAlways; add(screen)
+        let node = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+        let trace = XCTAttachment(string: node.exists ? (node.value as? String ?? "trace value is not a string") : "trace element absent")
+        trace.name = name + "-full-trace"; trace.lifetime = .keepAlways; add(trace)
+    }
+    /// All nodes of one accessibility snapshot that satisfy `match`.
+    @MainActor private func snapshotNodes(_ root: XCUIElementSnapshot, _ match: (XCUIElementSnapshot) -> Bool) -> [XCUIElementSnapshot] {
+        var found: [XCUIElementSnapshot] = [], pending = [root]
+        while let item = pending.popLast() {
+            if match(item) { found.append(item) }
+            pending.append(contentsOf: item.children.reversed())
+        }
+        return found
+    }
+    /// Polls one whole-app snapshot per evaluation until `condition` holds.
+    /// The timeout is the caller's existing one; only the evaluation cost changes.
+    @MainActor private func waitForSnapshot(_ app: XCUIApplication, timeout: TimeInterval, _ condition: (XCUIElementSnapshot) -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let root = try? app.snapshot(), condition(root) { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+        return false
+    }
+    /// One round trip for a diagnostic row: identity, frame and value together.
+    /// `diagnostic()` plus `.value` issued four live queries per read.
+    @MainActor private func diagnosticSnapshot(_ id: String, in app: XCUIApplication, timeout: TimeInterval = 5) -> XCUIElementSnapshot? {
+        let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let snapshot = try? element.snapshot() { return snapshot }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+        return nil
+    }
+    @MainActor private func diagnosticValue(_ id: String, in app: XCUIApplication) -> String? {
+        let snapshot = diagnosticSnapshot(id, in: app)
+        XCTAssertNotNil(snapshot, "Diagnostic \(id) must exist.")
+        guard let snapshot else { return nil }
+        XCTAssertLessThanOrEqual(snapshot.frame.width, 2, "Diagnostics must not occupy transcript layout.")
+        XCTAssertLessThanOrEqual(snapshot.frame.height, 2)
+        // The value is read live. XCUIElementSnapshot truncates values to about
+        // 512 characters, which cut the trace JSON in run 44857710643 (#4432).
+        let value = app.descendants(matching: .any).matching(identifier: id).firstMatch.value as? String
+        XCTAssertNotNil(value, "Diagnostic \(id) must expose a string value.")
+        return value
     }
     @MainActor private func diagnostic(_ id: String, in app: XCUIApplication) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
@@ -184,27 +284,31 @@ final class StudioJourneyTests: XCTestCase {
         return element
     }
     @MainActor private func readinessFailure(_ name: String, app: XCUIApplication, queries: [(String, XCUIElement)]) {
-        // Capture the failed observation without another action, wait or assertion.
-        // An unresolved query alone omits the hierarchy needed to distinguish a
-        // stale lookup from a visible element outside the transcript viewport.
-        var observations = ["window=\(app.frame)"]
-        for (label, element) in queries {
-            let exists = element.exists
-            observations.append("\(label): exists=\(exists); query=\(element.debugDescription)")
-            if exists {
-                observations.append("\(label): frame=\(element.frame); enabled=\(element.isEnabled); hittable=\(element.isHittable); label=\(element.label); value=\(String(describing: element.value)); placeholder=\(String(describing: element.placeholderValue))")
+        // Preserve the screen before diagnostics. One AX snapshot supplies all
+        // fields; repeated live queries can consume the entire test allowance
+        // after the original readiness wait has already failed.
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+        var observations = ["failed queries: " + queries.map { $0.0 }.joined(separator: ", ")]
+        var rawTrace = "trace absent from failure snapshot"
+        do {
+            let snapshot = try app.snapshot()
+            var remaining = 2000
+            func collect(_ item: XCUIElementSnapshot, depth: Int) {
+                guard remaining > 0 else { return }; remaining -= 1
+                observations.append("depth=\(depth); type=\(item.elementType.rawValue); id=\(item.identifier); frame=\(item.frame); enabled=\(item.isEnabled); label=\(item.label); value=\(String(describing: item.value))")
+                if item.identifier == "nativeJourneyTrace" { rawTrace = item.value as? String ?? "trace value absent" }
+                for child in item.children { collect(child, depth: depth + 1) }
             }
-        }
-        let traceElement = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
-        let rawTrace = traceElement.exists ? (traceElement.value as? String ?? "trace value absent") : "trace absent"
-        let details = XCTAttachment(string: observations.joined(separator: "\n")); details.name = name + "-queries-and-frames"; details.lifetime = .keepAlways; add(details)
-        let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+            collect(snapshot, depth: 0)
+            if remaining == 0 { observations.append("snapshot truncated after 2000 nodes") }
+        } catch { observations.append("single AX snapshot unavailable: \(error)") }
+        let hierarchy = XCTAttachment(string: observations.joined(separator: "\n"))
+        hierarchy.name = name + "-single-snapshot"; hierarchy.lifetime = .keepAlways; add(hierarchy)
         let trace = XCTAttachment(string: rawTrace); trace.name = name + "-synthetic-trace"; trace.lifetime = .keepAlways; add(trace)
-        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
     @MainActor private func trace(_ app: XCUIApplication) throws -> [String: Any] {
-        let element = diagnostic("nativeJourneyTrace", in: app)
-        let value = try XCTUnwrap(element.value as? String)
+        let value = try XCTUnwrap(diagnosticValue("nativeJourneyTrace", in: app))
         let data = try XCTUnwrap(value.data(using: .utf8))
         let result = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(result["physical_device"] as? String, "NOT_RUN")
@@ -227,9 +331,14 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(appeared, "A send action needs a visible answer or an actionable failure, not just a cleared composer.")
         XCTAssertEqual(app.staticTexts["sharedReply"].firstMatch.label, "HP Studio의 답변. What small change would make tomorrow better?")
     }
-    @MainActor private func evidence(_ name: String, app: XCUIApplication) throws {
+    @MainActor private func evidence(_ name: String, app: XCUIApplication, capturedTrace: [String: Any]? = nil) throws {
         let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
-        let observation = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: trace(app), options: [.sortedKeys]), encoding: .utf8)!)
+        // Reuse the observation already asserted at the end of a journey. A
+        // second accessibility traversal can consume the remaining test budget
+        // while collecting evidence, without observing another product action.
+        let observed: [String: Any]
+        if let capturedTrace { observed = capturedTrace } else { observed = try trace(app) }
+        let observation = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: observed, options: [.sortedKeys]), encoding: .utf8)!)
         observation.name = name + "-synthetic-trace"; observation.lifetime = .keepAlways; add(observation)
     }
     @MainActor func testOrdinaryAccountDoesNotShowMemberApprovalEntry() throws {
@@ -242,6 +351,67 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertFalse(paths.contains { $0.contains("/decisions") })
         app.buttons["conversationSettings"].tap()
         XCTAssertFalse(app.buttons["memberApprovalInbox"].exists)
+    }
+    @MainActor func testSystemApprovalPushOpensMatchingReadOnlyCard() throws {
+        guard ProcessInfo.processInfo.environment["HP_APPROVAL_PUSH_SIMULATOR"] == "1" ||
+            ProcessInfo.processInfo.environment["TEST_RUNNER_HP_APPROVAL_PUSH_SIMULATOR"] == "1" else {
+            throw XCTSkip("Run with verify-approval-push-simulator.py to inject an OS notification.")
+        }
+        let id = "SMK-11111111-1111-4111-8111-111111111111"
+        let title = "테스트 · 승인 푸시"
+        let app = launch("approval-push-test")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let authorize = app.buttons["approvalPushFixtureAuthorize"]
+        XCTAssertTrue(authorize.waitForExistence(timeout: 5))
+        authorize.tap()
+        let allow = springboard.alerts.buttons["Allow"]
+        // The notification daemon may begin handling authorization late on a fresh simulator.
+        XCTAssertTrue(allow.waitForExistence(timeout: 75), springboard.debugDescription)
+        allow.tap()
+        signIn(app)
+        let register = app.buttons["approvalPushFixtureRegister"]
+        XCTAssertTrue(register.waitForExistence(timeout: 5))
+        register.tap()
+        let registered = XCTNSPredicateExpectation(predicate: NSPredicate(
+            format: "value CONTAINS %@", "push-devices"
+        ), object: diagnostic("nativeJourneyTrace", in: app))
+        let readiness = XCTWaiter.wait(for: [registered], timeout: 10)
+        let diagnostics = try trace(app)
+        let before = try XCTUnwrap(diagnostics["paths"] as? [String])
+        XCTAssertEqual(readiness, .completed, before.joined(separator: "\n"))
+        XCTAssertEqual(before.filter { $0.hasPrefix("PUT /v1/me/push-devices/") }.count, 1)
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
+        let directory = URL.documentsDirectory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("ready".utf8).write(to: directory.appendingPathComponent("approval-push-ready"), options: .atomic)
+        let alert = springboard.staticTexts[title].firstMatch
+        // Stay on Home so a delayed hosted push still arrives as a tappable banner.
+        XCTAssertTrue(alert.waitForExistence(timeout: 135), springboard.debugDescription)
+        let received = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        received.name = "approval-push-system-notification"; received.lifetime = .keepAlways; add(received)
+        alert.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20), "Tapping the iOS banner must foreground Studio.")
+        let focus = app.staticTexts["approvalFromPush-" + id]
+        XCTAssertTrue(focus.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["approvalChangeSummary-member-card"].exists)
+        XCTAssertEqual(app.staticTexts["approvalChangeSummary-" + id].label, title)
+        XCTAssertTrue(app.staticTexts["approvalPushTestReadOnly-" + id].exists)
+        for action in ["approvalApprove-", "approvalHold-", "approvalQuestion-"] {
+            XCTAssertFalse(app.buttons[action + id].exists, "The read-only card must hide " + action)
+        }
+        for label in ["승인", "보류", "설명 요청"] {
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch.exists)
+        }
+        let head = app.staticTexts["approvalExactHead-" + id]
+        XCTAssertTrue(head.waitForExistence(timeout: 5))
+        XCTAssertEqual(head.label, String(repeating: "a", count: 40))
+        let detail = XCTAttachment(screenshot: app.screenshot())
+        detail.name = "approval-push-matching-read-only-detail"; detail.lifetime = .keepAlways; add(detail)
+        app.buttons["닫기"].tap()
+        let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
+        XCTAssertEqual(paths.filter { $0.hasPrefix("POST /v1/me/push-devices/") && $0.hasSuffix("/opened") }.count, 1)
+        XCTAssertFalse(paths.contains { $0.hasSuffix("/decisions") })
     }
     @MainActor func testMemberInboxKeepsDraftAndReconcilesUncertainChoiceWithoutResend() throws {
         let app = launch("member-inbox"); signIn(app)
@@ -285,10 +455,11 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertFalse(app.buttons["approvalApprove-member-card"].isEnabled)
         XCTAssertFalse(app.staticTexts["GitHub 승인 반영됨"].exists)
         app.buttons["닫기"].tap(); valueContains(field(app), "Keep my question draft")
-        let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
+        let finalTrace = try trace(app)
+        let paths = try XCTUnwrap(finalTrace["paths"] as? [String])
         XCTAssertEqual(paths.filter { $0 == "POST /v1/me/approval-inbox/member-card/decisions" }.count, 1)
         XCTAssertTrue(paths.contains("GET /v1/me/approval-inbox/member-card"))
-        try evidence("member-inbox-uncertain-choice", app: app)
+        try evidence("member-inbox-uncertain-choice", app: app, capturedTrace: finalTrace)
     }
     @MainActor func testFirstInstallSignInToFirstAnswerWithoutDesktop() throws {
         let app = launch("first-answer")
@@ -338,6 +509,9 @@ final class StudioJourneyTests: XCTestCase {
         send.tap(); answer(app)
         let after = try trace(app)
         XCTAssertEqual(after["submitted_while_desktop_list_held"] as? Int, 1, "The actual POST must start before the unrelated GET settles.")
+        XCTAssertFalse(app.staticTexts["같은 계정의 대화에 저장됨"].exists)
+        XCTAssertFalse(app.staticTexts["같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."].exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch.exists)
         XCTAssertEqual(after["submitted_texts"] as? [String], [words])
         XCTAssertEqual((after["submitted_ids"] as? [String])?.count, 1)
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)
@@ -492,11 +666,16 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func waitForVoiceEvent(_ event: String, in app: XCUIApplication, count: Int = 1, timeout: TimeInterval = 10) {
         let trace = diagnostic("nativeVoiceTimeline", in: app)
-        let observed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            let lines = (trace.value as? String ?? "").split(separator: "\n")
-            return lines.filter { $0.split(separator: " ").dropFirst().first == Substring(event) }.count >= count
-        }, object: trace)
-        let result = XCTWaiter.wait(for: [observed], timeout: timeout)
+        // One live value read per evaluation; the timeout is unchanged. A snapshot
+        // value is truncated at about 512 characters, so it cannot carry the timeline (#4432).
+        let deadline = Date().addingTimeInterval(timeout)
+        var reached = false
+        repeat {
+            let lines = ((trace.value as? String) ?? "").split(separator: "\n")
+            reached = lines.filter { $0.split(separator: " ").dropFirst().first == Substring(event) }.count >= count
+            if !reached { RunLoop.current.run(until: Date().addingTimeInterval(0.2)) }
+        } while !reached && Date() < deadline
+        let result: XCTWaiter.Result = reached ? .completed : .timedOut
         if result != .completed {
             let evidence = XCTAttachment(string: trace.value as? String ?? "voice timeline missing")
             evidence.name = "voice-handoff-incomplete"; evidence.lifetime = .keepAlways; add(evidence)
@@ -577,14 +756,29 @@ final class StudioJourneyTests: XCTestCase {
         // fallback to the generic 400ms journey completion.
         let app = launch("voice-playback-real"); signIn(app)
         enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
-        let reply = app.staticTexts["sharedReply"].firstMatch
-        XCTAssertTrue(reply.waitForExistence(timeout: 10))
-        XCTAssertEqual(reply.label, "HP Studio의 답변. 내일은 어떤 작은 일을 해 보고 싶나요?")
+        // One app snapshot per evaluation while real OS playback runs; live
+        // queries took 9-30 s each in that window in run 44860149508 (#4432).
+        var replyLabel: String?
+        let replied = waitForSnapshot(app, timeout: 10) { root in
+            replyLabel = self.snapshotNodes(root) { $0.identifier == "sharedReply" && $0.elementType == .staticText }.first?.label
+            return replyLabel != nil
+        }
+        // Run 44907983994 shard 1: the screen stayed at "전송 대기" and the
+        // 10 s wait ended after about 60 s, with no trace attached.
+        if !replied { waitFailureEvidence(app, "real-playback-reply-wait-failure") }
+        XCTAssertTrue(replied, "sharedReply must appear after the voice turn.")
+        XCTAssertEqual(replyLabel, "HP Studio의 답변. 내일은 어떤 작은 일을 해 보고 싶나요?")
         waitForVoiceEvent("playbackStarted", in: app, timeout: 20)
         waitForVoiceEvent("playbackFinished", in: app, timeout: 20)
         waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 2)
         valueContains(field(app), "Keep this spoken draft without sending")
         app.buttons["sharedVoiceStop"].tap()
+        // Save before assertions: a failure must retain the submitted words and
+        // real playback events, not only a shallow XCTest snapshot.
+        try evidence("journey-real-playback-before-count-assertions", app: app)
+        let beforeAssertions = XCTAttachment(string: diagnostic("nativeVoiceTimeline", in: app).value as? String ?? "")
+        beforeAssertions.name = "journey-real-playback-before-count-timeline"; beforeAssertions.lifetime = .keepAlways; add(beforeAssertions)
+        XCTAssertEqual(try trace(app)["held_second_capture_endpoint_clock"] as? Bool, true)
         XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
         XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 2)
         let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
@@ -612,6 +806,35 @@ final class StudioJourneyTests: XCTestCase {
         selection.name = "requested-korean-voice-inventory-not-effective-audio"; selection.lifetime = .keepAlways; add(selection)
         let observation = XCTAttachment(string: timeline); observation.name = "actual-os-korean-playback-synthetic-next-capture"; observation.lifetime = .keepAlways; add(observation)
         try evidence("journey-real-playback-handoff", app: app)
+    }
+    @MainActor func testSlowVoiceListEndsPlaybackKeepsReplyAndLateListCannotSpeak() throws {
+        // The DEBUG voice list returns 13 s after the read starts, after the
+        // controller's 10 s playback limit (#4432). Service and microphone
+        // input are synthetic; the reply, deadline and fences are real.
+        let app = launch("voice-inventory-slow"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        let reply = app.staticTexts["sharedReply"]
+        XCTAssertTrue(reply.waitForExistence(timeout: 10), "sharedReply must appear before the voice list returns.")
+        waitForVoiceEvent("voiceInventoryTimedOut", in: app, timeout: 20)
+        let status = app.staticTexts["sharedVoiceStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요.")
+        XCTAssertTrue(reply.exists, "The reply text stays on screen after voice playback ends.")
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        // The late list must arrive and must not start speech or fail again.
+        waitForVoiceEvent("voiceInventoryLate", in: app, timeout: 10)
+        let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
+        let entries = timeline.split(separator: "\n").map { $0.split(separator: " ") }
+        let timedOut = try XCTUnwrap(entries.first { $0.count == 3 && $0[1] == "voiceInventoryTimedOut" })
+        XCTAssertEqual(timedOut[2], "speaking", "The limit ends a reply that is still in its speaking phase.")
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(Int(timedOut[0])), 10_000)
+        XCTAssertFalse(entries.contains { $0.count == 3 && ["playbackQueued", "playbackStarted", "syntheticPlaybackQueued"].contains(String($0[1])) })
+        XCTAssertEqual(entries.filter { $0.count == 3 && $0[1] == "failed" }.count, 1)
+        XCTAssertEqual(status.label, "한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요.")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
+        let observation = XCTAttachment(string: timeline); observation.name = "slow-voice-list-playback-limit"; observation.lifetime = .keepAlways; add(observation)
+        try evidence("journey-slow-voice-list-fallback", app: app)
     }
     @MainActor private func waitForRegisteredResponse(in app: XCUIApplication) {
         let transport = diagnostic("nativeJourneyTrace", in: app)
@@ -662,9 +885,20 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(after["held_response_returns"] as? Int, 1, "The original POST transport delivers its error before cancel acknowledgement; actor callback order must not overwrite confirmation.")
         XCTAssertEqual(after["speech_captures"] as? Int, 1); XCTAssertEqual(after["accepted_turns"] as? Int, 0)
         XCTAssertTrue(app.staticTexts["내 메시지. I want to understand my next step"].exists)
-        field(app).tap(); field(app).typeText("Keep my separate draft")
+        let expectedDraft = "Keep my separate draft"
+        func exactDraft(_ stage: String) -> Bool {
+            let input = field(app)
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expectedDraft), object: input)
+            let result = XCTWaiter.wait(for: [expectation], timeout: 10)
+            let observation = XCTAttachment(string: "Observed value: " + (input.value as? String ?? "<non-string>") + "\n" + input.debugDescription)
+            observation.name = "stop-voice-draft-" + stage; observation.lifetime = .keepAlways; add(observation)
+            XCTAssertEqual(result, .completed, "Exact draft must be observed at " + stage + "; incomplete input must not be attributed to persistence.")
+            return result == .completed
+        }
+        field(app).tap(); field(app).typeText(expectedDraft)
+        guard exactDraft("before-termination") else { return }
         app.terminate(); app.launch(); _ = field(app)
-        valueContains(field(app), "Keep my separate draft")
+        guard exactDraft("after-relaunch") else { return }
         XCTAssertTrue(cancelled.waitForExistence(timeout: 5))
         let reopened = try trace(app)
         XCTAssertEqual(reopened["submitted_ids"] as? [String], ids)
@@ -680,7 +914,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(refresh.isHittable); XCTAssertGreaterThanOrEqual(refresh.frame.height, 44)
         refresh.tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertFalse(syncing.exists, "The held history read must not restore the removed conversation spinner.")
         // Refresh may overlap the sheet dismissal. A voice button behind an
         // open settings surface is not yet a usable touch target.
         XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
@@ -690,7 +925,7 @@ final class StudioJourneyTests: XCTestCase {
                 && !voice.frame.isEmpty && app.frame.contains(voice.frame)
         }, object: voice)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
-        XCTAssertTrue(syncing.exists, "The voice action must still overlap the held history read.")
+        XCTAssertFalse(syncing.exists, "History activity is observed through the fixture barrier, not removed UI.")
         let before = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
         XCTAssertEqual(before["history_sync_automatic"] as? Bool, false, "This journey must hold the explicit Settings refresh, not an earlier quiet poll.")
         XCTAssertEqual(before["active_history_reads"] as? Int, 1)
@@ -808,12 +1043,63 @@ final class StudioJourneyTests: XCTestCase {
         app.terminate(); app.launch(); _ = field(app)
         let retry = app.buttons["sharedRetry"]; enabled(retry)
         XCTAssertTrue(app.scrollViews["conversationTimeline"].staticTexts["Keep my unfinished question"].exists)
+        XCTAssertTrue(retry.isHittable); XCTAssertGreaterThanOrEqual(retry.frame.width, 44); XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
+        let target = XCTAttachment(string: "Retry before single tap: frame=\(retry.frame), enabled=\(retry.isEnabled), hittable=\(retry.isHittable)")
+        target.name = "retry-single-touch-target"; target.lifetime = .keepAlways; add(target)
         retry.tap(); answer(app)
         let after = try trace(app)
+        XCTAssertEqual(after["retry_stages"] as? [String], ["touch", "attempt", "admitted", "post"])
         XCTAssertEqual(after["submitted_ids"] as? [String], [firstIDs[0], firstIDs[0]], "Retry must preserve the durable request ID.")
         XCTAssertEqual(after["submitted_texts"] as? [String], ["Keep my unfinished question", "Keep my unfinished question"])
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)
         try evidence("journey-retry-outbox", app: app)
+    }
+    @MainActor func testSingleExplicitRetryQueuesBehindHeldPeriodicHistoryWithoutAutomaticReplay() throws {
+        let app = launch("retry-once", arguments: ["--hold-retry-history"]); signIn(app)
+        let words = "Keep my unfinished question"
+        field(app).tap(); field(app).typeText(words); app.buttons["sharedSend"].tap()
+        enabled(app.buttons["sharedRetry"])
+        let first = try trace(app), ids = try XCTUnwrap(first["submitted_ids"] as? [String])
+        XCTAssertEqual(ids.count, 1); XCTAssertEqual(first["accepted_turns"] as? Int, 0)
+        app.terminate(); app.launch(); _ = field(app)
+        func armOrdinaryRead() throws {
+            app.buttons["conversationSettings"].tap()
+            let hold = app.buttons["nativeJourneyHoldHistory"]; enabled(hold); hold.tap()
+            _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+            XCTAssertEqual(try trace(app)["history_sync_automatic"] as? Bool, true)
+        }
+        func releaseRead() {
+            app.buttons["conversationSettings"].tap()
+            let release = app.buttons["nativeJourneyReleaseHistory"]; enabled(release); release.tap()
+        }
+        // A read completing after restart without user intent must not replay the POST.
+        try armOrdinaryRead(); releaseRead()
+        _ = try waitForTraceCount("history_barrier_completions", atLeast: 1, in: app)
+        XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], ids)
+        try armOrdinaryRead()
+        let retry = app.buttons["sharedRetry"]
+        XCTAssertTrue(retry.isEnabled, "A background read must not swallow the user's explicit retry.")
+        XCTAssertTrue(retry.isHittable)
+        retry.tap() // Exactly one real tap; keep the original answer and receipt assertions.
+        let node = diagnostic("nativeJourneyTrace", in: app)
+        let touched = XCTNSPredicateExpectation(predicate: NSPredicate { object, _ in
+            guard let raw = (object as? XCUIElement)?.value as? String,
+                  let data = raw.data(using: .utf8),
+                  let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return value["retry_stages"] as? [String] == ["touch"]
+        }, object: node)
+        XCTAssertEqual(XCTWaiter.wait(for: [touched], timeout: 5), .completed)
+        XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], ids)
+        XCTAssertFalse(retry.isEnabled, "One queued intent must prevent a second retry tap.")
+        releaseRead(); answer(app)
+        let after = try trace(app)
+        XCTAssertEqual(after["retry_stages"] as? [String], ["touch", "attempt", "admitted", "post"])
+        XCTAssertEqual(after["submitted_ids"] as? [String], [ids[0], ids[0]])
+        XCTAssertEqual(after["submitted_texts"] as? [String], [words, words])
+        XCTAssertEqual(after["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(after["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(after["history_barrier_completions"] as? Int, 2)
+        try evidence("journey-explicit-retry-during-history", app: app)
     }
     @MainActor func testUnacknowledgedWordsStayVisibleWhenHistoryReusesIDWithDifferentText() throws {
         let app = launch("pending-text-mismatch"); signIn(app)
@@ -852,15 +1138,30 @@ final class StudioJourneyTests: XCTestCase {
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in self.transcriptShows(element, in: app) }, object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 10), .completed, "The saved/latest reply must be inside the real transcript viewport, not merely in the accessibility tree.")
     }
+    /// Reads one exact saved reply from a single accessibility snapshot.
+    @MainActor private func snapshotShowsReply(_ root: XCUIElementSnapshot, number: Int, account: Int) -> Bool {
+        let prefix = "HP Studio의 답변. Account \(account) answer \(number)."
+        guard let viewport = snapshotNodes(root, { $0.identifier == "conversationTimeline" && $0.elementType == .scrollView }).first?.frame,
+              let reply = snapshotNodes(root, { $0.identifier == "sharedReply" && $0.elementType == .staticText && $0.label.hasPrefix(prefix) }).first?.frame
+        else { return false }
+        let intersection = reply.intersection(viewport)
+        return reply.height > 0 && !intersection.isNull && intersection.height >= min(32, reply.height)
+    }
+    @MainActor private func waitForReply(_ number: Int, account: Int = 1, in app: XCUIApplication) {
+        let shown = waitForSnapshot(app, timeout: 10) { self.snapshotShowsReply($0, number: number, account: account) }
+        XCTAssertTrue(shown, "The saved/latest reply \(number) must be inside the real transcript viewport, not merely in the accessibility tree.")
+    }
     @MainActor private func signInToHistory(_ app: XCUIApplication, account: Int = 1) {
         let login = app.buttons["linkDesktop"]; enabled(login); login.tap()
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard !app.buttons["linkDesktop"].exists, !app.buttons["accountCancel"].exists else { return false }
-            // Resolve the exact account/reply after adoption on every evaluation,
-            // rather than retaining a query constructed during the login transition.
-            return self.transcriptShows(self.historyReply(40, account: account, in: app), in: app)
-        }, object: app)
-        let result = XCTWaiter.wait(for: [ready], timeout: 10)
+        // One snapshot per evaluation. The former block issued four live
+        // queries per evaluation; on hosted runners that allowed one or two
+        // evaluations in 10s while the reply was already visible (#4432).
+        // Every evaluation re-resolves the exact account/reply after adoption.
+        let ready = waitForSnapshot(app, timeout: 10) { root in
+            let blocking = self.snapshotNodes(root) { $0.elementType == .button && ["linkDesktop", "accountCancel"].contains($0.identifier) }
+            return blocking.isEmpty && self.snapshotShowsReply(root, number: 40, account: account)
+        }
+        let result: XCTWaiter.Result = ready ? .completed : .timedOut
         if result != .completed {
             readinessFailure("history-account-\(account)-answer-40-not-ready", app: app, queries: [
                 ("linkDesktop", app.buttons["linkDesktop"]), ("accountCancel", app.buttons["accountCancel"]),
@@ -887,6 +1188,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 10), .completed)
     }
     @MainActor func testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords() throws {
+        // Hosted accessibility traversal exceeded the 180s default; keep the existing 240s hard cap.
+        executionTimeAllowance = 240
         let app = launch("logout-sync"); signIn(app)
         let words = "Keep my queued thought"
         field(app).tap(); field(app).typeText(words)
@@ -895,16 +1198,24 @@ final class StudioJourneyTests: XCTestCase {
         // A periodic read may win the same real refresh slot. Usable history
         // deliberately hides its spinner; prove the held HTTP read itself.
         let transport = diagnostic("nativeJourneyTrace", in: app)
-        let held = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let text = transport.value as? String, let bytes = text.data(using: .utf8),
-                  let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
-            return (value["delayed_history_reads"] as? Int) == 1
-                && (value["active_history_reads"] as? Int) == 1
-                && (value["history_barrier_completions"] as? Int) == 0
-                && (value["history_barrier_timeouts"] as? Int) == 0
-                && (value["history_barrier_cancellations"] as? Int) == 0
-        }, object: transport)
-        let holdResult = XCTWaiter.wait(for: [held], timeout: 5)
+        // One live value read per evaluation. A failed run's trace already
+        // showed the held read, but the four-query predicate was evaluated too
+        // rarely inside 5s on a hosted runner. Snapshot values are truncated at
+        // about 512 characters, so the value is read live (#4432).
+        let deadline = Date().addingTimeInterval(5)
+        var isHeld = false
+        repeat {
+            if let text = transport.value as? String, let bytes = text.data(using: .utf8),
+               let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] {
+                isHeld = (value["delayed_history_reads"] as? Int) == 1
+                    && (value["active_history_reads"] as? Int) == 1
+                    && (value["history_barrier_completions"] as? Int) == 0
+                    && (value["history_barrier_timeouts"] as? Int) == 0
+                    && (value["history_barrier_cancellations"] as? Int) == 0
+            }
+            if !isHeld { RunLoop.current.run(until: Date().addingTimeInterval(0.2)) }
+        } while !isHeld && Date() < deadline
+        let holdResult: XCTWaiter.Result = isHeld ? .completed : .timedOut
         if holdResult != .completed {
             readinessFailure("logout-history-not-held", app: app, queries: [("transport", transport)])
         }
@@ -926,13 +1237,15 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertFalse(app.buttons["linkDesktop"].exists, "Waiting is not confirmed logout.")
         XCTAssertFalse(app.buttons["sharedSend"].isEnabled)
         let waiting = try trace(app)
-        XCTAssertEqual(waiting["logout_requests"] as? Int, 0)
-        XCTAssertEqual(waiting["submitted_ids"] as? [String], [])
+        // Barrier state first: if the held read already ended, say so instead
+        // of reporting only its consequence (an early logout request).
+        XCTAssertEqual(waiting["history_barrier_timeouts"] as? Int, 0, "The fixture hold must not expire before the explicit release.")
+        XCTAssertEqual(waiting["history_barrier_cancellations"] as? Int, 0, "The app read budget must not cancel the held read before release.")
+        XCTAssertEqual(waiting["history_barrier_completions"] as? Int, 0)
         XCTAssertEqual(waiting["active_history_reads"] as? Int, 1, "The same HTTP read must remain held after the one logout tap.")
         XCTAssertEqual(waiting["delayed_history_reads"] as? Int, 1)
-        XCTAssertEqual(waiting["history_barrier_completions"] as? Int, 0)
-        XCTAssertEqual(waiting["history_barrier_timeouts"] as? Int, 0)
-        XCTAssertEqual(waiting["history_barrier_cancellations"] as? Int, 0)
+        XCTAssertEqual(waiting["logout_requests"] as? Int, 0)
+        XCTAssertEqual(waiting["submitted_ids"] as? [String], [])
         // Release only the synthetic HTTP response; never alter account/model state.
         app.buttons["conversationSettings"].tap()
         XCTAssertFalse(app.buttons["내 상황과 의도"].isEnabled)
@@ -965,7 +1278,7 @@ final class StudioJourneyTests: XCTestCase {
         let app = launch("long-history"); signInToHistory(app)
         XCTAssertEqual(try trace(app)["history_window_messages"] as? Int, 80)
         app.terminate(); app.launch()
-        waitForTranscript(historyReply(40, in: app), in: app)
+        waitForReply(40, in: app)
         XCTAssertFalse(app.buttons["conversationLatest"].exists)
         // Warm a second 80-message cache, then leave it while reading old text.
         app.buttons["conversationHistory"].tap(); app.buttons["Saved desktop conversation"].tap()
@@ -974,7 +1287,7 @@ final class StudioJourneyTests: XCTestCase {
         readOlderHistory(app)
         XCTAssertFalse(transcriptShows(peer, in: app))
         app.buttons["conversationHistory"].tap(); app.buttons["나를 알아가는 대화"].tap()
-        waitForTranscript(historyReply(40, in: app), in: app)
+        waitForReply(40, in: app)
         XCTAssertFalse(app.buttons["conversationLatest"].exists, "Equal message counts must not retain the other conversation's reading offset.")
         app.buttons["conversationSettings"].tap(); enabled(app.buttons["로그아웃"]); app.buttons["로그아웃"].tap()
         signInToHistory(app, account: 2)
@@ -987,7 +1300,7 @@ final class StudioJourneyTests: XCTestCase {
     @MainActor func testEightyMessageWindowFollowsNewTailWithoutInterruptingReading() throws {
         let app = launch("long-history", arguments: ["--journey-dark"]); signInToHistory(app)
         advanceRemoteHistory(app, revision: 82)
-        waitForTranscript(historyReply(41, in: app), in: app)
+        waitForReply(41, in: app)
         XCTAssertEqual(try trace(app)["history_window_messages"] as? Int, 80, "The rollover changes identities, not message count.")
         readOlderHistory(app)
         let previouslyVisible = app.staticTexts.matching(identifier: "sharedReply").allElementsBoundByIndex.filter { transcriptShows($0, in: app) }.map(\.label)
@@ -998,7 +1311,7 @@ final class StudioJourneyTests: XCTestCase {
             transcriptShows(app.staticTexts.matching(NSPredicate(format: "label == %@", label)).firstMatch, in: app)
         }, "An already-visible passage must remain in the reading viewport.")
         let latest = app.buttons["conversationLatest"]; enabled(latest); latest.tap()
-        waitForTranscript(historyReply(42, in: app), in: app)
+        waitForReply(42, in: app)
         XCTAssertFalse(latest.exists)
         // A deliberate new send, unlike a background refresh, follows its reply.
         readOlderHistory(app)
@@ -1007,7 +1320,7 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertLessThanOrEqual(input.frame.maxY, app.keyboards.firstMatch.frame.minY)
         XCTAssertEqual(input.value as? String, "My next question from this saved history")
         enabled(app.buttons["sharedSend"]); app.buttons["sharedSend"].tap()
-        waitForTranscript(historyReply(43, in: app), in: app)
+        waitForReply(43, in: app)
         let result = try trace(app)
         XCTAssertEqual(result["history_window_messages"] as? Int, 80)
         XCTAssertEqual(result["history_advances"] as? Int, 2)
@@ -1203,7 +1516,7 @@ final class StudioJourneyTests: XCTestCase {
         try evidence("journey-cancel-first-thought", app: app)
     }
     @MainActor func testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice() throws {
-        let app = launch("draft-collision")
+        let app = launch("draft-collision", arguments: ["--hold-guest-history"])
         let input = field(app); input.tap(); input.typeText("My thought before login")
         signIn(app)
         XCTAssertEqual(field(app).value as? String, "Existing account draft")
@@ -1235,7 +1548,24 @@ final class StudioJourneyTests: XCTestCase {
             ])
         }
         XCTAssertEqual(cleared, .completed, "The account draft must actually be cleared before restoring the separate guest draft.")
+        app.buttons["conversationSettings"].tap()
+        let hold = app.buttons["nativeJourneyHoldHistory"]; enabled(hold); hold.tap()
+        let held = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
+        XCTAssertEqual(held["history_sync_automatic"] as? Bool, true)
+        XCTAssertEqual(held["accepted_turns"] as? Int, 0)
+        XCTAssertTrue(restore.isEnabled, "An ordinary history GET must not consume or disable explicit guest draft restoration.")
         enabled(restore); restore.tap()
+        XCTAssertEqual(field(app).value as? String, "My thought before login")
+        XCTAssertFalse(restore.exists)
+        XCTAssertEqual(try trace(app)["active_history_reads"] as? Int, 1, "The restore must finish while the same GET is still held.")
+        app.buttons["conversationSettings"].tap()
+        let release = app.buttons["nativeJourneyReleaseHistory"]; enabled(release); release.tap()
+        let after = try waitForTraceCount("history_barrier_completions", atLeast: 1, in: app)
+        XCTAssertEqual(after["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(after["accepted_turns"] as? Int, 0)
+        XCTAssertEqual(after["submitted_ids"] as? [String], [])
+        XCTAssertEqual(field(app).value as? String, "My thought before login", "The completing GET must preserve the locally restored words.")
+        app.terminate(); app.launch()
         XCTAssertEqual(field(app).value as? String, "My thought before login")
         XCTAssertFalse(restore.exists)
         XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
@@ -1255,7 +1585,7 @@ final class StudioSignInBoundaryTests: XCTestCase {
     }
     @MainActor func testSystemBrowserOpensLiveSignInPageAndCancelReturnsToApp() throws {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = studioApp()
         app.launchArguments = ["--native-journey"]
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = "sign-in-live-boundary"
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString

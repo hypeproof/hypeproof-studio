@@ -15,13 +15,16 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 MOCK = r'''#!/usr/bin/env python3
 import json,os,pathlib,signal,subprocess,sys,time
 s=pathlib.Path(os.environ['MOCK_STATE']); mode=os.environ['MOCK_MODE']
+def put(name,value,delay=0):
+ # Readers see no file or the whole value, never an empty one (os.replace is atomic).
+ t=s/(name+'.tmp');t.write_text(value);time.sleep(delay);os.replace(t,s/name)
 tool=pathlib.Path(sys.argv[0]).name; args=sys.argv[1:]
 with (s/'calls.jsonl').open('a') as f: f.write(json.dumps([tool,*args])+'\n')
 if tool=='avdmanager':
  name=args[args.index('--name')+1]; p=pathlib.Path(os.environ['ANDROID_AVD_HOME'])/(name+'.avd');p.mkdir()
  (p/'config.ini').write_text('fixture=1\n')
 elif tool=='emulator':
- (s/'name').write_text(args[args.index('-avd')+1]);(s/'pid').write_text(str(os.getpid()))
+ put('pid',str(os.getpid()));put('name',args[args.index('-avd')+1],float(os.environ.get('MOCK_NAME_DELAY','0')))
  def stop(*_):
   (s/'stopped').write_text('owned emulator terminated');sys.exit(0)
  signal.signal(signal.SIGTERM,stop)
@@ -49,10 +52,18 @@ elif tool=='adb':
   print('mCurrentFocus='+focus+'\nisKeyguardShowing=false')
  elif args==['shell','dumpsys','power']:print('mWakefulness=Awake')
  elif args==['shell','getprop','ro.build.fingerprint']:print('fixture fingerprint')
+ elif args==['shell','device_config','set_sync_disabled_for_tests','persistent']:
+  if mode!='sync_not_disabled':(s/'sync').write_text('persistent')
+ elif args==['shell','device_config','get_sync_disabled_for_tests']:print((s/'sync').read_text() if (s/'sync').exists() else 'none')
+ elif args[:3]==['shell','pm','disable-user']:
+  pkg=args[-1]
+  if mode=='messaging_absent':print('Exception occurred while executing \'disable-user\':\njava.lang.IllegalArgumentException: Unknown package: '+pkg);sys.exit(255)
+  elif mode=='disable_fails':print('Error: java.lang.SecurityException: Shell cannot change component state');sys.exit(1)
+  else:print('Package '+pkg+' new state: disabled-user')
  else:print('retained diagnostic fixture')
 '''
 VERIFY = r'''#!/bin/bash
-printf 'started\n' >> "$MOCK_STATE/verification"
+printf 'started %s\n' "$*" >> "$MOCK_STATE/verification"
 if [ "$MOCK_MODE" = verify_failure ]; then exit 23; fi
 if [ "$MOCK_MODE" = emulator_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = interrupt_test ] || [ "$MOCK_MODE" = test_timeout ]; then sleep 60; fi
@@ -94,13 +105,13 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
             except ProcessLookupError: pass
         self.temp.cleanup()
 
-    def start(self, mode, boot=3, test=3):
+    def start(self, mode, boot=3, test=3, name_delay=0):
         p = subprocess.Popen([sys.executable, str(self.native / "scripts/android-emulator.py"),
                               "--sdk-root", str(self.sdk), "--work-dir", str(self.root / "work"),
                               "--port", str(self.port), "--boot-timeout", str(boot),
                               "--test-timeout", str(test), "--poll-interval", ".01"],
                              env=dict(os.environ, MOCK_STATE=str(self.state), MOCK_MODE=mode,
-                                      PYTHONDONTWRITEBYTECODE="1"), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                      MOCK_NAME_DELAY=str(name_delay), PYTHONDONTWRITEBYTECODE="1"), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.children.append(p)
         return p
 
@@ -121,10 +132,60 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertGreaterEqual(int((self.state / "windows").read_text()), 6)
         self.assertTrue(receipt["verification_started"])
-        self.assertEqual((self.state / "verification").read_text(), "started\n")
+        # The APKs were built before boot; the booted device only runs the device phase.
+        self.assertEqual((self.state / "verification").read_text(), "started device\n")
         self.assertEqual(receipt["stable_focus_observations"], 3)
         self.assertTrue((self.state / "stopped").exists())
         self.assertIn(["adb", "-s", f"emulator-{self.port}", "shell", "input", "keyevent", "KEYCODE_WAKEUP"], calls)
+
+    def test_device_config_sync_is_frozen_and_read_back_before_tests(self):
+        code, receipt, calls = self.finish(self.start("unstable"))
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["device_config_sync_disabled"], "persistent")
+        adb = [c[3:] for c in calls if c[:1] == ["adb"]]
+        freeze = adb.index(["shell", "device_config", "set_sync_disabled_for_tests", "persistent"])
+        self.assertLess(freeze, adb.index(["shell", "device_config", "get_sync_disabled_for_tests"]))
+        self.assertLess(adb.index(["shell", "settings", "put", "global", "animator_duration_scale", "0.0"]), freeze)
+
+    def test_unconfirmed_device_config_freeze_never_starts_tests(self):
+        code, receipt, calls = self.finish(self.start("sync_not_disabled"))
+        self.assertNotEqual(code, 0)
+        self.assertEqual(receipt["device_config_sync_disabled"], "none")
+        self.assertFalse(receipt["verification_started"])
+        self.assertFalse((self.state / "verification").exists())
+
+    def disabled(self, receipt):
+        return [(r["package"], r["result"]) for r in receipt["disabled_packages"]]
+
+    def test_messaging_is_disabled_after_first_observation_and_before_tests(self):
+        code, receipt, calls = self.finish(self.start("unstable"))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.disabled(receipt), [("com.google.android.apps.messaging", "disabled")])
+        disable = ["adb", "-s", f"emulator-{self.port}", "shell", "pm", "disable-user", "--user", "0", "com.google.android.apps.messaging"]
+        self.assertEqual(calls.count(disable), 1)
+        window = ["adb", "-s", f"emulator-{self.port}", "shell", "dumpsys", "window"]
+        # The first observation precedes the disable, so an existing ANR is never concealed.
+        self.assertLess(calls.index(window), calls.index(disable))
+        self.assertEqual(receipt["recipe"]["target"], "google_apis")
+
+    def test_absent_messaging_is_recorded_and_tests_still_run(self):
+        code, receipt, _ = self.finish(self.start("messaging_absent"))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.disabled(receipt), [("com.google.android.apps.messaging", "not_installed")])
+        self.assertTrue(receipt["verification_started"])
+
+    def test_failed_disable_is_recorded_not_hidden_or_retried(self):
+        code, receipt, calls = self.finish(self.start("disable_fails"))
+        self.assertEqual(code, 0)
+        [entry] = receipt["disabled_packages"]
+        self.assertEqual((entry["result"], entry["exit_code"]), ("failed", 1))
+        self.assertIn("SecurityException", entry["output"])
+        self.assertEqual(sum(c[4:6] == ["pm", "disable-user"] for c in calls), 1)
+
+    def test_foreign_anr_before_disable_still_blocks(self):
+        code, receipt, calls = self.finish(self.start("foreign_anr"))
+        self.assertEqual((code, receipt["reason"]), (2, "foreign_anr"))
+        self.assertFalse(any("disable-user" in c for c in calls))
 
     def test_absent_focus_blocks_tests_and_retains_observations(self):
         code, receipt, _ = self.finish(self.start("no_focus", boot=.7))
@@ -132,6 +193,15 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertFalse(receipt["verification_started"])
         self.assertFalse((self.state / "verification").exists())
         self.assertTrue(list((self.native / "evidence/android/bootstrap").glob("readiness-*-window.txt")))
+
+    def test_slow_emulator_name_write_is_not_read_as_another_avd(self):
+        # Run 45002166166 got 2 instead of 124: the fake emulator created the name file
+        # before writing it, adb printed an empty name, and the bootstrap saw another AVD.
+        # Hold the write open longer than any runner would; the outcome must not change.
+        code, receipt, _ = self.finish(self.start("no_focus", boot=.7, name_delay=.2))
+        self.assertEqual(code, 124)
+        # The deadline ends either between polls or inside the adb call it bounds.
+        self.assertTrue(receipt["reason"].startswith(("boot_or_focus_timeout", "command_timeout")), receipt["reason"])
 
     def test_anr_blocks_before_preparation_and_preserves_diagnostics(self):
         code, receipt, calls = self.finish(self.start("foreign_anr"))

@@ -23,23 +23,23 @@ with open(os.environ["STUB_CALLS"], "a") as log:
     log.write(json.dumps({"command": name, "args": args, "pid": os.getpid()}) + "\n")
 if name == "xcodebuild":
     if args == ["-version"]:
-        print("Xcode 26.3")
+        print("Xcode 27.2")
     if "test" in args:
         if os.environ.get("STUB_TEST_SIGNAL"):
             os.kill(os.getpid(), int(os.environ["STUB_TEST_SIGNAL"]))
         raise SystemExit(int(os.environ.get("STUB_TEST_EXIT", "0")))
 elif name == "xcrun":
     if args == ["--sdk", "iphonesimulator", "--show-sdk-version"]:
-        print("26.3")
+        print("27.2")
     elif args[:3] == ["simctl", "list", "runtimes"]:
         print(json.dumps({"runtimes": [
-            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3", "version": "26.3",
+            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2", "version": "27.2",
              "supportedDeviceTypes": [{"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"}]},
-            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3-special", "version": "26.3",
+            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2-special", "version": "27.2",
              "supportedDeviceTypes": [{"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"}]}
         ]}))
     elif args[:2] == ["simctl", "create"]:
-        if args[-1] != "com.apple.CoreSimulator.SimRuntime.iOS-26-3":
+        if args[-1] != "com.apple.CoreSimulator.SimRuntime.iOS-27-2":
             raise SystemExit("Incompatible device")
         if os.environ.get("STUB_CREATE_EXIT"):
             raise SystemExit(int(os.environ["STUB_CREATE_EXIT"]))
@@ -78,6 +78,13 @@ if len(sys.argv) == 3 and sys.argv[1] == "-":
             timeout = 0.25
         return original_wait(self, timeout=timeout)
     subprocess.Popen.wait = wait
+    if os.environ.get("STUB_KILLPG_EPERM"):
+        # macOS gives EPERM when only the unreaped leader is left; the helper must then
+        # stop the leader itself and keep its log about the timeout, not an OSError.
+        import errno
+        def killpg(pid, sig):
+            raise PermissionError(errno.EPERM, "Operation not permitted")
+        os.killpg = killpg
     code = sys.stdin.read()
     sys.argv = sys.argv[1:]
     exec(compile(code, "<ios-cleanup>", "exec"), {"__name__": "__main__"})
@@ -87,7 +94,7 @@ else:
 
 
 class IosCleanupTest(unittest.TestCase):
-    def run_script(self, *, device=DEVICE, cleanup=None, test_exit=0, create_exit=0, test_signal=0):
+    def run_script(self, *, device=DEVICE, cleanup=None, test_exit=0, create_exit=0, test_signal=0, killpg_eperm=False):
         temp = tempfile.TemporaryDirectory(prefix="studio-ios-cleanup-")
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -95,6 +102,7 @@ class IosCleanupTest(unittest.TestCase):
         for directory in (scripts, ios, bin_dir):
             directory.mkdir()
         shutil.copyfile(SCRIPT, scripts / "ios-verify.sh")
+        shutil.copyfile(SCRIPT.parent / "select-ios-simulator.py", scripts / "select-ios-simulator.py")
         (scripts / "collect-native-journeys.py").write_text("raise SystemExit(0)\n")
         (scripts / "collect-signin-journey.py").write_text("raise SystemExit(0)\n")
         # This suite isolates simulator ownership/cleanup, not native metadata.
@@ -112,7 +120,7 @@ class IosCleanupTest(unittest.TestCase):
                    STUB_CALLS=str(calls), STUB_TIMEOUTS=str(timeouts), STUB_DEVICE=device,
                    STUB_CLEANUP=json.dumps(cleanup or {}), STUB_TEST_EXIT=str(test_exit),
                    STUB_TEST_SIGNAL=str(test_signal) if test_signal else "",
-                   STUB_DESCENDANTS=str(descendants),
+                   STUB_DESCENDANTS=str(descendants), STUB_KILLPG_EPERM="1" if killpg_eperm else "",
                    STUB_CREATE_EXIT=str(create_exit) if create_exit else "")
         result = subprocess.run(["bash", str(scripts / "ios-verify.sh")], cwd=root,
                                 env=env, capture_output=True, text=True, timeout=10)
@@ -163,6 +171,20 @@ class IosCleanupTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assert_owned(calls, requested)
                 self.assertIn(f"{action} timed out after 30s; stopping owned process group", log)
+                timed_out = next(c for c in calls if c["args"][1] == action)
+                self.assert_stopped(timed_out["pid"])
+
+    def test_eperm_from_an_exited_group_stops_the_leader_and_keeps_the_timeout_log(self):
+        for action in ("shutdown", "delete"):
+            with self.subTest(action=action):
+                result, calls, requested, log = self.run_script(cleanup={action: "timeout"}, killpg_eperm=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assert_owned(calls, requested)
+                self.assertIn(f"{action} timed out after 30s; stopping owned process group", log)
+                self.assertNotIn("cleanup error", log)
+                self.assertNotIn("did not reap", log)
+                for other in {"shutdown", "delete"} - {action}:
+                    self.assertIn(f"{other} completed exit=0", log)
                 timed_out = next(c for c in calls if c["args"][1] == action)
                 self.assert_stopped(timed_out["pid"])
 

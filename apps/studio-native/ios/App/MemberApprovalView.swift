@@ -31,7 +31,7 @@ struct MemberApprovalView: View {
                             .buttonStyle(.borderedProminent).disabled(push.state.busy).accessibilityIdentifier("approvalEnablePush")
                     }
                 }
-                ForEach(model.state.cards) { card in
+                ForEach(focusedTestCard.map { [$0] } ?? model.state.cards) { card in
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             if card.id == model.focusID {
@@ -39,36 +39,36 @@ struct MemberApprovalView: View {
                             }
                             Text(changeSummary(card)).font(.body).lineLimit(3)
                                 .accessibilityIdentifier("approvalChangeSummary-" + card.id)
-                            Text("검토 담당자로 지정됐어요. " + card.statusLabel).font(.caption)
-                                .accessibilityIdentifier("approvalStatus-" + card.id)
-                            TimelineView(.periodic(from: .now, by: 1)) { clock in
-                                let allowed = model.state.status == "ready" && !model.state.busy && !model.state.pending.contains(where: { $0.cardID == card.id }) && card.canDecide(now: clock.date.timeIntervalSince1970)
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Button { model.decide(card, .approve) } label: { Text("승인").frame(minHeight: 44) }.accessibilityIdentifier("approvalApprove-" + card.id)
-                                        Button { model.decide(card, .reject) } label: { Text("보류").frame(minHeight: 44) }.accessibilityIdentifier("approvalHold-" + card.id)
-                                        Button { model.decide(card, .question) } label: { Text("설명 요청").frame(minHeight: 44) }.accessibilityIdentifier("approvalQuestion-" + card.id)
-                                    }.buttonStyle(.bordered).disabled(!allowed)
-                                    if !allowed && card.decision == nil && card.review == nil && card.state != "resolved" { Text("지금은 답할 수 없어요. 새로고침해 주세요.").font(.caption) }
+                            if card.isApprovalPushTest {
+                                Text("알림 수신과 상세 열기를 확인하는 테스트 카드입니다.").font(.caption)
+                                    .accessibilityIdentifier("approvalPushTestReadOnly-" + card.id)
+                            } else {
+                                Text("검토 담당자로 지정됐어요. " + card.statusLabel).font(.caption)
+                                    .accessibilityIdentifier("approvalStatus-" + card.id)
+                                TimelineView(.periodic(from: .now, by: 1)) { clock in
+                                    let allowed = model.state.status == "ready" && !model.state.busy && !model.state.pending.contains(where: { $0.cardID == card.id }) && card.canDecide(now: clock.date.timeIntervalSince1970)
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Button { model.decide(card, .approve) } label: { Text("승인").frame(minHeight: 44) }.accessibilityIdentifier("approvalApprove-" + card.id)
+                                            Button { model.decide(card, .reject) } label: { Text("보류").frame(minHeight: 44) }.accessibilityIdentifier("approvalHold-" + card.id)
+                                            Button { model.decide(card, .question) } label: { Text("설명 요청").frame(minHeight: 44) }.accessibilityIdentifier("approvalQuestion-" + card.id)
+                                        }.buttonStyle(.bordered).disabled(!allowed)
+                                        if !allowed && card.decision == nil && card.review == nil && card.state != "resolved" { Text("지금은 답할 수 없어요. 새로고침해 주세요.").font(.caption) }
+                                    }
                                 }
                             }
                             if let review = card.review, let url = URL(string: review.html_url) { Link("GitHub에 반영된 승인 보기", destination: url) }
                         }
-                        DisclosureGroup {
-                            Text("\(card.source.repo) #\(card.source.pr)")
-                            Text("정확한 버전").font(.caption)
-                            Text(card.source.head).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                                .accessibilityIdentifier("approvalExactHead-" + card.id)
-                            Text("작성자가 설명한 변경").font(.headline)
-                            ForEach(Array(card.brief.authored.enumerated()), id: \.offset) { _, text in Text(text) }
-                            Text("검증된 근거").font(.headline)
-                            ForEach(Array(card.brief.verified.enumerated()), id: \.offset) { _, text in Text(text) }
-                            Text("기준: " + card.source.base)
-                            Text("검토자: " + card.reviewer)
-                        } label: {
-                            Text("설명과 근거 " + String(card.source.head.prefix(7)))
-                                .accessibilityLabel("설명과 근거. 정확한 버전 " + card.source.head)
-                        }.accessibilityIdentifier("approvalEvidence-" + card.id)
+                        if focusedTestCard?.id == card.id {
+                            evidence(card)
+                        } else {
+                            DisclosureGroup {
+                                evidence(card)
+                            } label: {
+                                Text("설명과 근거 " + String(card.source.head.prefix(7)))
+                                    .accessibilityLabel("설명과 근거. 정확한 버전 " + card.source.head)
+                            }.accessibilityIdentifier("approvalEvidence-" + card.id)
+                        }
                     } header: {
                         Text("\(card.source.repo.split(separator: "/").last.map(String.init) ?? card.source.repo) #\(card.source.pr)")
                             .accessibilityLabel("\(card.source.repo) #\(card.source.pr)")
@@ -91,6 +91,23 @@ struct MemberApprovalView: View {
                 .onDisappear { model.focusID = nil; model.dismiss() }
         }
     }
+    private var focusedTestCard: MemberApprovalCard? {
+        model.state.cards.first { $0.id == model.focusID && $0.isApprovalPushTest }
+    }
+
+    @ViewBuilder private func evidence(_ card: MemberApprovalCard) -> some View {
+        Text("\(card.source.repo) #\(card.source.pr)")
+        Text("정확한 버전").font(.caption)
+        Text(card.source.head).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            .accessibilityIdentifier("approvalExactHead-" + card.id)
+        Text("작성자가 설명한 변경").font(.headline)
+        ForEach(Array(card.brief.authored.enumerated()), id: \.offset) { _, text in Text(text) }
+        Text("검증된 근거").font(.headline)
+        ForEach(Array(card.brief.verified.enumerated()), id: \.offset) { _, text in Text(text) }
+        Text("기준: " + card.source.base)
+        Text("검토자: " + card.reviewer)
+    }
+
     private func changeSummary(_ card: MemberApprovalCard) -> String {
         let authored = card.brief.authored.first ?? ""
         return authored.hasPrefix("summary: ") ? String(authored.dropFirst(9)) : authored

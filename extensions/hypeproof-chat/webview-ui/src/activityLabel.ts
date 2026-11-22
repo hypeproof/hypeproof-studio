@@ -18,9 +18,11 @@ export function activityLabel(kind: Kind, pass?: unknown, fallback = "개인 작
 export function passSummary(pass: PassStatus | undefined, now = Date.now()): string | null {
   if (!pass) return null;
   if (pass.expires_at && pass.expires_at <= now) return "이용 기간이 끝났어요";
+  const end = pass.expires_at ? new Date(pass.expires_at) : null;
+  // An invite or super seat: the count is a placeholder (the cost ceiling is the limit), so it is not shown.
+  if (pass.grant) return "요청 횟수 제한 없이 사용" + (end ? ` · ${end.getMonth() + 1}월 ${end.getDate()}일까지` : "");
   const left = Math.max(0, pass.request_limit - pass.requests_used);
   if (left === 0) return "AI 요청을 모두 썼어요";
-  const end = pass.expires_at ? new Date(pass.expires_at) : null;
   return `AI 요청 ${left.toLocaleString("ko-KR")}번 남음` + (end ? ` · ${end.getMonth() + 1}월 ${end.getDate()}일까지` : "");
 }
 

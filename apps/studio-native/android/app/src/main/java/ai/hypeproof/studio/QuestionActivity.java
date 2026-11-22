@@ -65,7 +65,10 @@ public final class QuestionActivity extends Activity {
     private boolean foreground;
     private boolean visible,editing;
     private int ink,paper,muted,card,accent,onAccent;
-    private final Runnable poll=new Runnable(){public void run(){if(visible&&model!=null){if(!voice.session.active()||voice.session.phase()==VoiceSession.Phase.WAITING)model.refresh();updateVoiceReply();handler.postDelayed(this,4000);}}};
+    // Uptime of the next scheduled refresh poll, 0 when none is scheduled. Instrumentation
+    // reads it so a synthetic tap never lands in the moment a poll starts a refresh.
+    long pollDueAt;
+    private final Runnable poll=new Runnable(){public void run(){pollDueAt=0;if(visible&&model!=null){if(!voice.session.active()||voice.session.phase()==VoiceSession.Phase.WAITING)model.refresh();updateVoiceReply();pollDueAt=SystemClock.uptimeMillis()+4000;handler.postDelayed(this,4000);}}};
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);storage=new ReflectionStorage(this);
@@ -104,10 +107,10 @@ public final class QuestionActivity extends Activity {
         if(saved!=null&&Objects.equals(model.account(),saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
         update();
     }
-    @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
+    @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);pollDueAt=SystemClock.uptimeMillis();handler.post(poll);}
     @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();StudioMessagingService.attach(pushListener);resumePush();consumePush(getIntent());}
     @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
-    @Override protected void onStop(){visible=false;StudioMessagingService.detach(pushListener);handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();if(experienceDialog!=null)experienceDialog.dismiss();super.onStop();}
+    @Override protected void onStop(){visible=false;StudioMessagingService.detach(pushListener);handler.removeCallbacks(poll);pollDueAt=0;stopVoice();if(teamDialog!=null)teamDialog.dismiss();if(experienceDialog!=null)experienceDialog.dismiss();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
     @Override protected void onDestroy(){if(push!=null)push.invalidate();pushWorker.shutdown();if(experience!=null)experience.invalidate();experienceWorker.shutdown();if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);if(request==PUSH_PERMISSION){if(push.accepts(pushPermission)){if(grants.length>0&&grants[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)resumePush();else disablePush();}pushPermission=null;}}

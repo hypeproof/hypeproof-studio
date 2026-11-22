@@ -268,6 +268,8 @@ Runs43253872173/1 and43321849035/1 retained the same launcher input-dispatch ANR
 
 The bootstrap preserves per-observation hashes, emulator output/configuration and failure window/activity/input/logcat/screenshot evidence. ANRs fail before preparation; absent focus, child exit or timeout cannot start tests. Only its own process groups are terminated and waited for on success, failure or interruption; occupied ports and foreign AVD identities are refused. Stateful SDK-boundary subprocess tests exercise these controls, failure propagation and TERM with a surviving peer. These controls are not real Android or physical-device acceptance.
 
+Studio #4433 moves three environment causes out of the test run without loosening any readiness or test assertion. Gradle builds and unit-tests the app (`android-verify.sh build`) before the emulator boots; the booted device only installs and runs the prebuilt APKs (`android-verify.sh device`), which refuses to start when the build log or either APK is missing. The emulator stays on API35 Google APIs. On it, Google Messages raised a foreign ANR after boot (run44374245152) and readiness correctly refused to start tests. After the first readiness observation, the bootstrap runs `pm disable-user --user 0 com.google.android.apps.messaging` once and records `disabled`, `not_installed` or `failed` with its output in the receipt; a failed disable is kept visible, not retried. The foreign-ANR refusal stays in force. The AOSP `default` image was tried and rejected: run44857179737 booted ready, but all44 instrumented tests were skipped, because their disposable-emulator guard accepts only `generic` or `sdk_gphone` builds. apt downloads retry transient archive errors (`Acquire::Retries=5`).
+
 ## Required first-person iPhone journeys — MFR-T01–T06 / Studio #3771
 
 The reported installed-app failures were indefinite account checking, dictated
@@ -287,6 +289,7 @@ the new fixtures as a successful physical retest.
 | MFR-T03-stop-denial | Stop races a recorded admission failure; the original POST delivers its typed403 after the snapshot already says failed. Relaunch. | Preserve the exact refusal reason and human words; no fake cancellation, extra POST or voice continuation. |
 | MFR-T03-response-stop | A real native voice turn leaves its POST pending while a Service-shaped running row exists. Explicitly stop; the original POST returns its late error before cancel acknowledgment, then relaunch with a separate draft. | The >=44pt action is usable during POST; only exact terminal acknowledgment shows stopped. Same human words/ID remain; no automatic replay, extra capture, reply or draft loss. Synthetic transport; physical/live voice remains separate. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T05-held-read | After the failed POST and relaunch, hold an ordinary periodic history read. Release it without tapping Retry and require no replay. Hold another read, tap Retry exactly once, then release. | The explicit action remains enabled during the read, queues once without an early POST, and sends the same ID/text after reconciliation. Require one accepted turn, no fixture timeout, and the original answer assertion. |
 | MFR-T05-recorded | A Service-shaped failed turn leaves its user event and terminal ID after the first POST. Relaunch, explicitly restore into an empty composer, relaunch again, then explicitly Send. | Restore/relaunch creates no POST; only Send creates a distinct ID at the reconciled revision. The original failed event remains. |
 | MFR-T05-collision | After a recorded failure, write a different draft and relaunch. | Restore stays disabled and preserves the draft. Pure controls also cover unsaved overlays, whitespace and all non-failed states. |
 | MPER-T03-history | Reopen an 80-message cached conversation, switch away while reading an equal-count cached conversation, and change synthetic account. | The correct latest answer is inside the actual viewport; history navigation creates no AI request and cannot retain the other account's messages. |
@@ -730,6 +733,53 @@ iPhone accessibility, TestFlight processing, installation or reporter acceptance
 | MFB-T02 | MFB-03 | Core persistence/failure controls and native receipt/timeout restart journeys; positive request-count control before restart. |
 | MFB-T03 | MFB-04 | UTF-16 boundary controls, retained text/receipt on persistence failure, native experience settings grant/decline and physical export/accessibility verification. |
 
+### SDK27 verification and delivery — Studio #4346
+
+The native CI and signed-upload lanes pin Xcode27.2 on the standard xcode-27
+image. Simulator selection uses the installed runtime's advertised iPhone
+support and deterministic preference, not a fixed obsolete device/runtime pair.
+Selection controls cover competing same-version runtimes, unavailable runtimes,
+wrong SDK versions and tablet-only support. Existing owned-simulator cleanup
+controls remain required after the toolchain change.
+
+The upload lane writes Xcode and iOS SDK version evidence and rejects SDKs
+below27 or unreadable versions before signing material is created. Synthetic
+Apple-tool controls execute the upload shell and verify that rejection creates
+no signing directory and invokes neither signing nor provider validation/upload.
+Metadata reads remain distinct from archive, validation and upload operations.
+A new source/workflow candidate,
+provider CI run and request-bound cost quote are required before signed upload.
+Local checks, official runner documentation and source review do not prove a
+provider run, Apple acceptance or installation. Earlier18.1 used iOS26.2; its
+nonblocking Apple warning cannot be retroactively relabeled as SDK27 evidence.
+
+Local validation for #4346: 11 simulator selection/cleanup controls and 11
+upload/push boundary controls passed. The complete Python contract suite ran
+129 tests with nine Android fixture failures. An isolated archive of unchanged
+base `be756b3d` reproduced eight of those failures in 26 Android tests, including
+an `Operation not permitted` process-control error; the remaining focus-deadline
+failure was not reproduced in that single baseline run. Android sources are
+unchanged. This is not a passing full-suite result or proof of provider CI.
+Logs: `/tmp/ios-sdk27-contracts.log`, `/tmp/ios-sdk27-upload-contracts-2.log`,
+`/tmp/ios-sdk27-all-contracts.log`, `/tmp/ios-sdk27-baseline-4346.log`.
+
+
+SDK27 remote run `44297615009` retained a failed logout-during-sync case at the
+180-second default and hit the iOS job's 45-minute execution cap. The logout case
+now explicitly uses the existing 240-second maximum; transport barriers, no-send
+assertions and logout completion checks remain unchanged. The job cap is 55 minutes
+for measured build/UI duration plus evidence finalization, adding at most ten runner
+minutes with no automatic retry or extra jobs. The prior run remains failed; these
+limits alone do not establish a passing run.
+
+The focused logout simulator journey passed on 2026-11-18 (1 test, 0 failures,
+51.487 seconds; `/tmp/ios-4360-logout-regression.xcresult`), with runner and owned
+simulator cleanup exit 0. The Android consent-decline failure had three predicates
+on one source line and no failure-time state, so its cause remains unproven. Its
+waits now have distinct stage names and synthetic model/counter diagnostics with
+the original wait budgets and assertions. Android compilation/instrumentation is
+pending remote CI; no speculative runtime change was made.
+
 ### Internal request and discussion client (Studio #4340)
 
 | Test ID | Targets | Required evidence |
@@ -745,3 +795,681 @@ account model with the DEBUG-only TeamEntry transport. They never contact the
 operating internal request API. Their results do not establish live Lab/D1
 membership, production retention, real-account discussion or installed-iPhone
 acceptance. TestFlight and physical accessibility remain separate acceptance.
+
+### Internal triage client — Studio #4342
+
+| Test ID | Targets | Required evidence |
+|---|---|---|
+| MTR-T04 | MTR-06, MTR-07 | Native request detail to triage, cancel preserving exact text, explicit save receipt and refreshed history. Read-only authority must prevent writes and member-picker reads. |
+| MTR-T05 | MTR-08 | Durable unknown outcome with same-key manual retry, storage failure before dispatch, revision conflict requiring refresh/rebase and first-attempt assignee denial versus uncertain retry. |
+
+`TeamWorkflowTests` covers six injected Core scenarios. The actual simulator
+`testInternalWorkflowCancelSaveAndHistory` uses DEBUG-only synthetic transport;
+it does not prove deployed API integration or installed-device acceptance.
+Service owns the insert/read revocation and product membership controls.
+
+### Internal GitHub association client — Studio #4349
+
+Core `TeamGitHubTests` covers durable uncertain-before-send, restart without replay,
+explicit same-key recovery, read-only access, disk failure, refresh-before-rebase,
+late account reply rejection, complete lineage input, foreign URLs and ordered history.
+Actual native `TeamEntryUITests` covers cancel with zero synthetic posts, explicit
+save with one event, refreshed metadata, read-only access and unsaved export/exit guard.
+The DEBUG fixture never contacts GitHub or the production Service and contains no
+provider credentials. Its counters distinguish requests from stored associations.
+
+Focused local validation: seven Core tests passed in
+`artifacts/m1/github-core-3.log`; three native simulator journeys passed in
+`artifacts/m1/github-ui-4.log`. Earlier failed UI attempts remain in
+`github-ui-1.log` (SwiftUI declaration), `github-ui-2.log` (offscreen receipt)
+and `github-ui-3.log` (history accessibility identity). Final UI assertions
+use bounded real scrolling and confirm one stored event, cancellation with
+zero POSTs, and two explicit same-key POSTs with one event after an unknown result. These fixtures do not prove deployed Service #567 integration,
+actual operator grants, Apple processing, TestFlight availability, installation
+or reporter confirmation. Those gates remain NOT RUN.
+
+
+CI run `44298015149` at `558498e3` completed 47 UI cases with one failure:
+repeated downward swipes dismissed the GitHub association sheet before reading
+its counters. The regression now stops scrolling when that row is reachable;
+cancel/save/history and unknown-result recovery retain their original assertions.
+The same job hit its 45-minute execution limit after approximately 34 minutes of
+UI tests plus build/setup overhead. Its bounded limit is now 55 minutes to allow
+result finalization, cleanup and artifact upload. This raises the worst-case
+runner allocation by ten minutes per iOS job, with no added jobs or automatic
+retry; individual case limits remain unchanged. Neither change makes the failed
+run passing. A new exact-source remote run is required.
+
+Both affected simulator journeys passed on 2026-11-18 (2 tests, 0 failures;
+`/tmp/ios-4361-github-regression.xcresult`, log of the same basename).
+This is focused synthetic verification, not a full-suite or installed-device pass.
+
+
+Conversation status simplification (2026-11-18): the existing
+`testPersonalQuestionReadyAndSendWhileDesktopListIsHeld` journey now verifies
+that a successful answer does not display the completed saved caption, routine
+same-account notice, or main syncing spinner while its transport counters still
+prove a real send during a held background request. Existing timeout/retry and
+logout journeys retain their actionable-state assertions. Focused simulator validation passed: both this journey and
+`testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft` completed with zero
+failures (`/tmp/ios-quiet-conversation.log`, `/tmp/ios-quiet-conversation.xcresult`).
+The resource-wrapped runner exited 0; its dedicated simulator was removed.
+This is local synthetic UI evidence, not a new shipped TestFlight build.
+
+### Read-only delivery evidence — Studio #4364
+
+`TeamDeliveryTests` checks the exact freshness boundary, rejection of foreign
+request/repository and malformed/overclaimed evidence, account changes during
+both successful and failed reads, and unavailable-server clearing/retry. The
+screen recomputes freshness each second; it does not poll or mutate the server.
+`TeamEntryUITests` opens the real request detail and delivery screen against a
+DEBUG-only transport, checking exact version/build, unobserved personal states,
+stale observation wording and unavailable-endpoint handling. These tests do not
+prove production activation, Apple state, installation or reporter resolution.
+
+Local evidence (2026-11-18): six focused Core cases passed, including repeated
+account-boundary invalidation of a retained navigation controller
+(`/tmp/ios4364-core-final-lifetime.log`). Two real simulator journeys passed with
+owned-device cleanup exit 0 (`/tmp/ios4364-delivery-ui-reviewed.xcresult`); their
+rendered screenshot was inspected. Those UI runs preceded the final weak-registry
+retention correction, which is covered by the final Core case. Full-suite CI,
+production Service integration, signed delivery and physical-device acceptance
+remain NOT RUN for this slice. No hosted model call, automatic server polling,
+operator mutation or additional cloud service is introduced.
+
+
+### Reporter outcome confirmation — Studio #4366
+
+Focused Core cases cover persisted-before-send explicit action, exact build,
+expired/unavailable evidence reopening, required reason, unknown restart and
+same-key replay against newer history, late account success/failure, storage
+failure export, readonly and revision conflicts, refresh-before-next response,
+retention capability compatibility, forged receipts, and latest/prior build
+selection without mutating uncertain drafts. Native UI journeys exercise
+cancel/resolve/refresh/reopen, unknown navigation and explicit deduplication,
+and readonly/storage-failure behavior through DEBUG-only transport.
+
+Core: nine cases PASS (`/tmp/ios4366-core-build-choice.log`). Initial native
+attempts failed during compilation (State declaration and Section overload);
+those failures are retained. Three native journeys subsequently passed: readonly/
+storage export in `/tmp/ios4366-outcome-ui-3.xcresult`, uncertain navigation/
+same-key recovery in `/tmp/ios4366-outcome-ui-4.xcresult`, and cancel/resolve/
+refresh/reopen in `/tmp/ios4366-outcome-ui-5.xcresult` (runner exit 0). Earlier
+scroll-window assertion failures remain in v3/v4; only failed cases were retried
+with bounded reveals and the original assertions. The server-scoped retention
+copy changed before v5; other product source is identical across these passing
+cases. The v5 screenshot was inspected for readable version/build and self-report
+wording. Dedicated simulators were cleaned up. Full-suite, production API, signed
+TestFlight and physical-device acceptance are NOT RUN.
+
+
+Follow-up visual review of the v5 screenshot found stale resolved history still
+labelled latest after a successful reopening. The corrected controller reads
+current history automatically after persisting the receipt, with account and
+revision guards; a failed read preserves acknowledgement and labels history as
+previously loaded. Eleven Core cases pass (`/tmp/ios4366-core-refresh.log`),
+including immediate resolve/reopen, read failure, stale read, account change
+while refreshing, and older receipt replay against newer current history.
+The affected native journey passed with runner/cleanup exit 0 in
+`/tmp/ios4366-outcome-ui-6.xcresult`. The inspected screenshot shows the reopened
+result as current immediately, matching its saved draft and reason. Prior v3/v4
+UI passes predate this automatic-read change and are not exact-source evidence
+for it. No broad or unrelated test rerun was performed.
+Same-source tool validation at `8c672ec9` on Ubuntu host `snts` passed all 26
+Android bootstrap/environment controls (exit 0). Exact command:
+`python3 -m unittest discover -s apps/studio-native/tests -p 'test_android*.py' -v`.
+Isolated source directory: `/home/snts/ub1000-native-contract-8c672ec9-L3QglI`;
+retrieved log: `/tmp/ios-4360-ubuntu-contracts-result.log`. The authorized Mac
+full suite still had 8 failures out of 129, including process-control permission
+errors. Linux controls pass unchanged; neither platform result establishes actual
+Android application instrumentation or resolves the prior consent-flow failure.
+
+### Durable retry target regression — 2026-11-18
+
+CI run44310462168 at359cb613 failed the single retry after relaunch: one initial
+POST, no second POST, and a visible 20.3pt retry target. The old trace cannot
+distinguish a missed touch from an admission race; it does not prove either.
+The retry now has a >=44pt label hit area. DEBUG-only stage diagnostics contain
+no user text and distinguish actual touch, admission and POST entry. The same
+single normal tap, exact request ID/words and visible reply assertions remain.
+Focused simulator validation passed in `/tmp/ios-release-failure-focused.xcresult`:
+the target was102x58pt, stages touch/attempt/admitted/post, the same ID submitted
+twice and one accepted turn. No retry semantics, delays or timeout budgets changed.
+This is local synthetic evidence; remote CI and physical-device acceptance remain
+separate. The prior failing CI evidence is retained.
+
+### Held history without removed status UI — 2026-11-18
+
+CI run44310557985 at2e7de2dc exposed an obsolete positive assertion for the
+removed `sharedSyncing` element. The queued-voice journey now waits for the
+fixture's actual active-history-read barrier and asserts that the removed UI
+stays absent. Existing held-read, voice capture, send-once, reply and resumed
+listening checks remain. Both this case and durable retry passed together in
+`/tmp/ios-release-failure-focused.xcresult` (2 cases, runner/cleanup exit0).
+All remaining references to the removed saved/account/sync labels in native
+journeys were checked; they assert absence, not stale positive visibility.
+
+
+### Team inbox and explicit subscriptions — Studio #4368
+
+Core controls cover explicit stable-key subscription recovery, request mute,
+late account replies, fresh detail plus read acknowledgement, bounded/malformed
+pages and revisions, source freshness, typed opened destination identity, and
+legacy versus transient capability discovery. Final Core15 PASS (Inbox9 plus
+existing Push6), runner exit0: `/tmp/ios4368-core-final.log`. A recognized
+`team_subscription_conflict` during recovery becomes a durable conflict requiring
+fresh read and explicit new choice; unknown409 remains uncertain. Valid480+50
+filtered rows retain the first500 with read state and stop further pagination.
+Independent source re-review accepted both corrections.
+
+Native evidence is deliberately separate from those final Core-only changes:
+- Denied OS permission, explicit opt-in, inbox/request detail, per-request
+  settings link and original draft preservation PASS30.254s in
+  `/tmp/ios4368-inbox-ui-4.xcresult`.
+- Warm/cold authorized push, occupied context-sheet deferral, retained context
+  text and main draft, and detail back-to-inbox closure PASS51.328s in
+  `/tmp/ios4368-inbox-ui-6.xcresult`, runner and owned-simulator cleanup exit0.
+  This verified the one-shot initial push route correction: returning from detail
+  must not replay initial navigation. Screenshot inspected at
+  `/tmp/ios4368-inbox-ui-6-attachments/FC3530F9-3676-4BF8-B86A-71622E05A46D.png`.
+
+Earlier native attempts remain failed evidence: v1 lacked the fixture launch
+argument, v2 exposed an actor-isolation compile error, v3 awaited an offscreen
+lazy settings row, v4 selected an underlying navigation bar, and v5 exposed the
+initial-route replay. Each was corrected; only affected flows were repeated.
+The denied-permission pass precedes the route-only fix; both native passes
+precede the final conflict/cumulative-cap Core fixes, which passed focused Core
+regressions. No blanket exact-final native-suite pass is claimed.
+
+Fixture transport, OS permission result and notification envelope are synthetic;
+the actual account, model, protected preferences, navigation and screens remain.
+No production subscription, provider send or installed-device receipt is claimed.
+
+
+### Explicit question and reply authoring — Studio #4370
+
+Focused Core controls cover old JSON draft recovery with exact v1 payload/key,
+v2 intent/target freezing through serialization, same-request target selection,
+authoring discovery and malformed metadata, specific definitive conflict versus
+unknown409, and matching acknowledged server tombstones versus uncertain text.
+Core12 (Discussion5 plus existing Request7) passed in
+`/tmp/ios4370-core-final.log`. After the final target-selection guard, focused
+Discussion5 passed in `/tmp/ios4370-core-target-guard.log`. The existing Request7
+pass precedes that isolated guard; it was not unnecessarily repeated.
+
+Native v2 question unknown-result recovery followed by a selected-comment reply
+passed48.996s in `/tmp/ios4370-discussion-ui-2.xcresult`, runner/cleanup exit0.
+Final expanded journey PASS59.040s in `/tmp/ios4370-discussion-ui-4.xcresult`,
+runner and owned-simulator cleanup exit0: both home entries are visible/hittable
+and opened; question recovery retains one event; definitive target409 permits
+explicit fresh choice; words remain and send stays disabled until a replacement
+target is selected; the chosen reply is stored and rendered descriptively.
+The final native source includes the pre-dispatch epoch fence. Inspected image:
+`/tmp/ios4370-discussion-ui-4-attachments/A826EC23-AEA3-49B0-AF3E-DDEEAFECF15F.png`.
+
+Preserved failures: first runner attempt exited2 before build because an external
+checkout switched away from a selector script; the script is now pinned locally
+from exact2c6d0f83. Native v1 exposed the parent inbox toolbar regression: multiple
+buttons in a single ToolbarItem hid the existing team-request entry. A scoped
+ToolbarItemGroup correction retains both entries rather than removing assertions.
+Native v3 remains FAIL: both home entries passed, then the focused editor kept
+the target selection from taking effect. Dismissing editor focus at send/new
+choice corrected that flow with one ordinary target tap; no assertion or wait
+budget was weakened. Toolbar correction is isolated in69abb919 for parent4368.
+Fixture HTTP responses remain synthetic; no production send or phone acceptance.
+
+Retention limitation: discovery exposes supported schemas, not current thread
+writability. A stored content-expired draft stays unavailable/exportable; an old
+purge mark does not prove current write permission after a later reopening.
+That reactivation needs a separately defined current writable contract. The
+client does not infer it or automatically retry an expired send.
+
+4370 retention review correction: comment pages now share one purge generation.
+A changed purge revision clears accumulated rows before a read-only first-page
+refetch; an older refetch cannot restore them. Acknowledged local content stays
+hidden until fresh matching account/key/receipt content is reconciled. Uncertain
+and unsent drafts are not removed. The pre-purge page1/post-purge page2 regression
+and the existing Discussion controls passed together (Core6) in
+`/tmp/ios4370-core-retention-pages.log`, exit0. The actual simulator-target App
+build passed in `/tmp/ios4370-retention-app-build.log`, exit0. Native v4 evidence
+above predates this pagination correction; it was not relabeled as a final-head
+UI rerun.
+
+### Stopped voice response draft input boundary — CI #4361
+
+Run44326288656 on0ea2078b restored `Keep my separate` after the stop-response
+journey immediately terminated following `typeText("Keep my separate draft")`.
+The original recording at
+`/tmp/ios4361-stop-full/A9397026-6036-45C3-9082-4E3D51828601.mp4` does not establish
+complete input before termination: sampled frames show `Ke`, then termination,
+then the partial restored text. This is not proof of a persistence defect.
+
+The journey now requires exact full input before terminating and exact full
+restoration afterwards, each using the existing10s wait. It keeps one typeText,
+no retyping, original cancellation/send-once/no-restart assertions, and records
+each boundary. An incomplete precondition fails the test before termination.
+Independent source review accepted the stronger assertion and failure guard.
+
+Focused native PASS31.469s (Executed1), runner and owned-simulator cleanup exit0:
+`/tmp/ios4361-stop-input-boundary-2.xcresult`. Both equality predicates passed.
+The earlier `/tmp/ios4361-stop-input-boundary.xcresult` selected the wrong class
+and executed0 tests despite exit0; it is NOT validation. Captured AX descriptions
+truncate long values, so the final diagnostic attachment additionally records raw
+`input.value`; that diagnostic-only addition followed the passing run and was not
+claimed as a rerun. Product runtime code is unchanged; remote CI remains separate.
+
+
+### Current GitHub observations — Studio #4373
+
+Core4 PASS in `/tmp/ios4373-core.log`, resource wrapper exit0: device expiry and
+provider failure remain distinct; recorded-run source claims are validated;
+association cursor409 clears old rows before fresh reload; account/session
+changes clear late responses and repeated registry invalidation survives reopen.
+The native acceptance journey preserves an association draft across current,
+expired/provider-failed and unavailable reads, then returns without a write.
+Native v3 PASS39.150s (Executed1), `/tmp/ios4373-observations-ui-3.xcresult`,
+runner and owned-simulator cleanup exit0. It preserves draft issue77 after
+current→expired/provider-failed→503 reads and back, with zero association POSTs.
+Inspected stale/error screenshot:
+`/tmp/ios4373-observations-ui-3-attachments/2247375E-83CD-44D4-9275-10B0350688F5.png`.
+Independent source review and root read-through PASS; root also inspected the
+current-state screenshot. Requirement integrity PASS743; this is not whole-product
+acceptance. No source changes followed the passing native run, only this record.
+
+Initial native build failed before test execution because the new App file
+imported StudioCore even though this Xcode target compiles Core sources directly.
+Removing that import follows the existing App file pattern. Original evidence:
+`/tmp/ios4373-observations-ui-1.log`, wrapper exit65, zero executed UI tests.
+No Service deployment, provider reconciliation, TestFlight upload or installed
+user acceptance is claimed. Integrated stop-input boundary test evidence above
+remains independent of this readonly feature.
+
+Native v2 failed after rendering current evidence: the parent VStack accessibility
+identifier overrode the nested source-mismatch identifier. The actual recording
+frame `/tmp/ios4373-failed-frame.png` visibly shows the complete mismatch warning.
+Removed the unused container identifier to preserve child identifiers; the exact
+child assertion remains. Original v2 result is retained at
+`/tmp/ios4373-observations-ui-2.xcresult` (one executed failure, wrapper exit65).
+
+
+### Explicit related requests — Studio #4375
+
+Focused Core4 PASS in `/tmp/ios4375-core-2.log`, resource wrapper exit0: a committed
+unknown link recovers the same key and can later be explicitly withdrawn; a
+recognized conflict preserves words/key until fresh history and deliberate choice;
+readonly inspection does not change its draft or send; foreign/malformed pairs
+and receipt identity mismatches are rejected. Initial test-fixture compilation
+failure in `/tmp/ios4375-core.log` is preserved (mixed String/NSNull inference,
+corrected with explicit Any; no runtime workaround).
+
+Core5 including late-account and failed-persistence controls passed in
+`/tmp/ios4375-core-3.log`, wrapper exit0. Independent review found that original
+navigation could discard an in-memory draft after storage failure; both original
+links now share the busy/storage guard. Native savefailure navigation/export
+control passed22.024s in `/tmp/ios4375-related-ui-2.xcresult`.
+
+At that point the other two native journeys required concrete corrections. v1
+failed before tests because @State declarations cannot share multiple variable
+names; splitting the declaration fixes the actual build error. v2 failed after
+unknown recovery and original navigation passed: an unlink action assertion was
+queried after its row scrolled offscreen; the unchanged assertion now runs before
+reason typing, after bounded reveal. Readonly history exposed a product bug:
+NavigationLink and history Button shared an automatic List row, so the history
+tap also navigated. `/tmp/ios4375-readonly-frame.png` shows the wrong destination.
+The two actions now occupy separate rows. Failed evidence is preserved in
+`/tmp/ios4375-related-ui-1.log` and `ios4375-related-ui-2.xcresult`; affected
+two-case retry followed, without repeating the unrelated passing savefailure
+journey. These fixtures
+are not actual Service deployment or installed-device acceptance. Broad hidden
+content/local acknowledged-cache compatibility is a separate required integration
+before rollout. Source does not grant operators or activate production state.
+
+Native v3 passed the full cancel/unknown-recovery/original-navigation/unlink case
+in47.925s. Its readonly case passed history inspection, then the final draft hit
+check was blocked by the simulator's first-use keyboard tip. The actual frame
+`/tmp/ios4375-return-frame.png` shows the complete preserved comment beneath
+"Speed up your typing… Continue". The retry recognizes only that exact system-tip
+prefix and dismisses Continue once; original hittable and exact draft assertions
+remain unchanged. `/tmp/ios4375-related-ui-3.xcresult` retains both the passing
+case and this failure. No product source changes followed v3; only readonly-test
+handling of the system tip and documentation changed.
+
+Native v4 dismissed the recognized keyboard tip, but the restored editor focus
+then placed the keyboard over its retained input. Actual frame:
+`/tmp/ios4375-return4-frame.png`; the failure is retained in
+`/tmp/ios4375-related-ui-4.xcresult`. Clearing only comment focus on detail
+disappearance was attempted without changing the draft.
+That callback alone did not fix the interaction; prior passes are not relabeled.
+
+Final Core6 PASS in `/tmp/ios4375-core-final.log`, wrapper exit0, adds a durable
+received-receipt floor and exact receipt ID at equal revision. Stale history
+cannot enable a new action; a coherent explicit refresh can. Pagination cannot
+roll back the currently loaded same-pair history. This does not claim a general
+cross-refresh maximum-revision cache. Independent final source review PASS for
+these guards, protected navigation and focus clearing. Native link/unlink v3 and
+savefailure v2 evidence above predates the final receipt guard/focus correction.
+
+Native v5 still showed the restored keyboard covering the editor
+(`/tmp/ios4375-return5-frame.png`). Focus resignation on disappearance was too
+late for navigation's focus capture. The related entry now uses an explicit
+state-driven transition: clear focus, capture product, then present on the next
+main turn only if the source generation/storage/busy guards still hold. There
+is no arbitrary sleep or automatic request. The affected test additionally
+requires keyboard absence before its original hittable/exact-draft assertions.
+Original v5 failure is retained. V6 passed31.713s (Executed1) in
+`/tmp/ios4375-related-ui-6.xcresult`, resource runner and owned-simulator cleanup
+exit0. It verifies readonly history, no mutation, absent keyboard and exact
+preserved editable comment text. Inspected restored screenshot:
+`/tmp/ios4375-related-ui-6-attachments/AE57CF32-6D18-40A6-8075-386FEA7CCC97.png`.
+The link/unlink screenshot from passing v3 was also inspected:
+`/tmp/ios4375-link-3-attachments/DD9767A4-503D-4D1C-917A-33B914864F5B.png`.
+Final targeted focus/navigation source review PASS. Requirement integrity PASS746.
+No product source changed after v6; only this evidence record was completed.
+
+
+### Hidden retained content — Studio #4377
+
+Actual authenticated D1 fixtures are checked in under StudioCoreTests/Fixtures.
+The original Service590 fixture used nonproduction seed IDs and is preserved in
+/tmp; native ID validators were not weakened. Service593 test-only fixture
+extensions use production-shaped IDs and unchanged runtime d31bb402. Workflow
+fixture 1e37b40f SHA256 0dd10ca9825ff9a16617b6d2d6b8cd5c6d2b936e7f36af037eb3b018c327efb7
+and post-sweep fixture04c22b03 SHA256
+3bb49b437c9f3ec52be2481376a02cbebb0f41ba32fbcff0e4ab68f63a762980
+retain provenance receipts. No postprocessing is applied to the decoder inputs.
+The DEBUG native journey separately adapts account/request identity for existing
+app login and draft paths; it is synthetic app evidence, not deployed Service.
+
+Core53 PASS /tmp/ios4377-hidden-core5.log, wrapper exit0, covers actual logical
+hiding and physical purge, nullable private fields, retained actor/key identities,
+older purge-cycle timestamps, failed-save visible scrubbing, uncertain word/key
+preservation, pagination reset and rejection of stale unhidden automatic retry.
+Explicit refresh may observe genuine reopening; no cross-refresh enforcement
+epoch or universal monotonic server watermark is claimed.
+
+Preserved failures: core2 over-broad workflow constructor edit, core3 incorrect
+comment test initializer; both compilation failures corrected. Native v1 failed
+build due to a missing await for MainActor reconciliation; no journey ran.
+Native v2 failed36.084s because the synthetic adapter used `github-links`
+while the actual client route is `/github`; corrected fixture routing without
+changing assertions. Core53 passed again in `/tmp/ios4377-hidden-core6.log`,
+wrapper exit0, including a fresh-history/offline restart with the old acknowledged
+disk copy after failed scrubbing: it stays hidden until a matching server record
+is fetched. Explicit new-comment creation remains available without locating the
+old receipt, subject to current storage/hidden-content guards. Independent final
+source review PASS for pagination, physical-retention versus account-deletion,
+pre-refetch acknowledged scrubbing and offline restart boundaries.
+
+Native v3 PASS42.712s, Executed1, `/tmp/ios4377-hidden-ui-3.xcresult`, wrapper and
+owned-simulator cleanup exit0. The journey opens a hidden request, GitHub and
+delivery evidence, then explicitly reopens its exact0.2.0/18.1 outcome with words.
+Inspected screenshot:
+`/tmp/ios4377-hidden-ui-3-attachments/85DB8026-0FFC-4268-99A6-F937420F5C24.png`.
+It shows the retained build identity, hidden old result and new reopened result.
+The synthetic transport retains its existing purge_implemented=false after
+reopening; its capability footer is not a statement about deployed retention.
+Requirement integrity PASS749; no runtime source changed after v3.
+No deployment, deletion job, provider push, TestFlight or phone acceptance claim.
+
+
+### Author text revisions — Studio #4379
+
+Core parser/controller slice35cea1d3 was independently reviewed and passed8
+focused controls in the root checkout before UI integration. The API/UI slice
+uses authenticated /:id/text/:target and supported_text_revision_schemas, the
+existing protected account draft store and a weak live-controller registry.
+Detail navigation clears comment focus before a generation-checked transition.
+Original/current labels and author/server timestamps are explicit; latest
+question metadata can point outside the loaded comment page.
+
+Core21 PASS `/tmp/ios4379-wire-core1.log`, wrapper exit0, includes9 text controls
+plus existing hidden-content/discussion controls. An explicit fresh edit can
+start from current authoritative text even when an acknowledged older receipt
+lies outside the loaded history; that withheld local body is not displayed.
+Native v3 `/tmp/ios4379-text-ui-3.xcresult` passed both focused journeys
+(59.709s and43.998s), with wrapper cleanup exit0. These exercise latest-question
+navigation beyond page1, immutable original, exact captured edited words,
+unknown same-key recovery, explicit conflict choice, author-only access and
+failed local-save export/cancel with zero POST. The existing explicit-question
+and selected-comment reply journey passed64.743s in v2 with identical app source.
+The v1/v2 failures remain preserved: test caret-position assumptions were replaced
+by exact single-insertion preservation; the v2 save-failure assertion failed on
+an offscreen diagnostic lookup after actionable export and disabled-send checks
+had passed. Bounded reveal fixed that diagnostic lookup without changing export.
+
+Viewed screenshot
+`/tmp/ios4379-text-ui-3-attachments/DE9EC64D-1E39-4FAD-9697-369323F1B66F.png`
+shows readable current/original text, author/server timestamps and history.
+The DEBUG trace and synthetic fixture dates are not production observations.
+Independent API/UI source review and targeted parent review passed.
+
+After native v3, a bounded Core correction accepts validated physically purged
+history after reopening and scrubs only an exact acknowledged receipt. Final
+`/tmp/ios4379-final-core2.log` passed10 controls, wrapper exit0, including hidden
+and readable physical-purge cases, one persistence per matching acknowledgment,
+private-body rejection and unchanged uncertain words/keys. Targeted source review
+passed; native v3 predates this Core-only correction (UI source unchanged).
+Requirement inventory check passed752 entries; `git diff --check` passed.
+Local release-check body contract passed via
+`/tmp/ios4379-release-check-validation.json`; the proposed section is
+`/tmp/ios4379-release-check.md`. This is not a remote release-check result.
+Synthetic transports are not real Service deployment, TestFlight readiness,
+phone installation or full integrated CI acceptance.
+
+
+### Explicit public request summaries — Studio #4381
+
+Initial durable Core a22a5448 was independently reviewed before native integration.
+The native integration adds explicit Lab login, public-summary preview and
+confirmation, exact-key recovery and separately confirmed operator association.
+Synthetic Intake HTTP/MCP responses follow the existing Service source contract;
+they make no provider calls. The selected principal metadata is nonsecret; its
+bearer is stored only in the separate Keychain adapter. Every account boundary
+clears that scoped vault even if no Intake screen remains alive.
+
+Planned native controls cover cancel without publication, committed-but-unknown
+submission recovery with the same key, published issue retention after association
+failure, and exportable words after local save failure. Earlier isolated Core
+controls (9) and adapter controls (3) passed before the final policy-recovery and
+UTF-8 payload-size changes. Final Core/adapter source is `30752e94`; its combined
+run never started because the shared-resource wait expired (exit 75). The native
+journeys have not run. Source review, project-file validation and requirement
+inventory checks do not establish runtime, provider, Keychain-device, TestFlight
+or production acceptance. The complete reviewed candidate is preserved for CI;
+no local timeout, assertion or resource safeguard was bypassed.
+
+### Native failure recovery — 2026-11-19
+
+Run44364736519 at3f854ffd executed62 UI journeys with four failures; its job also
+reached the55-minute limit after tests failed. The original retry trace contains
+no button-action entry or second POST, despite an unobscured44pt-plus target.
+Ordinary synchronization disabled that action; an explicit-intent queue and
+MFR-T05-held-read now cover that race. This is a source-grounded fix pending
+execution, not proof that synchronization caused the observed missed tap.
+
+The comment receipt check now reads the visible full receipt status before
+refreshing and checking the exact received comment. Received-body withholding
+still requires fresh matching history. Noninteractive related-trace inspection
+no longer asks XCTest for an activation point. The real original-request reply
+button still requires a hittable target and a native tap; its activation-point
+failure remains unresolved. These changes have source review and diff checks,
+but focused native execution and full acceptance have not yet passed.
+
+
+The original-request reply loop now preserves the controlled app screenshot and
+hierarchy immediately before each explicit hittability query, including the final
+assertion. Its eight-scroll budget, assertion and single real tap are unchanged.
+This captures evidence before an XCTest activation-point exception can interrupt
+the test; it does not establish or fix the cause of that exception. Frame extraction
+from the earlier CI videos never ran because its resource wait expired (exit 75).
+The reviewed outer iOS job budget from `2df4fcf1` is also propagated: 65 minutes
+covers the measured 62-case UI duration of about 43 minutes plus setup, build and
+failure-evidence collection. Individual test deadlines and assertions are unchanged.
+These diagnostic and job-budget changes have not been executed locally.
+
+### Intake App compilation correction — Studio #4384
+
+Exact candidate a4e1d264 reached 178 passing Core tests in CI44388287014,
+then device compilation failed before UI execution: the implicit Swift catch
+`error` shadowed the model error property in credential invalidation and logout.
+Both assignments now explicitly target `self.error`; the logout early return and
+credential cleanup safeguards remain unchanged. Independent source review passed.
+The prior compile failure remains recorded; corrected device build and UI tests
+require new exact-source CI and are not claimed by the Core result.
+
+Run44378435132 at `41fa5285` passed the original retry journey, the new held-history
+single-retry control, Korean speech completion and the real original-request reply
+journey (127.845 seconds). The comment journey passed its exact receipt check but
+failed the subsequent fresh-comment existence assertion. It had scrolled to the
+top receipt and then waited in place, while the discussion row sits below the
+navigation sections of a lazy list. The test now uses its existing bounded reveal
+helper after the single refresh, retaining the exact comment body assertion and
+checking the resulting frame lies in the viewport. This geometry diagnosis is
+not proof of the original cause: cancellation left an incomplete xcresult without
+Info.plist, so the failure screenshot could not be extracted.
+The run was cancelled at the outer 55-minute limit; partial passes do not establish
+full-suite acceptance. The separately reviewed `2df4fcf1` outer 65-minute budget is
+propagated for the measured approximately 43-minute 62-case suite plus setup/build
+and evidence collection. Per-test limits, the five-scroll reveal bound and real
+interaction assertions are unchanged. New changes are locally runtime NOT RUN:
+shared-resource ownership remains blocked; no queue bypass or duplicate run.
+
+### Noninteractive GitHub diagnostics — Studio #4361 follow-up
+
+Run44383839227 at0a59f232 completed105 Core and48 UI cases;47 UI passed.
+The sole failure was XCTest activation-point calculation for teamGitHubTrace,
+which is read as diagnostic data and never tapped. Both retry cases and Korean
+playback passed. The trace helper now reads an existing accessibility value
+without a hit test, retaining bounded fallback and exact event/post assertions.
+The observation journey explicitly reveals its actual open button before the
+unchanged hittability assertion and tap, rather than relying on a diagnostic read
+to position the screen. This does not claim corrected runtime acceptance.
+The current39745c68 CI remains running and is not cancelled for this local fix.
+
+
+### Real-playback synthetic capture boundary — 2026-11-19
+
+Run44385991373 at `2d93` passed153 Core tests but failed3 of60 UI journeys. The
+real Korean playback case reached playback completion and capture2, then observed
+2 accepted turns instead of1 after Stop. Its finite synthetic partial producer
+ended after about20 seconds; the unchanged real endpoint can then finish on
+silence (or at30 seconds). Exact causality remains unconfirmed: the failure lacked
+its final trace and supplied only shallow snapshots plus video.
+Only DEBUG `voice-playback-real` capture2 now freezes endpoint time consistently
+for initialization, recognition and decisions, and holds its synthetic partial
+until actual Stop/background/teardown cancellation. Real OS synthesis/callback,
+first capture, other scenarios and production clocks stay unchanged. The actual
+Stop tap, accepted1/captures2 assertions and existing bounded test deadlines remain.
+This verifies playback-to-capture/Stop behavior, not real microphone endpointing.
+A fixture trace flag explicitly identifies the frozen synthetic endpoint; trace,
+submitted words and playback timeline are attached before count assertions.
+Static review and diff checks are not runtime evidence; new execution is NOT RUN
+while the shared resource slot remains blocked. No heavy work was requeued.
+
+### Actual comment button and outcome trace follow-up — 2026-11-19
+
+Run44385991373 at2d93 completed153 Core and60 UI cases with3 UI failures.
+The comment retry failed in XCTest hit-point calculation before the retry tap.
+Its failure hierarchy and binary snapshot show an enabled370x52 button inside
+the window with no keyboard or alert, so an offscreen-frame explanation is not
+confirmed. An explicit borderless native button with a full-width, minimum44-point
+rectangular label is a candidate correction for automatic List-row interaction;
+the identifier, confirmation action, disabling rules and actual UI tap assertions
+remain. Other borderless controls have also failed; this is not a proven fix.
+
+Run44387085419 at8a5dd1 completed59 UI cases with2 failures. One was the same
+invalid hit-point lookup on read-only teamOutcomeTrace. It now reads the existing
+value with the same bounded fallback; the real reopen action is separately
+revealed downwards and retains its hit assertion and tap. The other failure was
+teamOutcomeEntry during read-only setup, before export/storage assertions; it
+remains under investigation. Exact post/event and result-history checks remain.
+No corrected native runtime or installed-device acceptance is claimed.
+
+### Full-suite runtime budget — 2026-11-19
+
+Run44364736519 started at18:02:31UTC. Its62 UI cases used2586.576seconds
+(43.11minutes); test results finished at18:55:57 and TEST FAILED appeared at18:56:33.
+After cleanup, exit65 appeared at18:57:13. Evidence content uploaded at18:57:30;
+artifact finalization at18:57:31 and post-job cleanup crossed the55-minute budget.
+The full iOS job now has a65-minute cap to accommodate the measured larger suite,
+build/setup and evidence collection. Individual test limits, assertions and
+failure exit handling are unchanged. This budget change does not repair or
+reclassify any of the four actual test failures and is not a passing test result.
+No model calls are added; at most ten additional hosted Mac runner minutes are
+permitted per full job. Normal completion still ends the job immediately.
+
+
+### Android second explicit capture boundary — 2026-11-19
+
+Run44393604967 at `d8563645` failed one of44 Android tests: the background/reopen
+journey expected2 capture starts but observed1. Its second click was followed by
+partial injection through whichever listener remained, without first proving a
+new capture. This establishes a missing start, not a background reopening defect.
+The test now observes actual foreground/allowed conversation, empty draft and
+visible enabled target readiness using the existing five-second readiness budget,
+then performs exactly one real click. Before injecting or backgrounding it requires
+starts2, a new listener and LISTENING. Existing background no-reopen, submitted1 and
+preserved draft assertions remain unchanged. Content-free failure state records
+guards, target readiness and new-listener identity as a boolean; no credentials or
+utterance text are added to diagnostics. No retry, relaxed count or product change.
+A periodic-read race remains a hypothesis until runtime evidence; new execution is
+NOT RUN while shared compute is blocked. Static integrity checks are not acceptance.
+
+### Intake focus and bounded list navigation candidate — 2026-11-19
+
+Run44391109739 at39745c68 passed178 Core tests and63 of65 UI cases.
+The two Intake cases failed field reveal: intent after successful title entry,
+and title after failed-storage export checks and refresh. Neither reached its
+remaining assertions. Available artifacts do not establish keyboard interception
+as the cause; this is a source-informed candidate, not a confirmed root cause.
+
+Intake fields now have distinct focus identities and a real keyboard completion
+button. The journey dismisses the keyboard through that button, waits at most
+five seconds for disappearance, and scrolls the identified Intake List within
+the existing six-down/eight-up bounds. Real hittability, taps, exact field values
+and submission assertions remain. Exhausted reveal captures a screenshot and
+hierarchy before its final assertion. Persistence and authentication are unchanged.
+This delta has not been built or run locally; shared-resource validation was not
+bypassed. Integrated CI and actual user acceptance remain separate gates.
+
+The Intake diagnostic top anchor uses a finite frame contained in the List, not a touch activation-point query. The same six-scroll positioning bound and all real-control hittability assertions remain. Root and independent source review passed; corrected runtime remains pending.
+
+
+### 2026-11-19 final intake candidate recovery (run 44403446430)
+
+At 28681ec1, 178 Core tests and both new Intake UI cases passed (140.771s and
+87.289s). The complete UI suite did not finish: the 65-minute outer job cap
+cancelled execution during text-history coverage. Preserve NOT RUN for unfinished
+cases. Two earlier failures were real-control reveal failures: final root-reply
+comment send activation-point lookup, and delivery entry before any stale-data
+assertion. They are not evidence that live API/APNs or TestFlight works.
+
+The recovery waits for loaded detail content, identifies the owning detail List,
+and uses bounded frame-directed scrolling before real hittability/tap. It affects
+the two failing entry paths only; assertions, request identities, confirmation and
+authorization remain unchanged. Containment is a prerequisite, not proof of
+hittability. The outer job budget is 75 minutes to allow suite and evidence
+completion; individual 180/240-second test limits remain unchanged. Runtime
+verification of this correction is pending. Earlier failure evidence is retained.
+### Accessibility evidence collection regression — 2026-11-19
+
+Run44326111986 at source2c6d0f83 failed two of43 UI cases;92 Core cases passed.
+Its checkoute83b9db3 has the same native tree and workflow blobs as the source
+head, recorded in the native-candidate artifact. LongHistory failed its initial
+login-enabled wait before any history action. Its final video frame shows the
+guest screen without a storage-error message; this does not establish why the
+accessibility wait failed. Failed enabled waits now preserve one element snapshot
+and the composer screen without changing the original wait result or repeating
+the user's action.
+
+MemberInbox reached its final draft and one-POST/recovery-GET assertions, then
+exceeded180seconds while collecting evidence. The retained spindump shows the
+test runner and app traversing accessibility snapshots in evidence/trace, not
+account storage. The test now reuses that already-asserted final trace for its
+attachment, retaining the screenshot, assertions and unchanged timeout budgets.
+
+Focused local Xcode27.2 validation passed both cases in84.670seconds:
+LongHistory40.217s and MemberInbox44.453s. Runner and owned-simulator cleanup
+exited0. Evidence: `/tmp/ios-4360-accessibility-regression.log` and `.xcresult`.
+Independent source review found no weakened assertion. The earlier remote run
+remains FAIL; this focused pass is not a complete remote or physical acceptance.

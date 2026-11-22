@@ -1,0 +1,22 @@
+{
+  "base_commit": "181a03a95931f39ac011c87fbc3189e313b38758",
+  "source_state": "593 uncommitted source, actual D1 seeds corrected to production 32-hex identifiers; no JSON response rewriting",
+  "source_snapshot": "/tmp/service593-native-fixture-source",
+  "source_sha256": {
+    "worker/src/lib/team-request-retention.ts": "2d19b989bad74531fe8d70dacb52b277102ee09dccded461a1aff2925f2b9274",
+    "worker/src/lib/team-requests.ts": "5b1fbb40225edb215aeb3338a03c679a6e9c0bf5e81f0442601b36c9089b635c",
+    "worker/src/routes/team-requests.ts": "38344146c46193592a7a5d05109c1781cf7c35159d433a1c2e51fa634b346ee5",
+    "worker/test/account-push-d1.test.mjs": "d7ee6cd1647fa6ed6f2e1fcdd903fc0b3929c5fba557e6feaa2fda9090fe7acf",
+    "worker/test/release-deploy.test.mjs": "48020aafec4a4de16de19e24f4f47a3f20ca4f5c645147f19c3d0a319c39c900",
+    "worker/test/team-requests.test.mjs": "36b635d57fc99218224a179a9b49a334b29f82d59687bc52df93bf97b7a685db",
+    "worker/migrations/0111-team-text-revisions.sql": "b863ee5aa2923057e895c7cff03792555c894b4f1ba54a50fe70be5baf6c472f",
+    "worker/src/lib/team-text-revisions.ts": "7dc771b256833a0b2de16f318575b797d8de60506c21362e71b3ace56f5d246c"
+  },
+  "fixture": "/tmp/service593-native-contract-fixtures.json",
+  "fixture_sha256": "9e9b0abc4eef966793d46e0b29221200106ddb8fecb57ace05af2d5a356470db",
+  "test_exit": 0,
+  "passed": 20,
+  "log": "/Users/jay.lee/CodeWorkspace/service-ios-internal-m1-20261118/.artifacts/ios-m2/service593-native-fixture-1.log",
+  "host": "Jays-MacBook-Pro-M6.local",
+  "provider": "synthetic only"
+}
