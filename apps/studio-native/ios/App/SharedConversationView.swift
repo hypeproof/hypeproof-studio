@@ -745,11 +745,14 @@ struct SharedConversationView: View {
         #endif
         if model.loggingOut { ProgressView("계정 확인을 마치고 로그아웃하는 중이에요.").font(.caption).accessibilityIdentifier("sharedLoggingOut") }
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
-        if model.signedIn && model.error != nil && !model.syncing && !model.loggingOut {
+        // A quiet periodic read (no sync progress) keeps this button in place and only
+        // disables it. Removing it moved every row above it by its height each poll, so a
+        // tap meant for "다시 보내기" could land on "답변 중지" (#4432, run 45011755448).
+        if model.signedIn && model.error != nil && !model.showsSyncProgress && !model.loggingOut {
             Button { voice.stop(); model.refresh() } label: {
                 Label("대화 다시 확인", systemImage: "arrow.clockwise").frame(minHeight: 44)
             }
-            .buttonStyle(.bordered).disabled(model.busy)
+            .buttonStyle(.bordered).disabled(model.busy || model.syncing)
             .accessibilityIdentifier("retryConversationSync")
         }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
