@@ -92,10 +92,16 @@ def record(evidence, **row):
 
 
 def stop_group(child):
+    """Stop a timed-out child's process group. Never raises, so the caller still records
+    and reports the timeout. A group that has already exited gives ESRCH, or EPERM on macOS
+    when only the unreaped leader is left (run 44990830847); the leader is then killed directly."""
     try:
         os.killpg(child.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    except (ProcessLookupError, PermissionError):
+        try:
+            child.kill()
+        except (ProcessLookupError, PermissionError):
+            pass
     try:
         child.wait(timeout=5)
     except subprocess.TimeoutExpired:
