@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import CryptoKit
+import UserNotifications
 
 /// Simulator journeys replace external transports, never the app's account,
 /// outbox, persistence or voice state machines. This file has no Release code.
@@ -8,13 +9,22 @@ import CryptoKit
     static var feedbackRequests = 0
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
+    nonisolated static var approvalPushEnabled: Bool {
+        JourneyConfiguration.enabled && JourneyConfiguration.scenario == "approval-push-test"
+    }
     static var trace: String {
         let value = JourneyTransport.store.trace()
-        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty,
+        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty,
               var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
         if !emptyStopBoundary.isEmpty { fields["empty_stop_boundary"] = emptyStopBoundary }
+        if !retryStages.isEmpty { fields["retry_stages"] = retryStages }
         if !requestedPlaybackVoice.isEmpty { fields["requested_playback_voice"] = requestedPlaybackVoice }
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
+    }
+    private static var retryStages: [String] = []
+    static func recordRetry(_ stage: String) {
+        guard enabled, JourneyConfiguration.scenario == "retry-once" else { return }
+        retryStages.append(stage)
     }
     private static var requestedPlaybackVoice: [String: Any] = [:]
     static func recordRequestedPlaybackVoice(inventory: [[String: String]], requested: [String: String]?,
@@ -31,6 +41,19 @@ import CryptoKit
     static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
     static var pendingPush: Bool { enabled && JourneyConfiguration.scenario == "push-registration-held" }
     private static var pendingPushStarted = false
+    static func requestApprovalPushAuthorization() async {
+        guard approvalPushEnabled else { return }
+        do {
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            NSLog("Approval push fixture authorization granted: %@", String(granted))
+        } catch {
+            NSLog("Approval push fixture authorization error: %@", error.localizedDescription)
+        }
+    }
+    static func startApprovalPushRegistration(_ controller: AccountPushController?) async {
+        guard approvalPushEnabled, let controller else { return }
+        if controller.enable() { await controller.register(String(repeating: "d", count: 64)) }
+    }
     static func startPendingPushRegistration(_ controller: AccountPushController?) {
         guard pendingPush, !pendingPushStarted, let controller else { return }
         pendingPushStarted = true
@@ -44,6 +67,8 @@ import CryptoKit
     }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var accessDenied: Bool { enabled && JourneyConfiguration.scenario == "access-denied" }
+    static var retryHistory: Bool { enabled && JourneyConfiguration.scenario == "retry-once" && ProcessInfo.processInfo.arguments.contains("--hold-retry-history") }
+    static var guestHistory: Bool { enabled && JourneyConfiguration.scenario == "draft-collision" && ProcessInfo.processInfo.arguments.contains("--hold-guest-history") }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
     private(set) static var emptyStopBoundary: [String: Any] = [:]
@@ -52,13 +77,13 @@ import CryptoKit
         emptyStopBoundary = ["active": active, "phase": phase]
     }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
-    static func holdNextHistory() { if logoutSync || accessDenied { JourneyTransport.store.armHistory() } }
-    static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
+    static func holdNextHistory() { if logoutSync || accessDenied || retryHistory || guestHistory { JourneyTransport.store.armHistory() } }
+    static func releaseHistory() { if logoutSync || retryHistory || guestHistory { JourneyTransport.store.releaseHistory() } }
     static func failedDraftRestoreAttempt(eligible: Bool) { if accessDenied { JourneyTransport.store.failedDraftRestoreAttempt(eligible: eligible) } }
     static func failedDraftHistoryApplied() { if accessDenied { JourneyTransport.store.failedDraftHistoryApplied() } }
     static func failedDraftRestored() { if accessDenied { JourneyTransport.store.failedDraftRestored() } }
     static func synchronizationStarted(automatic: Bool) {
-        if periodicVoice || queuedVoice || accessDenied {
+        if periodicVoice || queuedVoice || accessDenied || retryHistory || guestHistory {
             JourneyTransport.store.synchronizationStarted(automatic: automatic)
         }
     }
@@ -101,9 +126,12 @@ import CryptoKit
         try JSONSerialization.data(withJSONObject: snapshot).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
     static func speech(deliver: @escaping @MainActor (String, Bool) -> Void,
+                       prepareEndpoint: @MainActor (Bool) -> Void = { _ in },
                        stopAfterEmpty: @escaping @MainActor () -> Void = {}) -> Task<Void, Never>? {
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
+        let heldPlaybackContinuation = realPlayback && capture == 2
+        prepareEndpoint(heldPlaybackContinuation)
         if periodicVoice && capture == 2 {
             return Task { @MainActor in
                 let text = "I can send a second spoken thought"
@@ -154,7 +182,11 @@ import CryptoKit
             do {
                 try await Task.sleep(nanoseconds: 200_000_000)
                 try Task.checkCancellation(); deliver(text, false)
-                if !hold {
+                if heldPlaybackContinuation {
+                    // No synthetic final or wall-clock expiry. The real UI Stop,
+                    // app background or test teardown cancels this capture.
+                    while !Task.isCancelled { try await Task.sleep(nanoseconds: 400_000_000) }
+                } else if !hold {
                     try await Task.sleep(nanoseconds: 300_000_000)
                     try Task.checkCancellation(); JourneyTransport.store.finishedSpeech(); deliver(text, true)
                     JourneyTransport.store.deliveredSpeech()
@@ -162,9 +194,14 @@ import CryptoKit
                     // Continue revising partial recognition like ongoing speech.
                     // Stop/background must cancel this producer; a delayed test
                     // must not accidentally let silence submit the held draft.
-                    for revision in 1...50 {
+                    // A fixed 50-revision (20s) budget ran out on hosted runners
+                    // before the UI Stop landed; silence then sent a second turn
+                    // (#4432). Keep revising until Stop/background cancels.
+                    var revision = 0
+                    while true {
                         try await Task.sleep(nanoseconds: 400_000_000)
-                        try Task.checkCancellation(); deliver(text + String(repeating: ".", count: revision), false)
+                        try Task.checkCancellation(); revision = revision % 50 + 1
+                        deliver(text + String(repeating: ".", count: revision), false)
                     }
                 }
             } catch { /* Stopping/backgrounding invalidates this capture. */ }
@@ -176,7 +213,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held", "approval-push-test"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -224,8 +261,12 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         } catch { client?.urlProtocol(self, didFailWithError: error); return }
         guard Self.store.holdHistory(request, id: historyID) else { complete(); return }
         // UI-driven logout has several real controls before explicit release.
-        // Its DEBUG-only read budget is 90s; all other scenarios keep 20s/25s.
-        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + (JourneyConfiguration.scenario == "logout-sync" ? 60 : 20))
+        // A 60s fixture clock expired on hosted runners (10-14s per AX query)
+        // and let logout proceed (#4432). Hold until the explicit release; the
+        // app's DEBUG-only 90s read budget, stopLoading or app teardown still
+        // end it. All other scenarios keep the 20s fixture clock.
+        let fixtureBudget: TimeInterval = JourneyConfiguration.scenario == "logout-sync" ? .infinity : 20
+        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + fixtureBudget)
     }
     private func holdDesktopListIfNeeded() throws -> Bool {
         stopLock.lock(); defer { stopLock.unlock() }
@@ -268,7 +309,7 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     private func waitForSpeech(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
         guard !cancelled else { Self.store.cancelHistory(historyID); return }
-        if Self.store.historyMayFinish() { complete(historyOutcome: ["logout-sync", "access-denied"].contains(JourneyConfiguration.scenario) ? .explicitRelease : .speech); return }
+        if Self.store.historyMayFinish() { complete(historyOutcome: ["logout-sync", "access-denied", "draft-collision"].contains(JourneyConfiguration.scenario) ? .explicitRelease : .speech); return }
         if ProcessInfo.processInfo.systemUptime >= deadline {
             complete(historyOutcome: .timeout); return
         }
@@ -401,7 +442,9 @@ private final class JourneyStore: @unchecked Sendable {
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
             "cancelled_requests": value.cancelledRequests ?? [], "held_response_returns": value.heldResponseReturns ?? 0,
             "accepted_turns": value.accepted.count, "failed_turns": failedTurns.count, "browser_callbacks": value.callbacks,
-            "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
+            "speech_captures": value.speechCaptures,
+            "held_second_capture_endpoint_clock": JourneyConfiguration.scenario == "voice-playback-real" && value.speechCaptures >= 2,
+            "desktop_requests": value.desktopRequests,
             "history_account": historyAccount, "history_advances": value.historyAdvances ?? 0,
             "history_window_messages": min(80, value.accepted.count * 2 + failedTurns.count), "history_revision": value.accepted.count * 2 + failedTurns.count,
             "voice_start_attempts": value.voiceStartAttempts,
@@ -498,8 +541,14 @@ private final class JourneyStore: @unchecked Sendable {
         let periodicVoice = JourneyConfiguration.scenario == "voice-periodic-poll"
             && automaticSynchronization && value.accepted.count == 1
             && value.speechCaptures == 2 && periodicHistoryHolds == 0
-        guard queuedVoice || logout || periodicVoice || failedDraft else { return false }
-        if logout || failedDraft { historyArmed = false; historyReleased = false }
+        let retry = JourneyConfiguration.scenario == "retry-once"
+            && ProcessInfo.processInfo.arguments.contains("--hold-retry-history")
+            && historyArmed && automaticSynchronization
+        let guestRestore = JourneyConfiguration.scenario == "draft-collision"
+            && ProcessInfo.processInfo.arguments.contains("--hold-guest-history")
+            && historyArmed && automaticSynchronization
+        guard queuedVoice || logout || periodicVoice || failedDraft || retry || guestRestore else { return false }
+        if logout || failedDraft || retry || guestRestore { historyArmed = false; historyReleased = false }
         if periodicVoice { periodicHistoryHolds += 1 }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
@@ -507,7 +556,7 @@ private final class JourneyStore: @unchecked Sendable {
     func historyMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
         if JourneyConfiguration.scenario == "voice-periodic-poll" { return secondSpeechDelivered }
-        return ["logout-sync", "access-denied"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
+        return ["logout-sync", "access-denied", "retry-once", "draft-collision"].contains(JourneyConfiguration.scenario) ? historyReleased : speechDelivered
     }
     func failedDraftRestoreAttempt(eligible: Bool) {
         lock.lock(); defer { lock.unlock() }
@@ -665,6 +714,17 @@ private final class JourneyStore: @unchecked Sendable {
                 "expires_at": now + 3600, "lease_expires_at": now + 50, "can_decide": value.approvalDecisionID == nil,
                 "unavailable_reason": NSNull(), "decision": decision, "review": NSNull()]
     }
+    private func approvalPushTestCard() -> [String: Any] {
+        let now = Date().timeIntervalSince1970
+        let sha = String(repeating: "a", count: 40)
+        let digest = String(repeating: "a", count: 64)
+        return ["id": "SMK-11111111-1111-4111-8111-111111111111", "request_digest": digest,
+                "source": ["repo": "hypeproof/approval-push-test", "pr": 1, "head": sha, "base": sha,
+                           "policy_digest": digest, "evidence_digest": digest, "context_digest": digest],
+                "reviewer": "synthetic-reviewer", "brief": ["authored": ["summary: 테스트 · 승인 푸시"], "verified": ["Fixture evidence only"]],
+                "state": "pending", "created_at": now - 1, "expires_at": now + 1200,
+                "lease_expires_at": 0, "can_decide": false, "decision": NSNull(), "review": NSNull()]
+    }
     func respond(_ request: URLRequest) throws -> (Int, [String: Any]) {
         lock.lock(); defer { save(); lock.unlock() }
         guard JourneyConfiguration.enabled, request.url?.host == "native-journey.invalid", request.url?.scheme == "https" else { throw URLError(.unsupportedURL) }
@@ -698,6 +758,21 @@ private final class JourneyStore: @unchecked Sendable {
         default: break
         }
         guard request.value(forHTTPHeaderField: "Authorization") == "Bearer " + accessToken else { return (401, ["error": "account_required"]) }
+        if NativeJourneyFixture.approvalPushEnabled, method == "GET", path == "/v1/me/team-requests/access" {
+            return (404, ["error": "not_found"])
+        }
+        if NativeJourneyFixture.approvalPushEnabled, path.hasPrefix("/v1/me/push-devices/") {
+            let parts = path.split(separator: "/")
+            if method == "PUT", parts.count == 4, body["token"] as? String == String(repeating: "d", count: 64) {
+                pushInstallation = String(parts[3])
+                return (200, ["schema": "hps-push-device/1", "id": String(parts[3]), "active": true, "generation": 1])
+            }
+            if method == "POST", parts.count == 5, parts[4] == "opened", pushInstallation == String(parts[3]),
+               body["delivery_id"] as? String == "22222222-2222-4222-8222-222222222222" {
+                return (200, ["recorded": true, "evidence_kind": "client_observed"])
+            }
+            return (409, ["error": "unexpected_fixture_push_request"])
+        }
         if JourneyConfiguration.scenario == "push-registration-held", path.hasPrefix("/v1/me/push-devices/") {
             let parts = path.split(separator: "/")
             guard parts.count >= 4, UUID(uuidString: String(parts[3]))?.uuidString.lowercased() == String(parts[3]) else { return (400, ["error": "invalid_fixture_installation"]) }
@@ -722,6 +797,10 @@ private final class JourneyStore: @unchecked Sendable {
         case ("GET", "/v1/me"):
             return (200, ["account": ["id": accountID, "status": "active"], "session_id": sessionID])
         case ("GET", "/v1/me/approval-inbox"):
+            if NativeJourneyFixture.approvalPushEnabled {
+                return (200, ["schema": "hps-member-approval-inbox/1", "availability": "ready",
+                              "cards": [approvalCard(), approvalPushTestCard()]])
+            }
             return (200, ["schema": "hps-member-approval-inbox/1", "availability": JourneyConfiguration.scenario == "member-inbox" ? "ready" : "not_enrolled", "cards": JourneyConfiguration.scenario == "member-inbox" ? [approvalCard()] : []])
         case ("GET", "/v1/me/approval-inbox/member-card"): return (200, approvalCard())
         case ("POST", "/v1/me/approval-inbox/member-card/decisions"):

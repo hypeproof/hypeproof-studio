@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan} from '../promote.mjs';
+import {acceptanceSource, branchVersion, completionMatches, promotionDecision, recordedRcTag, uploadPlan} from '../promote.mjs';
 import {buildTagMessage, expectedAppVersion, resolveBuildContract} from '../build-contract.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -202,4 +202,32 @@ test('#3513: studio-pr-ci runs every release control, so a change that breaks on
   assert.deepEqual(missing, [], 'add these to a `node --test` line in .github/workflows/pr-ci.yml');
   // release-promote's own Controls step runs these two before it touches a tag.
   assert.match(fs.readFileSync(`${root}.github/workflows/release-promote.yml`, 'utf8'), /node --test scripts\/release\/test\/promote\.test\.mjs scripts\/release\/test\/publish-gate\.test\.mjs/);
+});
+
+
+test('completion wakes only the current same-repository release identity and never supplies approval', () => {
+  const repo = 'hypeproof/hypeproof-studio';
+  const facts = good();
+  const ci = {workflow_run: {name: 'studio-pr-ci', conclusion: 'success', event: 'pull_request',
+    head_repository: {full_name: repo}, head_sha: HEAD, head_branch: facts.pr.headRef}};
+  const acceptance = {workflow_run: {...ci.workflow_run, name: 'Verify and publish Unified Studio',
+    event: 'workflow_dispatch', head_sha: CAND}};
+  assert.equal(completionMatches(ci, facts, repo), true);
+  assert.equal(completionMatches(acceptance, facts, repo), true);
+  for (const patch of [{conclusion: 'failure'}, {head_sha: OTHER}, {head_branch: 'unrelated'},
+    {head_repository: {full_name: 'outside/fork'}}, {event: 'push'}, {name: 'other workflow'}]) {
+    assert.equal(completionMatches({workflow_run: {...ci.workflow_run, ...patch}}, facts, repo), false);
+  }
+  assert.equal(completionMatches(acceptance, {...facts, commit: {...facts.commit, parents: [OTHER]}}, repo), false);
+  assert.equal(completionMatches(ci, {...facts, pr: {...facts.pr, state: 'closed'}}, repo), false);
+  const unapproved = {...facts, pr: {...facts.pr, reviews: []}};
+  assert.equal(completionMatches(ci, unapproved, repo), true);
+  assert.equal(promotionDecision(unapproved).allow, false);
+  assert.equal(promotionDecision({...facts, mergeState: 'BLOCKED'}).allow, false);
+  const doc = workflow('release-promote.yml');
+  assert.deepEqual(doc[true].workflow_run.workflows, ['studio-pr-ci', 'Verify and publish Unified Studio']);
+  assert.equal(doc.concurrency.group, 'release-promote');
+  assert.equal(workflow('release-auto.yml').concurrency.group, doc.concurrency.group,
+    'automatic authority and approved completion must not race the same tag or draft');
+  assert.match(doc.jobs.promote.steps.find(s => s.name === 'Promote the approved rc').run, /promote.mjs resume/);
 });

@@ -23,23 +23,23 @@ with open(os.environ["STUB_CALLS"], "a") as log:
     log.write(json.dumps({"command": name, "args": args, "pid": os.getpid()}) + "\n")
 if name == "xcodebuild":
     if args == ["-version"]:
-        print("Xcode 26.3")
+        print("Xcode 27.2")
     if "test" in args:
         if os.environ.get("STUB_TEST_SIGNAL"):
             os.kill(os.getpid(), int(os.environ["STUB_TEST_SIGNAL"]))
         raise SystemExit(int(os.environ.get("STUB_TEST_EXIT", "0")))
 elif name == "xcrun":
     if args == ["--sdk", "iphonesimulator", "--show-sdk-version"]:
-        print("26.3")
+        print("27.2")
     elif args[:3] == ["simctl", "list", "runtimes"]:
         print(json.dumps({"runtimes": [
-            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3", "version": "26.3",
+            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2", "version": "27.2",
              "supportedDeviceTypes": [{"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"}]},
-            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-3-special", "version": "26.3",
+            {"isAvailable": True, "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2-special", "version": "27.2",
              "supportedDeviceTypes": [{"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"}]}
         ]}))
     elif args[:2] == ["simctl", "create"]:
-        if args[-1] != "com.apple.CoreSimulator.SimRuntime.iOS-26-3":
+        if args[-1] != "com.apple.CoreSimulator.SimRuntime.iOS-27-2":
             raise SystemExit("Incompatible device")
         if os.environ.get("STUB_CREATE_EXIT"):
             raise SystemExit(int(os.environ["STUB_CREATE_EXIT"]))
@@ -95,6 +95,7 @@ class IosCleanupTest(unittest.TestCase):
         for directory in (scripts, ios, bin_dir):
             directory.mkdir()
         shutil.copyfile(SCRIPT, scripts / "ios-verify.sh")
+        shutil.copyfile(SCRIPT.parent / "select-ios-simulator.py", scripts / "select-ios-simulator.py")
         (scripts / "collect-native-journeys.py").write_text("raise SystemExit(0)\n")
         (scripts / "collect-signin-journey.py").write_text("raise SystemExit(0)\n")
         # This suite isolates simulator ownership/cleanup, not native metadata.

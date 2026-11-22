@@ -3,6 +3,12 @@ package ai.hypeproof.studio;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
+import android.util.Log;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.base.DefaultFailureHandler;
+import java.nio.charset.StandardCharsets;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -33,9 +39,66 @@ public class TeamEntryJourneyTest {
     private final java.util.List<String> metricTypes=new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AtomicBoolean loseTrigger=new AtomicBoolean(),triggerCommitted=new AtomicBoolean();
     private final java.util.List<String> triggerIDs=new java.util.concurrent.CopyOnWriteArrayList<>();
+    @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
+    private File failureDirectory;
+    private Throwable firstFailure;
+
+    // Espresso calls this before the exception unwinds into JUnit's @After.
+    // TestWatcher.failed would run too late to observe the original activity.
+    private void captureFailure(Throwable error) {
+        if(firstFailure!=null)return;
+        firstFailure=error;
+        try {
+            failureDirectory=new File(context.getExternalFilesDir(null),"evidence/failures/"+testName.getMethodName()+"-"+SystemClock.elapsedRealtime());
+            if(!failureDirectory.mkdirs())throw new java.io.IOException("Cannot create failure evidence directory");
+            String message=String.valueOf(error.getMessage());
+            JSONObject state=new JSONObject().put("phase","before_teardown").put("test",testName.getMethodName())
+                .put("elapsed_ms",SystemClock.elapsedRealtime()).put("error_class",error.getClass().getName())
+                .put("error_message",message.substring(0,Math.min(message.length(),4096))).put("scenario_state",app==null?"absent":app.getState().name());
+            if(app!=null)try {
+                app.onActivity(activity->{try {
+                    state.put("activity",activity.getClass().getName()).put("activity_destroyed",activity.isDestroyed())
+                        .put("activity_finishing",activity.isFinishing()).put("window_focus",activity.hasWindowFocus())
+                        .put("decor_visible",activity.getWindow().getDecorView().getVisibility());
+                }catch(Exception problem){throw new RuntimeException(problem);}});
+            }catch(Throwable problem){state.put("activity_observation_error",problem.getClass().getName());}
+            writeFailureJson("failure.json",state);
+            try {
+                Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+                if(pixels==null)throw new java.io.IOException("Screenshot unavailable");
+                try(FileOutputStream out=new FileOutputStream(new File(failureDirectory,"screen.png"))){
+                    if(!pixels.compress(Bitmap.CompressFormat.PNG,100,out))throw new java.io.IOException("Screenshot write failed");
+                }finally{pixels.recycle();}
+            }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
+            captureCommand("window.txt","timeout 3 dumpsys window",state);
+            captureCommand("power.txt","timeout 3 dumpsys power",state);
+            // 150 lines held only the teardown; keep the onset of a lost input focus too.
+            captureCommand("recent-logcat.txt","timeout 5 logcat -d -v threadtime -b main -b system -b crash -t 2000",state);
+            captureCommand("input.txt","timeout 3 dumpsys input",state);
+            state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
+        }catch(Throwable problem){Log.e("TeamFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
+    }
+    private void captureCommand(String name,String command,JSONObject state) {
+        try(java.io.InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command));
+            FileOutputStream output=new FileOutputStream(new File(failureDirectory,name))) {
+            byte[] buffer=new byte[8192];int count,total=0;
+            while(total<512*1024&&(count=input.read(buffer,0,Math.min(buffer.length,512*1024-total)))!=-1){output.write(buffer,0,count);total+=count;}
+            state.put(name+"_bytes",total).put(name+"_at_byte_limit",total==512*1024);
+        }catch(Throwable problem){try{state.put(name+"_error",problem.getClass().getName());}catch(Exception ignored){/* Keep the original Espresso failure. */}}
+    }
+    private void writeFailureJson(String name,JSONObject value) throws Exception {
+        Files.write(new File(failureDirectory,name).toPath(),value.toString(2).getBytes(StandardCharsets.UTF_8));
+    }
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowOriginal(Throwable error) throws T { throw (T)error; }
+
+
     @Before public void setup()throws Exception {
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Espresso.setFailureHandler((error,matcher)->{ captureFailure(error); TeamEntryJourneyTest.<RuntimeException>rethrowOriginal(error); });
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("team-account","team-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         ReflectionState state=new ReflectionState("team-account");state.draft="아직 보내지 않은 내 생각";store.save(state);
@@ -61,28 +124,58 @@ public class TeamEntryJourneyTest {
             throw new IOException("No other Service effects in this fixture");
         };
     }
-    @After public void cleanup(){if(app!=null)app.close();QuestionActivity.testTransport=null;QuestionActivity.testMenuObservation=null;}
+    @After public void cleanup(){
+        try { if(app!=null)app.close(); }
+        finally { QuestionActivity.testTransport=null;QuestionActivity.testMenuObservation=null;
+            if(context!=null)Espresso.setFailureHandler(new DefaultFailureHandler(context)); }
+    }
+    private static boolean teamDialogShown(QuestionActivity a){android.app.AlertDialog dialog=(android.app.AlertDialog)UiSync.field(a,"teamDialog");return dialog!=null&&dialog.isShowing();}
+    /** Opens a team entry only when no refresh can disable it, and requires the dialog. */
+    private void openTeam(String entry){UiSync.tap(onView(withText(entry)),entry,TeamEntryJourneyTest::teamDialogShown);}
+    /** One idle tap on a dialog action that must start its request. */
+    private void teamAction(String label,java.util.function.Predicate<NativeTeamModel> started){
+        onView(withText(label)).inRoot(isDialog()).perform(scrollTo());
+        UiSync.tap(onView(withText(label)).inRoot(isDialog()),label,a->started.test(team(a)));
+    }
     private static NativeTeamModel team(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("team");f.setAccessible(true);return(NativeTeamModel)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private void settled(java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
-        AtomicBoolean ready=new AtomicBoolean();for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}assertTrue("actual team model completion",ready.get());
+        settled("team model completion",predicate);
+    }
+    private void settled(String stage,java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
+        AtomicBoolean ready=new AtomicBoolean();
+        for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}
+        if(ready.get())return;
+        AtomicReference<String> snapshot=new AtomicReference<>("unavailable");
+        try { app.onActivity(a->{
+            NativeTeamModel t=team(a);NativeProductExperience e=experience(a);
+            String accountState;try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);ReflectionModel m=(ReflectionModel)field.get(a);accountState=",accountBusy="+m.busy+",accountReadOnly="+m.readOnly+",hasCredentials="+(m.credentials!=null);}catch(Exception problem){accountState=",accountObservationError="+problem.getClass().getName();}
+            snapshot.set("teamBusy="+t.busy+",canStart="+t.canStart+",hasQuestion="+(t.question!=null)
+                +",answerConfirmed="+t.answerConfirmed+",hasWords="+!t.words.isEmpty()+",hasPendingChoice="+(t.pendingChoice!=null)
+                +",answerMessage="+t.message.equals("다음 생각을 남겼어요")
+                +",experienceAvailable="+e.available+",experienceBusy="+e.busy+",experienceGranted="+e.granted
+                +",reads="+reads.get()+",triggers="+triggers.get()+",answers="+answers.get()
+                +",shown="+shown.get()+",consentWrites="+consentWrites.get()+",metricCount="+metricTypes.size()+accountState);
+        }); } catch(Throwable observation) { snapshot.set("observation_error="+observation.getClass().getName()); }
+        AssertionError failure=new AssertionError("Actual team model completion: "+stage+"; "+snapshot.get());
+        captureFailure(failure);throw failure;
     }
     private void screenshot(String name)throws Exception{Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}image.recycle();}
     @Test public void signedInGreetingOpensRealCardsAndKeepsConversationDraft()throws Exception{
         app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));
         onView(withText("안녕하세요, 지윤님.")).check(matches(isCompletelyDisplayed()));
-        onView(withText("확인 요청")).check(matches(isCompletelyDisplayed())).perform(click());settled(t->!t.busy&&t.approvals.size()==1);
+        onView(withText("확인 요청")).check(matches(isCompletelyDisplayed()));openTeam("확인 요청");settled(t->!t.busy&&t.approvals.size()==1);
         onView(withText("새 질문을 바로 볼 수 있어요")).inRoot(isDialog()).check(matches(isDisplayed()));
         onView(withText("승인")).inRoot(isDialog()).check(matches(isEnabled()));assertEquals(0,decisions.get());screenshot("android-team-direct-approval");
         onView(withText("설명과 근거 aaaaaaa")).inRoot(isDialog()).perform(scrollTo(),click());
         onView(withText("정확한 버전\n"+"a".repeat(40))).inRoot(isDialog()).check(matches(isDisplayed()));
         onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);assertEquals(0,triggers.get());
-        onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);
+        openTeam("도착한 질문");settled(t->!t.busy&&t.canStart);assertEquals(0,triggers.get());
+        teamAction("방법이 막혔어요",t->t.busy||!t.canStart);settled(t->!t.busy&&t.question!=null);
         onView(withText("지금 바꿔 볼 작은 방법은 무엇인가요?")).inRoot(isDialog()).check(matches(isDisplayed()));assertEquals(1,triggers.get());assertEquals(0,answers.get());screenshot("android-team-question");
-        onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(1,answers.get());
+        teamAction("한 가지 바꿔 볼게요",t->t.busy||t.question==null);settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(1,answers.get());
         onView(withText("다음 질문 보기")).inRoot(isDialog()).check(matches(isDisplayed())).check(matches(isEnabled()));
         assertEquals(2,reads.get());assertEquals(1,triggers.get());assertEquals(1,answers.get());screenshot("android-team-answer-next-action");
-        onView(withText("다음 질문 보기")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.canStart);
+        teamAction("다음 질문 보기",t->t.busy||!t.answerConfirmed);settled(t->!t.busy&&t.canStart);
         onView(withText("방법이 막혔어요")).inRoot(isDialog()).check(matches(isDisplayed()));
         assertEquals(3,reads.get());assertEquals(1,triggers.get());assertEquals(1,answers.get());screenshot("android-team-next-question-empty-choices");
         onView(withText("닫기")).inRoot(isDialog()).perform(click());
@@ -93,13 +186,13 @@ public class TeamEntryJourneyTest {
     }
     @Test public void lostStartingChoiceRetainsIntentAcrossRelaunchAndDoesNotOverwriteDraft()throws Exception{
         loseTrigger.set(true);app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);
-        onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.contains("자동으로 다시 요청하지 않아요"));
+        openTeam("도착한 질문");settled(t->!t.busy&&t.canStart);
+        teamAction("방법이 막혔어요",t->t.busy||!t.canStart);settled(t->!t.busy&&t.message.contains("자동으로 다시 요청하지 않아요"));
         String id=store.loadQuestionIntent("team-account").getString("id");assertEquals(1,triggers.get());assertEquals(id,triggerIDs.get(0));
         app.close();app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart&&"method".equals(t.pendingChoice));
+        openTeam("도착한 질문");settled(t->!t.busy&&t.canStart&&"method".equals(t.pendingChoice));
         onView(withText("목표를 정리하고 싶어요")).inRoot(isDialog()).check(matches(isNotEnabled()));assertEquals(1,triggers.get());screenshot("android-team-pending-choice");
-        loseTrigger.set(false);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);
+        loseTrigger.set(false);teamAction("방법이 막혔어요",t->t.busy||!t.canStart);settled(t->!t.busy&&t.question!=null);
         assertEquals(2,triggers.get());assertEquals(id,triggerIDs.get(1));assertNull(store.loadQuestionIntent("team-account"));assertEquals(0,answers.get());assertEquals(0,turns.get());assertEquals(0,decisions.get());
         assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
@@ -111,25 +204,28 @@ public class TeamEntryJourneyTest {
         app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));experienceSettled(e->e.available&&!e.busy);assertTrue(metricTypes.isEmpty());
         selectMenu("사용 경험 공유 설정");experienceSettled(e->e.available&&!e.busy);
         onView(withText("동의하고 공유하기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->e.granted&&!e.busy);assertEquals(1,consentWrites.get());screenshot("android-team-experience-consent");onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        openTeam("도착한 질문");settled("consent-granted/starting-choice",t->!t.busy&&t.canStart);teamAction("방법이 막혔어요",t->t.busy||!t.canStart);settled("consent-granted/question-loaded",t->!t.busy&&t.question!=null);teamAction("한 가지 바꿔 볼게요",t->t.busy||t.question==null);settled("consent-granted/answer-received",t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));onView(withText("닫기")).inRoot(isDialog()).perform(click());
         // Explicitly reopening settings flushes the already-persisted answer, without a product replay.
         selectMenu("사용 경험 공유 설정");experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
         onView(withText("공유하지 않기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->!e.busy&&!e.granted);int before=metricTypes.size();onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+        openTeam("도착한 질문");settled("consent-declined/starting-choice",t->!t.busy&&t.canStart);teamAction("방법이 막혔어요",t->t.busy||!t.canStart);settled("consent-declined/question-loaded",t->!t.busy&&t.question!=null);teamAction("한 가지 바꿔 볼게요",t->t.busy||t.question==null);settled("consent-declined/answer-received",t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private void selectMenu(String title)throws Exception {
         boolean observe=Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("observeTeamMenu","false"));
-        if(observe){
-        QuestionActivity.testMenuObservation=value->{if(menuObservations.length()<40)menuObservations.put(value);};
-        onView(withContentDescription("메뉴")).perform(new androidx.test.espresso.ViewAction(){
-            public org.hamcrest.Matcher<android.view.View> getConstraints(){return isDisplayed();}
-            public String getDescription(){return "observe the one actual menu touch without changing its listener";}
-            public void perform(androidx.test.espresso.UiController ui,android.view.View view){
-                observeMenu("before",view);view.setOnTouchListener((v,event)->{if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN||event.getActionMasked()==android.view.MotionEvent.ACTION_UP)observeMenu(event.getActionMasked()==0?"down":"up",v);return false;});
-                click().perform(ui,view);view.setOnTouchListener(null);
-            }
-        });
-        }else onView(withContentDescription("메뉴")).perform(click());
+        // The menu icon carries a tooltip (QuestionActivity.iconButton), so a tap that
+        // Espresso stretches past the long-press timeout shows the tooltip instead.
+        // UiSync taps once when idle and requires menu() to have shown its dialog.
+        AtomicInteger menuShown=new AtomicInteger();
+        QuestionActivity.testMenuObservation=value->{if(observe&&menuObservations.length()<40)menuObservations.put(value);if("shown".equals(value.optString("phase")))menuShown.incrementAndGet();};
+        try{
+            if(observe)onView(withContentDescription("메뉴")).check((v,e)->{if(e!=null)throw e;observeMenu("before",v);});
+            UiSync.tap(onView(withContentDescription("메뉴")),"menu",true,new UiSync.Hook(){
+                @Override public void touched(android.view.View view,android.view.MotionEvent event){
+                    int action=event.getActionMasked();
+                    if(observe&&(action==android.view.MotionEvent.ACTION_DOWN||action==android.view.MotionEvent.ACTION_UP))observeMenu(action==android.view.MotionEvent.ACTION_DOWN?"down":"up",view);
+                }
+            },a->menuShown.get()>0);
+        }finally{QuestionActivity.testMenuObservation=null;}
         long deadline=System.currentTimeMillis()+5000;boolean visible=false;
         while(System.currentTimeMillis()<deadline){android.view.accessibility.AccessibilityNodeInfo root=InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null){visible=!root.findAccessibilityNodeInfosByText(title).isEmpty();root.recycle();}if(visible)break;Thread.sleep(25);}
         if(observe)writeMenuObservations();
@@ -142,7 +238,7 @@ public class TeamEntryJourneyTest {
     private void writeMenuObservations()throws Exception{File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());Files.write(new File(dir,"android-team-menu-observations.json").toPath(),menuObservations.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
     @Test public void missingTeamCapabilityHidesOnlyStartingChoicesAndPreservesDraft()throws Exception{
         capabilityUnavailable.set(true);app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));experienceSettled(e->!e.busy&&!e.available);
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question==null&&!t.canStart);
+        openTeam("도착한 질문");settled(t->!t.busy&&t.question==null&&!t.canStart);
         onView(withText("방법이 막혔어요")).check(doesNotExist());onView(withText("지금 도착한 질문이 없어요.")).inRoot(isDialog()).check(matches(isDisplayed()));
         app.onActivity(a->team(a).begin(new NativeDeviceSignIn.Credentials("team-account","team-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000),"method"));
         assertEquals(0,triggers.get());onView(withText("닫기")).inRoot(isDialog()).perform(click());onView(withContentDescription("질문 대화 입력")).check(matches(withText("아직 보내지 않은 내 생각")));assertEquals(0,turns.get());assertEquals(0,consentWrites.get());
@@ -153,7 +249,7 @@ public class TeamEntryJourneyTest {
         onView(withText("알림 켜기")).inRoot(isDialog()).check(matches(isDisplayed())).check(matches(isNotEnabled()));
         onView(withText("이 버전은 알림 연결이 아직 준비되지 않았어요. 질문과 확인 요청에서 직접 확인할 수 있어요.")).inRoot(isDialog()).check(matches(isDisplayed()));
         assertFalse(store.loadPush().getBoolean("enabled"));screenshot("android-team-push-unconfigured");onView(withText("닫기")).inRoot(isDialog()).perform(click());
-        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).check(matches(isEnabled()));
+        openTeam("도착한 질문");settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).check(matches(isEnabled()));
         assertEquals(0,triggers.get());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertTrue(metricTypes.isEmpty());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private static android.view.View view(QuestionActivity a,String name){try{var f=QuestionActivity.class.getDeclaredField(name);f.setAccessible(true);return(android.view.View)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
@@ -167,7 +263,7 @@ public class TeamEntryJourneyTest {
             suffix.set(a.getResources().getConfiguration().fontScale>=1.9f?"large-dark":"normal");geometry.set(new JSONObject().put("font_scale",a.getResources().getConfiguration().fontScale).put("night",a.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK).put("opening",title.toShortString()).put("entry",above.toShortString()).put("composer",input.toShortString()));
         }catch(Exception e){throw new AssertionError(e);}});
         screenshot("android-team-empty-"+suffix.get());
-        onView(withContentDescription("질문 대화 입력")).perform(click());
+        UiSync.tap(onView(withContentDescription("질문 대화 입력")),"team-composer",a->view(a,"composer").hasFocus());
         AtomicBoolean ime=new AtomicBoolean();long end=System.currentTimeMillis()+5000;
         while(System.currentTimeMillis()<end){app.onActivity(a->{android.view.WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();ime.set(insets!=null&&insets.isVisible(android.view.WindowInsets.Type.ime())&&view(a,"composer").hasFocus());});if(ime.get())break;Thread.sleep(25);}assertTrue("Actual IME and editor focus must be present",ime.get());
         onView(withContentDescription("질문 대화 입력")).check(matches(isCompletelyDisplayed())).check(matches(withText("아직 보내지 않은 내 생각")));onView(withText("보내기")).check(matches(isCompletelyDisplayed()));

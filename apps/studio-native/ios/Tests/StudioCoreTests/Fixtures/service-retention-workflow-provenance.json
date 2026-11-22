@@ -1,0 +1,20 @@
+{
+  "schema": "hps-native-contract-source-receipt/1",
+  "source_commit": "1e37b40f76525a76af8962b6ea797b70ac864393",
+  "runtime_base_commit": "d31bb4021a2b0dbe633d6e300de82fcfee69642b",
+  "test_file": "worker/test/account-push-d1.test.mjs",
+  "test_sha256": "6eb38d2be0d14c4bb5d9bdf8e5d37bb9300cd59ddbfc057fe8ac7fa360aba599",
+  "fixture_path": "/tmp/service593-native-workflow-contract-fixtures.json",
+  "fixture_sha256": "0dd10ca9825ff9a16617b6d2d6b8cd5c6d2b936e7f36af037eb3b018c327efb7",
+  "log_path": "/tmp/service593-workflow-contract-d1.log",
+  "log_sha256": "6600c21e32c7093f19bbe22b022ca730da2cf4e99e7bc9d54788c1398df84505",
+  "node": "22.22.1",
+  "command": "node --test worker/test/account-push-d1.test.mjs",
+  "resource_job": "ios4377-workflow-contract-d1",
+  "exit_code": 0,
+  "tests_passed": 23,
+  "scope": "actual local D1, authenticated HTTP synthetic fixture; no production or provider acceptance",
+  "runtime_inventory_sha256": "224477fa7d3f1db1f2dd5ca9627ae99bfac808b937a936d04a63c3d127ffb8e2",
+  "runtime_inventory_files": 557,
+  "runtime_inventory_encoding": "UTF-8 JSON with sorted keys, no whitespace, and unescaped Unicode; map from private Service-relative paths to SHA-256 values. Original full inventory retained in private evidence; public receipt intentionally omits private paths."
+}

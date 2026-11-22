@@ -341,3 +341,32 @@ test('both build dispatches forward override_live_session to the release check; 
     }
   }
 });
+
+
+test('mirror validates marked RC final-version bytes and retains legacy and stable versions', t => {
+  const f = repoFixture(t);
+  const text = fs.readFileSync(path.join(root, '.github/workflows/mirror-release.yml'), 'utf8');
+  const lines = text.split('\n').filter(line => /version=.*app-version|node scripts\/check-unified-release.mjs dist/.test(line)).join('\n');
+  assert.match(lines, /app-version/);
+  const legacy = 'v2026.1017.0-rc.1', stable = 'v2026.1018.0';
+  git(f.repo, 'tag', legacy); git(f.repo, 'tag', stable);
+  const script = `set -eu
+node() {
+  if [[ "$1" == scripts/check-unified-release.mjs ]]; then
+    [[ "$4" == "$EXPECTED_VERSION" ]] || return 19
+    [[ "$3" == "$EXPECTED_SHA" ]] || return 20
+  else
+    shift
+    command "${process.execPath}" "${cli}" "$@"
+  fi
+}
+${lines}`;
+  for (const [tag, version] of [[plan.rcTag, '2026.1018.0'], [legacy, '2026.1017.0-rc.1'], [stable, '2026.1018.0']]) {
+    const result = spawnSync('bash', ['-c', script], {cwd: f.repo, encoding: 'utf8',
+      env: {...process.env, TAG: tag, EXPECTED_VERSION: version, EXPECTED_SHA: f.candidate, GITHUB_TOKEN_SOURCE: 'fixture'}});
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const mismatch = spawnSync('bash', ['-c', script], {cwd: f.repo, encoding: 'utf8',
+    env: {...process.env, TAG: plan.rcTag, EXPECTED_VERSION: 'other', EXPECTED_SHA: f.candidate, GITHUB_TOKEN_SOURCE: 'fixture'}});
+  assert.equal(mismatch.status, 19, 'the mirror must still propagate verification failure');
+});

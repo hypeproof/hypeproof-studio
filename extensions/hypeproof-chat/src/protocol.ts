@@ -1,5 +1,6 @@
 /** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
-export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
+/** `grant` (Service #594): an invite or super seat. Its request count is a placeholder, not a limit, so it is not shown. */
+export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number; grant?: "invite" | "super" }
 /**
  * TUX-SP-13 / CU-13 — what the Service confirms about a one-hour trial grant (`trial` on /v1/profile).
  * `ends_at` is null until the grant has started. Never sent for a pass, which keeps `pass`.
@@ -341,6 +342,8 @@ export interface ResolvedProfile {
   activity_kind?: "trial" | "personal" | "classroom";
   /** Service #536 (#4179): `"account"` when a signed-in account owns this seat; `activity_kind` stays `trial`. Presentation only; absent on an older Service. */
   seat_owner?: "account";
+  /** Service #594: an invite track seat (the class served on an invite). Shown with the class screen, not the personal task workspace. Presentation only; absent on an older Service. */
+  invite_track?: { name: string };
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
   /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */

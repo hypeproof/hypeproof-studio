@@ -9,7 +9,8 @@ permissions:
   contents: read
 concurrency:
   group: studio-native-${{ github.ref }}
-  cancel-in-progress: true
+  # A new PR push replaces the old PR run. Main runs are never cancelled by the next merge.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   scope:
     name: native / scope
@@ -85,20 +86,198 @@ jobs:
           node-version: '22'
       - name: Verify native journey and release casebook agreement before platform builds
         run: node --test scripts/release/test/select-cases.test.mjs scripts/release/test/publish-gate.test.mjs
-  ios:
-    needs: contract
-    runs-on: macos-15
+  approval-push-simulator:
+    name: iOS approval push simulator
+    if: github.event_name == 'pull_request'
+    # The preview xcode-27 image has intermittently lost its iOS runtime during boot.
+    runs-on: macos-26
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    timeout-minutes: 45 # 31 UI cases plus result finalization, cleanup and evidence upload
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Build device binary and test native simulator
+      # A once-booted simulator from the ios-sim-seed job (#4432). It is restored before any
+      # simctl or xcodebuild call; the boot step uses it only if CoreSimulatorService lists it.
+      - name: Key for the once-booted simulator
+        id: preboot
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py cache-key
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ios-sim-preboot
+          key: ${{ steps.preboot.outputs.key }}
+      - name: Restore the once-booted simulator
+        env:
+          HP_SIM_SEED_DIR: ${{ runner.temp }}/ios-sim-preboot
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py restore
+      # Build before a simulator exists, so compilation never competes with simulator IPC.
+      - name: Build the focused XCUITest
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py build
+      - name: Create, boot and warm up the owned simulator
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py boot
+      - name: Inject and tap one read-only approval notification
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py run
+      - name: Shut down and delete the owned simulator
+        if: always()
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-approval-push-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/studio-native/evidence/approval-push/build.log
+            apps/studio-native/evidence/approval-push/xcodebuild.log
+            apps/studio-native/evidence/approval-push/simulator-steps.jsonl
+            apps/studio-native/evidence/approval-push/simctl-hang-*.txt
+            apps/studio-native/evidence/approval-push/simulator-notifications.log
+            apps/studio-native/evidence/approval-push/ApprovalPush.xcresult
+            apps/studio-native/evidence/approval-push/approval-push-*.png
+          retention-days: 14
+  # Seeds the approval push job's once-booted simulator (#4432). Runs on main and on dispatch,
+  # only when the cache has no entry for this runner image and Xcode, so a cache miss never
+  # slows a PR. Its settle wait has its own limit; no approval push limit depends on it.
+  ios-sim-seed:
+    name: iOS simulator seed
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Key for the once-booted simulator
+        id: preboot
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py cache-key
+      - uses: actions/cache/restore@v4
+        id: existing
+        with:
+          path: ${{ runner.temp }}/ios-sim-preboot
+          key: ${{ steps.preboot.outputs.key }}
+          lookup-only: true
+      - name: Boot once, wait for first-boot work to stop, archive the device
+        if: steps.existing.outputs.cache-hit != 'true'
+        env:
+          HP_SIM_SEED_DIR: ${{ runner.temp }}/ios-sim-preboot
+          HP_APPROVAL_PUSH_EVIDENCE: ${{ github.workspace }}/apps/studio-native/evidence/sim-seed-run
+        run: python3 apps/studio-native/scripts/verify-approval-push-simulator.py seed
+      - uses: actions/cache/save@v4
+        if: steps.existing.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/ios-sim-preboot
+          key: ${{ steps.preboot.outputs.key }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-sim-seed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/studio-native/evidence/sim-seed-run/simulator-steps.jsonl
+            apps/studio-native/evidence/sim-seed-run/simctl-hang-*.txt
+            apps/studio-native/evidence/sim-seed-run/simulator-ps.txt
+            ${{ runner.temp }}/ios-sim-preboot/seed.json
+          if-no-files-found: ignore
+          retention-days: 14
+  ios-build:
+    name: iOS build
+    needs: contract
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Core tests, device build and one simulator build-for-testing
+        env:
+          # Must equal the ios-ui matrix below; the ios job fails when a planned shard is missing.
+          IOS_UI_SHARDS: '4'
+        run: bash apps/studio-native/scripts/ios-verify.sh build
+      - name: Pack the simulator test products
+        run: |
+          # tar keeps the signed bundles' symlinks and modes; an artifact zip does not.
+          mkdir -p "$RUNNER_TEMP/ios-transfer"
+          tar -C apps/studio-native/ios/DerivedData/Build -cf "$RUNNER_TEMP/ios-transfer/ios-test-products.tar" Products
+          cp apps/studio-native/evidence/ios-ui-shard-plan.json "$RUNNER_TEMP/ios-transfer/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-ios-test-products-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-transfer/
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/studio-native/evidence/
+            apps/studio-native/ios/DerivedData-device/Build/Products/Release-iphoneos/*.app
+          retention-days: 14
+  ios-ui:
+    name: iOS UI shard ${{ matrix.shard }}
+    needs: ios-build
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 35
+    strategy:
+      # Every shard finishes and keeps its evidence even when another shard fails.
+      fail-fast: false
+      matrix:
+        # With 3 shards the 66 cases took 22-25 min of UI per shard (#4437). 4 shards keep each
+        # job near 27 min, under half of the former 75-min single-job limit, without raising a timeout.
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: studio-ios-test-products-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-transfer
+      - name: Unpack the build job's test products
+        run: |
+          mkdir -p apps/studio-native/ios/DerivedData/Build apps/studio-native/evidence
+          tar -C apps/studio-native/ios/DerivedData/Build -xf "$RUNNER_TEMP/ios-transfer/ios-test-products.tar"
+          cp "$RUNNER_TEMP/ios-transfer/ios-ui-shard-plan.json" apps/studio-native/evidence/
+      - name: Native simulator journeys for one shard
+        run: bash apps/studio-native/scripts/ios-verify.sh shard ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-ui-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native/evidence/
+          retention-days: 14
+  # The trusted merge gate on base reads exactly the job results scope, contract, ios and
+  # android. This job keeps the name ios and passes only when the build and every shard did.
+  ios:
+    needs: [contract, ios-build, ios-ui]
+    if: ${{ !cancelled() && needs.contract.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: studio-ios-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: studio-ios-ui-shard-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-shard-artifacts
+      - name: Merge every UI shard and record the native journeys
         env:
           NATIVE_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bash apps/studio-native/scripts/ios-verify.sh
+          IOS_BUILD_RESULT: ${{ needs.ios-build.result }}
+          IOS_UI_RESULT: ${{ needs.ios-ui.result }}
+          IOS_SHARD_ARTIFACTS: ${{ runner.temp }}/ios-shard-artifacts
+        run: bash apps/studio-native/scripts/ios-collect.sh
       # Per-hop signed-in journey record for this exact run attempt. The TestFlight gate reads it;
       # a missing record means NOT_RUN, never PASS.
       - uses: actions/upload-artifact@v4
@@ -134,8 +313,9 @@ jobs:
       - name: Install emulator host library on the disposable runner
         run: |
           # Headless SDK QEMU still links to the PulseAudio client library.
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpulse0
+          # A transient archive 503 failed one run; let apt retry each download.
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends libpulse0
       - name: Enable emulator acceleration on the disposable runner
         run: sudo chmod a+rw /dev/kvm
       - name: Provision the existing Android 35 emulator recipe
@@ -145,6 +325,10 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           set -o pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platform-tools' 'platforms;android-35' 'emulator' 'system-images;android-35;google_apis;x86_64' --channel=0
+      # Build and unit-test before the emulator exists, so Gradle and the booting
+      # emulator never compete for the runner's CPUs.
+      - name: Build and unit-test the Android app before the emulator boots
+        run: bash apps/studio-native/scripts/android-verify.sh build
       - name: Native Android record and speech handoff journeys
         run: python3 apps/studio-native/scripts/android-emulator.py --sdk-root "$ANDROID_HOME" --work-dir "$RUNNER_TEMP/studio-native-android"
       - uses: actions/upload-artifact@v4
@@ -160,7 +344,7 @@ jobs:
   acceptance:
     name: native / acceptance
     if: always()
-    needs: [scope, contract, ios, android]
+    needs: [scope, contract, ios-build, ios-ui, ios, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -223,3 +407,15 @@ jobs:
           path: ${{ runner.temp }}/native-merge-acceptance.json
           if-no-files-found: ignore
           retention-days: 14
+      - name: Require the iOS build and every iOS UI shard
+        if: always()
+        env:
+          NATIVE_SELECTED: ${{ needs.scope.outputs.run_native }}
+          IOS_BUILD_RESULT: ${{ needs.ios-build.result }}
+          IOS_UI_RESULT: ${{ needs.ios-ui.result }}
+        run: |
+          # The ios job already requires both; this keeps the requirement visible here too.
+          if [ "$NATIVE_SELECTED" != 'false' ] && { [ "$IOS_BUILD_RESULT" != success ] || [ "$IOS_UI_RESULT" != success ]; }; then
+            echo "::error::iOS build=$IOS_BUILD_RESULT, UI shards=$IOS_UI_RESULT; native acceptance requires both to succeed"
+            exit 1
+          fi

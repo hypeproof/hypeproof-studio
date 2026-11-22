@@ -80,7 +80,7 @@
         },
         {
           "path": "docs/requirements/studio-native-trial.md",
-          "section": "## Product Intent와 체험 범위"
+          "section": "## Product Intent\uc640 \uccb4\ud5d8 \ubc94\uc704"
         }
       ]
     },
@@ -107,7 +107,7 @@
       "sources": [
         {
           "path": "docs/requirements/studio-native-trial.md",
-          "section": "## 접근 방식"
+          "section": "## \uc811\uadfc \ubc29\uc2dd"
         }
       ]
     },
@@ -379,7 +379,7 @@
       "sources": [
         {
           "path": "docs/design/model-effort-and-course-usage.md",
-          "section": "## 수업 effort 구현 계약 (#799)"
+          "section": "## \uc218\uc5c5 effort \uad6c\ud604 \uacc4\uc57d (#799)"
         }
       ]
     },
@@ -638,7 +638,7 @@
       "sources": [
         {
           "path": "docs/PRODUCT-INTENT.md",
-          "section": "## 후보 모델과 이용 권한에 대한 Intent"
+          "section": "## \ud6c4\ubcf4 \ubaa8\ub378\uacfc \uc774\uc6a9 \uad8c\ud55c\uc5d0 \ub300\ud55c Intent"
         }
       ]
     },
@@ -1020,7 +1020,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## R. 음성 capability 계측 (#896 / #897 V0)"
+          "section": "## R. \uc74c\uc131 capability \uacc4\uce21 (#896 / #897 V0)"
         }
       ]
     },
@@ -1253,11 +1253,11 @@
       "sources": [
         {
           "path": "docs/design/unified-studio-experience.md",
-          "section": "## UX와 상태 경계"
+          "section": "## UX\uc640 \uc0c1\ud0dc \uacbd\uacc4"
         },
         {
           "path": "docs/design/unified-studio-experience.md",
-          "section": "## 배포와 계층"
+          "section": "## \ubc30\ud3ec\uc640 \uacc4\uce35"
         },
         {
           "path": "docs/plan/unified-studio-experience.md"
@@ -2337,7 +2337,7 @@
     {
       "id": "ST-TEST-FEEDBACK-LOOP",
       "stage": "test",
-      "label": "Feedback loop — learner answer, retrospective and next draft tests (#1013)",
+      "label": "Feedback loop \u2014 learner answer, retrospective and next draft tests (#1013)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -2367,7 +2367,7 @@
     {
       "id": "ST-IMP-FEEDBACK-LOOP",
       "stage": "implementation",
-      "label": "Feedback loop — learner answer to feedback, lesson retrospective → next draft (#1013)",
+      "label": "Feedback loop \u2014 learner answer to feedback, lesson retrospective \u2192 next draft (#1013)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -2414,7 +2414,7 @@
     {
       "id": "ST-TEST-AE-GOAL",
       "stage": "test",
-      "label": "Learner goal beside the lesson criteria — rules, host, screen, browser and App tests (AE-01, #554)",
+      "label": "Learner goal beside the lesson criteria \u2014 rules, host, screen, browser and App tests (AE-01, #554)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -3475,7 +3475,7 @@
         },
         {
           "path": "docs/studio-requirements.md",
-          "section": "## Learning experience revision — 2026-09-18"
+          "section": "## Learning experience revision \u2014 2026-09-18"
         }
       ]
     },
@@ -3800,7 +3800,7 @@
         },
         {
           "path": "docs/studio-requirements.md",
-          "section": "## Curriculum runtime proposal — 2026-09-29"
+          "section": "## Curriculum runtime proposal \u2014 2026-09-29"
         }
       ]
     },
@@ -4301,7 +4301,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 진입·목록 (UX)"
+          "section": "## \uc9c4\uc785\u00b7\ubaa9\ub85d (UX)"
         }
       ]
     },
@@ -4316,7 +4316,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 생성 (GEN)"
+          "section": "## \uc0dd\uc131 (GEN)"
         }
       ]
     },
@@ -4330,7 +4330,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 피드백과 검사 (FB)"
+          "section": "## \ud53c\ub4dc\ubc31\uacfc \uac80\uc0ac (FB)"
         }
       ]
     },
@@ -4345,7 +4345,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 강의 만들기 (OUT)"
+          "section": "## \uac15\uc758 \ub9cc\ub4e4\uae30 (OUT)"
         }
       ]
     },
@@ -4359,7 +4359,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 리허설 (RH)"
+          "section": "## \ub9ac\ud5c8\uc124 (RH)"
         }
       ]
     },
@@ -4373,7 +4373,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 강의 계획안 (PLAN)"
+          "section": "## \uac15\uc758 \uacc4\ud68d\uc548 (PLAN)"
         }
       ]
     },
@@ -4387,7 +4387,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 강사 구독 연결 (SUB)"
+          "section": "## \uac15\uc0ac \uad6c\ub3c5 \uc5f0\uacb0 (SUB)"
         }
       ]
     },
@@ -4401,7 +4401,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 계획서 형식 (HTML)"
+          "section": "## \uacc4\ud68d\uc11c \ud615\uc2dd (HTML)"
         }
       ]
     },
@@ -4415,7 +4415,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 저장 형식 (SCH)"
+          "section": "## \uc800\uc7a5 \ud615\uc2dd (SCH)"
         }
       ]
     },
@@ -4429,7 +4429,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## 지식원 (KB)"
+          "section": "## \uc9c0\uc2dd\uc6d0 (KB)"
         }
       ]
     },
@@ -4443,7 +4443,7 @@
       "sources": [
         {
           "path": "docs/design/chalk-knowledge-and-plan-spec.md",
-          "section": "## 1. 제품 지식 저장 (KB-01 · 03 · 05)"
+          "section": "## 1. \uc81c\ud488 \uc9c0\uc2dd \uc800\uc7a5 (KB-01 \u00b7 03 \u00b7 05)"
         }
       ]
     },
@@ -4555,11 +4555,11 @@
       "sources": [
         {
           "path": "docs/design/chalk-knowledge-and-plan-spec.md",
-          "section": "## 2. 계획서 HTML 규격 `chalk-plan/1` (HTML-01~04 · GEN-04 · 결정 2 · 9)"
+          "section": "## 2. \uacc4\ud68d\uc11c HTML \uaddc\uaca9 `chalk-plan/1` (HTML-01~04 \u00b7 GEN-04 \u00b7 \uacb0\uc815 2 \u00b7 9)"
         },
         {
           "path": "docs/design/chalk-knowledge-and-plan-spec.md",
-          "section": "## 3. 초안 저장 (결정 3 · OUT-04)"
+          "section": "## 3. \ucd08\uc548 \uc800\uc7a5 (\uacb0\uc815 3 \u00b7 OUT-04)"
         }
       ]
     },
@@ -4576,19 +4576,19 @@
       "sources": [
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 1. 강사 모드 (SUB-08)"
+          "section": "## 1. \uac15\uc0ac \ubaa8\ub4dc (SUB-08)"
         },
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 2. 구독 연결 (SUB-01 · 02 · 04)"
+          "section": "## 2. \uad6c\ub3c5 \uc5f0\uacb0 (SUB-01 \u00b7 02 \u00b7 04)"
         },
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 5. 서버 AI 강사용 경로 (SUB-03 · GEN-06, E4-8)"
+          "section": "## 5. \uc11c\ubc84 AI \uac15\uc0ac\uc6a9 \uacbd\ub85c (SUB-03 \u00b7 GEN-06, E4-8)"
         },
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 6. 디자인 기준 (UX-04 · UX-05)"
+          "section": "## 6. \ub514\uc790\uc778 \uae30\uc900 (UX-04 \u00b7 UX-05)"
         }
       ]
     },
@@ -4725,7 +4725,7 @@
     {
       "id": "ST-IMP-CHALK-KB-STORE",
       "stage": "implementation",
-      "label": "Chalk knowledge store — worker implementation",
+      "label": "Chalk knowledge store \u2014 worker implementation",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-KB",
@@ -4742,7 +4742,7 @@
     {
       "id": "ST-TEST-CHALK-KB-STORE",
       "stage": "test",
-      "label": "Chalk knowledge store — unit + integration tests",
+      "label": "Chalk knowledge store \u2014 unit + integration tests",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-IMP-CHALK-KB-STORE",
@@ -5025,7 +5025,7 @@
     {
       "id": "ST-IMP-CHALK-GEN-APP",
       "stage": "implementation",
-      "label": "Chalk 생성 도구 4개 — 앱 측 (E2-6 / #1295, #1306)",
+      "label": "Chalk \uc0dd\uc131 \ub3c4\uad6c 4\uac1c \u2014 \uc571 \uce21 (E2-6 / #1295, #1306)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-DES-CHALK-TOOLS",
@@ -5040,7 +5040,7 @@
     {
       "id": "ST-TEST-CHALK-GEN-APP",
       "stage": "test",
-      "label": "Chalk 생성 도구 단위 시험 (E2-6 / #1295, #1306)",
+      "label": "Chalk \uc0dd\uc131 \ub3c4\uad6c \ub2e8\uc704 \uc2dc\ud5d8 (E2-6 / #1295, #1306)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-GEN",
@@ -5055,7 +5055,7 @@
     {
       "id": "ST-IMP-CHALK-FEEDBACK",
       "stage": "implementation",
-      "label": "Chalk 피드백 기록·비교·이력 구현 (E2-7 / #1466)",
+      "label": "Chalk \ud53c\ub4dc\ubc31 \uae30\ub85d\u00b7\ube44\uad50\u00b7\uc774\ub825 \uad6c\ud604 (E2-7 / #1466)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING"
@@ -5097,7 +5097,7 @@
     {
       "id": "ST-TEST-CHALK-FEEDBACK",
       "stage": "test",
-      "label": "Chalk 피드백 라우트·도구 시험 (E2-7 / #1466)",
+      "label": "Chalk \ud53c\ub4dc\ubc31 \ub77c\uc6b0\ud2b8\u00b7\ub3c4\uad6c \uc2dc\ud5d8 (E2-7 / #1466)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING",
@@ -5122,7 +5122,7 @@
     {
       "id": "ST-IMP-CHALK-JUDGEMENTS",
       "stage": "implementation",
-      "label": "Context judgement items and records — server (E2-5 / #1465)",
+      "label": "Context judgement items and records \u2014 server (E2-5 / #1465)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-GEN",
@@ -5154,7 +5154,7 @@
     {
       "id": "ST-TEST-CHALK-JUDGEMENTS",
       "stage": "test",
-      "label": "Context judgement items and records — tests (E2-5 / #1465)",
+      "label": "Context judgement items and records \u2014 tests (E2-5 / #1465)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-GEN",
@@ -5451,7 +5451,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## P. 배포 자동화 (코치 스킬 · #431 결과물 2번)"
+          "section": "## P. \ubc30\ud3ec \uc790\ub3d9\ud654 (\ucf54\uce58 \uc2a4\ud0ac \u00b7 #431 \uacb0\uacfc\ubb3c 2\ubc88)"
         }
       ]
     },
@@ -6632,6 +6632,9 @@
         },
         {
           "path": ".github/workflows/release-promote.yml"
+        },
+        {
+          "path": "policy/release-recovery.md"
         }
       ]
     },
@@ -7579,7 +7582,7 @@
     {
       "id": "ST-TEST-IME-GUARD-KEYS",
       "stage": "test",
-      "label": "Compose 안녕 then Enter, Escape, Tab, Arrow-up, Cmd/Ctrl+Enter: nothing acts, nothing reaches the host (CGP-DS-D-024)",
+      "label": "Compose \uc548\ub155 then Enter, Escape, Tab, Arrow-up, Cmd/Ctrl+Enter: nothing acts, nothing reaches the host (CGP-DS-D-024)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CHAT-DETAIL",
@@ -8134,7 +8137,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### VER-03 확정 전 안내 문구 줄 비교 · 2026-10-20"
+          "section": "### VER-03 \ud655\uc815 \uc804 \uc548\ub0b4 \ubb38\uad6c \uc904 \ube44\uad50 \u00b7 2026-10-20"
         }
       ]
     },
@@ -8191,7 +8194,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### CH-01 첫 실행 기본 대상 · 2026-10-26"
+          "section": "### CH-01 \uccab \uc2e4\ud589 \uae30\ubcf8 \ub300\uc0c1 \u00b7 2026-10-26"
         }
       ]
     },
@@ -8827,7 +8830,7 @@
         },
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### 수업 참여 링크 · 2026-10-20 (ADM-01 · CGP-SHELL-R-005)"
+          "section": "### \uc218\uc5c5 \ucc38\uc5ec \ub9c1\ud06c \u00b7 2026-10-20 (ADM-01 \u00b7 CGP-SHELL-R-005)"
         }
       ]
     },
@@ -12427,7 +12430,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "### REQ-KNOW-63 — Visitor preview before publication"
+          "section": "### REQ-KNOW-63 \u2014 Visitor preview before publication"
         },
         {
           "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
@@ -14634,7 +14637,7 @@
         },
         {
           "path": "docs/session-log-consent.ko.md",
-          "section": "## 8. 느려요 기록 (성능 기록) 고지문"
+          "section": "## 8. \ub290\ub824\uc694 \uae30\ub85d (\uc131\ub2a5 \uae30\ub85d) \uace0\uc9c0\ubb38"
         }
       ]
     },
@@ -15187,7 +15190,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### 완료 조건 도우미 — 무엇을 만들면 끝인가 (CGP-LEARN-R-015) · 2026-10-26"
+          "section": "### \uc644\ub8cc \uc870\uac74 \ub3c4\uc6b0\ubbf8 \u2014 \ubb34\uc5c7\uc744 \ub9cc\ub4e4\uba74 \ub05d\uc778\uac00 (CGP-LEARN-R-015) \u00b7 2026-10-26"
         }
       ]
     },
@@ -15244,7 +15247,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### CH-08 수업 버전별 AI가 묻는 방식 (CGP-AGENT-R-001) · 2026-11-04"
+          "section": "### CH-08 \uc218\uc5c5 \ubc84\uc804\ubcc4 AI\uac00 \ubb3b\ub294 \ubc29\uc2dd (CGP-AGENT-R-001) \u00b7 2026-11-04"
         }
       ]
     },
@@ -15279,7 +15282,7 @@
         },
         {
           "path": "docs/testing/chalk-authoring.md",
-          "section": "### T-51 수업 버전별 AI가 묻는 방식 (CH-08, CGP-AGENT-R-001) · 2026-11-04"
+          "section": "### T-51 \uc218\uc5c5 \ubc84\uc804\ubcc4 AI\uac00 \ubb3b\ub294 \ubc29\uc2dd (CH-08, CGP-AGENT-R-001) \u00b7 2026-11-04"
         }
       ]
     },
@@ -15295,7 +15298,7 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)"
+          "section": "### \ub3c4\uc6c0 \uc694\uccad \ud0a4\ubcf4\ub4dc \ubd84\ub958 \u00b7 2026-10-26 (ADM-05 \u00b7 DES-06 \u00b7 CGP-LEARN-R-017)"
         }
       ]
     },
@@ -17226,7 +17229,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## Memory use on an answer: \"기억 사용 N\" and per-task exclusion (CGP-KNOW-R-026)"
+          "section": "## Memory use on an answer: \"\uae30\uc5b5 \uc0ac\uc6a9 N\" and per-task exclusion (CGP-KNOW-R-026)"
         }
       ]
     },
@@ -17471,7 +17474,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## \"기록 없이 묻기\": a task this computer does not keep (CGP-KNOW-R-029)"
+          "section": "## \"\uae30\ub85d \uc5c6\uc774 \ubb3b\uae30\": a task this computer does not keep (CGP-KNOW-R-029)"
         }
       ]
     },
@@ -18614,7 +18617,7 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
+          "section": "### \uc218\uc5c5 \uc124\uc815 \ubcc0\uacbd \uc54c\ub9bc \u00b7 2026-11-11 (ADM-11 \u00b7 CGP-SHELL-R-024 \u00b7 CGP-SHELL-D-023)"
         },
         {
           "path": "docs/research/chatgpt-desktop-2026-10/decisions/README.md"
@@ -18661,14 +18664,14 @@
         },
         {
           "path": "docs/testing/classroom-admin.md",
-          "section": "## 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
+          "section": "## \uc218\uc5c5 \uc124\uc815 \ubcc0\uacbd \uc54c\ub9bc \u00b7 2026-11-11 (ADM-11 \u00b7 CGP-SHELL-R-024 \u00b7 CGP-SHELL-D-023)"
         }
       ]
     },
     {
       "id": "ST-REQ-CHALK-SEAT-VERSION",
       "stage": "requirement",
-      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
+      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads \ud655\uc778 \ubd88\uac00",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN",
@@ -18677,7 +18680,7 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+          "section": "### \uc88c\uc11d\ubcc4 Studio \ubc84\uc804 \u00b7 2026-11-12 (ADM-02 \u00b7 CGP-SHELL-R-034 \u00b7 CGP-SHELL-D-033)"
         },
         {
           "path": "docs/research/chatgpt-desktop-2026-10/decisions/README.md"
@@ -18687,7 +18690,7 @@
     {
       "id": "ST-IMP-CHALK-SEAT-VERSION",
       "stage": "implementation",
-      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
+      "label": "Chalk /manage \ubc84\uc804 column, \uc21c\uc11c select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CHALK-SEAT-VERSION",
@@ -18726,7 +18729,7 @@
         },
         {
           "path": "docs/testing/classroom-admin.md",
-          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+          "section": "## \uc88c\uc11d\ubcc4 Studio \ubc84\uc804 \u00b7 2026-11-12 (ADM-02 \u00b7 CGP-SHELL-R-034 \u00b7 CGP-SHELL-D-033)"
         }
       ]
     },
@@ -18944,7 +18947,7 @@
     {
       "id": "ST-REQ-COHORT-UPDATE-FREEZE",
       "stage": "requirement",
-      "label": "REQ-SHELL-03 / DES-SHELL-02: an instructor freezes a cohort's Studio updates for a date range; a security-critical release is never held; amber 업데이트 고정 badge on the cohort row",
+      "label": "REQ-SHELL-03 / DES-SHELL-02: an instructor freezes a cohort's Studio updates for a date range; a security-critical release is never held; amber \uc5c5\ub370\uc774\ud2b8 \uace0\uc815 badge on the cohort row",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN",
@@ -18954,7 +18957,7 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)"
+          "section": "### \uc218\uc5c5\ubcc4 Studio \uc5c5\ub370\uc774\ud2b8 \uace0\uc815 \u00b7 2026-11-12 (ADM-11 \u00b7 CGP-SHELL-R-003 \u00b7 CGP-SHELL-D-002)"
         },
         {
           "path": "docs/studio-requirements.md"
@@ -19042,7 +19045,7 @@
         },
         {
           "path": "docs/testing/classroom-admin.md",
-          "section": "## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)"
+          "section": "## \uc218\uc5c5\ubcc4 Studio \uc5c5\ub370\uc774\ud2b8 \uace0\uc815 \u00b7 2026-11-12 (ADM-11 \u00b7 CGP-SHELL-R-003 \u00b7 CGP-SHELL-D-002)"
         }
       ]
     },
@@ -19056,11 +19059,11 @@
       "sources": [
         {
           "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "## Correlated native deployment — MTF-01"
+          "section": "## Correlated native deployment \u2014 MTF-01"
         },
         {
           "path": "docs/studio-requirements.md",
-          "section": "### Correlated iPhone testing delivery — MTF-01"
+          "section": "### Correlated iPhone testing delivery \u2014 MTF-01"
         },
         {
           "path": "apps/studio-native/README.md",
@@ -19107,7 +19110,7 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md",
-          "section": "## TestFlight request and receipt — MTF-T01"
+          "section": "## TestFlight request and receipt \u2014 MTF-T01"
         },
         {
           "path": "apps/studio-native/tests/test_native_workflow_source.py"
@@ -19296,7 +19299,7 @@
       "sources": [
         {
           "path": "docs/requirements/guardian-child-profile.md",
-          "section": "## 검증 계획"
+          "section": "## \uac80\uc99d \uacc4\ud68d"
         },
         {
           "path": "extensions/hypeproof-chat/test/child-profile-posture.smoke.mjs"
@@ -19327,7 +19330,7 @@
       "sources": [
         {
           "path": "docs/requirements/invite-seat.md",
-          "section": "## 검증"
+          "section": "## \uac80\uc99d"
         }
       ]
     },
@@ -19481,7 +19484,7 @@
     {
       "id": "ST-REQ-DATA-DELETION-REQUEST",
       "stage": "requirement",
-      "label": "REQ-SHELL-27 / DES-SHELL-26: a learner requests account and data deletion from the settings dialog; the Service records it, an operator processes it by hand; status chip 접수 / 처리 중 / 완료 / 보류(사유); local files untouched; default off (DEC-23)",
+      "label": "REQ-SHELL-27 / DES-SHELL-26: a learner requests account and data deletion from the settings dialog; the Service records it, an operator processes it by hand; status chip \uc811\uc218 / \ucc98\ub9ac \uc911 / \uc644\ub8cc / \ubcf4\ub958(\uc0ac\uc720); local files untouched; default off (DEC-23)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN",
@@ -19490,7 +19493,7 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)"
+          "section": "### \uacc4\uc815\uacfc \ub370\uc774\ud130 \uc0ad\uc81c \uc694\uccad \u00b7 2026-11-13 (ADM-14 \u00b7 CGP-SHELL-R-027 \u00b7 CGP-SHELL-D-026)"
         },
         {
           "path": "docs/studio-requirements.md"
@@ -19548,7 +19551,7 @@
         },
         {
           "path": "docs/testing/classroom-admin.md",
-          "section": "## 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)"
+          "section": "## \uacc4\uc815\uacfc \ub370\uc774\ud130 \uc0ad\uc81c \uc694\uccad \u00b7 2026-11-13 (ADM-14 \u00b7 CGP-SHELL-R-027 \u00b7 CGP-SHELL-D-026)"
         }
       ]
     },
@@ -19694,7 +19697,7 @@
       "sources": [
         {
           "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "### Android personal questions · issue #3733"
+          "section": "### Android personal questions \u00b7 issue #3733"
         }
       ]
     },
@@ -19886,7 +19889,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "### Theme choice: HP Dark, HP Light, 기기 설정 따르기 (CGP-SHELL-R-016)"
+          "section": "### Theme choice: HP Dark, HP Light, \uae30\uae30 \uc124\uc815 \ub530\ub974\uae30 (CGP-SHELL-R-016)"
         },
         {
           "path": "docs/research/chatgpt-desktop-2026-10/domains/settings-account-shell.md"
@@ -20192,7 +20195,7 @@
       "sources": [
         {
           "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "### Account question entry — #4111"
+          "section": "### Account question entry \u2014 #4111"
         }
       ]
     },
@@ -20206,7 +20209,7 @@
       "sources": [
         {
           "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "### Account question entry — #4111"
+          "section": "### Account question entry \u2014 #4111"
         }
       ]
     },
@@ -20514,6 +20517,438 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/protocol.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-TRIAGE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Internal request triage client \u2014 Studio #4342"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Internal request triage \u2014 MTR-06\u201308"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-TRIAGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-TRIAGE",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Internal triage client \u2014 Studio #4342"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-GITHUB",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Internal GitHub association client \u2014 Studio #4349"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone internal GitHub association evidence (#4349)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-GITHUB",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-GITHUB",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Internal GitHub association client \u2014 Studio #4349"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRequestTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-DELIVERY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Read-only delivery evidence \u2014 Studio #4364"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone request delivery evidence (#4364)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-DELIVERY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-DELIVERY",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Read-only delivery evidence \u2014 Studio #4364"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamDeliveryTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-OUTCOME",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Reporter outcome confirmation \u2014 Studio #4366"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone reporter outcome confirmation (#4366)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-OUTCOME",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-OUTCOME",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Reporter outcome confirmation \u2014 Studio #4366"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamOutcomeTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-INBOX",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Team inbox and explicit subscriptions \u2014 Studio #4368"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone team notification inbox (#4368)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-INBOX",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-INBOX",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Team inbox and explicit subscriptions \u2014 Studio #4368"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamInboxTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEAM-DISCUSSION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Explicit question and reply authoring \u2014 Studio #4370"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone explicit question and reply authoring (#4370)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEAM-DISCUSSION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEAM-DISCUSSION",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Explicit question and reply authoring \u2014 Studio #4370"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamDiscussionTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-GITHUB-OBSERVATIONS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Current GitHub observations \u2014 Studio #4373"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone current GitHub observations (#4373)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-GITHUB-OBSERVATIONS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-GITHUB-OBSERVATIONS",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Current GitHub observations \u2014 Studio #4373"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamGitHubObservationTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-RELATED",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Explicit related requests \u2014 Studio #4375"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone related requests (#4375)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-RELATED",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-RELATED",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Explicit related requests \u2014 Studio #4375"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamRelationTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-RETENTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Hidden retained content \u2014 Studio #4377"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone hidden retained content (#4377)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-RETENTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-RETENTION",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Hidden retained content \u2014 Studio #4377"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamHiddenContentTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-TEXT-REVISIONS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Author text revisions \u2014 Studio #4379"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone author text revisions (#4379)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-TEXT-REVISIONS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-TEXT-REVISIONS",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Author text revisions \u2014 Studio #4379"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/TeamTextRevisionTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-INTAKE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Explicit public request summaries \u2014 Studio #4381"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## iPhone explicit public summaries (#4381)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-INTAKE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-INTAKE",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "### Explicit public request summaries \u2014 Studio #4381"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/IntakeCoreTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/TeamEntryUITests.swift"
         }
       ]
     }

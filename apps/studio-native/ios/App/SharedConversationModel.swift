@@ -1,5 +1,6 @@
 import SwiftUI
 import Security
+import CryptoKit
 import AuthenticationServices
 
 private enum AccountKeychain {
@@ -70,6 +71,12 @@ private struct SharedCacheFile: Codable {
 }
 
 @MainActor final class SharedConversationModel: ObservableObject {
+    private let intakePresentations = TeamIntakePresentations()
+    private let deliveryControllers = TeamDeliveryControllers()
+    private let outcomeControllers = TeamOutcomeControllers()
+    private let githubObservationControllers = TeamGitHubObservationControllers()
+    private let relationControllers = TeamRelationControllers()
+    private let textRevisionControllers = TeamTextRevisionControllers()
     static let personalID = "personal-reflection"
     @Published private(set) var opening = "요즘 어떤 일에 시간을 많이 쓰세요?"
     @Published private(set) var openingHint = "일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요."
@@ -146,9 +153,61 @@ private struct SharedCacheFile: Codable {
         }, call: { [weak self] binding, method, id, body in
             guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
             try await self.service.accountPush(id, method: method, body: body, token: token)
-        }, changed: { [weak presentation] in presentation?.state = $0 })
+        }, changed: { [weak presentation] in presentation?.state = $0 }, teamCapabilities: { [weak self] binding in
+            guard let self else { throw CancellationError() }
+            let attempt = await self.epoch
+            do {
+                let access = try await self.teamService.teamRequestAccess(token: self.approvalToken(binding)); try access.validate(account: binding.accountID)
+                return access.products.isEmpty ? [] : try TeamPushCapabilities.supported(access.supported_push_capabilities)
+            } catch SyncFailure.http(let status, let code) {
+                if status == 404 || (status == 403 && code == "team_product_denied") { return [] }
+                if status == 401 { await self.teamPushDiscoveryDenied(binding, attempt: attempt, status: status, code: code) }
+                throw SyncFailure.http(status, code)
+            }
+        }, registerTeam: { [weak self] binding, id, body, capabilities in
+            guard let self else { throw CancellationError() }
+            try await self.teamService.accountPush(id, method: "PUT", body: body, token: self.approvalToken(binding), capabilities: capabilities)
+        }, openTeam: { [weak self] binding, id, reference in
+            guard let self else { throw CancellationError() }
+            return try await self.teamService.openedTeamPush(installation: id, reference: reference, token: self.approvalToken(binding))
+        })
         return presentation
     }()
+    private func teamPushDiscoveryDenied(_ binding: MemberApprovalIdentity, attempt: UUID, status: Int, code: String) {
+        guard epoch == attempt, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { return }
+        failure(SyncFailure.http(status, code))
+    }
+    private func commentSchemas(product: String) async throws -> [String] {
+        let attempt = epoch
+        guard let binding = try await approvalIdentity() else { throw CancellationError() }
+        let access = try await teamService.teamRequestAccess(token: approvalToken(binding)); try access.validate(account: binding.accountID)
+        guard epoch == attempt, try await approvalIdentity() == binding, access.products.contains(product) else { throw CancellationError() }
+        return try TeamCommentSupport.schemas(access.supported_comment_schemas)
+    }
+    private func sendTeamComment(_ draft: TeamCommentDraft) async throws -> String {
+        let attempt = epoch
+        guard let binding = try await approvalIdentity(), epoch == attempt, binding.accountID == draft.accountID else { throw CancellationError() }
+        try draft.validate(account: binding.accountID, request: draft.requestID)
+        let receipt = try await teamService.teamRequestComment(draft, token: approvalToken(binding))
+        guard epoch == attempt, try await approvalIdentity() == binding else { throw CancellationError() }
+        return receipt
+    }
+    func authorizedTeamPushRequest(_ destination: TeamPushDestination) async -> String? {
+        let attempt = epoch
+        var captured: MemberApprovalIdentity?
+        do {
+            guard let binding = try await approvalIdentity(), epoch == attempt else { return nil }
+            captured = binding
+            let detail = try await teamService.teamRequestDetail(id: destination.requestID, token: approvalToken(binding)); try detail.validate(id: destination.requestID)
+            guard try await approvalIdentity() == binding, epoch == attempt else { return nil }
+            return destination.requestID
+        } catch {
+            if let captured, epoch == attempt, signedIn, !loggingOut, account?.accountID == captured.accountID, account?.tokens.session_id == captured.sessionID {
+                push.controller?.unavailable("이 요청을 열 수 없어요. 팀 알림함에서 권한과 최신 상태를 확인해 주세요.")
+            }
+            return nil
+        }
+    }
     private func loadPushPreference() throws -> AccountPushPreference {
         let file = directory.appendingPathComponent("push-device-v1.json")
         guard FileManager.default.fileExists(atPath: file.path) else { let value = AccountPushPreference(); try savePushPreference(value); return value }
@@ -160,8 +219,31 @@ private struct SharedCacheFile: Codable {
         var folder = directory; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
         try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("push-device-v1.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
+    lazy var teamInbox: TeamInboxPresentation = {
+        let presentation = TeamInboxPresentation()
+        presentation.controller = TeamInboxController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] account in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamRequestAccess(token: self.approvalToken(account))
+        }, subscriptions: { [weak self] account in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamSubscriptions(token: self.approvalToken(account))
+        }, inbox: { [weak self] account, after in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamInbox(after: after, token: self.approvalToken(account))
+        }, mutate: { [weak self] account, mutation in
+            guard let self else { throw CancellationError() }; return try await self.teamService.setTeamSubscription(mutation, token: self.approvalToken(account))
+        }, detail: { [weak self] account, request in
+            guard let self else { throw CancellationError() }; return try await self.teamService.teamRequestDetail(id: request, token: self.approvalToken(account))
+        }, read: { [weak self] account, sequence in
+            guard let self else { throw CancellationError() }; return try await self.teamService.readTeamNotification(sequence: sequence, token: self.approvalToken(account))
+        }, load: { [weak self] account in
+            guard let self else { throw CancellationError() }; return try self.readTeamDraft(TeamSubscriptionMutation.self, account: account, name: "subscription.json")
+        }, save: { [weak self] mutation in
+            guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == mutation.accountID else { throw CancellationError() }
+            try mutation.validate(account: mutation.accountID); try self.writeTeamDraft(mutation, account: mutation.accountID, name: "subscription.json")
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
     lazy var teamRequests: TeamRequestPresentation = {
         let presentation = TeamRequestPresentation()
+        presentation.inbox = teamInbox
         presentation.controller = TeamRequestController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] identity in
             guard let self else { throw CancellationError() }
             return try await self.teamService.teamRequestAccess(token: self.approvalToken(identity))
@@ -176,7 +258,12 @@ private struct SharedCacheFile: Codable {
             return try await self.teamService.recoverTeamRequest(draft, token: self.approvalToken(identity))
         }, load: { [weak self] account in
             guard let self else { throw CancellationError() }
-            return try self.readTeamDraft(TeamRequestDraft.self, account: account, name: "request.json")
+            let stored = try self.readTeamDraft(TeamRequestDraft.self, account: account, name: "request.json")
+#if DEBUG
+            // Synthetic journey only: an already-acknowledged request (#4432).
+            if stored == nil, let seeded = TeamEntryFixture.seededRequest(account: account) { return seeded }
+#endif
+            return stored
         }, save: { [weak self] draft in
             guard let self else { throw CancellationError() }
             try draft.validate(account: draft.accountID); try self.writeTeamDraft(draft, account: draft.accountID, name: "request.json")
@@ -185,14 +272,15 @@ private struct SharedCacheFile: Codable {
             guard let self, let binding = try await self.approvalIdentity() else { throw CancellationError() }
             let result = try await self.teamService.teamRequestDetail(id: id, after: after, token: self.approvalToken(binding))
             guard try await self.approvalIdentity() == binding else { throw CancellationError() }
+            try result.validate(id: id)
+            await self.teamRequests.controller?.observeHidden(result.request, account: binding)
             return result
         }
+        presentation.commentSchemas = { [weak self] product in
+            guard let self else { throw CancellationError() }; return try await self.commentSchemas(product: product)
+        }
         presentation.comment = { [weak self] draft in
-            guard let self, let binding = try await self.approvalIdentity(), binding.accountID == draft.accountID else { throw CancellationError() }
-            try draft.validate(account: binding.accountID, request: draft.requestID)
-            let receipt = try await self.teamService.teamRequestComment(id: draft.requestID, key: draft.key, body: draft.body, token: self.approvalToken(binding))
-            guard try await self.approvalIdentity() == binding else { throw CancellationError() }
-            return receipt
+            guard let self else { throw CancellationError() }; return try await self.sendTeamComment(draft)
         }
         presentation.loadComment = { [weak self] request in
             guard let self, self.signedIn, !self.loggingOut, let account = self.account?.accountID, TeamRequestRecord.validID(request) else { throw CancellationError() }
@@ -204,20 +292,236 @@ private struct SharedCacheFile: Codable {
             try draft.validate(account: draft.accountID, request: draft.requestID)
             try self.writeTeamDraft(draft, account: draft.accountID, name: draft.requestID + ".json")
         }
+        presentation.makeOutcome = { [weak self] request in
+            let outcome = TeamOutcomePresentation()
+            let controller = TeamOutcomeController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }; return try await self.teamService.teamOutcomes(id: request, after: after, token: self.approvalToken(binding))
+            }, deliveries: { [weak self] binding in
+                guard let self else { throw CancellationError() }; return try await self.teamService.teamDeliveries(id: request, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }; return try await self.teamService.reportTeamOutcome(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }; return try self.readTeamDraft(TeamOutcomeDraft.self, account: account, name: request + "-outcome.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request); try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-outcome.json")
+            }, changed: { [weak outcome] in outcome?.state = $0 })
+            outcome.controller = controller; self?.outcomeControllers.register(controller); return outcome
+        }
+        presentation.makeDelivery = { [weak self] request in
+            let delivery = TeamDeliveryPresentation()
+            let controller = TeamDeliveryController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamDeliveries(id: request, after: after, token: self.approvalToken(binding))
+            }, changed: { [weak delivery] in delivery?.state = $0 })
+            delivery.controller = controller; self?.deliveryControllers.register(controller)
+            return delivery
+        }
+        presentation.makeIntake = { [weak self] request, product in self?.makeTeamIntake(request: request, product: product) ?? TeamIntakePresentation() }
+        presentation.makeTextHistory = { [weak self] request, target, product in
+            let text = TeamTextRevisionPresentation()
+            let controller = TeamTextRevisionController(requestID: request, targetID: target, identity: { [weak self] in try await self?.approvalIdentity() }, discover: { [weak self] binding in
+                guard let self else { throw CancellationError() }
+                let access = try await self.teamService.teamRequestAccess(token: self.approvalToken(binding)); try access.validate(account: binding.accountID)
+                guard access.products.contains(product) else { throw SyncFailure.http(403, "team_product_denied") }
+                return access.supported_text_revision_schemas ?? []
+            }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }; return try await self.teamService.teamTextHistory(id: request, target: target, after: after, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }; return try await self.teamService.reviseTeamText(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }; return try self.readTeamDraft(TeamTextRevisionDraft.self, account: account, name: target + "-text.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request, target: target); try self.writeTeamDraft(draft, account: draft.accountID, name: target + "-text.json")
+            }, changed: { [weak text] in text?.state = $0 })
+            text.controller = controller; self?.textRevisionControllers.register(controller); return text
+        }
+        presentation.makeRelations = { [weak self] request, product in
+            let related = TeamRelationPresentation()
+            let controller = TeamRelationController(requestID: request, product: product, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, target, after in
+                guard let self else { throw CancellationError() }; return try await self.teamService.teamRelations(id: request, target: target, after: after, token: self.approvalToken(binding))
+            }, targets: { [weak self] binding, before in
+                guard let self else { throw CancellationError() }; return try await self.teamService.teamRequestList(product: product, before: before, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }; return try await self.teamService.changeTeamRelation(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }; return try self.readTeamDraft(TeamRelationDraft.self, account: account, name: request + "-related.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request, product: product); try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-related.json")
+            }, changed: { [weak related] in related?.state = $0 })
+            related.controller = controller; self?.relationControllers.register(controller); return related
+        }
+        presentation.makeGitHub = { [weak self] request in
+            let github = TeamGitHubPresentation()
+            github.makeObservations = { [weak self] in
+                let observation = TeamGitHubObservationPresentation()
+                let controller = TeamGitHubObservationController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                    guard let self else { throw CancellationError() }
+                    return try await self.teamService.teamGitHubObservations(id: request, after: after, token: self.approvalToken(binding))
+                }, changed: { [weak observation] in observation?.state = $0 })
+                observation.controller = controller; self?.githubObservationControllers.register(controller)
+                return observation
+            }
+            github.controller = TeamGitHubController(requestID: request, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamGitHub(id: request, after: after, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.associateTeamGitHub(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }
+                return try self.readTeamDraft(TeamGitHubDraft.self, account: account, name: request + "-github.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request)
+                try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-github.json")
+            }, changed: { [weak github] in github?.state = $0 })
+            return github
+        }
+        presentation.makeWorkflow = { [weak self] request, product in
+            let workflow = TeamWorkflowPresentation()
+            workflow.controller = TeamWorkflowController(requestID: request, product: product, identity: { [weak self] in try await self?.approvalIdentity() }, fetch: { [weak self] binding, after in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamWorkflow(id: request, after: after, token: self.approvalToken(binding))
+            }, members: { [weak self] binding in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamAssignmentMembers(product: product, account: binding.accountID, token: self.approvalToken(binding))
+            }, targets: { [weak self] binding, before in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.teamRequestList(product: product, before: before, token: self.approvalToken(binding))
+            }, send: { [weak self] binding, draft in
+                guard let self else { throw CancellationError() }
+                return try await self.teamService.changeTeamWorkflow(draft, token: self.approvalToken(binding))
+            }, load: { [weak self] account in
+                guard let self else { throw CancellationError() }
+                return try self.readTeamDraft(TeamWorkflowDraft.self, account: account, name: request + "-workflow.json")
+            }, save: { [weak self] draft in
+                guard let self, self.signedIn, !self.loggingOut, self.account?.accountID == draft.accountID else { throw CancellationError() }
+                try draft.validate(account: draft.accountID, request: request)
+                try self.writeTeamDraft(draft, account: draft.accountID, name: request + "-workflow.json")
+            }, changed: { [weak workflow] in workflow?.state = $0 })
+            return workflow
+        }
         return presentation
     }()
     private func teamDraftFile(account: String, name: String) throws -> URL {
         let key = try approvalDirectory(account).lastPathComponent
         return directory.appendingPathComponent("team-requests", isDirectory: true).appendingPathComponent(key, isDirectory: true).appendingPathComponent(name)
     }
-    private func readTeamDraft<T: Decodable>(_ type: T.Type, account: String, name: String) throws -> T? {
+    private func clearIntakeCredentials(accountID: String) throws {
+        try IntakeKeychain(studioAccountID: accountID, origin: teamService.serviceOrigin).removeAllForStudioAccount()
+    }
+    private func invalidateIntake() {
+        intakePresentations.invalidate()
+        if let id = account?.accountID {
+            do { try clearIntakeCredentials(accountID: id) }
+            catch { self.error = "Lab 연결 정보를 지우지 못했어요. 다시 로그인하기 전에 저장소를 확인해 주세요." }
+        }
+    }
+    private func makeTeamIntake(request: String, product: String) -> TeamIntakePresentation {
+        let presentation = TeamIntakePresentation()
+        presentation.configure = { [weak self, weak presentation] in
+            guard let self, let presentation, let initial = try await self.approvalIdentity() else { throw IntakeFailure.identityChanged }
+            let access = try await self.teamService.teamRequestAccess(token: self.approvalToken(initial)); try access.validate(account: initial.accountID)
+            guard access.products.contains(product), try await self.approvalIdentity() == initial else { throw IntakeFailure.identityChanged }
+            let page = try await self.teamService.teamGitHub(id: request, after: nil, token: self.approvalToken(initial))
+            guard try await self.approvalIdentity() == initial else { throw IntakeFailure.identityChanged }
+            presentation.repository = page.configured_repository; presentation.canAssociate = page.can_manage
+            if presentation.controller != nil { return }
+            let origin = self.teamService.serviceOrigin
+            let vault = try IntakeKeychain(studioAccountID: initial.accountID, origin: origin)
+            let wire = try IntakeURLSessionTransport(origin: origin)
+            let transport: IntakeTransport = { url, headers, body in
+#if DEBUG
+                if TeamIntakeFixture.enabled { return try await TeamIntakeFixture.send(url, headers: headers, body: body) }
+#endif
+                return try await wire.send(url, headers: headers, body: body)
+            }
+            let current: () -> Bool = { [weak self] in self?.signedIn == true && self?.loggingOut == false && self?.account?.accountID == initial.accountID && self?.account?.tokens.session_id == initial.sessionID }
+            let selectionName = request + "-intake-selection.json"
+            let name: (IntakePrincipal, String) -> String = { principal, suffix in
+                let scope = principal.id + "|" + principal.endpoint
+                let hash = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined()
+                return request + "-intake-" + hash + suffix
+            }
+            presentation.clearSecret = { try vault.removeAllForStudioAccount() }
+            presentation.device = try IntakeDeviceAuth(origin: origin, studioIdentity: { current() ? initial.accountID + ":" + initial.sessionID : nil }, transport: transport, saveSecret: { [weak self, weak presentation] principal, token in
+                guard current(), let self else { throw IntakeFailure.identityChanged }
+                try vault.save(principal: principal, token: token)
+                do { try self.writeTeamDraft(TeamIntakeSelection(principalID: principal.id), account: initial.accountID, name: selectionName) }
+                catch { try? vault.remove(principalID: principal.id); throw error }
+                presentation?.principal = principal
+            }, clearSecret: { [weak presentation] in
+#if DEBUG
+                if TeamIntakeFixture.enabled, ProcessInfo.processInfo.environment["HP_TEAM_INTAKE_DISCONNECT_FAIL"] == "1", presentation?.principal != nil { throw IntakeFailure.storage }
+#endif
+                try vault.removeAllForStudioAccount()
+            }, changed: { [weak presentation] in presentation?.auth = $0 })
+            presentation.restore = { [weak self, weak presentation] in
+                guard current(), let self, let presentation else { throw IntakeFailure.identityChanged }
+                presentation.principal = nil
+                if let selected = try self.readTeamDraft(TeamIntakeSelection.self, account: initial.accountID, name: selectionName), let id = selected.principalID, let credential = try vault.read(principalID: id) {
+                    presentation.principal = credential.principal
+                    presentation.summary = try self.readTeamDraft(IntakeProposal.self, account: initial.accountID, name: name(credential.principal, "-summary.json")) ?? IntakeProposal()
+                }
+            }
+            presentation.persistSummary = { [weak self, weak presentation] summary in
+                guard current(), let self, let principal = presentation?.principal else { throw IntakeFailure.identityChanged }
+#if DEBUG
+                if TeamIntakeFixture.enabled, ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "intake", summary.title.contains("Unstored") { throw CocoaError(.fileWriteOutOfSpace) }
+#endif
+                guard try JSONEncoder().encode(summary).count <= 65_536 else { throw IntakeFailure.storage }
+                try self.writeTeamDraft(summary, account: initial.accountID, name: name(principal, "-summary.json"))
+            }
+            let client = try IntakeClient(origin: origin, token: { [weak presentation] in
+                guard current(), let principal = presentation?.principal else { return nil }
+                return try? vault.read(principalID: principal.id)?.bearer()
+            }, transport: transport)
+            presentation.client = client
+            presentation.controller = IntakeProposalController(context: { [weak self, weak presentation] in
+                guard let self, let principal = presentation?.principal, principal.expiresAt > Date(), let binding = try await self.approvalIdentity(), binding == initial else { return nil }
+                let access = try await self.teamService.teamRequestAccess(token: self.approvalToken(binding)); try access.validate(account: binding.accountID)
+                guard access.products.contains(product) else { throw IntakeFailure.routing }
+                let detail = try await self.teamService.teamRequestDetail(id: request, after: nil, token: self.approvalToken(binding))
+                let history = try await self.teamService.teamTextHistory(id: request, target: request, after: nil, token: self.approvalToken(binding))
+                guard current(), try await self.approvalIdentity() == binding, detail.request.product == product, detail.retention?.hidden != true else { throw IntakeFailure.identityChanged }
+                return IntakeBinding(studioAccountID: binding.accountID, studioSessionEpoch: binding.sessionID, principal: principal, requestID: request, sourceRevision: detail.request.revision, sourceTextRevision: history.current.revision)
+            }, route: { [weak self, weak presentation] binding in
+                guard current(), let self, presentation?.principal?.id == binding.intakePrincipalID else { throw IntakeFailure.identityChanged }
+                let page = try await self.teamService.teamGitHub(id: request, after: nil, token: self.approvalToken(initial))
+                let policy = try await client.call("get_intake_policy")
+                guard current(), let values = policy["policy"]?["repositories"]?.array, let revision = policy["policy"]?["revision"]?.string else { throw IntakeFailure.invalidResponse }
+                let repos = values.compactMap { $0.string }; guard repos.count == values.count else { throw IntakeFailure.invalidResponse }
+                presentation?.repository = page.configured_repository; presentation?.canAssociate = page.can_manage; presentation?.policyRevision = revision
+                return IntakeRoute(configuredRepository: page.configured_repository, repositories: repos, policyRevision: revision)
+            }, call: { tool, arguments in try await client.call(tool, arguments: arguments) }, load: { [weak self] binding in
+                guard current(), let self else { throw IntakeFailure.identityChanged }
+                let principal = IntakePrincipal(id: binding.intakePrincipalID, endpoint: binding.endpoint, expiresAt: Date())
+                return try self.readTeamDraft(IntakeOperation.self, account: binding.studioAccountID, name: name(principal, "-operation.json"), maxBytes: 262144)
+            }, save: { [weak self] operation in
+                guard current(), let self, operation.binding.studioAccountID == initial.accountID else { throw IntakeFailure.identityChanged }
+                let principal = IntakePrincipal(id: operation.binding.intakePrincipalID, endpoint: operation.binding.endpoint, expiresAt: Date())
+                guard try JSONEncoder().encode(operation).count <= 262144 else { throw IntakeFailure.storage }
+                try self.writeTeamDraft(operation, account: initial.accountID, name: name(principal, "-operation.json"))
+            }, changed: { [weak presentation] in presentation?.state = $0 })
+            presentation.github = self.teamRequests.makeGitHub(request)
+        }
+        intakePresentations.register(presentation); return presentation
+    }
+    private func readTeamDraft<T: Decodable>(_ type: T.Type, account: String, name: String, maxBytes: Int = 65_536) throws -> T? {
         let file = try teamDraftFile(account: account, name: name)
         guard FileManager.default.fileExists(atPath: file.path) else { return nil }
-        let data = try Data(contentsOf: file); guard data.count <= 65_536 else { throw SyncFailure.invalidResponse }
+        let data = try Data(contentsOf: file); guard data.count <= maxBytes else { throw SyncFailure.invalidResponse }
         return try JSONDecoder().decode(type, from: data)
     }
     private func writeTeamDraft<T: Encodable>(_ value: T, account: String, name: String) throws {
 #if DEBUG
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "text", name.hasSuffix("-text.json"), let draft = value as? TeamTextRevisionDraft, draft.body.contains("Unstored") { throw CocoaError(.fileWriteOutOfSpace) }
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "related", name.hasSuffix("-related.json"), let draft = value as? TeamRelationDraft, !draft.reason.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "outcome", name.hasSuffix("-outcome.json"), let draft = value as? TeamOutcomeDraft, !draft.result.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
+        if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "github", name.hasSuffix("-github.json"), let draft = value as? TeamGitHubDraft, !draft.reason.isEmpty { throw CocoaError(.fileWriteOutOfSpace) }
         if NativeJourneyFixture.enabled && ProcessInfo.processInfo.environment["HP_TEAM_DRAFT_SAVE_FAILURE"] == "comment" && name.hasPrefix("trq_") { throw CocoaError(.fileWriteOutOfSpace) }
 #endif
         let file = try teamDraftFile(account: account, name: name)
@@ -364,8 +668,10 @@ private struct SharedCacheFile: Codable {
     var canLogout: Bool { signedIn && account != nil && !busy && !stoppingReflection }
     var pendingGuestDraft: String? { signedIn && !guestDraft.text.isEmpty ? guestDraft.text : nil }
     var canRestoreGuestDraft: Bool {
-        signedIn && accountStorageReady && cacheReadable && guestDraftReadable && isReflection
-            && !busy && !syncing && guestDraft.canRestore(into: cache)
+        // Ordinary history reads preserve the current local draft. A synchronous
+        // explicit restore can safely use the same durable edit path as typing.
+        signedIn && account != nil && accountStorageReady && cacheReadable && guestDraftReadable && isReflection
+            && !busy && !loggingOut && !stoppingReflection && guestDraft.canRestore(into: cache)
     }
     var canRestoreFailedReflectionDraft: Bool {
         // A history GET never owns the local draft. Restore from the current
@@ -562,9 +868,14 @@ private struct SharedCacheFile: Codable {
                 try Task.checkCancellation()
                 guard epoch == attempt else { try? await service.logout(tokens.access_token); return }
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
-                do { try AccountKeychain.save(value) }
+                do {
+                    // Purge independently of any live screen, including a previous failed boundary cleanup.
+                    if let old = account?.accountID { try clearIntakeCredentials(accountID: old) }
+                    try clearIntakeCredentials(accountID: value.accountID)
+                    try AccountKeychain.save(value)
+                }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); invalidateIntake(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -616,7 +927,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); invalidateIntake(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -672,7 +983,7 @@ private struct SharedCacheFile: Codable {
             if current == Self.personalID {
                 refreshConversationList(credential, attempt: attempt)
                 error = guestDraftFailure ?? cache.requestFailure
-                notice = "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."
+                notice = ""
                 return
             }
             var list = try await service.list(credential)
@@ -698,7 +1009,7 @@ private struct SharedCacheFile: Codable {
                 }
             }
             error = guestDraftFailure ?? cache.requestFailure
-            notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
+            notice = isReflection ? "" : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
         } catch {
             if epoch == attempt {
                 if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
@@ -757,8 +1068,32 @@ private struct SharedCacheFile: Codable {
             queuedSend = (id, request.id); notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
         } else { retry() }
     }
+    var canRetryLocalRequest: Bool {
+        signedIn && accountStorageReady && cacheReadable && !loggingOut
+            && !stoppingReflection && !sendingCurrentRequest && cache.request?.status == "local"
+    }
+    // An explicit user Retry can wait behind a read just like explicit Send.
+    // Reads/restarts/uncertain results themselves never create a retry intent.
+    func retryFromUser() {
+        guard canRetryLocalRequest, let id = selected, let request = entries[id]?.request else { return }
+        if syncing {
+            queuedSend = (id, request.id)
+            notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
+        } else { retry() }
+    }
     func retry() {
-        guard !busy, !syncing, !stoppingReflection, let id = selected, let request = entries[id]?.request, request.status == "local" else { return }
+#if DEBUG
+        NativeJourneyFixture.recordRetry("attempt")
+#endif
+        guard !busy, !syncing, !stoppingReflection, let id = selected, let request = entries[id]?.request, request.status == "local" else {
+#if DEBUG
+            NativeJourneyFixture.recordRetry(busy ? "blocked_busy" : syncing ? "blocked_syncing" : stoppingReflection ? "blocked_stopping" : "blocked_request")
+#endif
+            return
+        }
+#if DEBUG
+        NativeJourneyFixture.recordRetry("admitted")
+#endif
         busy = true; let attempt = epoch; error = nil
         let generation = UUID(); responseGeneration = generation; stoppedResponse = nil
         let credentialTask = Task { try await self.token() }
@@ -769,6 +1104,9 @@ private struct SharedCacheFile: Codable {
                 guard epoch == attempt, responseGeneration == generation else { return }
                 if id == Self.personalID {
                     observedReflectionID = request.id; experience.controller?.record(.reflectionStarted)
+#if DEBUG
+                    NativeJourneyFixture.recordRetry("post")
+#endif
                     let result = try await service.reflect(request, token: credential)
                     guard epoch == attempt, responseGeneration == generation else { return }
                     try applyReflection(result)
@@ -901,7 +1239,9 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
+        do { try clearIntakeCredentials(accountID: account.accountID) }
+        catch { self.error = "Lab 연결 정보를 지우지 못했어요. 저장소를 확인한 뒤 로그아웃을 다시 눌러 주세요."; return }
+        approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); invalidateIntake(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -939,7 +1279,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
+                questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); invalidateIntake(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {
