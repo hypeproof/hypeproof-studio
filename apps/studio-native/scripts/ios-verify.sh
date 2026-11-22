@@ -64,13 +64,18 @@ read -r device_type runtime <<< "$selection"
 
 device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" "$device_type" "$runtime")
 sampler_pid=
-# The shard's background sampler (ios-sim-observe.py watch) never outlives the test.
+terminate_watch_pid=
+# The shard's background observers (ios-sim-observe.py watch and terminate-watch) never outlive the test.
 stop_sampler() {
-  if [ -n "$sampler_pid" ]; then
-    kill "$sampler_pid" 2> /dev/null || true
-    wait "$sampler_pid" 2> /dev/null || true
-    sampler_pid=
-  fi
+  local pid
+  for pid in "$sampler_pid" "$terminate_watch_pid"; do
+    if [ -n "$pid" ]; then
+      kill "$pid" 2> /dev/null || true
+      wait "$pid" 2> /dev/null || true
+    fi
+  done
+  sampler_pid=
+  terminate_watch_pid=
 }
 cleanup_simulator() {
   local original_status=$1 cleanup_status=0
@@ -175,8 +180,16 @@ if [ "$mode" = shard ]; then
   # One reading a minute beside the test, for observation only; the test never waits for it.
   python3 ../scripts/ios-sim-observe.py watch --evidence ../evidence --device "$device" --interval 60 &
   sampler_pid=$!
+  # On "Failed to terminate", record the app's launchctl rows and the last 3 minutes of
+  # runningboardd/SpringBoard/testmanagerd log while the device is still in that state
+  # (#4432 F6). Diagnostics only; each capture command has its own limit.
+  : > ../evidence/simulator-test.log
+  python3 ../scripts/ios-sim-observe.py terminate-watch --evidence ../evidence --device "$device" --log ../evidence/simulator-test.log &
+  terminate_watch_pid=$!
   xcodebuild -xctestrun "$xctestrun" "${common_test[@]}" "${shard_arguments[@]}" test-without-building 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
   stop_sampler
+  # A failure in the last seconds of the log, which the stopped watcher had not reached yet.
+  python3 ../scripts/ios-sim-observe.py terminate-scan --evidence ../evidence --device "$device" --log ../evidence/simulator-test.log || true
 else
   printf 'native verification: iPhone simulator journeys\n'
   xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -derivedDataPath DerivedData "${common_test[@]}" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
