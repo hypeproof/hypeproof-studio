@@ -55,6 +55,10 @@ private struct VoiceInventory: @unchecked Sendable {
     /// The one voice inventory read in flight; cleared when it returns.
     private var voiceInventoryRead: Task<VoiceInventory, Never>?
     private var playbackSetup: Task<Void, Never>?
+    /// Ends this reply's playback if the voice inventory has not returned in time.
+    private var playbackDeadline: Task<Void, Never>?
+    /// How long a reply waits for the voice inventory before it gives up on speech.
+    nonisolated static let voiceInventoryLimit: Duration = .seconds(10)
 #if DEBUG
     private var fixtureSpeech: Task<Void, Never>?
     private var fixtureEndpointTime: Double?
@@ -360,7 +364,7 @@ private struct VoiceInventory: @unchecked Sendable {
             speechSynthesizer(speaker, didStart: utterance)
             return
         }
-        if NativeJourneyFixture.enabled && !NativeJourneyFixture.realPlayback {
+        if NativeJourneyFixture.enabled && !NativeJourneyFixture.realPlayback && !NativeJourneyFixture.slowVoiceInventory {
             let token = turn.token
             status = "답변을 읽고 있어요. 마이크는 꺼져 있어요."
             timeout = Task { [weak self] in
@@ -386,8 +390,24 @@ private struct VoiceInventory: @unchecked Sendable {
             let loaded = await read.value
             guard let self else { return }
             if self.voiceInventoryRead == read { self.voiceInventoryRead = nil }
-            guard !Task.isCancelled, self.turn.token == token, self.turn.phase == .speaking else { return }
+            guard !Task.isCancelled, self.turn.token == token, self.turn.phase == .speaking else {
+                // A result after the deadline or Stop never starts speech for
+                // this reply. The next reply reads the inventory again.
+                if self.turn.token != token { self.record(.voiceInventoryLate) }
+                return
+            }
+            self.playbackDeadline?.cancel(); self.playbackDeadline = nil
             self.startPlayback(text, inventory: loaded)
+        }
+        // On hosted simulators speechVoices() has blocked for minutes (#4432).
+        // After the limit, this reply ends its voice turn with the existing
+        // message; the reply text is already in the conversation.
+        playbackDeadline = Task { [weak self] in
+            try? await Task.sleep(for: VoiceController.voiceInventoryLimit)
+            guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .speaking,
+                  self.utteranceID == nil else { return }
+            self.record(.voiceInventoryTimedOut)
+            self.fail("한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요.")
         }
     }
     @inline(never) private func startPlayback(_ text: String, inventory: VoiceInventory) {
@@ -412,7 +432,17 @@ private struct VoiceInventory: @unchecked Sendable {
     @inline(never) nonisolated private static func loadVoiceInventory() -> Task<VoiceInventory, Never> {
         Task {
             await withCheckedContinuation { continuation in
-                VoiceController.voiceInventoryQueue.async { continuation.resume(returning: VoiceController.readVoiceInventory()) }
+                VoiceController.voiceInventoryQueue.async {
+#if DEBUG
+                    if NativeJourneyFixture.slowVoiceInventory {
+                        // Stands in for a blocked speechVoices(): return no voices
+                        // only after the playback deadline has passed.
+                        Thread.sleep(forTimeInterval: 13)
+                        continuation.resume(returning: VoiceInventory(voices: [], preferred: nil)); return
+                    }
+#endif
+                    continuation.resume(returning: VoiceController.readVoiceInventory())
+                }
             }
         }
     }
@@ -471,7 +501,7 @@ private struct VoiceInventory: @unchecked Sendable {
 #if DEBUG
         fixtureSpeech?.cancel(); fixtureSpeech = nil; fixtureEndpointTime = nil
 #endif
-        playbackSetup?.cancel(); playbackSetup = nil
+        playbackSetup?.cancel(); playbackSetup = nil; playbackDeadline?.cancel(); playbackDeadline = nil
         utteranceID = nil; speaker.stopSpeaking(at: .immediate)
         stopInput(); request?.endAudio(); recognition?.cancel(); request = nil; recognition = nil
         reviewPlayer?.stop(); reviewPlayer = nil; reviewData = nil; reviewCapture = nil; canReplayOwnVoice = false; reviewEnabled = false

@@ -807,6 +807,35 @@ final class StudioJourneyTests: XCTestCase {
         let observation = XCTAttachment(string: timeline); observation.name = "actual-os-korean-playback-synthetic-next-capture"; observation.lifetime = .keepAlways; add(observation)
         try evidence("journey-real-playback-handoff", app: app)
     }
+    @MainActor func testSlowVoiceListEndsPlaybackKeepsReplyAndLateListCannotSpeak() throws {
+        // The DEBUG voice list returns 13 s after the read starts, after the
+        // controller's 10 s playback limit (#4432). Service and microphone
+        // input are synthetic; the reply, deadline and fences are real.
+        let app = launch("voice-inventory-slow"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        let reply = app.staticTexts["sharedReply"]
+        XCTAssertTrue(reply.waitForExistence(timeout: 10), "sharedReply must appear before the voice list returns.")
+        waitForVoiceEvent("voiceInventoryTimedOut", in: app, timeout: 20)
+        let status = app.staticTexts["sharedVoiceStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요.")
+        XCTAssertTrue(reply.exists, "The reply text stays on screen after voice playback ends.")
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        // The late list must arrive and must not start speech or fail again.
+        waitForVoiceEvent("voiceInventoryLate", in: app, timeout: 10)
+        let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
+        let entries = timeline.split(separator: "\n").map { $0.split(separator: " ") }
+        let timedOut = try XCTUnwrap(entries.first { $0.count == 3 && $0[1] == "voiceInventoryTimedOut" })
+        XCTAssertEqual(timedOut[2], "speaking", "The limit ends a reply that is still in its speaking phase.")
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(Int(timedOut[0])), 10_000)
+        XCTAssertFalse(entries.contains { $0.count == 3 && ["playbackQueued", "playbackStarted", "syntheticPlaybackQueued"].contains(String($0[1])) })
+        XCTAssertEqual(entries.filter { $0.count == 3 && $0[1] == "failed" }.count, 1)
+        XCTAssertEqual(status.label, "한국어 읽기 음성을 사용할 수 없어요. 답변을 화면에서 확인해 주세요.")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(try trace(app)["speech_captures"] as? Int, 1)
+        let observation = XCTAttachment(string: timeline); observation.name = "slow-voice-list-playback-limit"; observation.lifetime = .keepAlways; add(observation)
+        try evidence("journey-slow-voice-list-fallback", app: app)
+    }
     @MainActor private func waitForRegisteredResponse(in app: XCUIApplication) {
         let transport = diagnostic("nativeJourneyTrace", in: app)
         let registered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in

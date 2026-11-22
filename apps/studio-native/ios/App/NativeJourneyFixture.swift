@@ -38,6 +38,8 @@ import UserNotifications
     static var queuedVoice: Bool { enabled && JourneyConfiguration.scenario == "queued-voice" }
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
+    /// Real-synthesis path whose voice list returns only after the playback deadline (#4432).
+    nonisolated static var slowVoiceInventory: Bool { enabled && JourneyConfiguration.scenario == "voice-inventory-slow" }
     static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
     static var pendingPush: Bool { enabled && JourneyConfiguration.scenario == "push-registration-held" }
     private static var pendingPushStarted = false
@@ -213,7 +215,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held", "approval-push-test"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-inventory-slow", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox", "push-registration-held", "approval-push-test"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
