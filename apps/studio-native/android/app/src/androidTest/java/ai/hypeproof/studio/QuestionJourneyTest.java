@@ -31,6 +31,7 @@ public class QuestionJourneyTest {
     }
     @After public void teardown(){if(app!=null)app.close();QuestionActivity.testTransport=null;}
     @Rule public final org.junit.rules.TestWatcher failureEvidence=UiSync.failureWatcher();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
     /** One idle tap on a voice control that must start exactly one new capture. */
     private void startVoice(String control,VoiceFixture voice){
         int before=voice.starts;android.speech.RecognitionListener previous=voice.capture;
@@ -188,7 +189,7 @@ public class QuestionJourneyTest {
         assertTrue("injected gesture must stay below the device long-press threshold",delivered.get(1).getLong("event_duration_ms")<limit);
         assertTrue("delivered gesture must stay below the device long-press threshold",delivered.get(1).getLong("uptime_ms")-delivered.get(0).getLong("uptime_ms")<limit);
         app.onActivity(a->{try{var f=QuestionActivity.class.getDeclaredField("model");f.setAccessible(true);ReflectionModel model=(ReflectionModel)f.get(a);assertNotNull("dictation tap must start capture; phase="+voice.controller.session.phase()+" error="+model.error,voice.capture);}catch(ReflectiveOperationException e){throw new AssertionError(e);}});
-        app.onActivity(a->voice.partial("말로 이어 적은 글"));app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+        app.onActivity(a->voice.partial("말로 이어 적은 글"));app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);UiSync.resumeWithFocus(app,"dictation background");
         app.onActivity(a->voice.result("늦게 온 말"));drain();assertFalse(voice.controller.session.active());
         app.close();app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(withText("이미 적은 글\n말로 이어 적은 글")));assertEquals(0,calls.get());saveDictationTouch("PASS");
         }catch(Exception|AssertionError failure){
@@ -541,7 +542,7 @@ public class QuestionJourneyTest {
                 assertEquals(VoiceSession.Phase.LISTENING,voice.controller.session.phase());
                 voice.partial("화면을 떠나도 남길 말");
             });
-            var old=voice.capture;app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+            var old=voice.capture;app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);UiSync.resumeWithFocus(app,"reply background");
             app.onActivity(a->old.onResults(VoiceFixture.words("뒤늦은 말")));drain();assertFalse(voice.controller.session.active());assertEquals(2,voice.starts);assertEquals(1,submitted.size());
             onView(withContentDescription("질문 대화 입력")).check(matches(withText("화면을 떠나도 남길 말")));
         }catch(Exception|AssertionError failure){

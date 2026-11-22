@@ -11,7 +11,7 @@ struct TeamRelationScreen:View {
     @State private var confirmSend=false
     @State private var confirmLeave=false
     @FocusState private var reasonFocused:Bool
-    init(model:TeamRelationPresentation,requests:TeamRequestPresentation){_model=StateObject(wrappedValue:model);self.requests=requests}
+    init(make:@escaping @MainActor()->TeamRelationPresentation,requests:TeamRequestPresentation){_model=StateObject(wrappedValue:make());self.requests=requests}
     private var canManage:Bool{model.state.list?.can_manage==true && model.state.history?.can_manage==true && model.state.history?.target_request_id==model.state.draft?.targetID}
     private var editable:Bool{canManage && !model.state.busy && model.state.storageReady && model.state.draft?.phase == .draft}
     private func label(_ target:String)->String{model.state.targets.first(where:{$0.id==target}).map{String($0.body.prefix(100))} ?? "요청 " + String(target.suffix(8))}
@@ -23,6 +23,7 @@ struct TeamRelationScreen:View {
         }
     }
     var body:some View{
+        let _=teamRenderCount("body.related")
         List{
 #if DEBUG
             if TeamEntryFixture.enabled{TimelineView(.periodic(from:.now,by:0.25)){_ in Text("Synthetic related trace").font(.caption2).accessibilityIdentifier("teamRelatedTrace").accessibilityValue(TeamEntryFixture.trace)}}

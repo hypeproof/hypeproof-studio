@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.os.Handler;
+import android.os.Build;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
@@ -12,6 +13,9 @@ import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewTreeObserver;
+import androidx.lifecycle.Lifecycle;
+import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.IdlingRegistry;
 import androidx.test.espresso.IdlingResource;
 import androidx.test.espresso.InjectEventSecurityException;
@@ -27,8 +31,10 @@ import org.hamcrest.Matcher;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -36,6 +42,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayingAtLeast;
 
@@ -177,6 +187,19 @@ final class UiSync {
                 row.put("attached", view.isAttachedToWindow()).put("enabled", view.isEnabled())
                     .put("pressed", view.isPressed()).put("shown", view.isShown())
                     .put("window_focus", view.hasWindowFocus()).put("focused", view.hasFocus());
+                // Where the view and its window are now, and whether a layout is still pending.
+                // A tap point from a new layout with an old input window frame misses the view.
+                int[] onScreen = new int[2];
+                view.getLocationOnScreen(onScreen);
+                View root = view.getRootView();
+                int[] rootOnScreen = new int[2];
+                root.getLocationOnScreen(rootOnScreen);
+                row.put("view_on_screen", new JSONArray().put(onScreen[0]).put(onScreen[1]))
+                    .put("view_size", new JSONArray().put(view.getWidth()).put(view.getHeight()))
+                    .put("root_on_screen", new JSONArray().put(rootOnScreen[0]).put(rootOnScreen[1]))
+                    .put("root_size", new JSONArray().put(root.getWidth()).put(root.getHeight()))
+                    .put("view_layout_requested", view.isLayoutRequested())
+                    .put("root_layout_requested", root.isLayoutRequested());
             }
             QuestionActivity activity = view == null ? resumedQuestionActivity() : activityOf(view);
             if (activity != null) {
@@ -260,6 +283,7 @@ final class UiSync {
             record(trace, state("before_tap", view, null));
             if (!view.isEnabled()) throw new AssertionError(label + ": target is disabled when idle");
             if (!view.hasWindowFocus()) throw new AssertionError(label + ": target window has no focus");
+            awaitCommittedLayout(ui, view);
             view.setOnTouchListener((touched, event) -> {
                 record(trace, state("delivered", touched, event));
                 if (hook != null) hook.touched(touched, event);
@@ -275,6 +299,9 @@ final class UiSync {
             // Both events are queued before Espresso waits, so a slow frame cannot
             // separate DOWN and UP by more than the frame itself.
             float[] xy = GeneralLocation.VISIBLE_CENTER.calculateCoordinates(view);
+            JSONObject inject = state("inject", view, null);
+            try { inject.put("tap_xy", new JSONArray().put((double) xy[0]).put((double) xy[1])); } catch (JSONException ignored) { /* Trace only. */ }
+            record(trace, inject);
             MotionEvent down = MotionEvents.obtainDownEvent(xy, new float[]{1, 1}, InputDevice.SOURCE_TOUCHSCREEN, MotionEvent.BUTTON_PRIMARY);
             MotionEvent up = MotionEvents.obtainUpEvent(down, down.getDownTime() + ViewConfiguration.getTapTimeout() / 2, xy);
             try {
@@ -293,6 +320,52 @@ final class UiSync {
                     throw new AssertionError(label + ": the tap did not produce its expected state");
                 }
                 ui.loopMainThreadForAtLeast(16);
+            }
+        }
+
+        /**
+         * Requires the target's window to have no pending layout and then one committed
+         * frame with no new layout after it, so the tap point and the window frame that
+         * input uses come from the same layout. A dialog that just grew is re-centred by
+         * its next layout; a tap computed before that frame reaches the old window frame.
+         *
+         * This is a precondition, not a delay: it returns as soon as a frame commits on a
+         * settled layout. The bound is the existing EXPECTATION_MS, reached only when no
+         * such frame commits.
+         */
+        private void awaitCommittedLayout(UiController ui, View view) {
+            View root = view.getRootView();
+            long deadline = SystemClock.uptimeMillis() + EXPECTATION_MS;
+            for (;;) {
+                while (root.isLayoutRequested()) {
+                    if (SystemClock.uptimeMillis() >= deadline) {
+                        record(trace, state("layout_pending", view, null));
+                        throw new AssertionError(label + ": the target window still had a pending layout");
+                    }
+                    ui.loopMainThreadForAtLeast(16);
+                }
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    // registerFrameCommitCallback is API 29+. CI runs API 35; older devices tap after layout only.
+                    record(trace, state("frame_commit_unavailable", view, null));
+                    return;
+                }
+                AtomicBoolean committed = new AtomicBoolean();
+                root.getViewTreeObserver().registerFrameCommitCallback(() -> committed.set(true));
+                // Without a dirty view no frame is drawn, and the callback would not run.
+                root.invalidate();
+                while (!committed.get()) {
+                    if (SystemClock.uptimeMillis() >= deadline) {
+                        record(trace, state("frame_not_committed", view, null));
+                        throw new AssertionError(label + ": no frame committed before the tap");
+                    }
+                    ui.loopMainThreadForAtLeast(16);
+                }
+                if (!root.isLayoutRequested()) {
+                    record(trace, state("frame_committed", view, null));
+                    return;
+                }
+                // The frame requested another layout, which can move the window again.
+                record(trace, state("layout_requested_after_frame", view, null));
             }
         }
     }
@@ -327,6 +400,113 @@ final class UiSync {
             int count, total = 0, limit = 1024 * 1024;
             while (total < limit && (count = input.read(buffer, 0, Math.min(buffer.length, limit - total))) != -1) { file.write(buffer, 0, count); total += count; }
         }
+    }
+
+    /**
+     * The device did not give the app's window input focus. This is a device or
+     * window-manager state, not a product result, and every later Espresso lookup
+     * fails the same way, so it carries its own message.
+     */
+    static final class DeviceFocusLost extends AssertionError {
+        DeviceFocusLost(String message, Throwable cause) { super(message, cause); }
+    }
+
+    /**
+     * Moves the scenario to RESUMED and requires its window to gain input focus.
+     * moveToState returns when the activity is resumed; window focus arrives later
+     * from the window manager. Bound: the existing EXPECTATION_MS. The wait is a
+     * focus-change listener, so it returns as soon as focus arrives.
+     */
+    static <A extends Activity> void resumeWithFocus(ActivityScenario<A> scenario, String where) {
+        scenario.moveToState(Lifecycle.State.RESUMED);
+        awaitWindowFocus(scenario, where);
+    }
+
+    static <A extends Activity> void awaitWindowFocus(ActivityScenario<A> scenario, String where) {
+        CountDownLatch focused = new CountDownLatch(1);
+        AtomicReference<View> decor = new AtomicReference<>();
+        ViewTreeObserver.OnWindowFocusChangeListener listener = hasFocus -> { if (hasFocus) focused.countDown(); };
+        scenario.onActivity(activity -> {
+            View root = activity.getWindow().getDecorView();
+            decor.set(root);
+            if (root.hasWindowFocus()) focused.countDown();
+            else root.getViewTreeObserver().addOnWindowFocusChangeListener(listener);
+        });
+        boolean arrived;
+        try {
+            arrived = focused.await(EXPECTATION_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException problem) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(where + ": interrupted while waiting for window focus", problem);
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                View root = decor.get();
+                if (root != null && root.getViewTreeObserver().isAlive()) root.getViewTreeObserver().removeOnWindowFocusChangeListener(listener);
+            });
+        }
+        if (!arrived) throw deviceFocusLost(where + ": the window did not gain input focus after RESUMED", null);
+    }
+
+    /**
+     * Reports a lost device focus as DeviceFocusLost, with the window manager's focus
+     * line in the message and dumpsys window and activity output in evidence/failures.
+     *
+     * At test start it requires that no activity left over from an earlier test is
+     * shown without window focus. A launcher focus before launch is normal, so the
+     * start check cannot see a device that loses focus only on the next launch; the
+     * classification of RootViewWithoutFocusException covers that case. No retry.
+     */
+    static TestRule deviceFocusRule() {
+        return (base, description) -> new Statement() {
+            @Override public void evaluate() throws Throwable {
+                String leftover = leftoverWithoutFocus();
+                if (leftover != null) throw deviceFocusLost(description.getMethodName() + ": at test start " + leftover, null);
+                try {
+                    base.evaluate();
+                } catch (DeviceFocusLost lost) {
+                    throw lost;
+                } catch (Throwable failure) {
+                    if (!lostRootFocus(failure)) throw failure;
+                    throw deviceFocusLost(description.getMethodName() + ": Espresso found no root with window focus", failure);
+                }
+            }
+        };
+    }
+
+    private static String leftoverWithoutFocus() {
+        AtomicReference<String> found = new AtomicReference<>();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            for (Stage stage : new Stage[]{Stage.RESUMED, Stage.PAUSED})
+                for (Activity activity : ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(stage))
+                    // Only app activities; ActivityScenario's own EmptyActivity is not shown to the user.
+                    if (found.get() == null && activity.getClass().getName().startsWith("ai.hypeproof.studio.") && !activity.hasWindowFocus())
+                        found.set(activity.getClass().getSimpleName() + " is " + stage + " without window focus");
+        });
+        return found.get();
+    }
+
+    private static boolean lostRootFocus(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause())
+            if (cause.getClass().getName().endsWith("RootViewWithoutFocusException")) return true;
+        return false;
+    }
+
+    private static DeviceFocusLost deviceFocusLost(String message, Throwable cause) {
+        String focus = "focus unknown";
+        try {
+            Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+            File dir = new File(context.getExternalFilesDir(null), "evidence/failures");
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create failure evidence directory");
+            String base = "device-focus-lost-" + SystemClock.elapsedRealtime();
+            File window = new File(dir, base + "-window.txt");
+            shell("timeout 3 dumpsys window", window);
+            shell("timeout 3 dumpsys activity activities", new File(dir, base + "-activity.txt"));
+            for (String line : Files.readAllLines(window.toPath(), StandardCharsets.UTF_8))
+                if (line.contains("mCurrentFocus=") || line.contains("mFocusedApp=")) focus = focus.equals("focus unknown") ? line.trim() : focus + "; " + line.trim();
+        } catch (Exception | AssertionError problem) {
+            Log.e(TAG, "Device focus evidence capture failed", problem);
+        }
+        return new DeviceFocusLost("device focus lost (device state, not a product result): " + message + " [" + focus + "]", cause);
     }
 
     /** Captures logcat and input state when a test fails outside a tap. */
