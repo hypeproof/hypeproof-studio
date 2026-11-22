@@ -101,15 +101,28 @@ final class TeamRenderTrace: @unchecked Sendable {
 /// quiet ping until the stall ended, each with its last uptime, so tap, async, make and appear can be
 /// ordered against the stall start. The team trace JSON gets only the count ("stalls": N), so it
 /// changes only when a stall is reported, never on a ping. At most 8 reports per process.
+///
+/// A stall that never ends (the main queue never answers, or the test is killed first) would give no
+/// final line. So the timer also checks an ongoing stall on every tick. An unanswered ping that is
+/// 100 ms or older counts as a stall from the time it was sent. When an ongoing stall reaches 10 s,
+/// 20 s and 40 s, one "(ongoing)" line is logged with the same render changes. These lines do not
+/// change the trace JSON or the "stalls" count. At most 3 per stall and 12 per process.
+/// The queue is user-initiated, not utility. Run 45033852560 had no ping handled for about 51 s after
+/// a tap on a heavily loaded runner; a starved utility queue is the inferred reason (not proven).
 final class TeamMainStallWatch: @unchecked Sendable {
     static let shared = TeamMainStallWatch()
     private static let interval = 0.5, slowMs = 100, quietPings = 3, reportMs = 2_000, maxReports = 8
+    private static let interimMs = [10_000, 20_000, 40_000], maxInterim = 12
     private static func now() -> Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
-    private let queue = DispatchQueue(label: "ai.hypeproof.studio.main-stall-watch", qos: .utility)
+    private let queue = DispatchQueue(label: "ai.hypeproof.studio.main-stall-watch", qos: .userInitiated)
     // Touched only on `queue`.
     private var timer: DispatchSourceTimer?
     private var waiting = false
+    /// Send time of the ping that the main queue has not answered yet.
+    private var pendingSent = 0
     private var reports = 0
+    /// Ongoing-stall lines logged for the current stall, and in this process.
+    private var interimDone = 0, interimTotal = 0
     /// Counters at the last quiet ping, so a tap just before the stall is in its changes.
     private var quietBefore: [String: [String: Int]] = [:]
     private var stall: (start: Int, end: Int, pings: Int, fast: Int, quiet: Int, worst: Int, before: [String: [String: Int]])?
@@ -126,14 +139,37 @@ final class TeamMainStallWatch: @unchecked Sendable {
     }
     func reportCount() -> Int { lock.lock(); defer { lock.unlock() }; return reportedStalls }
     private func ping() {
-        guard !waiting else { return }
         guard reports < Self.maxReports else { timer?.cancel(); return }
+        interim()
+        guard !waiting else { return }
         waiting = true
         let sent = Self.now(), before = stall == nil ? TeamRenderTrace.shared.snapshot() : [:]
+        pendingSent = sent
         DispatchQueue.main.async { [self] in
             let answered = Self.now()
             queue.async { self.answer(sent: sent, answered: answered, before: before) }
         }
+    }
+    /// Logs one "(ongoing)" line when the current stall passes its next 10 s, 20 s or 40 s mark.
+    private func interim() {
+        guard interimDone < Self.interimMs.count, interimTotal < Self.maxInterim else { return }
+        let now = Self.now(), outstanding = waiting ? now - pendingSent : 0
+        let start: Int
+        if let s = stall { start = s.start } else if outstanding >= Self.slowMs { start = pendingSent } else { return }
+        let length = now - start
+        guard length >= Self.interimMs[interimDone] else { return }
+        interimDone += 1; interimTotal += 1
+        let text = "HPStudio main stall (ongoing): \(length) ms since uptime \(start) ms; outstanding ping \(outstanding) ms; \(stall?.pings ?? 0) slow pings answered; render changes: "
+            + changes(since: stall?.before ?? quietBefore)
+        os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
+    }
+    /// Render counters that grew since `before`, oldest last change first.
+    private func changes(since before: [String: [String: Int]]) -> String {
+        let changed = TeamRenderTrace.shared.snapshot().compactMap { key, row -> (key: String, count: Int, last: Int)? in
+            let count = (row["count"] ?? 0) - (before[key]?["count"] ?? 0)
+            return count > 0 ? (key, count, row["last_ms"] ?? 0) : nil
+        }.sorted { $0.last < $1.last }
+        return changed.isEmpty ? "none" : changed.map { "\($0.key)+\($0.count)@\($0.last)" }.joined(separator: " ")
     }
     private func answer(sent: Int, answered: Int, before: [String: [String: Int]]) {
         waiting = false
@@ -145,17 +181,13 @@ final class TeamMainStallWatch: @unchecked Sendable {
         }
         guard let s = stall else { quietBefore = before; return }
         guard s.quiet + 1 >= Self.quietPings else { stall = (s.start, s.end, s.pings, s.fast, s.quiet + 1, s.worst, s.before); return }
-        stall = nil; quietBefore = TeamRenderTrace.shared.snapshot()
+        let changed = changes(since: s.before)
+        stall = nil; interimDone = 0; quietBefore = TeamRenderTrace.shared.snapshot()
         let length = s.end - s.start
         guard length > Self.reportMs else { return }
         reports += 1
-        let changed = TeamRenderTrace.shared.snapshot().compactMap { key, row -> (key: String, count: Int, last: Int)? in
-            let count = (row["count"] ?? 0) - (s.before[key]?["count"] ?? 0)
-            return count > 0 ? (key, count, row["last_ms"] ?? 0) : nil
-        }.sorted { $0.last < $1.last }
         lock.lock(); reportedStalls += 1; lock.unlock()
-        let text = "HPStudio main stall: \(length) ms from uptime \(s.start) ms; \(s.pings) slow and \(s.fast) fast pings, worst \(s.worst) ms; render changes: "
-            + (changed.isEmpty ? "none" : changed.map { "\($0.key)+\($0.count)@\($0.last)" }.joined(separator: " "))
+        let text = "HPStudio main stall: \(length) ms from uptime \(s.start) ms; \(s.pings) slow and \(s.fast) fast pings, worst \(s.worst) ms; render changes: " + changed
         os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
     }
 }
