@@ -41,6 +41,7 @@ func teamOffMainCheck(_ what: String) {
 #if DEBUG
 /// DEBUG-only render counters for #4432. Each key keeps its count and the first and last
 /// system uptime in ms, so a reader can tell bounded render work from an unbounded update loop.
+/// The trace JSON shows the counts only; the uptimes appear in the main-stall line.
 /// Trace tickers are deliberately not counted: the trace is an accessibility value, and a count that
 /// changed on every 0.25 s tick flooded testmanagerd with accessibility notifications while idle.
 final class TeamRenderTrace: @unchecked Sendable {
@@ -76,12 +77,13 @@ final class TeamRenderTrace: @unchecked Sendable {
     }
     /// Adds the counters to a trace JSON object under "render"; other keys stay unchanged.
     /// The trace is an accessibility value, and a long value can lose its later keys before a test
-    /// reads them (#4432 F12). So the trace carries only short markers: "offMain": 1 and "stalls": N.
+    /// reads them (#4432 F12). So the trace carries only short values: "render" holds counts only
+    /// (first_ms/last_ms feed the stall line), plus "offMain": 1 and "stalls": N.
     /// The off-main stack and the stall details stay in their runtime-issue lines, and the push marks
     /// (tap., async., appear.) only feed the stall line.
     static func merged(into trace: String) -> String {
         guard var object = (try? JSONSerialization.jsonObject(with: Data(trace.utf8))) as? [String: Any] else { return trace }
-        object["render"] = shared.snapshot().filter { key, _ in !pushMarkPrefixes.contains { key.hasPrefix($0) } }
+        object["render"] = shared.snapshot().filter { key, _ in !pushMarkPrefixes.contains { key.hasPrefix($0) } }.mapValues { $0["count"] ?? 0 }
         shared.lock.lock(); let offMain = shared.offMain != nil; shared.lock.unlock()
         if offMain { object["offMain"] = 1 }
         let stalls = TeamMainStallWatch.shared.reportCount()
