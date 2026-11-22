@@ -56,7 +56,8 @@ DIAGNOSTIC_LIMIT = 30
 OBSERVE_SAMPLES = 3
 OBSERVE_INTERVAL = 5
 # The seed job's own wait for first-boot work to stop. A new limit in a new job; the
-# approval push job never waits on it.
+# approval push job never waits on it. The iOS real-voice job (ios-sim-observe.py settle) uses
+# the same wait and limit before its one test.
 SEED_SETTLE_LIMIT = 900
 SEED_SETTLE_INTERVAL = 5
 SEED_SETTLE_SAMPLES = 3
@@ -222,7 +223,7 @@ def is_settled(samples, cpus):
     return len({count for count, _ in recent}) == 1 and all(runnable <= cpus for _, runnable in recent)
 
 
-def seed_table(evidence, table, device, sample, seconds):
+def seed_table(evidence, table, device, sample, seconds, step="seed"):
     """Append one seed reading to simulator-ps.txt: the busiest host processes, then every
     runnable process of the device (starved ones sit at 0 % CPU and miss the busiest list)."""
     lines = table.splitlines()
@@ -231,14 +232,15 @@ def seed_table(evidence, table, device, sample, seconds):
     runnable = [line for line, r in zip(lines, rows)
                 if launchd and len(r) == 7 and r[1] == launchd[0] and r[2].startswith("R")]
     with (evidence / "simulator-ps.txt").open("a") as target:
-        target.write(f"== seed sample {sample} {seconds}s\n")
+        target.write(f"== {step} sample {sample} {seconds}s\n")
         target.write("\n".join(lines[:SEED_TABLE_ROWS + 1]) + "\n")
         target.write(f"-- runnable device processes: {len(runnable)}\n")
         target.write("".join(line + "\n" for line in runnable))
 
 
-def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SETTLE_INTERVAL, table_every=SEED_TABLE_EVERY):
-    """Seed job only: wait until the new device stops its first-boot work. Reads `ps` only."""
+def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SETTLE_INTERVAL, table_every=SEED_TABLE_EVERY,
+                 step="seed"):
+    """Seed and real-voice jobs only: wait until the new device stops its first-boot work. Reads `ps` only."""
     cpus = os.cpu_count() or 1
     started = time.monotonic()
     samples = []
@@ -250,35 +252,35 @@ def wait_settled(evidence, device, *, limit=SEED_SETTLE_LIMIT, interval=SEED_SET
         activity = device_activity("\n".join(f"{r[0]} {r[1]} {r[2]} {r[6]}" for r in rows if len(r) == 7), device)
         samples.append(activity)
         seconds = round(time.monotonic() - started, 1)
-        record(evidence, step="seed", command="observe", outcome="sample",
+        record(evidence, step=step, command="observe", outcome="sample",
                processes=None if activity is None else activity[0],
                runnable=None if activity is None else activity[1], seconds=seconds,
                daemons=device_daemons(table, device))
         settled = is_settled(samples, cpus)
         if table_at is None or seconds - table_at >= table_every or settled:
-            seed_table(evidence, table, device, len(samples), seconds)
+            seed_table(evidence, table, device, len(samples), seconds, step)
             table_at = seconds
         if settled:
-            record(evidence, step="seed", command="settle", limit=limit, outcome="settled", seconds=seconds)
+            record(evidence, step=step, command="settle", limit=limit, outcome="settled", seconds=seconds)
             return seconds, activity
         if time.monotonic() - started + interval > limit:
-            record(evidence, step="seed", command="settle", limit=limit, outcome="timeout", seconds=seconds)
-            diagnose(evidence, "seed", None)
-            raise SimctlHang(f"seed simulator first-boot work did not settle within {limit}s")
+            record(evidence, step=step, command="settle", limit=limit, outcome="timeout", seconds=seconds)
+            diagnose(evidence, step, None)
+            raise SimctlHang(f"{step} simulator first-boot work did not settle within {limit}s")
         time.sleep(interval)
 
 
-def speech_probe(evidence, device, *, build_limit=SPEECH_PROBE_BUILD_LIMIT, limit=SPEECH_PROBE_LIMIT, xcrun="xcrun"):
-    """Seed job only: time one speechVoices() call on the settled device. Recorded only; never raises."""
+def speech_probe(evidence, device, *, build_limit=SPEECH_PROBE_BUILD_LIMIT, limit=SPEECH_PROBE_LIMIT, xcrun="xcrun", step="seed"):
+    """Seed and real-voice jobs only: time one speechVoices() call on the settled device. Recorded only; never raises."""
     try:
-        return _speech_probe(evidence, device, build_limit, limit, xcrun)
-    except Exception as error:  # A probe failure never decides the seed.
-        row = {"step": "seed", "command": "speech-probe", "outcome": "error", "detail": str(error)[:400]}
+        return _speech_probe(evidence, device, build_limit, limit, xcrun, step)
+    except Exception as error:  # A probe failure never decides the seed or the voice job.
+        row = {"step": step, "command": "speech-probe", "outcome": "error", "detail": str(error)[:400]}
         record(evidence, **row)
         return row
 
 
-def _speech_probe(evidence, device, build_limit, limit, xcrun):
+def _speech_probe(evidence, device, build_limit, limit, xcrun, step):
     sdk = subprocess.check_output([xcrun, "--sdk", "iphonesimulator", "--show-sdk-version"], text=True, timeout=30).strip()
     binary = evidence / "ios-speech-probe"
     started = time.monotonic()
@@ -289,7 +291,7 @@ def _speech_probe(evidence, device, build_limit, limit, xcrun):
         outcome = f"exit {built.returncode}"
     except subprocess.TimeoutExpired:
         built, outcome = None, "timeout"
-    record(evidence, step="seed", command="speech-probe-build", limit=build_limit, outcome=outcome,
+    record(evidence, step=step, command="speech-probe-build", limit=build_limit, outcome=outcome,
            seconds=round(time.monotonic() - started, 1),
            **({"detail": (built.stderr or "")[-400:]} if built is not None and built.returncode else {}))
     if outcome != "exit 0":
@@ -305,7 +307,7 @@ def _speech_probe(evidence, device, build_limit, limit, xcrun):
         # The probe runs under the device's launchd_sim, not under simctl: sample it by name.
         stuck = bounded(["pgrep", "-x", binary.name]).split()
         stuck = stuck[0] if stuck and stuck[0].isdigit() else None
-        row = {"step": "seed", "command": "speech-probe", "limit": limit, "outcome": "timeout", "seconds": seconds,
+        row = {"step": step, "command": "speech-probe", "limit": limit, "outcome": "timeout", "seconds": seconds,
                "daemons_before": before, "daemons_at_limit": device_daemons(bounded(PS_TABLE), device)}
         record(evidence, **row)
         diagnose(evidence, "speech-probe", stuck, "speech probe")
@@ -323,13 +325,13 @@ def _speech_probe(evidence, device, build_limit, limit, xcrun):
         reading = json.loads(lines[-1]) if lines else {}
     except ValueError:
         reading = {}
-    row = {"step": "seed", "command": "speech-probe", "limit": limit, "outcome": f"exit {child.returncode}",
+    row = {"step": step, "command": "speech-probe", "limit": limit, "outcome": f"exit {child.returncode}",
            "seconds": seconds, "call_milliseconds": reading.get("milliseconds"), "voices": reading.get("voices"),
            "ko_KR": reading.get("ko_KR"), "daemons_before": before, "daemons_after": device_daemons(bounded(PS_TABLE), device)}
     if not reading:
         row["detail"] = (out or "")[-400:]
     record(evidence, **row)
-    print(f"seed: speechVoices() probe {row['outcome']} in {seconds}s ({row['voices']} voices)", flush=True)
+    print(f"{step}: speechVoices() probe {row['outcome']} in {seconds}s ({row['voices']} voices)", flush=True)
     return {k: row[k] for k in ("outcome", "seconds", "call_milliseconds", "voices")}
 
 

@@ -193,6 +193,7 @@ jobs:
       - name: Core tests, device build and one simulator build-for-testing
         env:
           # Must equal the ios-ui matrix below; the ios job fails when a planned shard is missing.
+          # The plan adds row 5 for the real-voice case, which only the ios-voice job runs.
           IOS_UI_SHARDS: '4'
         run: bash apps/studio-native/scripts/ios-verify.sh build
       - name: Pack the simulator test products
@@ -250,10 +251,43 @@ jobs:
           name: studio-ios-ui-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: apps/studio-native/evidence/
           retention-days: 14
+  # The real Korean voice case (#4432) runs alone: plan row 5, after the simulator's first-boot
+  # work settles and one speech probe has loaded the voice list. Its artifact has the shard name,
+  # so the ios job merges it like any shard; the ios job and acceptance both require this job.
+  ios-voice:
+    name: iOS UI real voice
+    needs: ios-build
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    # Boot, the seed's 900 s settle limit, the probe's 180 s build and 240 s call limits, then one case.
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: studio-ios-test-products-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-transfer
+      - name: Unpack the build job's test products
+        run: |
+          mkdir -p apps/studio-native/ios/DerivedData/Build apps/studio-native/evidence
+          tar -C apps/studio-native/ios/DerivedData/Build -xf "$RUNNER_TEMP/ios-transfer/ios-test-products.tar"
+          cp "$RUNNER_TEMP/ios-transfer/ios-ui-shard-plan.json" apps/studio-native/evidence/
+      - name: Settle the simulator, probe the voices, run the real-voice case
+        run: bash apps/studio-native/scripts/ios-verify.sh shard 5
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-ui-shard-5-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native/evidence/
+          retention-days: 14
   # The trusted merge gate on base reads exactly the job results scope, contract, ios and
-  # android. This job keeps the name ios and passes only when the build and every shard did.
+  # android. This job keeps the name ios and passes only when the build, every shard and the
+  # real-voice job did.
   ios:
-    needs: [contract, ios-build, ios-ui]
+    needs: [contract, ios-build, ios-ui, ios-voice]
     if: ${{ !cancelled() && needs.contract.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -276,6 +310,7 @@ jobs:
           NATIVE_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           IOS_BUILD_RESULT: ${{ needs.ios-build.result }}
           IOS_UI_RESULT: ${{ needs.ios-ui.result }}
+          IOS_VOICE_RESULT: ${{ needs.ios-voice.result }}
           IOS_SHARD_ARTIFACTS: ${{ runner.temp }}/ios-shard-artifacts
         run: bash apps/studio-native/scripts/ios-collect.sh
       # Per-hop signed-in journey record for this exact run attempt. The TestFlight gate reads it;
@@ -344,7 +379,7 @@ jobs:
   acceptance:
     name: native / acceptance
     if: always()
-    needs: [scope, contract, ios-build, ios-ui, ios, android]
+    needs: [scope, contract, ios-build, ios-ui, ios-voice, ios, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -407,15 +442,16 @@ jobs:
           path: ${{ runner.temp }}/native-merge-acceptance.json
           if-no-files-found: ignore
           retention-days: 14
-      - name: Require the iOS build and every iOS UI shard
+      - name: Require the iOS build, every iOS UI shard and the real-voice job
         if: always()
         env:
           NATIVE_SELECTED: ${{ needs.scope.outputs.run_native }}
           IOS_BUILD_RESULT: ${{ needs.ios-build.result }}
           IOS_UI_RESULT: ${{ needs.ios-ui.result }}
+          IOS_VOICE_RESULT: ${{ needs.ios-voice.result }}
         run: |
-          # The ios job already requires both; this keeps the requirement visible here too.
-          if [ "$NATIVE_SELECTED" != 'false' ] && { [ "$IOS_BUILD_RESULT" != success ] || [ "$IOS_UI_RESULT" != success ]; }; then
-            echo "::error::iOS build=$IOS_BUILD_RESULT, UI shards=$IOS_UI_RESULT; native acceptance requires both to succeed"
+          # The ios job already requires all three; this keeps the requirement visible here too.
+          if [ "$NATIVE_SELECTED" != 'false' ] && { [ "$IOS_BUILD_RESULT" != success ] || [ "$IOS_UI_RESULT" != success ] || [ "$IOS_VOICE_RESULT" != success ]; }; then
+            echo "::error::iOS build=$IOS_BUILD_RESULT, UI shards=$IOS_UI_RESULT, real voice=$IOS_VOICE_RESULT; native acceptance requires all three to succeed"
             exit 1
           fi

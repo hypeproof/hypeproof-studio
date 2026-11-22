@@ -2,7 +2,8 @@
 # CI stage 3 (any OS): merge the UI shard evidence, then write the journey and signed-in
 # records exactly once, from every shard's log. Fails unless the build and every planned
 # shard succeeded and every planned case started in its own shard.
-# Inputs: IOS_BUILD_RESULT, IOS_UI_RESULT (job results), IOS_SHARD_ARTIFACTS (one folder per
+# Inputs: IOS_BUILD_RESULT, IOS_UI_RESULT, IOS_VOICE_RESULT (job results; the real-voice job
+# uploads plan row 5 under the shard artifact name), IOS_SHARD_ARTIFACTS (one folder per
 # downloaded studio-ios-ui-shard-<i>-<run>-<attempt> artifact), and the build artifact already
 # unpacked into apps/studio-native.
 set -euo pipefail
@@ -61,8 +62,10 @@ python3 ../scripts/collect-signin-journey.py --source-sha "${NATIVE_SOURCE_HEAD:
 printf 'signin_journey_collect_exit=%s\n' "$signin_status" >> ../evidence/attachment-export.log
 if [ "${IOS_BUILD_RESULT:-}" != success ]; then echo "::error::iOS build job result: ${IOS_BUILD_RESULT:-unknown}"; exit 1; fi
 if [ "${IOS_UI_RESULT:-}" != success ]; then echo "::error::iOS UI shard jobs result: ${IOS_UI_RESULT:-unknown}"; fi
+if [ "${IOS_VOICE_RESULT:-}" != success ]; then echo "::error::iOS real-voice job result: ${IOS_VOICE_RESULT:-unknown}"; fi
 if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
 if [ "$merge_status" -ne 0 ]; then exit "$merge_status"; fi
 if [ "$journey_status" -ne 0 ]; then exit "$journey_status"; fi
 if [ "$attachment_status" -ne 0 ]; then exit "$attachment_status"; fi
 if [ "${IOS_UI_RESULT:-}" != success ]; then exit 1; fi
+if [ "${IOS_VOICE_RESULT:-}" != success ]; then exit 1; fi

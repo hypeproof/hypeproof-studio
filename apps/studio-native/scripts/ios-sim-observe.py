@@ -10,11 +10,18 @@ it is stopped; the shard starts it beside the test and stops it when the test en
 test never waits for it. A reading that cannot be taken is recorded as `timeout` or
 `no device`, never raised.
 
+`settle` is the one command here that waits. Only the real-voice row of the shard plan runs it
+(ios-verify.sh, #4432): the seed job's settle wait with its limit (push.SEED_SETTLE_LIMIT), then
+one speech probe so the device's voice list is loaded before the test. It writes
+<evidence>/voice-settle.json and prints both times. A settle timeout is recorded and the test
+still runs; the test alone decides the job.
+
 Rows go to <evidence>/simulator-steps.jsonl in the format the approval push job writes.
 """
 import argparse
 from datetime import datetime, timezone
 import importlib.util
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -94,6 +101,27 @@ def time_command(evidence, step, command):
     return status
 
 
+def settle(evidence, device, *, limit=None, step="voice"):
+    """Real-voice job: bounded settle wait, then one speech probe. Records both; never raises."""
+    limit = push.SEED_SETTLE_LIMIT if limit is None else limit
+    started = time.monotonic()
+    try:
+        seconds, activity = push.wait_settled(evidence, device, limit=limit, step=step)
+        result = {"outcome": "settled", "seconds": seconds, "processes": activity[0], "runnable": activity[1]}
+    except push.SimctlHang as error:
+        result = {"outcome": "timeout", "seconds": round(time.monotonic() - started, 1), "detail": str(error)}
+    except Exception as error:  # A reading that cannot be taken never decides the job.
+        result = {"outcome": "error", "seconds": round(time.monotonic() - started, 1), "detail": str(error)[:400]}
+    print(f"{step}: simulator settle {result['outcome']} after {result['seconds']}s (limit {limit}s)", flush=True)
+    if result["outcome"] != "settled":
+        print(f"::warning::{step}: simulator did not settle ({result['outcome']}); the test runs anyway", flush=True)
+    probe = push.speech_probe(evidence, device, step=step)
+    document = {"schema": "hps-ios-voice-settle/1", "device": device, "settle_limit": limit, "settle": result,
+                "speech_probe": probe}
+    (evidence / "voice-settle.json").write_text(json.dumps(document, indent=2) + "\n")
+    return document
+
+
 def safely(action, label):
     try:
         action()
@@ -108,13 +136,13 @@ def main(argv=None):
     timer.add_argument("--evidence", type=Path, required=True)
     timer.add_argument("--step", required=True)
     timer.add_argument("rest", nargs=argparse.REMAINDER)
-    for name in ("sample", "watch"):
+    for name in ("sample", "watch", "settle"):
         sub = commands.add_parser(name)
         sub.add_argument("--evidence", type=Path, required=True)
         sub.add_argument("--device", required=True)
         if name == "sample":
             sub.add_argument("--index", type=int, required=True)
-        else:
+        elif name == "watch":
             sub.add_argument("--interval", type=float, default=60)
     args = parser.parse_args(argv)
     args.evidence.mkdir(parents=True, exist_ok=True)
@@ -123,6 +151,9 @@ def main(argv=None):
         if not command:
             parser.error("time needs a command after --")
         return time_command(args.evidence, args.step, command)
+    if args.command == "settle":
+        settle(args.evidence, args.device)
+        return 0
     if args.command == "sample":
         safely(lambda: take(args.evidence, args.device, step="boot", sample=args.index, full_table=True), args.index)
         return 0
