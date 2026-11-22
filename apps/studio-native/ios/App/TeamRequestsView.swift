@@ -79,8 +79,79 @@ final class TeamRenderTrace: @unchecked Sendable {
         object["render"] = shared.snapshot()
         shared.lock.lock(); let offMain = shared.offMain; shared.lock.unlock()
         if let offMain { object["offMain"] = offMain }
+        let stalls = TeamMainStallWatch.shared.reported()
+        if !stalls.isEmpty { object["stalls"] = stalls }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return trace }
         return String(data: data, encoding: .utf8) ?? trace
+    }
+}
+/// DEBUG-only main-thread stall reporter (#4432 F11). F5 and F11 froze the request detail screen for
+/// 86-140 s after a tap, and no sample covered the frozen time. A background timer pings the main queue
+/// at most every 0.5 s. A ping answered after 100 ms or more starts or extends a stall. Three fast
+/// answers in a row end it, because a render loop leaves short gaps in which one ping can be answered
+/// quickly. A stall longer than 2 s (first slow ping to last slow answer) is reported once: one
+/// runtime-issue line (an XCTest warning) and one "stalls" record in the team trace JSON. Both list the
+/// render counters that changed from the last quiet ping until the stall ended, each with its last
+/// uptime, so tap, async, make and appear can be ordered against "start_ms". The trace changes only
+/// when a stall is reported, never on a ping. At most 8 reports per process.
+final class TeamMainStallWatch: @unchecked Sendable {
+    static let shared = TeamMainStallWatch()
+    private static let interval = 0.5, slowMs = 100, quietPings = 3, reportMs = 2_000, maxReports = 8
+    private static func now() -> Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
+    private let queue = DispatchQueue(label: "ai.hypeproof.studio.main-stall-watch", qos: .utility)
+    // Touched only on `queue`.
+    private var timer: DispatchSourceTimer?
+    private var waiting = false
+    private var reports = 0
+    /// Counters at the last quiet ping, so a tap just before the stall is in its changes.
+    private var quietBefore: [String: [String: Int]] = [:]
+    private var stall: (start: Int, end: Int, pings: Int, fast: Int, quiet: Int, worst: Int, before: [String: [String: Int]])?
+    private let lock = NSLock()
+    private var records: [[String: Any]] = []
+    func start() {
+        queue.async { [self] in
+            guard timer == nil else { return }
+            let source = DispatchSource.makeTimerSource(queue: queue)
+            source.schedule(deadline: .now() + Self.interval, repeating: Self.interval, leeway: .milliseconds(100))
+            source.setEventHandler { [weak self] in self?.ping() }
+            timer = source; source.resume()
+        }
+    }
+    func reported() -> [[String: Any]] { lock.lock(); defer { lock.unlock() }; return records }
+    private func ping() {
+        guard !waiting else { return }
+        guard reports < Self.maxReports else { timer?.cancel(); return }
+        waiting = true
+        let sent = Self.now(), before = stall == nil ? TeamRenderTrace.shared.snapshot() : [:]
+        DispatchQueue.main.async { [self] in
+            let answered = Self.now()
+            queue.async { self.answer(sent: sent, answered: answered, before: before) }
+        }
+    }
+    private func answer(sent: Int, answered: Int, before: [String: [String: Int]]) {
+        waiting = false
+        let latency = answered - sent
+        if latency >= Self.slowMs {
+            if let s = stall { stall = (s.start, answered, s.pings + 1, s.fast + s.quiet, 0, max(s.worst, latency), s.before) }
+            else { stall = (sent, answered, 1, 0, 0, latency, quietBefore) }
+            return
+        }
+        guard let s = stall else { quietBefore = before; return }
+        guard s.quiet + 1 >= Self.quietPings else { stall = (s.start, s.end, s.pings, s.fast, s.quiet + 1, s.worst, s.before); return }
+        stall = nil; quietBefore = TeamRenderTrace.shared.snapshot()
+        let length = s.end - s.start
+        guard length > Self.reportMs else { return }
+        reports += 1
+        let changed = TeamRenderTrace.shared.snapshot().compactMap { key, row -> (key: String, count: Int, last: Int)? in
+            let count = (row["count"] ?? 0) - (s.before[key]?["count"] ?? 0)
+            return count > 0 ? (key, count, row["last_ms"] ?? 0) : nil
+        }.sorted { $0.last < $1.last }
+        let render = Dictionary(uniqueKeysWithValues: changed.map { ($0.key, ["count": $0.count, "last_ms": $0.last]) })
+        let record: [String: Any] = ["start_ms": s.start, "ms": length, "slow_pings": s.pings, "fast_pings": s.fast, "worst_ms": s.worst, "render": render]
+        lock.lock(); records.append(record); lock.unlock()
+        let text = "HPStudio main stall: \(length) ms from uptime \(s.start) ms; \(s.pings) slow and \(s.fast) fast pings, worst \(s.worst) ms; render changes: "
+            + (changed.isEmpty ? "none" : changed.map { "\($0.key)+\($0.count)@\($0.last)" }.joined(separator: " "))
+        os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
     }
 }
 /// Runtime issues are expected to surface as XCTest warnings only when the log call names a system
@@ -211,15 +282,15 @@ struct TeamRequestDetailView: View {
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { Button("공개 요청으로 제안") {
-                    commentFocused = false; intakeProduct = detail.request.product; let expected = generation
-                    DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { showIntake = true } }
+                    teamRenderCount("tap.intake"); commentFocused = false; intakeProduct = detail.request.product; let expected = generation
+                    DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { teamRenderCount("async.intake"); showIntake = true } }
                 }.disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
                     Button("관련 요청") {
-                        commentFocused = false; relatedProduct = detail.request.product
+                        teamRenderCount("tap.related"); commentFocused = false; relatedProduct = detail.request.product
                         let expected = generation
                         // Commit focus resignation before NavigationStack captures the source view.
-                        DispatchQueue.main.async { if generation == expected && !busy && storageReady { showRelated = true } }
+                        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.related"); showRelated = true } }
                     }.disabled(busy || !storageReady).accessibilityIdentifier("teamRelationsEntry") }
                 if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamSubscriptionScreen(model: inbox, product: detail.request.product, request: requestID) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
@@ -299,9 +370,9 @@ struct TeamRequestDetailView: View {
     }
     private func openTextHistory(_ target: String, product: String) {
         guard !busy, storageReady, TeamTextVersion.validTarget(target, request: requestID) else { return }
-        commentFocused = false; textTarget = target; textProduct = product
+        teamRenderCount("tap.text"); commentFocused = false; textTarget = target; textProduct = product
         let expected = generation
-        DispatchQueue.main.async { if generation == expected && !busy && storageReady { showTextHistory = true } }
+        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.text"); showTextHistory = true } }
     }
     private var canChooseIntent: Bool { detail?.retention?.hidden != true && !busy && storageReady && draft?.phase == .draft && commentSchemas.contains("hps-team-comment/2") }
     private func intentLabel(_ intent: String) -> String { ["discussion":"논의", "question":"질문", "reply":"답글"][intent] ?? "논의" }

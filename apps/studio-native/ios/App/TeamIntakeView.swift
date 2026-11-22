@@ -153,6 +153,7 @@ struct TeamIntakeScreen: View {
             Button("새 로그인으로 기존 전송 복구") { Task { await model.controller?.recoverForCurrentSession() } }.disabled(locked || model.principal == nil)
             Button("연결 새로고침") { Task { await model.open() } }.disabled(model.state.busy).accessibilityIdentifier("teamIntakeRefresh")
         }.accessibilityIdentifier("teamIntakeForm").navigationTitle("공개 요청 제안").task { await model.open() }
+        .onAppear { teamRenderCount("appear.intake") }
         .onDisappear { if model.principal == nil { try? model.device?.cancel() } }
         .navigationDestination(isPresented: $association) { if let github = model.github { TeamGitHubScreen(model: github) } }
         .navigationBarBackButtonHidden(locked).interactiveDismissDisabled(locked)

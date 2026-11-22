@@ -79,6 +79,7 @@ struct TeamTextRevisionScreen: View {
             }
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }
+            .onAppear { teamRenderCount("appear.text") }
             .onDisappear { focused = false; model.controller?.invalidate() }
             .alert("이 내용으로 수정할까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }

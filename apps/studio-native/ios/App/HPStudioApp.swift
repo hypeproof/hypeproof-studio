@@ -3,6 +3,9 @@ import AVFoundation
 
 @main struct HPStudioApp: App {
     @UIApplicationDelegateAdaptor(NativePushDelegate.self) private var pushDelegate
+#if DEBUG
+    init() { if NativeJourneyFixture.enabled { TeamMainStallWatch.shared.start() } }
+#endif
     var body: some Scene { WindowGroup { StudioRoot() } }
 }
 struct StudioHome: View {
