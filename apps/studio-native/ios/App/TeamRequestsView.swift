@@ -209,7 +209,7 @@ struct TeamRequestDetailView: View {
                             Button("논의로 작성") { choose("discussion", target: nil) }.accessibilityIdentifier("teamCommentChooseDiscussion")
                             Button("질문으로 작성") { choose("question", target: nil) }.accessibilityIdentifier("teamCommentChooseQuestion")
                         }
-                        TextEditor(text: Binding(get: { self.draft?.body ?? "" }, set: edit)).frame(minHeight: 110).accessibilityLabel("댓글 내용").accessibilityIdentifier("teamCommentBody")
+                        TextEditor(text: Binding(get: { self.draft?.body ?? "" }, set: { edit($0) })).frame(minHeight: 110).accessibilityLabel("댓글 내용").accessibilityIdentifier("teamCommentBody")
                             .focused($commentFocused)
                             .disabled(busy || !storageReady || draft.phase != .draft)
                         if !draft.body.isEmpty { ShareLink("댓글 내용 내보내기", item: draft.body) }

@@ -639,7 +639,7 @@ struct SharedConversationView: View {
                 }.disabled(!model.canEditDraft)
             }
             VStack(alignment: .leading, spacing: 8) {
-                TextField("메시지를 입력하세요", text: Binding(get: { model.draftText }, set: model.editDraft), axis: .vertical)
+                TextField("메시지를 입력하세요", text: Binding(get: { model.draftText }, set: { model.editDraft($0) }), axis: .vertical)
                     .font(.body).lineLimit(1...(textSize.isAccessibilitySize ? 2 : 5)).padding(.horizontal, 4).padding(.top, 4)
                     .focused($focused).disabled(voice.isCapturing || !model.canEditDraft).accessibilityIdentifier("sharedInput")
                     .accessibilityLabel("메시지")
