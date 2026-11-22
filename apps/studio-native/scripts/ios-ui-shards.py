@@ -3,7 +3,9 @@
 
 `plan` reads the XCTest declarations in ios/UITests and assigns every case to one shard.
 Shards 1..N-1 run only their own cases; the last shard skips the cases of the others, so a
-case this parser misses still runs there instead of disappearing.
+case this parser misses still runs there instead of disappearing. A `--dedicated` case runs in
+none of them: it gets its own row, index N+1, which its own job runs (#4432: the real Korean
+voice case runs after the simulator settles, apart from the other cases).
 
 `merge` joins the shard logs and attachment exports into the single evidence layout the
 journey collectors and the release evidence reader already accept, and fails unless every
@@ -17,7 +19,8 @@ import re
 import shutil
 import sys
 
-SCHEMA_PLAN = 'hps-ios-ui-shard-plan/1'
+# /2: rows after `catch_all` hold the dedicated cases.
+SCHEMA_PLAN = 'hps-ios-ui-shard-plan/2'
 SCHEMA_MERGE = 'hps-ios-ui-shard-merge/1'
 TARGET = 'HPStudioUITests'
 CLASS = re.compile(r'^\s*(?:final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*XCTestCase\b')
@@ -51,17 +54,23 @@ def discover(ui_tests: Path):
     return classes
 
 
-def plan(classes, shards: int):
+def plan(classes, shards: int, dedicated=()):
     if not 2 <= shards <= 8:
         raise ValueError('Shard count must be between 2 and 8')
+    dedicated = list(dict.fromkeys(dedicated))
+    declared = {f'{TARGET}/{name}/{test}' for name, tests in classes.items() for test in tests}
+    missing = [case for case in dedicated if case not in declared]
+    if missing:
+        raise ValueError(f'Dedicated case(s) not declared: {", ".join(missing)}')
     assigned = [[] for _ in range(shards)]
     offset = 0
     # Round-robin inside each class keeps every shard a similar mix of short and long classes.
     # The start offset rotates so one shard does not collect every class remainder.
     for name in sorted(classes):
-        for position, test in enumerate(classes[name]):
+        tests = [test for test in classes[name] if f'{TARGET}/{name}/{test}' not in dedicated]
+        for position, test in enumerate(tests):
             assigned[(offset + position) % shards].append(f'{TARGET}/{name}/{test}')
-        offset = (offset + len(classes[name])) % shards
+        offset = (offset + len(tests)) % shards
     if any(not cases for cases in assigned):
         raise ValueError('Every shard needs at least one case; lower the shard count')
     rows = []
@@ -69,10 +78,14 @@ def plan(classes, shards: int):
         if index < shards:
             arguments = [f'-only-testing:{case}' for case in cases]
         else:
-            arguments = [f'-skip-testing:{case}' for other in assigned[:-1] for case in other]
-        rows.append({'index': index, 'cases': cases, 'xcodebuild_arguments': arguments})
-    return {'schema': SCHEMA_PLAN, 'target': TARGET, 'shard_count': shards,
-            'case_count': sum(len(cases) for cases in assigned), 'shards': rows}
+            # The catch-all shard also skips the dedicated cases; their own row runs them.
+            arguments = [f'-skip-testing:{case}' for other in assigned[:-1] + [dedicated] for case in other]
+        rows.append({'index': index, 'cases': cases, 'dedicated': False, 'xcodebuild_arguments': arguments})
+    if dedicated:
+        rows.append({'index': shards + 1, 'cases': dedicated, 'dedicated': True,
+                     'xcodebuild_arguments': [f'-only-testing:{case}' for case in dedicated]})
+    return {'schema': SCHEMA_PLAN, 'target': TARGET, 'shard_count': len(rows), 'catch_all': shards,
+            'case_count': sum(len(row['cases']) for row in rows), 'shards': rows}
 
 
 def read_plan(path: Path):
@@ -85,6 +98,9 @@ def read_plan(path: Path):
     every = [case for row in shards for case in row['cases']]
     if len(every) != len(set(every)) or len(every) != document['case_count']:
         raise ValueError('Shard plan assigns a case twice or miscounts')
+    catch_all = document['catch_all']
+    if [row['dedicated'] for row in shards] != [index > catch_all for index in range(1, len(shards) + 1)]:
+        raise ValueError('Shard plan dedicated rows must follow the catch-all shard')
     return document
 
 
@@ -144,6 +160,7 @@ def merge_attachments(shard_dirs, destination: Path):
 def merge(plan_doc, shard_root: Path, evidence: Path):
     shard_dirs = [(row['index'], shard_root / f'shard-{row["index"]}') for row in plan_doc['shards']]
     count = plan_doc['shard_count']
+    catch_all = plan_doc['catch_all']
     combined, results, problems = [], {}, []
     seen: dict[str, list[int]] = {}
     for (index, directory), row in zip(shard_dirs, plan_doc['shards']):
@@ -166,13 +183,13 @@ def merge(plan_doc, shard_root: Path, evidence: Path):
     not_run = sorted(case for case in owner if case not in seen)
     misplaced = sorted(case for case in owner if case in seen and seen[case] != [owner[case]])
     unplanned = sorted(case for case in seen if case not in owner)
-    unplanned_outside_last = [case for case in unplanned if seen[case] != [count]]
+    unplanned_outside_last = [case for case in unplanned if seen[case] != [catch_all]]
     if not_run:
         problems.append(f'{len(not_run)} planned case(s) never started')
     if misplaced:
         problems.append(f'{len(misplaced)} case(s) started outside their own shard or in two shards')
     if unplanned_outside_last:
-        problems.append(f'{len(unplanned_outside_last)} unplanned case(s) started outside the last shard')
+        problems.append(f'{len(unplanned_outside_last)} unplanned case(s) started outside the catch-all shard {catch_all}')
     evidence.mkdir(parents=True, exist_ok=True)
     (evidence / 'simulator-test.log').write_text(''.join(combined))
     manifest_rows = merge_attachments(shard_dirs, evidence / 'journey-attachments')
@@ -186,7 +203,7 @@ def merge(plan_doc, shard_root: Path, evidence: Path):
                 'planned_cases': len(owner), 'started_cases': len(seen), 'shards': results,
                 'test_exit': test_exit, 'attachment_exit': attachment_exit,
                 'attachment_manifest_rows': manifest_rows, 'not_run': not_run, 'misplaced': misplaced,
-                'unplanned_in_last_shard': [case for case in unplanned if seen[case] == [count]],
+                'unplanned_in_last_shard': [case for case in unplanned if seen[case] == [catch_all]],
                 'unplanned_outside_last_shard': unplanned_outside_last, 'problems': problems}
     (evidence / 'ios-ui-shards.json').write_text(json.dumps(document, indent=2) + '\n')
     return document
@@ -199,27 +216,34 @@ def main(argv=None):
     planner.add_argument('--ui-tests', type=Path, required=True)
     planner.add_argument('--shards', type=int, required=True)
     planner.add_argument('--output', type=Path, required=True)
+    planner.add_argument('--dedicated', action='append', default=[], help='a case that runs only in its own row')
     arguments = commands.add_parser('arguments')
     arguments.add_argument('--plan', type=Path, required=True)
     arguments.add_argument('--index', type=int, required=True)
+    role = commands.add_parser('dedicated', help='print yes when the row holds dedicated cases, else no')
+    role.add_argument('--plan', type=Path, required=True)
+    role.add_argument('--index', type=int, required=True)
     merger = commands.add_parser('merge')
     merger.add_argument('--plan', type=Path, required=True)
     merger.add_argument('--shard-root', type=Path, required=True)
     merger.add_argument('--evidence', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'plan':
-        document = plan(discover(args.ui_tests), args.shards)
+        document = plan(discover(args.ui_tests), args.shards, args.dedicated)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(document, indent=2) + '\n')
         sizes = ', '.join(str(len(row['cases'])) for row in document['shards'])
         print(f'UI shard plan: {document["case_count"]} cases in {document["shard_count"]} shards ({sizes})')
         return 0
-    if args.command == 'arguments':
+    if args.command in ('arguments', 'dedicated'):
         document = read_plan(args.plan)
         rows = [row for row in document['shards'] if row['index'] == args.index]
         if len(rows) != 1:
             raise ValueError(f'Shard {args.index} is not in the plan')
-        print('\n'.join(rows[0]['xcodebuild_arguments']))
+        if args.command == 'dedicated':
+            print('yes' if rows[0]['dedicated'] else 'no')
+        else:
+            print('\n'.join(rows[0]['xcodebuild_arguments']))
         return 0
     document = merge(read_plan(args.plan), args.shard_root, args.evidence)
     print(f'UI shards: {document["verdict"]}; {document["started_cases"]}/{document["planned_cases"]} planned cases started')

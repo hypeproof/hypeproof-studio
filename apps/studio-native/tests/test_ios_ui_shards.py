@@ -29,6 +29,8 @@ PUSH_SPEC = importlib.util.spec_from_file_location('approval_push', NATIVE / 'sc
 push = importlib.util.module_from_spec(PUSH_SPEC); PUSH_SPEC.loader.exec_module(push)
 
 SHA = 'a' * 40
+# The one case the iOS real-voice job runs instead of a shard (#4432).
+VOICE = 'HPStudioUITests/StudioJourneyTests/testRealKoreanPlaybackCompletionReachesNextCaptureBoundary'
 
 
 def started(case, outcome='passed'):
@@ -69,6 +71,50 @@ class PlanContracts(unittest.TestCase):
         self.assertEqual(last['xcodebuild_arguments'],
                          ['-skip-testing:' + c for c in first['cases'] + second['cases']])
 
+    def test_real_suite_with_the_voice_case_puts_every_case_in_exactly_one_place(self):
+        declared = []
+        for source in sorted((NATIVE / 'ios/UITests').glob('*.swift')):
+            cls = None
+            for line in source.read_text().splitlines():
+                found = re.match(r'^\s*(?:final\s+)?class (\w+)\s*:\s*XCTestCase', line)
+                cls = found[1] if found else cls
+                test = re.match(r'^\s*(?:@MainActor\s+)?func (test[A-Za-z0-9_]*)\(\)', line)
+                if test:
+                    declared.append(f'HPStudioUITests/{cls}/{test[1]}')
+        self.assertIn(VOICE, declared)
+        doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 4, [VOICE])
+        self.assertEqual((doc['shard_count'], doc['catch_all']), (5, 4))
+        every = [case for row in doc['shards'] for case in row['cases']]
+        self.assertEqual(sorted(every), sorted(declared))
+        self.assertEqual(len(every), len(set(every)))
+        *regular, voice = doc['shards']
+        self.assertEqual((voice['index'], voice['dedicated'], voice['cases']), (5, True, [VOICE]))
+        self.assertEqual(voice['xcodebuild_arguments'], ['-only-testing:' + VOICE])
+        self.assertEqual([row['dedicated'] for row in regular], [False] * 4)
+        self.assertFalse(any(VOICE in row['cases'] for row in regular))
+        sizes = [len(row['cases']) for row in regular]
+        self.assertLessEqual(max(sizes) - min(sizes), 1)
+        # The catch-all shard skips the other shards' cases and the voice case, and runs the rest.
+        self.assertEqual(regular[-1]['xcodebuild_arguments'],
+                         ['-skip-testing:' + c for row in regular[:-1] for c in row['cases']] + ['-skip-testing:' + VOICE])
+
+    def test_build_plans_the_voice_case_and_a_dedicated_case_must_be_declared(self):
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        self.assertEqual(re.findall(r'--dedicated (\S+)', script), [VOICE])
+        with self.assertRaisesRegex(ValueError, 'not declared'):
+            shards.plan({'AlphaTests': ['testA', 'testB']}, 2, ['HPStudioUITests/AlphaTests/testMissing'])
+
+    def test_plan_reader_refuses_a_dedicated_row_before_the_catch_all(self):
+        doc = shards.plan({'AlphaTests': ['testA', 'testB', 'testC']}, 2, ['HPStudioUITests/AlphaTests/testB'])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, 'plan.json')
+            path.write_text(json.dumps(doc))
+            self.assertEqual(shards.read_plan(path), doc)
+            doc['shards'][0]['dedicated'] = True
+            path.write_text(json.dumps(doc))
+            with self.assertRaisesRegex(ValueError, 'dedicated rows'):
+                shards.read_plan(path)
+
     def test_discovery_reads_attributes_and_ignores_helpers(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, 'A.swift').write_text(
@@ -93,6 +139,26 @@ class WorkflowShardCount(unittest.TestCase):
         self.assertEqual(len(planned), 1)
         self.assertEqual(len(matrix), 1)
         self.assertEqual([int(x) for x in matrix[0].split(',')], list(range(1, int(planned[0]) + 1)))
+
+    def test_voice_job_runs_the_row_after_the_shards_and_both_gates_require_it(self):
+        text = (ROOT / '.github/workflows/studio-native-mobile.yml').read_text()
+        voice_row = int(re.findall(r"^\s*IOS_UI_SHARDS: '([0-9]+)'$", text, re.M)[0]) + 1
+        job = PrebootCache.job_block(text, 'ios-voice')
+        shard_job = PrebootCache.job_block(text, 'ios-ui')
+        self.assertIn(f'run: bash apps/studio-native/scripts/ios-verify.sh shard {voice_row}', job)
+        self.assertIn(f'name: studio-ios-ui-shard-{voice_row}-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}', job)
+        # The same runner, Xcode and job limit as a shard: no limit was raised to fit the settle wait.
+        for line in ('    runs-on: xcode-27', '      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer',
+                     '    timeout-minutes: 35', '    needs: ios-build'):
+            with self.subTest(line=line):
+                self.assertIn(line, job.splitlines()); self.assertIn(line, shard_job.splitlines())
+        self.assertNotIn('continue-on-error', job)
+        ios_job, acceptance = PrebootCache.job_block(text, 'ios'), PrebootCache.job_block(text, 'acceptance')
+        self.assertIn('    needs: [contract, ios-build, ios-ui, ios-voice]', ios_job.splitlines())
+        self.assertIn('IOS_VOICE_RESULT: ${{ needs.ios-voice.result }}', ios_job)
+        self.assertIn('ios-voice', re.search(r'^    needs: \[(.*)\]$', acceptance, re.M)[1].split(', '))
+        self.assertIn('IOS_VOICE_RESULT: ${{ needs.ios-voice.result }}', acceptance)
+        self.assertIn('[ "$IOS_VOICE_RESULT" != success ]', acceptance)
 
 
 class MergeContracts(unittest.TestCase):
@@ -156,6 +222,44 @@ class MergeContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exported by shards 1 and 2'):
             self.merge()
 
+    def dedicated_plan(self):
+        self.plan = shards.plan({'AlphaTests': ['testA', 'testB', 'testC'], 'BetaTests': ['testD', 'testE', 'testF']}, 3,
+                                ['HPStudioUITests/BetaTests/testE'])
+        self.cases = {row['index']: row['cases'] for row in self.plan['shards']}
+
+    def test_positive_control_shards_and_the_voice_row_pass_together(self):
+        self.dedicated_plan()
+        self.complete()
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'PASS', doc['problems'])
+        self.assertEqual((doc['shard_count'], doc['started_cases'], sorted(doc['shards'])), (4, 6, [1, 2, 3, 4]))
+
+    def test_missing_voice_row_fails_with_did_not_run_exit(self):
+        self.dedicated_plan()
+        self.complete(skip=4)
+        doc = self.merge()
+        self.assertEqual((doc['verdict'], doc['test_exit']), ('FAIL', 125))
+        self.assertEqual(doc['not_run'], ['HPStudioUITests/BetaTests/testE'])
+
+    def test_voice_case_that_also_ran_in_a_shard_fails(self):
+        self.dedicated_plan()
+        self.cases[3] = self.cases[3] + ['HPStudioUITests/BetaTests/testE']
+        self.complete()
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'FAIL')
+        self.assertEqual(doc['misplaced'], ['HPStudioUITests/BetaTests/testE'])
+
+    def test_unplanned_case_is_accepted_in_the_catch_all_shard_not_the_voice_row(self):
+        self.dedicated_plan()
+        extra = started('HPStudioUITests/AlphaTests/testUnparsed')
+        self.complete({3: {'extra': extra}})
+        self.assertEqual(self.merge()['verdict'], 'PASS')
+        shutil.rmtree(self.root / 'shards'); shutil.rmtree(self.root / 'evidence')
+        self.complete({4: {'extra': extra}})
+        doc = self.merge()
+        self.assertEqual(doc['verdict'], 'FAIL')
+        self.assertEqual(doc['unplanned_outside_last_shard'], ['HPStudioUITests/AlphaTests/testUnparsed'])
+
     def test_unplanned_case_is_accepted_only_in_the_last_shard(self):
         extra = started('HPStudioUITests/AlphaTests/testUnparsed')
         self.complete({3: {'extra': extra}})
@@ -170,7 +274,7 @@ class MergeContracts(unittest.TestCase):
 class ShardShell(unittest.TestCase):
     """The real ios-verify.sh shard mode against stubbed Apple tools."""
 
-    def run_shard(self, index, *, test_exit=0, products=1, bootstatus_exit=0):
+    def run_shard(self, index, *, test_exit=0, products=1, bootstatus_exit=0, dedicated=()):
         temp = tempfile.TemporaryDirectory(prefix='studio-ios-shard-'); self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         scripts, ios, bin_dir, evidence = root / 'scripts', root / 'ios', root / 'bin', root / 'evidence'
@@ -179,10 +283,16 @@ class ShardShell(unittest.TestCase):
         for name in ('ios-verify.sh', 'select-ios-simulator.py', 'ios-ui-shards.py', 'ios-sim-observe.py',
                      'verify-approval-push-simulator.py'):
             shutil.copyfile(NATIVE / 'scripts' / name, scripts / name)
+        # The stubbed device never settles; a 1 s copy of the seed's 900 s limit reaches the
+        # timeout path in this temporary copy only. The shipped script keeps 900 s.
+        helper = scripts / 'verify-approval-push-simulator.py'
+        shipped = helper.read_text()
+        self.assertIn('\nSEED_SETTLE_LIMIT = 900\n', shipped)
+        helper.write_text(shipped.replace('\nSEED_SETTLE_LIMIT = 900\n', '\nSEED_SETTLE_LIMIT = 1\n'))
         built = ios / 'DerivedData/Build/Products'; built.mkdir(parents=True)
         for number in range(products):
             (built / f'HPStudio_iphonesimulator{number}.xctestrun').write_text('fixture')
-        plan = shards.plan({'AlphaTests': ['testA', 'testB', 'testC', 'testD']}, 2)
+        plan = shards.plan({'AlphaTests': ['testA', 'testB', 'testC', 'testD']}, 2, dedicated)
         (evidence / 'ios-ui-shard-plan.json').write_text(json.dumps(plan))
         stub = cleanup_suite.COMMAND_STUB.replace('if "test" in args:', 'if "test" in args or "test-without-building" in args:')
         self.assertNotEqual(stub, cleanup_suite.COMMAND_STUB)
@@ -262,6 +372,42 @@ class ShardShell(unittest.TestCase):
         self.assertEqual([a[:2] for a in boot[:4]], [['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate']])
         self.assertEqual(boot[1][-1], '-b')
         self.assertEqual([c['args'] for c in commands if c['command'] == 'sleep'][:2], [['5'], ['5']])
+
+    def test_voice_row_settles_and_probes_after_boot_and_before_its_one_case(self):
+        result, commands, plan, evidence = self.run_shard(3, dedicated=['HPStudioUITests/AlphaTests/testD'], test_exit=65)
+        # The test alone decides the job: its exit passes through after a settle timeout.
+        self.assertEqual(result.returncode, 65, result.stderr)
+        self.assertIn('voice: simulator settle timeout', result.stdout)
+        self.assertIn('the test runs anyway', result.stdout)
+        args = next(c['args'] for c in commands if c['command'] == 'xcodebuild' and 'test-without-building' in c['args'])
+        self.assertEqual([a for a in args if a.startswith('-only-testing:') or a.startswith('-skip-testing:')],
+                         ['-only-testing:HPStudioUITests/AlphaTests/testD'])
+        # The same per-test limits as every shard.
+        for flag, value in (('-default-test-execution-time-allowance', '180'), ('-maximum-test-execution-time-allowance', '240')):
+            self.assertEqual(args[args.index(flag) + 1], value)
+        rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        order = [(r['step'], r['command']) for r in rows if r['step'] != 'test' and r['command'] != 'observe']
+        self.assertEqual(order[:2], [('boot', 'xcrun simctl boot'), ('boot', 'xcrun simctl bootstatus')])
+        settle = order.index(('voice', 'settle'))
+        self.assertLess(settle, order.index(('voice', 'speech-probe-build')))
+        self.assertLess(order.index(('voice', 'speech-probe')), order.index(('warm-up', 'xcrun simctl launch')))
+        settle_row = next(r for r in rows if r['command'] == 'settle')
+        self.assertEqual((settle_row['outcome'], settle_row['limit']), ('timeout', 1))
+        record = json.loads((evidence / 'voice-settle.json').read_text())
+        self.assertEqual((record['settle']['outcome'], record['settle_limit']), ('timeout', 1))
+        self.assertIn('outcome', record['speech_probe'])
+        spawn = [c['args'] for c in commands if c['args'][:2] == ['simctl', 'spawn']]
+        self.assertEqual(len(spawn), 1)
+        self.assertLess(commands.index(next(c for c in commands if c['args'][:2] == ['simctl', 'spawn'])),
+                        commands.index(next(c for c in commands if 'test-without-building' in c['args'])))
+
+    def test_a_regular_shard_neither_settles_nor_probes(self):
+        result, commands, _, evidence = self.run_shard(1, dedicated=['HPStudioUITests/AlphaTests/testD'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertFalse(any(r['step'] == 'voice' for r in rows))
+        self.assertFalse(any(c['args'][:2] == ['simctl', 'spawn'] for c in commands))
+        self.assertFalse((evidence / 'voice-settle.json').exists())
 
     def test_a_failed_bootstatus_still_fails_the_shard_and_is_recorded(self):
         result, commands, _, evidence = self.run_shard(1, bootstatus_exit=3)
@@ -382,7 +528,7 @@ class SimObserve(unittest.TestCase):
 class CollectShell(unittest.TestCase):
     """The real ios-collect.sh with the real journey and sign-in collectors."""
 
-    def run_collect(self, *, build='success', ui='success', shard_changes=None, plan=True):
+    def run_collect(self, *, build='success', ui='success', voice='success', shard_changes=None, plan=True):
         temp = tempfile.TemporaryDirectory(prefix='studio-ios-collect-'); self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         native = root / 'apps/studio-native'
@@ -390,7 +536,7 @@ class CollectShell(unittest.TestCase):
         for name in ('ios-collect.sh', 'ios-ui-shards.py', 'collect-native-journeys.py', 'collect-signin-journey.py'):
             shutil.copyfile(NATIVE / 'scripts' / name, native / 'scripts' / name)
         (native / 'evidence/device-build.log').write_text('** BUILD SUCCEEDED **\n')
-        doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 3)
+        doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 3, [VOICE])
         if plan:
             (native / 'evidence/ios-ui-shard-plan.json').write_text(json.dumps(doc))
         artifacts = root / 'artifacts'
@@ -401,7 +547,7 @@ class CollectShell(unittest.TestCase):
             directory = write_shard(artifacts, row['index'], row['cases'], **changes)
             directory.rename(artifacts / f'studio-ios-ui-shard-{row["index"]}-77-2')
         env = dict(os.environ, GITHUB_SHA=SHA, NATIVE_SOURCE_HEAD=SHA, GITHUB_RUN_ID='77', GITHUB_RUN_ATTEMPT='2',
-                   IOS_BUILD_RESULT=build, IOS_UI_RESULT=ui, IOS_SHARD_ARTIFACTS=str(artifacts))
+                   IOS_BUILD_RESULT=build, IOS_UI_RESULT=ui, IOS_VOICE_RESULT=voice, IOS_SHARD_ARTIFACTS=str(artifacts))
         result = subprocess.run(['bash', str(native / 'scripts/ios-collect.sh')], cwd=root, env=env,
                                 capture_output=True, text=True, timeout=30)
         return result, native / 'evidence'
@@ -418,7 +564,21 @@ class CollectShell(unittest.TestCase):
         # Exactly one attachment manifest, as the release evidence reader requires.
         manifests = list(evidence.rglob('journey-attachments/manifest.json'))
         self.assertEqual(manifests, [evidence / 'journey-attachments/manifest.json'])
-        self.assertEqual(sorted(p.name for p in (evidence / 'shards').iterdir()), ['shard-1', 'shard-2', 'shard-3'])
+        self.assertEqual(sorted(p.name for p in (evidence / 'shards').iterdir()), ['shard-1', 'shard-2', 'shard-3', 'shard-4'])
+        self.assertIn("testRealKoreanPlaybackCompletionReachesNextCaptureBoundary]' passed", (evidence / 'simulator-test.log').read_text())
+
+    def test_missing_voice_artifact_fails_and_journeys_are_not_a_pass(self):
+        result, evidence = self.run_collect(shard_changes={4: 'missing'}, voice='failure')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads((evidence / 'ios-ui-shards.json').read_text())['not_run'], [VOICE])
+        self.assertNotEqual(json.loads((evidence / 'native-journeys.json').read_text())['simulator_journeys']['status'], 'PASS')
+
+    def test_voice_job_failure_fails_the_ios_job_even_with_complete_evidence(self):
+        result, _ = self.run_collect(voice='failure')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('iOS real-voice job result: failure', result.stdout)
+        result, _ = self.run_collect(voice='cancelled')
+        self.assertNotEqual(result.returncode, 0)
 
     def test_missing_shard_fails_and_journeys_are_not_a_pass(self):
         result, evidence = self.run_collect(shard_changes={2: 'missing'}, ui='failure')

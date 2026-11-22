@@ -5,6 +5,8 @@
 #                   No simulator is created. Products go to DerivedData for the shard jobs.
 #   shard <i>       CI stage 2: run plan shard <i> with test-without-building on its own simulator.
 #                   Needs DerivedData/Build/Products and ../evidence/ios-ui-shard-plan.json.
+#                   A dedicated row (the real-voice case) first waits for the booted device to
+#                   settle and runs one speech probe (ios-sim-observe.py settle).
 set -euo pipefail
 mode=${1:-full}
 shard_index=${2:-}
@@ -39,15 +41,19 @@ if [ "$mode" = build ]; then
   # require an actual app identity, so the products are ad-hoc signed as in the full run.
   printf 'native verification: iPhone simulator build-for-testing\n'
   xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build-for-testing 2>&1 | tee ../evidence/simulator-build.log
-  python3 ../scripts/ios-ui-shards.py plan --ui-tests UITests --shards "${IOS_UI_SHARDS:-3}" --output ../evidence/ios-ui-shard-plan.json
+  # The real Korean voice case runs in its own job, after the simulator settles (#4432).
+  python3 ../scripts/ios-ui-shards.py plan --ui-tests UITests --shards "${IOS_UI_SHARDS:-3}" --output ../evidence/ios-ui-shard-plan.json \
+    --dedicated HPStudioUITests/StudioJourneyTests/testRealKoreanPlaybackCompletionReachesNextCaptureBoundary
   exit 0
 fi
 shard_arguments=()
 xctestrun=
+dedicated=no
 if [ "$mode" = shard ]; then
   # The plan and products come from the build job; refuse to run a shard against anything else.
   while IFS= read -r argument; do shard_arguments+=("$argument"); done < <(python3 ../scripts/ios-ui-shards.py arguments --plan ../evidence/ios-ui-shard-plan.json --index "$shard_index")
   [ "${#shard_arguments[@]}" -gt 0 ] || { echo "Shard $shard_index has no cases" >&2; exit 2; }
+  dedicated=$(python3 ../scripts/ios-ui-shards.py dedicated --plan ../evidence/ios-ui-shard-plan.json --index "$shard_index")
   xctestruns=(DerivedData/Build/Products/*.xctestrun)
   [ "${#xctestruns[@]}" -eq 1 ] && [ -f "${xctestruns[0]}" ] || { echo "Expected one .xctestrun from build-for-testing" >&2; exit 2; }
   xctestrun=${xctestruns[0]}
@@ -144,6 +150,12 @@ if [ "$mode" = shard ]; then
     if [ "$sample" -gt 1 ]; then sleep 5; fi
     python3 ../scripts/ios-sim-observe.py sample --evidence ../evidence --device "$device" --index "$sample" || true
   done
+fi
+if [ "$dedicated" = yes ]; then
+  # The seed job's bounded settle wait, then one speechVoices() call, so the voice list is
+  # loaded before the test. Both are recorded (voice-settle.json); neither decides the job.
+  printf 'native verification: simulator settle and speech probe\n'
+  python3 ../scripts/ios-sim-observe.py settle --evidence ../evidence --device "$device" || echo "::warning::simulator settle not recorded"
 fi
 # Warm the booted simulator with a system app, never the app under test: the first UI case
 # must still see a fresh install. A cold first launch has stalled the first case before.
