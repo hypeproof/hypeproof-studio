@@ -16,6 +16,15 @@ one speech probe so the device's voice list is loaded before the test. It writes
 <evidence>/voice-settle.json and prints both times. A settle timeout is recorded and the test
 still runs; the test alone decides the job.
 
+`terminate-watch` runs beside the test like `watch`. Every few seconds it reads the shard's
+xcodebuild log; for each new "Failed to terminate <bundle>:<pid>" line (at most
+TERMINATE_CAPTURES per shard) it records, while the device is still in that state, the
+device's `launchctl list` rows for the app and the last 3 minutes of runningboardd,
+SpringBoard and testmanagerd log, each with its own limit. `terminate-scan` is the same pass
+once, after the test, for a line the watcher was stopped before reaching. Output goes to
+<evidence>/terminate-diagnostics.txt plus one row per capture. Both are diagnostics only:
+they change no test, wait, limit or result (#4432 F6).
+
 Rows go to <evidence>/simulator-steps.jsonl in the format the approval push job writes.
 """
 import argparse
@@ -24,6 +33,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -91,6 +101,96 @@ def take(evidence, device, *, step, sample, full_table):
         target.write(f"== {step} sample {sample} {wall}\n{vm_stat}\n")
 
 
+TERMINATE_FAILURE = re.compile(r"Failed to terminate ([A-Za-z0-9.-]+):(\d+)")
+TERMINATE_CAPTURES = 3
+LAUNCHCTL_LIMIT = 30
+LOG_SHOW_LIMIT = 60
+LOG_SHOW_WINDOW = "3m"
+LOG_SHOW_PREDICATE = 'process IN {"runningboardd", "SpringBoard", "testmanagerd"}'
+TERMINATE_FILE = "terminate-diagnostics.txt"
+_running = None
+
+
+def run_bounded(args, limit):
+    """Like push.bounded, and the running child is known so a stopped watcher can stop it too."""
+    global _running
+    try:
+        _running = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                    start_new_session=True)
+    except OSError as error:
+        return f"<{args[0]} unavailable: {error}>"
+    try:
+        out, _ = _running.communicate(timeout=limit)
+        return out
+    except subprocess.TimeoutExpired:
+        push.stop_group(_running)
+        return f"<{' '.join(args)} did not return within {limit}s>"
+    finally:
+        _running = None
+
+
+def stop_running(signum, _frame):
+    if _running is not None:
+        push.stop_group(_running)
+    raise SystemExit(128 + signum)
+
+
+def terminate_failures(log_text):
+    """(bundle, pid) of each distinct "Failed to terminate" in order; the inner ":0" retry is not a new one."""
+    seen = []
+    for bundle, pid in TERMINATE_FAILURE.findall(log_text):
+        if pid != "0" and (bundle, pid) not in seen:
+            seen.append((bundle, pid))
+    return seen
+
+
+def captured_failures(evidence):
+    path = evidence / TERMINATE_FILE
+    if not path.exists():
+        return []
+    return re.findall(r"^== terminate \d+ ([A-Za-z0-9.-]+):(\d+) ", path.read_text(), re.MULTILINE)
+
+
+def capture_terminate(evidence, device, bundle, pid, index, *, run=None):
+    run = run or run_bounded
+    wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    launchctl = run(["xcrun", "simctl", "spawn", device, "launchctl", "list"], LAUNCHCTL_LIMIT)
+    if launchctl.startswith("<"):
+        app_rows, launchctl_outcome = launchctl.strip(), "timeout"
+    else:
+        rows = [line for line in launchctl.splitlines() if "hypeproof" in line.lower()]
+        app_rows = "\n".join(rows) if rows else "<no hypeproof entry>"
+        launchctl_outcome = "listed" if rows else "absent"
+    log = run(["xcrun", "simctl", "spawn", device, "log", "show", "--last", LOG_SHOW_WINDOW, "--style", "compact",
+               "--info", "--predicate", LOG_SHOW_PREDICATE], LOG_SHOW_LIMIT)
+    log_outcome = "timeout" if log.startswith("<") else "shown"
+    push.record(evidence, step="terminate", command="diagnose", sample=index, utc=wall, bundle=bundle, pid=int(pid),
+                launchctl=launchctl_outcome, log=log_outcome, log_lines=len(log.splitlines()))
+    with (evidence / TERMINATE_FILE).open("a") as target:
+        target.write(f"== terminate {index} {bundle}:{pid} {wall}\n")
+        target.write(f"-- launchctl list (hypeproof rows, limit {LAUNCHCTL_LIMIT}s)\n{app_rows}\n")
+        target.write(f"-- log show --last {LOG_SHOW_WINDOW} {LOG_SHOW_PREDICATE} (limit {LOG_SHOW_LIMIT}s)\n{log.rstrip()}\n")
+
+
+def scan_terminate(evidence, device, log_path, *, run=None):
+    """Capture each failure in the log not yet captured, up to TERMINATE_CAPTURES. Returns how many it took."""
+    try:
+        text = Path(log_path).read_text(errors="replace")
+    except OSError:
+        return 0
+    done = captured_failures(evidence)
+    taken = 0
+    for bundle, pid in terminate_failures(text):
+        if (bundle, pid) in done:
+            continue
+        if len(done) >= TERMINATE_CAPTURES:
+            break
+        capture_terminate(evidence, device, bundle, pid, len(done) + 1, run=run)
+        done.append((bundle, pid))
+        taken += 1
+    return taken
+
+
 def time_command(evidence, step, command):
     started = time.monotonic()
     status = subprocess.run(command).returncode
@@ -136,7 +236,7 @@ def main(argv=None):
     timer.add_argument("--evidence", type=Path, required=True)
     timer.add_argument("--step", required=True)
     timer.add_argument("rest", nargs=argparse.REMAINDER)
-    for name in ("sample", "watch", "settle"):
+    for name in ("sample", "watch", "settle", "terminate-watch", "terminate-scan"):
         sub = commands.add_parser(name)
         sub.add_argument("--evidence", type=Path, required=True)
         sub.add_argument("--device", required=True)
@@ -144,6 +244,10 @@ def main(argv=None):
             sub.add_argument("--index", type=int, required=True)
         elif name == "watch":
             sub.add_argument("--interval", type=float, default=60)
+        elif name.startswith("terminate-"):
+            sub.add_argument("--log", type=Path, required=True)
+            if name == "terminate-watch":
+                sub.add_argument("--interval", type=float, default=5)
     args = parser.parse_args(argv)
     args.evidence.mkdir(parents=True, exist_ok=True)
     if args.command == "time":
@@ -154,6 +258,15 @@ def main(argv=None):
     if args.command == "settle":
         settle(args.evidence, args.device)
         return 0
+    if args.command.startswith("terminate-"):
+        # A stopped watcher also stops the capture command it is waiting on.
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(signum, stop_running)
+        while True:
+            safely(lambda: scan_terminate(args.evidence, args.device, args.log), "terminate")
+            if args.command == "terminate-scan":
+                return 0
+            time.sleep(args.interval)
     if args.command == "sample":
         safely(lambda: take(args.evidence, args.device, step="boot", sample=args.index, full_table=True), args.index)
         return 0

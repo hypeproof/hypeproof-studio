@@ -274,7 +274,7 @@ class MergeContracts(unittest.TestCase):
 class ShardShell(unittest.TestCase):
     """The real ios-verify.sh shard mode against stubbed Apple tools."""
 
-    def run_shard(self, index, *, test_exit=0, products=1, bootstatus_exit=0, dedicated=()):
+    def run_shard(self, index, *, test_exit=0, products=1, bootstatus_exit=0, dedicated=(), test_output=''):
         temp = tempfile.TemporaryDirectory(prefix='studio-ios-shard-'); self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         scripts, ios, bin_dir, evidence = root / 'scripts', root / 'ios', root / 'bin', root / 'evidence'
@@ -296,6 +296,9 @@ class ShardShell(unittest.TestCase):
         (evidence / 'ios-ui-shard-plan.json').write_text(json.dumps(plan))
         stub = cleanup_suite.COMMAND_STUB.replace('if "test" in args:', 'if "test" in args or "test-without-building" in args:')
         self.assertNotEqual(stub, cleanup_suite.COMMAND_STUB)
+        signal_line = '        if os.environ.get("STUB_TEST_SIGNAL"):'
+        self.assertIn(signal_line, stub)
+        stub = stub.replace(signal_line, '        sys.stdout.write(os.environ.get("STUB_TEST_OUTPUT", "")); sys.stdout.flush()\n' + signal_line)
         marker = '    elif args[:2] == ["simctl", "create"]:'
         self.assertIn(marker, stub)
         stub = stub.replace(marker, '    elif args[:2] == ["simctl", "bootstatus"]:\n'
@@ -310,7 +313,7 @@ class ShardShell(unittest.TestCase):
                    GITHUB_RUN_ID='shard-test', STUB_CALLS=str(calls), STUB_TIMEOUTS=str(root / 'timeouts.jsonl'),
                    STUB_DEVICE=cleanup_suite.DEVICE, STUB_CLEANUP='{}', STUB_TEST_EXIT=str(test_exit),
                    STUB_TEST_SIGNAL='', STUB_DESCENDANTS=str(root / 'descendants.txt'), STUB_CREATE_EXIT='',
-                   STUB_BOOTSTATUS_EXIT=str(bootstatus_exit))
+                   STUB_BOOTSTATUS_EXIT=str(bootstatus_exit), STUB_TEST_OUTPUT=test_output)
         result = subprocess.run(['bash', str(scripts / 'ios-verify.sh'), 'shard', str(index)], cwd=root,
                                 env=env, capture_output=True, text=True, timeout=20)
         commands = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
@@ -366,12 +369,40 @@ class ShardShell(unittest.TestCase):
         self.assertTrue(all(r['command'] == 'observe' for r in rows if r['step'] == 'test'))
         alive = subprocess.run(['pgrep', '-f', f'ios-sim-observe.py watch --evidence ../evidence --device {cleanup_suite.DEVICE}'], capture_output=True)
         self.assertNotEqual(alive.returncode, 0, alive.stdout)
+        watcher = subprocess.run(['pgrep', '-f', f'ios-sim-observe.py terminate-watch --evidence ../evidence --device {cleanup_suite.DEVICE}'], capture_output=True)
+        self.assertNotEqual(watcher.returncode, 0, watcher.stdout)
+        # No "Failed to terminate" in the log: no capture, no spawn.
+        self.assertFalse((evidence / 'terminate-diagnostics.txt').exists())
+        self.assertFalse(any(c['args'][:2] == ['simctl', 'spawn'] for c in commands))
         # The same simctl commands as before, and the only new waits are two fixed 5 s sleeps.
         boot = [c['args'] for c in commands if c['command'] == 'xcrun' and c['args'][:2] in (['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate'])]
         # Shard 1 also launches the app after the suite for its screenshot; that launch is not timed.
         self.assertEqual([a[:2] for a in boot[:4]], [['simctl', 'boot'], ['simctl', 'bootstatus'], ['simctl', 'launch'], ['simctl', 'terminate']])
         self.assertEqual(boot[1][-1], '-b')
         self.assertEqual([c['args'] for c in commands if c['command'] == 'sleep'][:2], [['5'], ['5']])
+
+    def test_failed_terminate_is_diagnosed_without_changing_the_test_or_its_exit(self):
+        failure = ('<unknown>:0: error: -[HPStudioUITests.AlphaTests testA] : Failed to terminate '
+                   'ai.hypeproof.studio.mobile:9784: Failed to terminate ai.hypeproof.studio.mobile:0\n')
+        result, commands, plan, evidence = self.run_shard(1, test_exit=65, test_output=failure)
+        self.assertEqual(result.returncode, 65, result.stderr)
+        args = next(c['args'] for c in commands if c['command'] == 'xcodebuild' and 'test-without-building' in c['args'])
+        self.assertEqual([a for a in args if a.startswith('-only-testing:') or a.startswith('-skip-testing:')],
+                         plan['shards'][0]['xcodebuild_arguments'])
+        for flag, value in (('-default-test-execution-time-allowance', '180'), ('-maximum-test-execution-time-allowance', '240')):
+            self.assertEqual(args[args.index(flag) + 1], value)
+        spawn = [c['args'] for c in commands if c['args'][:2] == ['simctl', 'spawn']]
+        self.assertEqual([a[3:5] for a in spawn], [['launchctl', 'list'], ['log', 'show']], spawn)
+        self.assertTrue(all(a[2] == cleanup_suite.DEVICE for a in spawn))
+        self.assertIn('--last', spawn[1]); self.assertEqual(spawn[1][spawn[1].index('--last') + 1], '3m')
+        # Diagnosed after the test, before the owned cleanup.
+        test_at = commands.index(next(c for c in commands if 'test-without-building' in c['args']))
+        shutdown_at = commands.index(next(c for c in commands if c['args'][:2] == ['simctl', 'shutdown']))
+        self.assertTrue(all(test_at < commands.index(next(c for c in commands if c['args'] == a)) < shutdown_at for a in spawn))
+        text = (evidence / 'terminate-diagnostics.txt').read_text()
+        self.assertEqual(re.findall(r'^== terminate (\d+) (\S+) ', text, re.MULTILINE), [('1', 'ai.hypeproof.studio.mobile:9784')])
+        row = next(json.loads(l) for l in (evidence / 'simulator-steps.jsonl').read_text().splitlines() if '"terminate"' in l)
+        self.assertEqual((row['command'], row['pid'], row['launchctl'], row['log']), ('diagnose', 9784, 'absent', 'shown'))
 
     def test_voice_row_settles_and_probes_after_boot_and_before_its_one_case(self):
         result, commands, plan, evidence = self.run_shard(3, dedicated=['HPStudioUITests/AlphaTests/testD'], test_exit=65)
@@ -524,6 +555,101 @@ class SimObserve(unittest.TestCase):
         self.assertEqual({(r['step'], r['command']) for r in rows}, {('test', 'observe')})
         self.assertEqual([r['sample'] for r in rows[:2]], [1, 2])
         self.assertIn(rows[0]['outcome'], ('no device', 'timeout'))
+
+class TerminateDiagnostics(unittest.TestCase):
+    """ios-sim-observe.py terminate-watch/terminate-scan (#4432 F6): diagnostics only."""
+    DEVICE = SimObserve.DEVICE
+
+    def line(self, pid, test='testA'):
+        return (f'<unknown>:0: error: -[HPStudioUITests.AlphaTests {test}] : Failed to terminate '
+                f'ai.hypeproof.studio.mobile:{pid}: Failed to terminate ai.hypeproof.studio.mobile:0\n')
+
+    def scan(self, evidence, text, outputs):
+        log = evidence / 'simulator-test.log'; log.write_text(text)
+        calls = []
+        def run(args, limit):
+            calls.append((args, limit))
+            return outputs[args[4]]
+        taken = observe.scan_terminate(evidence, self.DEVICE, log, run=run)
+        return taken, calls
+
+    def test_the_inner_zero_pid_is_not_a_second_failure(self):
+        self.assertEqual(observe.terminate_failures(self.line(9784) + 'Test Case passed\n' + self.line(30189)),
+                         [('ai.hypeproof.studio.mobile', '9784'), ('ai.hypeproof.studio.mobile', '30189')])
+        self.assertEqual(observe.terminate_failures("Test Case '-[A testB]' passed\n"), [])
+
+    def test_each_failure_is_captured_once_with_bounded_commands(self):
+        listing = 'PID\tStatus\tLabel\n-\t0\tUIKitApplication:ai.hypeproof.studio.mobile[1a2b][rb-legacy]\n412\t0\tcom.apple.other\n'
+        outputs = {'launchctl': listing, 'log': 'runningboardd: [app<ai.hypeproof.studio.mobile>:9784] termination reported\n'}
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, self.line(9784), outputs)
+            self.assertEqual(taken, 1)
+            self.assertEqual([(a[4:7] if a[4] == 'log' else a[4:6], limit) for a, limit in calls],
+                             [(['launchctl', 'list'], 30), (['log', 'show', '--last'], 60)])
+            self.assertIn('process IN {"runningboardd", "SpringBoard", "testmanagerd"}', calls[1][0])
+            # The same log again: nothing new.
+            self.assertEqual(self.scan(evidence, self.line(9784), outputs), (0, []))
+            text = (evidence / 'terminate-diagnostics.txt').read_text()
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+        self.assertIn('UIKitApplication:ai.hypeproof.studio.mobile[1a2b][rb-legacy]', text)
+        self.assertNotIn('com.apple.other', text)
+        self.assertIn('termination reported', text)
+        self.assertEqual({k: row[k] for k in ('step', 'command', 'sample', 'pid', 'launchctl', 'log', 'log_lines')},
+                         {'step': 'terminate', 'command': 'diagnose', 'sample': 1, 'pid': 9784,
+                          'launchctl': 'listed', 'log': 'shown', 'log_lines': 1})
+
+    def test_a_command_that_does_not_return_is_recorded_not_raised(self):
+        outputs = {'launchctl': '<xcrun simctl spawn x launchctl list did not return within 30s>',
+                   'log': '<xcrun simctl spawn x log show did not return within 60s>'}
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            self.assertEqual(self.scan(evidence, self.line(9784), outputs)[0], 1)
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+        self.assertEqual((row['launchctl'], row['log']), ('timeout', 'timeout'))
+
+    def test_captures_stop_at_the_per_shard_cap(self):
+        outputs = {'launchctl': '', 'log': ''}
+        text = ''.join(self.line(pid, f'test{pid}') for pid in (101, 102, 103, 104, 105))
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, text, outputs)
+            self.assertEqual(taken, observe.TERMINATE_CAPTURES)
+            self.assertEqual(len(calls), 2 * observe.TERMINATE_CAPTURES)
+            self.assertEqual(self.scan(evidence, text, outputs), (0, []))
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text().splitlines()[0])
+        self.assertEqual(row['launchctl'], 'absent')
+
+    def test_a_missing_log_takes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(observe.scan_terminate(Path(directory), self.DEVICE, Path(directory) / 'none.log',
+                                                    run=lambda *_: self.fail('no command without a log')), 0)
+
+    def test_a_stopped_watcher_stops_its_running_capture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); log = evidence / 'simulator-test.log'; log.write_text(self.line(9784))
+            bin_dir = evidence / 'bin'; bin_dir.mkdir()
+            # A capture command that never returns by itself; it records its pid first.
+            (bin_dir / 'xcrun').write_text(f'#!{sys.executable}\nimport os,time\nopen(os.environ["HANG_PID"],"w").write(str(os.getpid()))\ntime.sleep(120)\n')
+            (bin_dir / 'xcrun').chmod(0o755)
+            env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], HANG_PID=str(evidence / 'hang.pid'))
+            child = subprocess.Popen([sys.executable, str(NATIVE / 'scripts/ios-sim-observe.py'), 'terminate-watch', '--evidence', str(evidence),
+                                      '--device', self.DEVICE, '--log', str(log), '--interval', '0.2'], env=env)
+            deadline = time.monotonic() + 20
+            while not (evidence / 'hang.pid').exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            hung = int((evidence / 'hang.pid').read_text())
+            child.terminate(); child.wait(timeout=10)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(hung, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                os.kill(hung, 9); self.fail('the capture command outlived its stopped watcher')
+
 
 class CollectShell(unittest.TestCase):
     """The real ios-collect.sh with the real journey and sign-in collectors."""
