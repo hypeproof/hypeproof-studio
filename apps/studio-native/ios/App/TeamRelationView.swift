@@ -82,7 +82,7 @@ struct TeamRelationScreen:View {
                 ToolbarItem(placement:.topBarTrailing){Button("새로고침"){reasonFocused=false;Task{await model.controller?.open()}}.disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamRelatedRefresh")}
                 ToolbarItem(placement:.topBarLeading){if !model.state.storageReady{Button("뒤로"){confirmLeave=true}}}
             }.interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
-            .task{await model.controller?.open()}.onDisappear{model.controller?.invalidate()}
+            .task{await model.controller?.open()}.onAppear{teamRenderCount("appear.related")}.onDisappear{model.controller?.invalidate()}
             .alert("관련 요청 연결을 변경할까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}
                 Button("저장") { Task { await model.controller?.submit() } }
