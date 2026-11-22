@@ -28,6 +28,7 @@ struct TeamGitHubObservationScreen: View {
         }
     }
     var body: some View {
+        let _ = teamRenderCount("body.observations")
         TimelineView(.periodic(from: .now, by: 1)) { context in
             List {
                 if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamObservationUnavailable") }

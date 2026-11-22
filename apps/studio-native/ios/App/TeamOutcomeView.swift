@@ -20,6 +20,7 @@ struct TeamOutcomeView: View {
         }.accessibilityIdentifier("teamOutcomeHistory\(item.revision)")
     }
     var body: some View {
+        let _ = teamRenderCount("body.outcome")
         List {
 #if DEBUG
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic outcome trace").font(.caption2).accessibilityIdentifier("teamOutcomeTrace").accessibilityValue(TeamEntryFixture.trace) } }

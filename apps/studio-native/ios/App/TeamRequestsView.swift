@@ -47,6 +47,9 @@ func teamOffMainCheck(_ what: String) {
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
     private static let pushMarkPrefixes = ["tap.", "async.", "appear."]
+    /// Destination body and observation-factory counters (F11 GitHub loop) go only to the stall lines.
+    /// Keeping them out of the trace keeps its value the same length as before (#4457).
+    private static let logOnlyKeys: Set<String> = ["body.workflow", "body.outcome", "body.delivery", "body.github", "body.intake", "body.text", "body.observations", "body.subscription", "make.observations"]
     private let lock = NSLock()
     private var rows: [String: (count: Int, first: Int, last: Int)] = [:]
     func count(_ key: String) {
@@ -83,7 +86,7 @@ final class TeamRenderTrace: @unchecked Sendable {
     /// (tap., async., appear.) only feed the stall line.
     static func merged(into trace: String) -> String {
         guard var object = (try? JSONSerialization.jsonObject(with: Data(trace.utf8))) as? [String: Any] else { return trace }
-        object["render"] = shared.snapshot().filter { key, _ in !pushMarkPrefixes.contains { key.hasPrefix($0) } }.mapValues { $0["count"] ?? 0 }
+        object["render"] = shared.snapshot().filter { key, _ in !logOnlyKeys.contains(key) && !pushMarkPrefixes.contains { key.hasPrefix($0) } }.mapValues { $0["count"] ?? 0 }
         shared.lock.lock(); let offMain = shared.offMain != nil; shared.lock.unlock()
         if offMain { object["offMain"] = 1 }
         let stalls = TeamMainStallWatch.shared.reportCount()
@@ -519,6 +522,7 @@ private struct TeamWorkflowScreen: View {
         return model.state.members.first { $0.account_id == id }?.display_name ?? "계정: \(id)"
     }
     var body: some View {
+        let _ = teamRenderCount("body.workflow")
         List {
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamWorkflowMessage") }
             if let page = model.state.page {
@@ -634,13 +638,14 @@ struct TeamGitHubScreen: View {
         }
     }
     var body: some View {
+        let _ = teamRenderCount("body.github")
         List {
 #if DEBUG
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic GitHub trace").font(.caption2).accessibilityIdentifier("teamGitHubTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
 
             if let make = model.makeObservations {
-                NavigationLink { TeamGitHubObservationScreen(model: make()) } label: { Text("최근 확인한 GitHub 상태") }
+                NavigationLink { TeamGitHubObservationScreen(model: { teamRenderCount("make.observations"); return make() }()) } label: { Text("최근 확인한 GitHub 상태") }
                     .disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamGitHubObservationsOpen")
             }
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamGitHubMessage") }
@@ -719,6 +724,7 @@ private struct TeamDeliveryScreen: View {
         } else { Text(event.retention?.confirmsPurge(at: event.redacted_at) == true ? TeamContentRetention.purgedMarker : event.retention?.hidden == true ? event.retention!.marker : "작성자 삭제로 배포 근거가 제거됐어요.") }
     }
     var body: some View {
+        let _ = teamRenderCount("body.delivery")
         TimelineView(.periodic(from: .now, by: 1)) { context in
             List {
                 if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamDeliveryUnavailable") }
