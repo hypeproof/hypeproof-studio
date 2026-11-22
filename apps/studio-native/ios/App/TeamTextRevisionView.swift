@@ -11,7 +11,7 @@ struct TeamTextRevisionScreen: View {
     @State private var confirmSend = false
     @State private var confirmLeave = false
     @State private var editing = false
-    init(model: TeamTextRevisionPresentation) { _model = StateObject(wrappedValue: model) }
+    init(make: @escaping @MainActor () -> TeamTextRevisionPresentation) { _model = StateObject(wrappedValue: make()) }
     private var allowed: Bool { model.controller?.editingAllowed == true }
     private func date(_ value: Double) -> String { Date(timeIntervalSince1970: value / 1000).formatted() }
     private func version(_ item: TeamTextVersion, identifier: String) -> some View {
