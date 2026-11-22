@@ -101,10 +101,15 @@ with open("../evidence/simulator-cleanup.log", "w", buffering=1) as evidence:
     def stop_owned(child):
         # start_new_session gives this command its own process group. Stop any remaining
         # descendants too; they must not hold an output pipe or outlive this cleanup.
+        # A group that has already exited gives ESRCH, or EPERM on macOS when only the
+        # unreaped leader is left; the leader is then killed directly.
         try:
             os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        except (ProcessLookupError, PermissionError):
+            try:
+                child.kill()
+            except (ProcessLookupError, PermissionError):
+                pass
         try:
             child.wait(timeout=2)
         except subprocess.TimeoutExpired:

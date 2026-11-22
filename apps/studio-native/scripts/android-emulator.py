@@ -28,10 +28,11 @@ def stop_owned(process):
     if process is None:
         return
     def signal_group(sig):
+        # No live member: ESRCH, or EPERM on macOS when only the unreaped leader is left.
         try:
             os.killpg(process.pid, sig)
             return True
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             return False
     # A shell/launcher can exit while its children remain in the owned group.
     # Waiting for only the leader would leave those children running indefinitely.
