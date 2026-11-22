@@ -1,4 +1,7 @@
 import SwiftUI
+#if DEBUG
+import os
+#endif
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
     @Published var state = TeamRequestController.View()
@@ -25,6 +28,16 @@ func teamRenderCount(_ key: String) {
     TeamRenderTrace.shared.count(key)
 #endif
 }
+/// Records, once per process, the first write of `what` that runs off the main thread (#4432 F5).
+/// Diagnostics only: it changes no behaviour. Run 44994131331 logged "Updating ObservedObject<TeamRequestPresentation>
+/// from background threads"; code reading and a strict-concurrency type-check found no off-main writer.
+/// The record goes to the team trace JSON ("offMain") and to the runtime-issue log, which XCTest reports as a test warning.
+func teamOffMainCheck(_ what: String) {
+#if DEBUG
+    guard !Thread.isMainThread else { return }
+    TeamRenderTrace.shared.recordOffMain(what)
+#endif
+}
 #if DEBUG
 /// DEBUG-only render counters for #4432. Each key keeps its count and the first and last
 /// system uptime in ms, so a reader can tell bounded render work from an unbounded update loop.
@@ -40,6 +53,22 @@ final class TeamRenderTrace: @unchecked Sendable {
         let row = rows[key] ?? (0, now, now)
         rows[key] = (row.count + 1, row.first, now)
     }
+    private var offMain: [String: Any]?
+    func recordOffMain(_ what: String) {
+        let queue = String(cString: __dispatch_queue_get_label(nil))
+        let frames = Thread.callStackSymbols.prefix(40).map { line -> String in
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            return parts.count > 3 ? String(parts[1]) + " " + parts.dropFirst(3).joined(separator: " ") : line
+        }
+        let record: [String: Any] = ["what": what, "queue": queue, "thread": Thread.current.description, "uptime_ms": Int(ProcessInfo.processInfo.systemUptime * 1000), "stack": Array(frames)]
+        lock.lock()
+        let first = offMain == nil
+        if first { offMain = record }
+        lock.unlock()
+        guard first else { return }
+        let text = "HPStudio off-main write: \(what) on queue \(queue); stack: " + frames.joined(separator: " <- ")
+        os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
+    }
     func snapshot() -> [String: [String: Int]] {
         lock.lock(); defer { lock.unlock() }
         return rows.mapValues { ["count": $0.count, "first_ms": $0.first, "last_ms": $0.last] }
@@ -48,10 +77,20 @@ final class TeamRenderTrace: @unchecked Sendable {
     static func merged(into trace: String) -> String {
         guard var object = (try? JSONSerialization.jsonObject(with: Data(trace.utf8))) as? [String: Any] else { return trace }
         object["render"] = shared.snapshot()
+        shared.lock.lock(); let offMain = shared.offMain; shared.lock.unlock()
+        if let offMain { object["offMain"] = offMain }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return trace }
         return String(data: data, encoding: .utf8) ?? trace
     }
 }
+/// Runtime issues are expected to surface as XCTest warnings only when the log call names a system
+/// image (as SwiftUI's own "Updating ObservedObject" issue did), so the issue uses SwiftUI's image handle.
+/// If the lookup fails it falls back to this image; the trace JSON "offMain" record is kept either way.
+nonisolated(unsafe) private let teamRuntimeIssueDSO: UnsafeRawPointer? = {
+    var info = Dl_info()
+    guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "$s7SwiftUI4ViewMp"), dladdr(symbol, &info) != 0, let base = info.dli_fbase else { return nil }
+    return UnsafeRawPointer(base)
+}()
 #endif
 
 struct TeamRequestsView: View {
@@ -209,7 +248,7 @@ struct TeamRequestDetailView: View {
                             Button("논의로 작성") { choose("discussion", target: nil) }.accessibilityIdentifier("teamCommentChooseDiscussion")
                             Button("질문으로 작성") { choose("question", target: nil) }.accessibilityIdentifier("teamCommentChooseQuestion")
                         }
-                        TextEditor(text: Binding(get: { self.draft?.body ?? "" }, set: edit)).frame(minHeight: 110).accessibilityLabel("댓글 내용").accessibilityIdentifier("teamCommentBody")
+                        TextEditor(text: Binding(get: { self.draft?.body ?? "" }, set: { edit($0) })).frame(minHeight: 110).accessibilityLabel("댓글 내용").accessibilityIdentifier("teamCommentBody")
                             .focused($commentFocused)
                             .disabled(busy || !storageReady || draft.phase != .draft)
                         if !draft.body.isEmpty { ShareLink("댓글 내용 내보내기", item: draft.body) }
