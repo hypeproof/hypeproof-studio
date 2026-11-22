@@ -9,7 +9,7 @@ import Foundation
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [TeamEntryTransport.self]
         return ConversationService(session: URLSession(configuration: config), base: URL(string: "https://team-entry.invalid")!)
     }
-    static var trace: String { TeamEntryTransport.state.trace() }
+    static var trace: String { TeamRenderTrace.merged(into: TeamEntryTransport.state.trace()) }
     static var inboxEnabled: Bool { enabled && ProcessInfo.processInfo.environment["HP_TEAM_INBOX"] == "1" }
     static var pushEnabled: Bool { inboxEnabled && ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] != nil }
     static var permissionGranted: Bool { ProcessInfo.processInfo.environment["HP_TEAM_PUSH"] != "denied" }
@@ -26,6 +26,23 @@ import Foundation
     static func deliverPush() {
         guard pushEnabled else { return }
         NativePushCenter.shared.received(["hps":["schema":"hps-push/1", "delivery_id":"11111111-1111-4111-8111-111111111111", "kind":"team_request", "id":"trq_" + String(repeating:"a",count:32), "revision":12]])
+    }
+    /// `HP_TEAM_SEED_SENT=<body>` starts with one request the synthetic Service
+    /// already acknowledged (#4432). UI cases about later steps (discussion,
+    /// GitHub, outcome, intake) otherwise all repeat compose → send → receipt.
+    /// The seed is only returned when no real draft file exists, so the app's
+    /// own load, reconcile and save paths still run. `requestPosts` stays 0.
+    nonisolated static let seededRequestKey = "00000000-0000-4000-8000-000000004432"
+    nonisolated static var seededBody: String? {
+        guard let body = ProcessInfo.processInfo.environment["HP_TEAM_SEED_SENT"], !body.isEmpty else { return nil }
+        return body
+    }
+    static func seededRequest(account: String) -> TeamRequestDraft? {
+        guard enabled, let body = seededBody else { return nil }
+        var draft = TeamRequestDraft(accountID: account, product: "studio", key: seededRequestKey)
+        draft.body = body; draft.noticeVersion = "synthetic/1"; draft.phase = .received
+        draft.receipt = "trq_" + String(repeating: "a", count: 32)
+        return draft
     }
 }
 private final class TeamEntryState: @unchecked Sendable {
@@ -52,7 +69,11 @@ private final class TeamEntryState: @unchecked Sendable {
         if name == "detail", var row = result["request"] as? [String:Any], let key = teamRequest?["client_request_id"] { row["client_request_id"] = key; result["request"] = row }
         return result
     }
-    private var teamRequest: [String: Any]?
+    private var teamRequest: [String: Any]? = TeamEntryFixture.seededBody.map { body in
+        ["id": "trq_" + String(repeating: "a", count: 32), "account_id": "journey-account", "client_request_id": TeamEntryFixture.seededRequestKey,
+         "product": "studio", "category": "bug", "body": body, "notice_version": "synthetic/1", "status": "submitted",
+         "revision": 1, "created_at": 1000, "updated_at": 1000]
+    }
     private var teamComments: [[String: Any]] = []
     private var requestPosts = 0, commentPosts = 0
     private var relationEvents:[[String:Any]] = [], relationPosts = 0

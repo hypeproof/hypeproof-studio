@@ -218,20 +218,21 @@ final class StudioJourneyTests: XCTestCase {
         let input = waitForSnapshot(app, timeout: 7) { root in latest = root; return has(root, "sharedInput", [.textField, .textView]) }
         XCTAssertTrue(input, "The personal conversation must be usable without a desktop.")
         let opening = waitForSnapshot(app, timeout: 5) { root in latest = root; return has(root, "reflectionOpening", [.staticText]) }
-        if !input || !opening { signInFailureEvidence(app) }
+        if !input || !opening { waitFailureEvidence(app, "sign-in-wait-failure") }
         XCTAssertTrue(opening, "reflectionOpening must appear after sign-in.")
         XCTAssertFalse(latest.map { has($0, "accountCancel", [.button]) } ?? true, "Successful account adoption must finish the login state.")
     }
-    /// Diagnostics only, after a sign-in wait has already failed: the screen and
-    /// the full live trace. Snapshot values stop at about 512 characters and
-    /// hid `paths` (whether POST /v1/auth/native/start was sent) in run
-    /// 44866066162 (#4432). No wait, retry or assertion is added.
-    @MainActor private func signInFailureEvidence(_ app: XCUIApplication) {
+    /// Diagnostics only, after a wait has already failed: the screen and the
+    /// full live trace, as "<name>-screen" and "<name>-full-trace". Snapshot
+    /// values stop at about 512 characters and hid `paths` (whether POST
+    /// /v1/auth/native/start was sent) in run 44866066162 (#4432). No wait,
+    /// retry or assertion is added.
+    @MainActor private func waitFailureEvidence(_ app: XCUIApplication, _ name: String) {
         let screen = XCTAttachment(screenshot: app.screenshot())
-        screen.name = "sign-in-wait-failure-screen"; screen.lifetime = .keepAlways; add(screen)
+        screen.name = name + "-screen"; screen.lifetime = .keepAlways; add(screen)
         let node = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
         let trace = XCTAttachment(string: node.exists ? (node.value as? String ?? "trace value is not a string") : "trace element absent")
-        trace.name = "sign-in-wait-failure-full-trace"; trace.lifetime = .keepAlways; add(trace)
+        trace.name = name + "-full-trace"; trace.lifetime = .keepAlways; add(trace)
     }
     /// All nodes of one accessibility snapshot that satisfy `match`.
     @MainActor private func snapshotNodes(_ root: XCUIElementSnapshot, _ match: (XCUIElementSnapshot) -> Bool) -> [XCUIElementSnapshot] {
@@ -762,6 +763,9 @@ final class StudioJourneyTests: XCTestCase {
             replyLabel = self.snapshotNodes(root) { $0.identifier == "sharedReply" && $0.elementType == .staticText }.first?.label
             return replyLabel != nil
         }
+        // Run 44907983994 shard 1: the screen stayed at "전송 대기" and the
+        // 10 s wait ended after about 60 s, with no trace attached.
+        if !replied { waitFailureEvidence(app, "real-playback-reply-wait-failure") }
         XCTAssertTrue(replied, "sharedReply must appear after the voice turn.")
         XCTAssertEqual(replyLabel, "HP Studio의 답변. 내일은 어떤 작은 일을 해 보고 싶나요?")
         waitForVoiceEvent("playbackStarted", in: app, timeout: 20)
