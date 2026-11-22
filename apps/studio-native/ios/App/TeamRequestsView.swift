@@ -247,10 +247,6 @@ struct TeamRequestDetailView: View {
     private var comments: [TeamRequestComment] { history.comments }
     @State private var commentSchemas: [String] = []
     @FocusState private var commentFocused: Bool
-    @State private var showIntake = false
-    @State private var intakeProduct = "studio"
-    @State private var showRelated = false
-    @State private var relatedProduct = "studio"
     @State private var showTextHistory = false
     @State private var textTarget = ""
     @State private var textProduct = "studio"
@@ -281,17 +277,17 @@ struct TeamRequestDetailView: View {
                 Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, detail.request.product) }, requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
                 Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
                 Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
-                Section { Button("공개 요청으로 제안") {
-                    teamRenderCount("tap.intake"); commentFocused = false; intakeProduct = detail.request.product; let expected = generation
-                    DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { teamRenderCount("async.intake"); showIntake = true } }
-                }.disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
+                // Intake and related requests push through NavigationLink, like the four links above and below (#4432).
+                // With `.navigationDestination(isPresented:)` the detail and destination bodies were re-evaluated in
+                // lock step for 84-86 s after the push started (runs 45021415641, 45033852560). No link push has shown that.
+                // The tap gesture resigns the comment focus in the same tap, so a return does not restore the keyboard.
+                Section { NavigationLink("공개 요청으로 제안") { let product = detail.request.product; TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }) }
+                    .simultaneousGesture(TapGesture().onEnded { teamRenderCount("tap.intake"); commentFocused = false })
+                    .disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
                 Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
-                    Button("관련 요청") {
-                        teamRenderCount("tap.related"); commentFocused = false; relatedProduct = detail.request.product
-                        let expected = generation
-                        // Commit focus resignation before NavigationStack captures the source view.
-                        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.related"); showRelated = true } }
-                    }.disabled(busy || !storageReady).accessibilityIdentifier("teamRelationsEntry") }
+                    NavigationLink("관련 요청") { let product = detail.request.product; TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model) }
+                        .simultaneousGesture(TapGesture().onEnded { teamRenderCount("tap.related"); commentFocused = false })
+                        .disabled(busy || !storageReady).accessibilityIdentifier("teamRelationsEntry") }
                 if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamSubscriptionScreen(model: inbox, product: detail.request.product, request: requestID) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
                     ForEach(comments) { comment in
@@ -346,9 +342,7 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.accessibilityIdentifier("teamRequestDetailList").navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $showIntake) { let product = intakeProduct; TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }) }
             .navigationDestination(isPresented: $showTextHistory) { let target = textTarget, product = textProduct; TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) }) }
-            .navigationDestination(isPresented: $showRelated) { let product = relatedProduct; TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model) }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
