@@ -16,6 +16,8 @@ import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.FailureHandler;
 import androidx.test.espresso.IdlingRegistry;
 import androidx.test.espresso.IdlingResource;
 import androidx.test.espresso.InjectEventSecurityException;
@@ -24,6 +26,7 @@ import androidx.test.espresso.ViewAction;
 import androidx.test.espresso.ViewInteraction;
 import androidx.test.espresso.action.GeneralLocation;
 import androidx.test.espresso.action.MotionEvents;
+import androidx.test.espresso.base.DefaultFailureHandler;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
 import androidx.test.runner.lifecycle.Stage;
@@ -459,6 +462,9 @@ final class UiSync {
     static TestRule deviceFocusRule() {
         return (base, description) -> new Statement() {
             @Override public void evaluate() throws Throwable {
+                focusAtFailure = null;
+                // A class that sets its own handler in @Before wraps it with focusAware().
+                Espresso.setFailureHandler(focusAware(new DefaultFailureHandler(InstrumentationRegistry.getInstrumentation().getTargetContext())));
                 String leftover = leftoverWithoutFocus();
                 if (leftover != null) throw deviceFocusLost(description.getMethodName() + ": at test start " + leftover, null);
                 try {
@@ -467,9 +473,30 @@ final class UiSync {
                     throw lost;
                 } catch (Throwable failure) {
                     if (!lostRootFocus(failure)) throw failure;
-                    throw deviceFocusLost(description.getMethodName() + ": Espresso found no root with window focus", failure);
+                    // @After has closed the scenario by now, so the launcher holds focus.
+                    // Report the snapshot that the failure handler took before teardown.
+                    String snapshot = focusAtFailure;
+                    throw new DeviceFocusLost("device focus lost (device state, not a product result): " + description.getMethodName()
+                        + ": Espresso found no root with window focus ["
+                        + (snapshot != null ? "at failure, before teardown: " + snapshot : "no snapshot before teardown") + "]", failure);
+                } finally {
+                    focusAtFailure = null;
                 }
             }
+        };
+    }
+
+    /** Focus state taken at the failing Espresso lookup, before @After closes the scenario. */
+    private static volatile String focusAtFailure;
+
+    /**
+     * Wraps an Espresso failure handler. When a lookup fails because no root has window
+     * focus, it records window manager and input dispatcher focus first, then delegates.
+     */
+    static FailureHandler focusAware(FailureHandler delegate) {
+        return (error, matcher) -> {
+            if (lostRootFocus(error) && focusAtFailure == null) focusAtFailure = focusSnapshot("root-without-focus");
+            delegate.handle(error, matcher);
         };
     }
 
@@ -491,22 +518,74 @@ final class UiSync {
         return false;
     }
 
+    /** For failures raised inside the test (resume or start checks), before teardown. */
     private static DeviceFocusLost deviceFocusLost(String message, Throwable cause) {
-        String focus = "focus unknown";
+        return new DeviceFocusLost("device focus lost (device state, not a product result): " + message + " [" + focusSnapshot("device-focus-lost") + "]", cause);
+    }
+
+    /**
+     * Writes dumpsys window, input and activity to evidence/failures and returns window
+     * manager focus next to input dispatcher focus, the focus request result and the
+     * app window's input flags and alpha. The two focus owners can differ: a window can
+     * be focused in the window manager while input treats it as NOT_VISIBLE.
+     */
+    static String focusSnapshot(String label) {
         try {
             Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
             File dir = new File(context.getExternalFilesDir(null), "evidence/failures");
             if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create failure evidence directory");
-            String base = "device-focus-lost-" + SystemClock.elapsedRealtime();
+            String base = label + "-" + SystemClock.elapsedRealtime();
             File window = new File(dir, base + "-window.txt");
+            File input = new File(dir, base + "-input.txt");
             shell("timeout 3 dumpsys window", window);
+            shell("timeout 3 dumpsys input", input);
             shell("timeout 3 dumpsys activity activities", new File(dir, base + "-activity.txt"));
-            for (String line : Files.readAllLines(window.toPath(), StandardCharsets.UTF_8))
-                if (line.contains("mCurrentFocus=") || line.contains("mFocusedApp=")) focus = focus.equals("focus unknown") ? line.trim() : focus + "; " + line.trim();
+            return describeFocus(Files.readAllLines(window.toPath(), StandardCharsets.UTF_8),
+                Files.readAllLines(input.toPath(), StandardCharsets.UTF_8), context.getPackageName());
         } catch (Exception | AssertionError problem) {
             Log.e(TAG, "Device focus evidence capture failed", problem);
+            return "focus unknown: " + problem.getClass().getSimpleName();
         }
-        return new DeviceFocusLost("device focus lost (device state, not a product result): " + message + " [" + focus + "]", cause);
+    }
+
+    /** Pure parser for focusSnapshot; package-private for a unit check of its output. */
+    static String describeFocus(List<String> window, List<String> input, String appPackage) {
+        StringBuilder wm = new StringBuilder();
+        for (String line : window)
+            if (line.contains("mCurrentFocus=") || line.contains("mFocusedApp=")) wm.append(wm.length() == 0 ? "" : "; ").append(line.trim());
+        String focused = section(input, "FocusedWindows:");
+        String requests = section(input, "FocusRequests:");
+        StringBuilder app = new StringBuilder();
+        for (String line : input) {
+            String text = line.trim();
+            // Input window rows look like "7: name=40701a1 <package>/<activity>, id=184, ..., inputConfig=..., alpha=0, ...".
+            if (text.matches("\\d+: name=\\S+ " + java.util.regex.Pattern.quote(appPackage) + "/.*") && text.contains("inputConfig=")) {
+                int end = text.indexOf(", frame=");
+                app.append(app.length() == 0 ? "" : "; ").append(end > 0 ? text.substring(0, end) : text);
+            }
+        }
+        return "WM " + (wm.length() == 0 ? "focus line missing" : wm)
+            + " | InputDispatcher FocusedWindows: " + focused
+            + " | FocusRequests: " + requests
+            + " | app input windows: " + (app.length() == 0 ? "none" : app);
+    }
+
+    /** The text after a "Key:" line plus its more-indented continuation lines. */
+    private static String section(List<String> lines, String key) {
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            int at = line.indexOf(key);
+            if (at < 0 || !line.substring(0, at).trim().isEmpty()) continue;
+            StringBuilder value = new StringBuilder(line.substring(at + key.length()).trim());
+            for (int j = i + 1; j < lines.size(); j++) {
+                String next = lines.get(j);
+                int indent = next.length() - next.replaceAll("^\\s+", "").length();
+                if (next.trim().isEmpty() || indent <= at) break;
+                value.append(value.length() == 0 ? "" : "; ").append(next.trim());
+            }
+            return value.length() == 0 ? "<empty>" : value.toString();
+        }
+        return "missing";
     }
 
     /** Captures logcat and input state when a test fails outside a tap. */

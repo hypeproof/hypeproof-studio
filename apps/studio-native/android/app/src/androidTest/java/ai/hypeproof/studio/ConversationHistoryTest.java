@@ -127,10 +127,10 @@ public class ConversationHistoryTest {
     @Before public void setup()throws Exception{
         Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
         context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-        Espresso.setFailureHandler((error,matcher)->{
+        Espresso.setFailureHandler(UiSync.focusAware((error,matcher)->{
             captureFailure(error);
             ConversationHistoryTest.<RuntimeException>rethrowOriginal(error);
-        });
+        }));
         QuestionActivity.testMenuObservation=details->observeRefresh("menu_"+details.optString("phase"),details);
         File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
         store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("history-account","history-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
