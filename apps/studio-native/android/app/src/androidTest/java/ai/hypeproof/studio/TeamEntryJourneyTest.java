@@ -40,6 +40,7 @@ public class TeamEntryJourneyTest {
     private final AtomicBoolean loseTrigger=new AtomicBoolean(),triggerCommitted=new AtomicBoolean();
     private final java.util.List<String> triggerIDs=new java.util.concurrent.CopyOnWriteArrayList<>();
     @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
     private File failureDirectory;
     private Throwable firstFailure;
 

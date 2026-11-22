@@ -40,6 +40,7 @@ public class StudioJourneyTest {
     private ActivityScenario<MainActivity> app;
     private Context context;
     @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
     private File failureDirectory;
     private Throwable firstFailure;
 
@@ -306,7 +307,7 @@ public class StudioJourneyTest {
         }catch(Exception e){throw new AssertionError(e);}});
         app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
         assertFalse(controller.get().session.matches(oldTicket[0],id[0]));
-        app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+        UiSync.resumeWithFocus(app,"voice background");
         onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각\n아직 인식 중인 말")));
         app.recreate();onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각\n아직 인식 중인 말")));
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
