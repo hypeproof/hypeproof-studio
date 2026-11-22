@@ -131,6 +131,25 @@ class Bootstrap:
                 result = "failed"
             results.append({"package": package, "result": result, "exit_code": code, "output": text[-500:]})
 
+    def freeze_device_config(self, deadline):
+        """Stop server flag pushes for the rest of this disposable boot, and prove it.
+
+        A DeviceConfig update to the launcher namespace relaunches NexusLauncherActivity.
+        In run 44938132069 that relaunch ("Set visible without transition") came at the
+        end of test 20, and every later test found no focused window. The setting only
+        blocks DeviceConfig writes from outside the shell; it changes no test.
+        """
+        code, _ = self.adb("shell", "device_config", "set_sync_disabled_for_tests", "persistent",
+                           timeout=self.remaining(deadline))
+        if code:
+            raise Stopped("device_preparation_failed")
+        code, mode = self.adb("shell", "device_config", "get_sync_disabled_for_tests",
+                              timeout=self.remaining(deadline))
+        mode = mode.decode(errors="replace").strip()
+        self.receipt["device_config_sync_disabled"] = mode
+        if code or mode != "persistent":
+            raise Stopped("device_config_sync_not_disabled")
+
     def start(self):
         avdmanager = self.sdk / "cmdline-tools/latest/bin/avdmanager"
         code, output = self.command([str(avdmanager), "create", "avd", "--name", self.name,
@@ -191,6 +210,7 @@ class Bootstrap:
             code, _ = self.adb(*command, timeout=self.remaining(deadline))
             if code:
                 raise Stopped("device_preparation_failed")
+        self.freeze_device_config(deadline)
         stable, previous, number = 0, None, 0
         while stable < 3:
             number += 1
