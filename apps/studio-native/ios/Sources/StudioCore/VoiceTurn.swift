@@ -93,6 +93,7 @@ public struct VoiceTimeline: Sendable {
         case inputBuiltIn, inputWired, inputBluetoothHFP, inputOther, inputUnavailable
         case syntheticCaptureStarted, syntheticPlaybackQueued, syntheticPlaybackFinished
         case playbackQueued, playbackStarted, playbackFinished, playbackCancelled
+        case voiceInventoryTimedOut, voiceInventoryLate
         case ready, continuationRequested, stalePlaybackCallback
         case stopped, background, interrupted, routeChanged, scopeChanged
         case draftPresent, requestOutstanding, notReady, failed
