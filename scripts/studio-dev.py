@@ -359,7 +359,7 @@ def chalk_checkout(repo):
 
 
 def chalk_cli(app):
-    return app_resources(app) / ('bin/hypeproof-studio' if is_mac_app(app) else 'bin/hypeproof-studio.cmd')
+    return app_resources(app) / 'bin/hypeproof-studio' if is_mac_app(app) else app / 'bin/hypeproof-studio.cmd'
 
 
 def chalk_cli_args(state):
