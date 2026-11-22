@@ -35,6 +35,7 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 public class ConversationHistoryTest {
     private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
     @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    @Rule public final org.junit.rules.TestRule deviceFocus=UiSync.deviceFocusRule();
     private File failureDirectory;
     private Throwable firstFailure;
     private final JSONArray imeObservations=new JSONArray();
