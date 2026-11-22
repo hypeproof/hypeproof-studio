@@ -119,7 +119,11 @@ private struct SharedCacheFile: Codable {
         return service
 #endif
     }()
-    lazy var experience: ProductExperiencePresentation = {
+    // The presentations below are built by methods, not by `lazy var x = { ... }()`.
+    // Async closures made inside a lazy initializer ran on the cooperative pool, and
+    // their `await` on main-actor code did not hop to the main actor (#4432).
+    lazy var experience: ProductExperiencePresentation = makeExperience()
+    private func makeExperience() -> ProductExperiencePresentation {
         let presentation = ProductExperiencePresentation()
         presentation.controller = ProductExperienceController(identity: { [weak self] in
             guard let self, self.signedIn, !self.loggingOut, let account = self.account else { return nil }
@@ -142,8 +146,9 @@ private struct SharedCacheFile: Codable {
             try JSONEncoder().encode(queue).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         }, changed: { [weak self, weak presentation] in presentation?.state = $0; self?.questions.controller?.startAvailabilityChanged() })
         return presentation
-    }()
-    lazy var push: AccountPushPresentation = {
+    }
+    lazy var push: AccountPushPresentation = makePush()
+    private func makePush() -> AccountPushPresentation {
         let presentation = AccountPushPresentation()
         presentation.controller = AccountPushController(identity: { [weak self] in
             guard let self, self.signedIn, !self.loggingOut, let account = self.account else { return nil }
@@ -172,7 +177,7 @@ private struct SharedCacheFile: Codable {
             return try await self.teamService.openedTeamPush(installation: id, reference: reference, token: self.approvalToken(binding))
         })
         return presentation
-    }()
+    }
     private func teamPushDiscoveryDenied(_ binding: MemberApprovalIdentity, attempt: UUID, status: Int, code: String) {
         guard epoch == attempt, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { return }
         failure(SyncFailure.http(status, code))
@@ -219,7 +224,8 @@ private struct SharedCacheFile: Codable {
         var folder = directory; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
         try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("push-device-v1.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
-    lazy var teamInbox: TeamInboxPresentation = {
+    lazy var teamInbox: TeamInboxPresentation = makeTeamInbox()
+    private func makeTeamInbox() -> TeamInboxPresentation {
         let presentation = TeamInboxPresentation()
         presentation.controller = TeamInboxController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] account in
             guard let self else { throw CancellationError() }; return try await self.teamService.teamRequestAccess(token: self.approvalToken(account))
@@ -240,8 +246,9 @@ private struct SharedCacheFile: Codable {
             try mutation.validate(account: mutation.accountID); try self.writeTeamDraft(mutation, account: mutation.accountID, name: "subscription.json")
         }, changed: { [weak presentation] in presentation?.state = $0 })
         return presentation
-    }()
-    lazy var teamRequests: TeamRequestPresentation = {
+    }
+    lazy var teamRequests: TeamRequestPresentation = makeTeamRequests()
+    private func makeTeamRequests() -> TeamRequestPresentation {
         let presentation = TeamRequestPresentation()
         presentation.inbox = teamInbox
         presentation.controller = TeamRequestController(identity: { [weak self] in try await self?.approvalIdentity() }, access: { [weak self] identity in
@@ -405,7 +412,7 @@ private struct SharedCacheFile: Codable {
             return workflow
         }
         return presentation
-    }()
+    }
     private func teamDraftFile(account: String, name: String) throws -> URL {
         let key = try approvalDirectory(account).lastPathComponent
         return directory.appendingPathComponent("team-requests", isDirectory: true).appendingPathComponent(key, isDirectory: true).appendingPathComponent(name)
@@ -530,7 +537,8 @@ private struct SharedCacheFile: Codable {
         try JSONEncoder().encode(value).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
     private var observedReflectionID: String?
-    lazy var questions: AccountQuestionPresentation = {
+    lazy var questions: AccountQuestionPresentation = makeQuestions()
+    private func makeQuestions() -> AccountQuestionPresentation {
         let presentation = AccountQuestionPresentation()
         presentation.controller = AccountQuestionController(identity: { [weak self] in try await self?.approvalIdentity() }, load: { [weak self] binding in
             guard let self else { throw CancellationError() }
@@ -561,8 +569,9 @@ private struct SharedCacheFile: Codable {
             } else if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
         }, observed: { [weak self] event in self?.experience.controller?.record(event) }, startingAvailable: { [weak self] account in self?.experience.controller?.available(for: account) == true }, changed: { [weak presentation] in presentation?.state = $0 })
         return presentation
-    }()
-    lazy var approvals: MemberApprovalPresentation = {
+    }
+    lazy var approvals: MemberApprovalPresentation = makeApprovals()
+    private func makeApprovals() -> MemberApprovalPresentation {
         let presentation = MemberApprovalPresentation()
         presentation.controller = MemberApprovalController(identity: { [weak self] in try await self?.approvalIdentity() }, list: { [weak self] binding in
             guard let self else { throw CancellationError() }
@@ -597,7 +606,7 @@ private struct SharedCacheFile: Codable {
             if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
         }, changed: { [weak presentation, weak self] state in presentation?.state = state; self?.approvalEntryVisible = state.entryVisible })
         return presentation
-    }()
+    }
     private func discoverApprovals() {
         let attempt = epoch
         Task { [weak self] in
