@@ -1,8 +1,8 @@
-🛠️ **New skill published** · `{{ skill }}`{% if version %} · `{{ version }}`{% endif %}
+🛠️ **새 스킬 공개** · `{{ skill }}`{% if version %} · `{{ version }}`{% endif %}
 
 {% if description %}> {{ description | truncate(200) }}{% endif %}
-{% if added_files %}Files added: {{ added_files | length }}{% endif %}
+{% if added_files %}추가 파일: {{ added_files | length }}개{% endif %}
 
-{% if url %}[Skill source]({{ url }}){% endif %}
+{% if url %}[스킬 소스]({{ url }}){% endif %}
 
-To pull: `bash hypeproof-harness/scripts/sync.sh --commit`
+받기: `bash hypeproof-harness/scripts/sync.sh --commit`

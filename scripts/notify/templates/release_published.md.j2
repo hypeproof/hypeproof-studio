@@ -1,10 +1,10 @@
-🚢 **Release published** · `{{ product or "?" }}` · `{{ version }}`
+🚢 **새 버전 공개** · `{{ product or "?" }}` · `{{ version }}`
 
-{% if changelog %}
-**What's new:**
-```
-{{ changelog | truncate(800) }}
-```
+{% set changes = changelog | release_changes %}
+{% if changes %}
+**주요 변경**
+{% for change in changes %}
+- {{ change | truncate(90) }}
+{% endfor %}
 {% endif %}
-{% if asset_count %}{{ asset_count }} asset{{ "s" if asset_count != 1 else "" }} attached{% endif %}
-{% if url %}[Release page]({{ url }}){% endif %}{% if download_url %} · [Download]({{ download_url }}){% endif %}
+{% if url %}[릴리스 페이지]({{ url }}){% endif %}{% if download_url %} · [다운로드]({{ download_url }}){% endif %}

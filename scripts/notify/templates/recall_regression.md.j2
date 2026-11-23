@@ -1,19 +1,17 @@
-📉 **Recall regression detected** · `{{ tenant_slug or "?" }}`
+📉 **검색 품질 하락 감지** · `{{ tenant_slug or "?" }}`
 
-| | Previous | Current | Δ |
-|---|---:|---:|---:|
-| PASS | {{ prev_pass or "?" }} | {{ current_pass or "?" }} | {% if delta_pass is defined %}{{ delta_pass }}{% endif %} |
-| Avg recall | {{ prev_avg or "?" }}% | {{ current_avg or "?" }}% | {% if delta_avg is defined %}{{ delta_avg }}%{% endif %} |
-
-Threshold: ≥ {{ threshold or "?" }} PASS
+통과 {{ prev_pass or "?" }}개 → **{{ current_pass or "?" }}개** (기준 {{ threshold or "?" }}개 이상)
+{% if prev_avg and current_avg %}
+평균 재현율 {{ prev_avg }}% → {{ current_avg }}%
+{% endif %}
 {% if reason %}
 ⚠️ {{ reason }}
 {% endif %}
 
 {% if regressed_queries %}
-Regressed queries (top 5):
+나빠진 질문 (상위 5개)
 {% for q in regressed_queries[:5] %}
 - `{{ q.id }}` — {{ q.text | default(q.id) | truncate(60) }}
 {% endfor %}
 {% endif %}
-{% if url %}[Pipeline run]({{ url }}){% endif %}
+{% if url %}[파이프라인 실행 보기]({{ url }}){% endif %}

@@ -40,9 +40,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import asdict, dataclass, field
@@ -133,8 +135,18 @@ def _route_for(cfg: dict, tenant_slug: str | None, event_type: str) -> dict | No
 # Template rendering
 # ---------------------------------------------------------------------------
 
+def release_changes(changelog: Any, limit: int = 8) -> list[str]:
+    """PR titles from generated release notes, without install steps, authors or links."""
+    changes = []
+    for line in str(changelog or "").splitlines():
+        match = re.match(r"\s*[*-]\s+(.+?)(?:\s+by\s+@\S+.*)?$", line)
+        if match and not match.group(1).startswith("release:"):
+            changes.append(match.group(1).strip())
+    return changes[:limit]
+
+
 def _make_env(template_dir: Path) -> Environment:
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(str(template_dir)),
         autoescape=select_autoescape([]),     # markdown output, no html-escape
         # ChainableUndefined: missing vars render empty, support a.b.c lookup
@@ -145,6 +157,34 @@ def _make_env(template_dir: Path) -> Environment:
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    env.filters["release_changes"] = release_changes
+    return env
+
+
+# ---------------------------------------------------------------------------
+# Repeat suppression. Active only when NOTIFY_STATE_FILE is set, because most
+# callers run in stateless CI. An unreadable state file never blocks an alert.
+# ---------------------------------------------------------------------------
+
+def _fingerprint(event_type: str, channel: str, rendered: str) -> str:
+    # Run links change on every run while the incident stays the same.
+    stable = re.sub(r"https?://\S+", "", rendered)
+    return hashlib.sha256(f"{event_type}\0{channel}\0{stable}".encode()).hexdigest()
+
+
+def _read_state(path: str) -> dict:
+    try:
+        value = json.loads(Path(path).read_text())
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_state(path: str, state: dict, now: float, max_age_sec: float = 90 * 86400) -> None:
+    fresh = {k: v for k, v in state.items() if isinstance(v, (int, float)) and now - v < max_age_sec}
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(fresh, sort_keys=True))
 
 
 def render_event(
@@ -259,6 +299,10 @@ async def notify(
         return result
 
     channel_defs = cfg.get("channels") or {}
+    state_file = os.environ.get("NOTIFY_STATE_FILE", "").strip()
+    state = _read_state(state_file) if state_file else {}
+    cooldown_min = rule.get("cooldown_min", (cfg.get("defaults") or {}).get("cooldown_min", 0))
+    cooldown_sec = float(cooldown_min or 0) * 60
     for ch_slug in channels_to_fire:
         spec = channel_defs.get(ch_slug)
         if not spec:
@@ -285,11 +329,20 @@ async def notify(
             continue
 
         t0 = time.time()
+        fingerprint = _fingerprint(event_type, ch_slug, rendered)
+        if state_file and rule.get("severity") != "critical" and t0 - state.get(fingerprint, 0) < cooldown_sec:
+            result.routes_fired.append(RouteResult(
+                channel=ch_slug, transport=transport_name, status="suppressed_cooldown",
+            ))
+            continue
         try:
             send_opts = {"bot_name": spec["bot_name"]} if transport_name == "discord_webhook" and "bot_name" in spec else {}
             http_status, http_err = await trans.send(target, rendered, **send_opts)
             elapsed = int((time.time() - t0) * 1000)
             if 200 <= http_status < 300:
+                if state_file:
+                    state[fingerprint] = t0
+                    _write_state(state_file, state, t0)
                 result.routes_fired.append(RouteResult(
                     channel=ch_slug, transport=transport_name,
                     status="sent", http_status=http_status, elapsed_ms=elapsed,

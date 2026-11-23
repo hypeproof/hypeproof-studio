@@ -1,21 +1,21 @@
-💸 **Cost over budget** · `{{ tenant_slug or "system" }}`
+💸 **비용 예산 초과** · `{{ tenant_slug or "system" }}`
 
-Today's spend: **${{ "%.2f" | format(total_cost_usd) }}** (budget ${{ "%.2f" | format(daily_budget_usd) }})
+오늘 지출 **${{ "%.2f" | format(total_cost_usd) }}** (예산 ${{ "%.2f" | format(daily_budget_usd) }})
 
 {% if by_agent %}
-By agent:
+에이전트별
 {% for agent, cost in by_agent.items() %}
 - `{{ agent }}`: ${{ "%.2f" | format(cost) }}
 {% endfor %}
 {% endif %}
 {% if by_model %}
 
-By model:
+모델별
 {% for model, cost in by_model.items() %}
 - `{{ model }}`: ${{ "%.2f" | format(cost) }}
 {% endfor %}
 {% endif %}
 {% if unpriced_calls %}
 
-⚠️ {{ unpriced_calls }} calls had no priced model — likely a new model that needs adding to `cost_tracker._PRICING_USD_PER_M_TOKENS`.
+⚠️ 가격이 등록되지 않은 호출 {{ unpriced_calls }}건. 새 모델이면 `cost_tracker._PRICING_USD_PER_M_TOKENS`에 추가해야 해요.
 {% endif %}

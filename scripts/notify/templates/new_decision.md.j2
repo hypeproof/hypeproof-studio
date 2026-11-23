@@ -1,9 +1,9 @@
-🎯 **New decision recorded** · `{{ tenant_slug or "?" }}`
+🎯 **새 결정 기록** · `{{ tenant_slug or "?" }}`
 
 > {{ summary }}
 
-{% if rationale %}**Why:** {{ rationale | truncate(200) }}{% endif %}
-{% if deciders %}Decided by: {{ deciders | join(", ") }}{% endif %}
-{% if source_label %}Source: {{ source_label }}{% endif %}
+{% if rationale %}**이유:** {{ rationale | truncate(200) }}{% endif %}
+{% if deciders %}결정: {{ deciders | join(", ") }}{% endif %}
+{% if source_label %}출처: {{ source_label }}{% endif %}
 
-{% if ref %}`{{ ref }}`{% if vault_url %} → [open]({{ vault_url }}/{{ ref }}){% endif %}{% endif %}
+{% if ref %}`{{ ref }}`{% if vault_url %} → [열기]({{ vault_url }}/{{ ref }}){% endif %}{% endif %}
