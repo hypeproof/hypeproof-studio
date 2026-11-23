@@ -184,6 +184,15 @@ public struct TeamCommentHistory: Sendable {
         public init() {}
     }
     public private(set) var view = View()
+    /// Why `edit` kept or dropped a change (#4432 F24). Release callers ignore it; the product picker counts it in DEBUG.
+    public enum EditOutcome: String, Sendable {
+        case applied, busy, storage, noDraft, phase, access, length
+        /// The change was taken but writing it to the device failed (`storageReady` is now false).
+        case saveFailed
+    }
+    /// DEBUG diagnostics hook (#4432 F24): `open()` reports "open.start", "open.busy", "open.reset" and
+    /// "open.draft.<product>". Nil in release; it changes no behaviour.
+    public var observe: ((String) -> Void)?
     private var generation = UUID(), binding: MemberApprovalIdentity?
     private let identity: () async throws -> MemberApprovalIdentity?
     private let access: (MemberApprovalIdentity) async throws -> TeamRequestAccess
@@ -203,18 +212,19 @@ public struct TeamCommentHistory: Sendable {
     public func invalidate() { generation = UUID(); binding = nil; view = View(); changed(view) }
     private func current(_ g: UUID, _ account: MemberApprovalIdentity) async throws -> Bool { guard g == generation else { return false }; let now = try await identity(); return g == generation && now == account }
     public func open() async {
-        guard !view.busy else { return }
+        guard !view.busy else { observe?("open.busy"); return }
+        observe?("open.start")
         generation = UUID(); let g = generation
         view.busy = true; view.requests = []; view.access = nil; view.message = "팀 권한을 확인하고 있어요."; changed(view)
         defer { if g == generation { view.busy = false; changed(view) } }
         do {
             guard let account = try await identity() else { if g == generation { invalidate() }; return }
             guard g == generation else { return }
-            if binding != account { view = View(); view.busy = true }
+            if binding != account { view = View(); view.busy = true; observe?("open.reset") }
             binding = account
             do {
                 let draft = try load(account.accountID); try draft?.validate(account: account.accountID)
-                view.draft = draft; view.storageReady = true
+                view.draft = draft; view.storageReady = true; observe?("open.draft." + (draft?.product ?? "none"))
             } catch { view.storageReady = false; view.message = "저장된 초안을 읽지 못했어요. 원본을 덮어쓰지 않았어요."; changed(view); return }
             let rights = try await access(account); try rights.validate(account: account.accountID)
             guard try await current(g, account) else { if g == generation { invalidate() }; return }
@@ -240,14 +250,22 @@ public struct TeamCommentHistory: Sendable {
         }
         changed(view)
     }
-    public func edit(body: String, product: String, category: String) {
-        guard !view.busy, view.storageReady, var draft = view.draft, draft.phase == .draft,
-              view.access?.products.contains(product) == true, body.utf16.count <= 5000 else { return }
+    @discardableResult
+    public func edit(body: String, product: String, category: String) -> EditOutcome {
+        // Same guards in the same order as before; each one now names itself (#4432 F24).
+        guard !view.busy else { return .busy }
+        guard view.storageReady else { return .storage }
+        guard var draft = view.draft else { return .noDraft }
+        guard draft.phase == .draft else { return .phase }
+        guard view.access?.products.contains(product) == true else { return .access }
+        guard body.utf16.count <= 5000 else { return .length }
         if draft.product != product { view.requests = []; view.nextCursor = nil }
         draft.body = body; draft.product = product; draft.category = category; view.draft = draft
+        var outcome = EditOutcome.applied
         do { try draft.validate(account: draft.accountID); try save(draft); view.message = "" }
-        catch { view.storageReady = false; view.message = "기기에 저장하지 못했어요. 닫기 전에 내용을 복사해 주세요." }
+        catch { view.storageReady = false; view.message = "기기에 저장하지 못했어요. 닫기 전에 내용을 복사해 주세요."; outcome = .saveFailed }
         changed(view)
+        return outcome
     }
     public func submit(recoveryOnly: Bool = false) async {
         guard !view.busy, view.storageReady, var draft = view.draft, let account = binding,

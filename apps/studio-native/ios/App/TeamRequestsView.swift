@@ -24,6 +24,22 @@ import OSLog
 }
 private func productLabel(_ id: String) -> String { ["studio": "Studio", "lab": "Lab", "foundry": "Foundry"][id] ?? id }
 
+/// The product picker's setter: the same edit as before (#4432 F24). In DEBUG it also counts "set.product.<value>"
+/// and "edit.product.<outcome>" in the request trace and logs one "HPStudio product pick" line with the setter's
+/// uptime, on the stall lines' clock. Release behaviour is unchanged.
+@MainActor func teamPickProduct(_ model: TeamRequestPresentation, _ value: String) {
+    teamRenderCount("set.product." + value)
+    let outcome: String
+    if let current = model.state.draft, let controller = model.controller {
+        outcome = controller.edit(body: current.body, product: value, category: current.category).rawValue
+    } else { outcome = model.state.draft == nil ? "noState" : "noController" }
+#if DEBUG
+    teamRenderCount("edit.product." + outcome)
+    if NativeJourneyFixture.enabled { teamRuntimeIssue("HPStudio product pick: \(value) at uptime \(Int(ProcessInfo.processInfo.systemUptime * 1000)) ms; edit \(outcome)") }
+#else
+    _ = outcome
+#endif
+}
 /// Counts one body pass, destination factory call or factory argument (#4432). A no-op outside DEBUG.
 func teamRenderCount(_ key: String) {
 #if DEBUG
@@ -492,9 +508,10 @@ struct TeamRequestsView: View {
                 if let draft = model.state.draft {
                     Section {
                         if let access = model.state.access {
-                            Picker("제품", selection: Binding(get: { model.state.draft?.product ?? "studio" }, set: { value in guard let current = model.state.draft else { return }; model.controller?.edit(body: current.body, product: value, category: current.category) })) {
+                            Picker("제품", selection: Binding(get: { model.state.draft?.product ?? "studio" }, set: { value in teamPickProduct(model, value) })) {
                                 ForEach(access.products, id: \.self) { Text(productLabel($0)).tag($0) }
                             }.disabled(draft.phase != .draft || model.state.busy || !model.state.storageReady)
+                            .onChange(of: draft.product) { _, new in teamRenderCount("draft.product." + new) }
                         }
                         Picker("종류", selection: Binding(get: { model.state.draft?.category ?? "bug" }, set: { value in guard let current = model.state.draft else { return }; model.controller?.edit(body: current.body, product: current.product, category: value) })) {
                             Text("불편·문제").tag("bug"); Text("개선 아이디어").tag("improvement"); Text("질문").tag("question")

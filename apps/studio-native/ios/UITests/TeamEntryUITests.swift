@@ -1001,7 +1001,12 @@ final class TeamEntryUITests: XCTestCase {
         let product = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "제품, ")).firstMatch
         XCTAssertTrue(product.waitForExistence(timeout: 10)); githubReveal(app, product); product.tap()
         XCTAssertTrue(app.buttons["Lab"].waitForExistence(timeout: 5)); app.buttons["Lab"].tap()
-        XCTAssertEqual(product.label, "제품, Lab", "The request must be created for Lab, not the Studio default.")
+        // #4432 F24: read the label first, at the same moment as before; the evidence below is read after it,
+        // so it adds no time before the read. Attachment only: no wait, retry or second tap.
+        let picked = product.label
+        let pick = XCTAttachment(string: "label=\(picked)\nmenuItemLab=\(app.buttons["Lab"].exists)\ntrace=\(app.staticTexts["teamRequestTrace"].value as? String ?? "missing trace")\n\(app.debugDescription)")
+        pick.name = "team-product-pick"; pick.lifetime = .keepAlways; add(pick)
+        XCTAssertEqual(picked, "제품, Lab", "The request must be created for Lab, not the Studio default.")
         githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
