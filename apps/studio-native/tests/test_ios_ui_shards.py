@@ -510,7 +510,7 @@ class SimObserve(unittest.TestCase):
         self.assertIsNone(observe.device_reading(self.table().replace(self.DEVICE, 'OTHER'), self.DEVICE))
 
     def take(self, table, step='boot'):
-        outputs = {'ps': table, 'vm_stat': 'Pages free:                               4298.\n', 'top': HOST_TOP_OUTPUT}
+        outputs = {'ps': table, 'vm_stat': 'Pages free:                               4298.\n', 'top': HOST_TOP_OUTPUT, 'pgrep': ''}
         def bounded(args, limit=30):
             if args[0] == 'sysctl':
                 return '{ 353.66 142.08 64.21 }\n' if args[1] == '-n' else HOST_SYSCTL_OUTPUT
@@ -694,10 +694,132 @@ class HostSnapshots(unittest.TestCase):
         self.assertEqual(case.commands[:3], ['ps', 'vm_stat', 'sysctl'])
         # The existing reading is unchanged and comes first; the watch readings add top.
         row, _ = case.take(case.table(), step='test')
-        self.assertEqual(case.commands, ['ps', 'vm_stat', 'sysctl', 'sysctl', 'top', 'top'])
+        # The render reading (#4432 F21) comes after all of them; no render process listed, so no ps -p.
+        self.assertEqual(case.commands, ['ps', 'vm_stat', 'sysctl', 'sysctl', 'top', 'top', 'pgrep'])
         self.assertEqual(row['host']['groups']['app']['processes'], 1)
         self.assertEqual([c['command'] for c in row['host']['costs']][:3], ['ps', 'vm_stat', 'sysctl loadavg'])
         self.assertIsInstance(row['uptime_ms'], int)
+
+
+class RenderAndGroups(unittest.TestCase):
+    """ios-sim-observe.py (#4432 F21): the simulator's render processes and poster/widget extensions get their
+    own groups, and every watch reading records SimRenderServer's RSS and the test it falls in."""
+    DEVICE = SimObserve.DEVICE
+    # Run 45263058705 shard 3, 21:17:55: SimRenderServer was the biggest process and its parent is launchd.
+    TOP = (HOST_TOP_HEADER + HOST_TOP_TABLE + HOST_TOP_HEADER + HOST_TOP_TABLE
+           + '1691   1     1837M 1.4  12    sleeping SimRenderServer\n'
+           + '1623   1     102M  0.0  9     sleeping SimMetalHost\n'
+           + '1587   1500  31M   0.4  3     sleeping launchd_sim\n'
+           + '1600   1587  116M  3.0  8     sleeping SpringBoard\n'
+           + '1807   1587  37M   0.1  5     running  PosterBoard\n'
+           + '3300   1587  60M   79.0 7     running  EmojiPosterExten\n'
+           + '3301   1587  55M   81.0 7     running  AegirPoster\n'
+           + '3462   1587  20M   45.2 4     running  SleepWidgetExten\n'
+           + '3463   1587  15M   9.3  4     running  HealthMedication\n'
+           + '8208   1587  56M   18.3 31    running  HPStudio\n')
+
+    def test_render_processes_are_simulator_and_poster_and_widget_extensions_are_springboard_ext(self):
+        groups = observe.group_sums(observe.top_rows(self.TOP))
+        # SimRenderServer + SimMetalHost by name, launchd_sim by name, SpringBoard and HealthMedication by parent.
+        self.assertEqual(groups['simulator'], {'mem_mb': 2101.0, 'cpu': 14.1, 'processes': 5})
+        self.assertEqual(groups['springboard-ext'], {'mem_mb': 172.0, 'cpu': 205.3, 'processes': 4})
+        self.assertEqual(groups['app'], {'mem_mb': 56.0, 'cpu': 18.3, 'processes': 1})
+        self.assertNotIn('other', groups, 'Nothing in this table is unknown.')
+        self.assertEqual(observe.process_group({'command': 'SimRenderServer', 'ppid': 1}, set()), 'simulator')
+        self.assertEqual(observe.process_group({'command': 'MercuryPoster', 'ppid': 1}, set()), 'springboard-ext')
+        self.assertEqual(observe.process_group({'command': 'Google Chrome He', 'ppid': 1}, set()), 'other')
+
+    def render(self, outputs):
+        calls = []
+        def run(args, limit):
+            calls.append((args, limit))
+            return outputs[args[0]]
+        return observe.render_reading(run=run), calls
+
+    def test_render_reading_reads_the_named_pids_only_and_reports_rss_in_mb(self):
+        reading, calls = self.render({'pgrep': '1691 SimRenderServer\n1623 SimMetalHost\n', 'ps': ' 1623 104448\n 1691 1881088\n'})
+        self.assertEqual(calls, [(observe.RENDER_PGREP, 10), (['ps', '-o', 'pid=,rss=', '-p', '1623,1691'], 10)])
+        self.assertEqual(reading['processes'], [{'pid': 1623, 'name': 'SimMetalHost', 'rss_mb': 102.0},
+                                                {'pid': 1691, 'name': 'SimRenderServer', 'rss_mb': 1837.0}])
+        self.assertEqual([c['command'] for c in reading['costs']], ['pgrep render', 'ps render'])
+        self.assertEqual(observe.RENDER_PGREP, ['pgrep', '-lx', 'SimRenderServer|SimMetalHost'])
+
+    def test_a_render_command_that_does_not_return_leaves_no_rows_and_its_outcome(self):
+        reading, calls = self.render({'pgrep': '<pgrep -lx SimRenderServer|SimMetalHost did not return within 10s>'})
+        self.assertEqual((reading['processes'], len(calls)), ([], 1))
+        self.assertEqual(reading['costs'][0]['outcome'], 'timeout')
+        reading, calls = self.render({'pgrep': '1691 SimRenderServer\n', 'ps': '<ps did not return within 10s>'})
+        self.assertEqual(reading['processes'], [])
+        self.assertEqual([c['outcome'] for c in reading['costs']], ['returned', 'timeout'])
+        reading, calls = self.render({'pgrep': ''})
+        self.assertEqual((reading['processes'], len(calls)), ([], 1))
+        # A ps row for a pid pgrep did not name is not taken.
+        reading, _ = self.render({'pgrep': '1691 SimRenderServer\n', 'ps': ' 1691 2048\n 77 99999\n'})
+        self.assertEqual(reading['processes'], [{'pid': 1691, 'name': 'SimRenderServer', 'rss_mb': 2.0}])
+
+    LOG = ("Test Case '-[HPStudioUITests.TeamEntryUITests testFirst]' started.\n"
+           "    t =     0.18s     Launch ai.hypeproof.studio.mobile\n"
+           "    t =    61.26s Type 'X' into \"teamOutcomeResult\" TextView\n"
+           "Test Case '-[HPStudioUITests.TeamEntryUITests testFirst]' passed (89.861 seconds).\n"
+           "Test Case '-[HPStudioUITests.TeamEntryUITests testSecond]' started.\n")
+
+    def current(self, text):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'simulator-test.log'
+            path.write_text(text)
+            return observe.current_test(path)
+
+    def test_current_test_is_the_last_started_test_and_its_own_last_step(self):
+        self.assertEqual(self.current(self.LOG), ('testSecond', None), "The previous test's step time is not this test's.")
+        self.assertEqual(self.current(self.LOG + '    t =     4.12s         Setting up automation session\n'
+                                      + '    t =    12.50s Tap "linkDesktop" Button\n'), ('testSecond', 12.5))
+        self.assertEqual(self.current(self.LOG.split("Test Case '-[HPStudioUITests.TeamEntryUITests testSecond]")[0]), ('testFirst', 61.26))
+        self.assertEqual(self.current(''), (None, None))
+        self.assertEqual(observe.current_test(Path('/nonexistent/simulator-test.log')), (None, None))
+        self.assertEqual(observe.current_test(None), (None, None))
+        # Only the tail is read: a start older than LOG_TAIL_BYTES is not found.
+        self.assertEqual(self.current(self.LOG + 'x' * (observe.LOG_TAIL_BYTES + 10)), (None, None))
+
+    def take(self, step, log_text=None):
+        outputs = {'ps': SimObserve().table(), 'vm_stat': 'Pages free:   4298.\n', 'top': self.TOP, 'pgrep': '1691 SimRenderServer\n'}
+        def bounded(args, limit=30):
+            if args[0] == 'sysctl':
+                return '{ 1.0 1.0 1.0 }\n' if args[1] == '-n' else HOST_SYSCTL_OUTPUT
+            if args[:2] == ['ps', '-o']:
+                return ' 1691 1003520\n'
+            return outputs[args[0]]
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe.push, 'bounded', side_effect=bounded) as called:
+            evidence = Path(directory)
+            log = None
+            if log_text is not None:
+                log = evidence / 'simulator-test.log'
+                log.write_text(log_text)
+            observe.take(evidence, self.DEVICE, step=step, sample=1, full_table=False, log=log)
+            commands = [call.args[0][0] for call in called.call_args_list]
+            return json.loads((evidence / 'simulator-steps.jsonl').read_text()), commands
+
+    def test_watch_rows_carry_the_render_rss_and_the_test_they_fall_in(self):
+        row, commands = self.take('test', self.LOG + '    t =    68.17s Find the NavigationBar (Element at index 1)\n')
+        self.assertEqual(row['host']['render'], [{'pid': 1691, 'name': 'SimRenderServer', 'rss_mb': 980.0}])
+        self.assertIsInstance(row['host']['render_uptime_ms'], int)
+        self.assertGreaterEqual(row['host']['render_uptime_ms'], row['uptime_ms'])
+        self.assertEqual((row['test'], row['test_t']), ('testSecond', 68.17))
+        self.assertEqual(commands[-2:], ['pgrep', 'ps'], 'The render reading comes after every existing reading.')
+        self.assertEqual(row['host']['groups']['simulator']['processes'], 5)
+        row, _ = self.take('test')
+        self.assertNotIn('test', row, 'Without --log the row names no test.')
+        self.assertEqual(row['host']['render'][0]['rss_mb'], 980.0)
+
+    def test_boot_readings_take_no_render_reading(self):
+        row, commands = self.take('boot', self.LOG)
+        self.assertNotIn('pgrep', commands)
+        self.assertNotIn('render', row['host'])
+        self.assertNotIn('test', row)
+
+    def test_the_shard_passes_the_test_log_to_the_watch(self):
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        self.assertIn('ios-sim-observe.py watch --evidence ../evidence --device "$device" --interval 60 --log ../evidence/simulator-test.log &', script)
+        self.assertEqual(observe.main.__code__.co_filename, observe.__file__)
 
 
 class BoundaryVerdicts(unittest.TestCase):

@@ -180,7 +180,8 @@ common_test=(-destination "platform=iOS Simulator,id=$device" -resultBundlePath 
 if [ "$mode" = shard ]; then
   printf 'native verification: iPhone simulator journeys, shard %s\n' "$shard_index"
   # One reading a minute beside the test, for observation only; the test never waits for it.
-  python3 ../scripts/ios-sim-observe.py watch --evidence ../evidence --device "$device" --interval 60 &
+  # --log names the test and step time each reading falls in (#4432 F21).
+  python3 ../scripts/ios-sim-observe.py watch --evidence ../evidence --device "$device" --interval 60 --log ../evidence/simulator-test.log &
   sampler_pid=$!
   # On "Failed to terminate", record the app's launchctl rows and the last 3 minutes of
   # runningboardd/SpringBoard/testmanagerd log while the device is still in that state
