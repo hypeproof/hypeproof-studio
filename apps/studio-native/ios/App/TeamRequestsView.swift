@@ -197,28 +197,41 @@ final class TeamMainStallWatch: @unchecked Sendable {
         os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
     }
     private let launched = Date()
+    /// Body-change lines already counted at the previous report (touched only on `queue`).
+    private var whyLinesSeen = 0
     /// Which body properties changed since `start` (uptime ms), from the `teamWhy` lines in this process's
-    /// log store, most frequent first. If there are none, it states how many such lines the whole process has:
-    /// a non-zero count shows the probe works and the stall simply had no body pass (positive control).
+    /// log store, most frequent first. The tail gives the window count, the process total (a non-zero total
+    /// shows the probe works: positive control) and the age of the newest line.
+    /// On the iOS simulator, `position(date:)` for a recent date skipped lines that a read from launch
+    /// returned (run 45116092106), so this reads from launch and filters by each entry's own date.
+    /// If no entry falls in the window but new lines arrived since the previous report, it counts those
+    /// instead and says so ("since last report").
     private func why(since start: Int) -> String {
-        let back = Double(Self.now() - start) / 1000 + 0.5
+        let cutoff = Date().addingTimeInterval(-(Double(Self.now() - start) / 1000 + 0.5))
         guard let store = try? OSLogStore(scope: .currentProcessIdentifier) else { return "store unavailable" }
         let predicate = NSPredicate(format: "subsystem == %@ AND category == %@", "com.apple.SwiftUI", "Changed Body Properties")
-        func read(from date: Date) -> [String]? {
-            guard let entries = try? store.getEntries(at: store.position(date: date), matching: predicate) else { return nil }
-            return entries.compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+        guard let entries = try? store.getEntries(at: store.position(date: launched), matching: predicate) else { return "read failed" }
+        let lines = entries.compactMap { entry -> (date: Date, text: String)? in
+            (entry as? OSLogEntryLog).map { ($0.date, $0.composedMessage) }
         }
-        guard let lines = read(from: Date().addingTimeInterval(-back)) else { return "read failed" }
+        let previous = min(whyLinesSeen, lines.count); whyLinesSeen = lines.count
+        let window = lines.filter { $0.date >= cutoff }.map(\.text)
+        let newest = lines.last.map { String(format: "%.1f", Date().timeIntervalSince($0.date)) } ?? "-"
+        let tail = " (window \(window.count) of \(lines.count) lines; newest line \(newest)s ago)"
+        if !window.isEmpty { return Self.summary(window) + tail }
+        if lines.count > previous { return "since last report: " + Self.summary(lines[previous...].map(\.text)) + tail }
+        return "none" + tail
+    }
+    /// "TeamIntakeScreen: _dismiss, _model changed." lines as "<View>.<property>+N", 12 most frequent.
+    private static func summary(_ lines: [String]) -> String {
         var counts: [String: Int] = [:]
         for line in lines {
-            // "TeamIntakeScreen: _dismiss, _model changed."
             guard let colon = line.firstIndex(of: ":") else { continue }
             let type = line[..<colon]
             var rest = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
             if rest.hasSuffix(" changed.") { rest.removeLast(" changed.".count) }
             for part in rest.split(separator: ",") { counts[type + "." + part.trimmingCharacters(in: .whitespaces), default: 0] += 1 }
         }
-        if counts.isEmpty { return "none (\(read(from: launched)?.count ?? -1) body-change lines in process)" }
         return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(12).map { "\($0.key)+\($0.value)" }.joined(separator: " ")
     }
     /// Render counters that grew since `before`, oldest last change first.
