@@ -146,8 +146,13 @@ import UserNotifications
                 do {
                     // Keep recognition active until a genuine periodic GET is
                     // held and the test delivers this external speech event.
+                    // No revision budget: like the hold path below, a fixed
+                    // 50-revision (20 s) budget can run out on hosted runners
+                    // before the finish tap lands (#4432). Revise until the
+                    // finish tap or Stop/background cancels this producer.
                     deliver(text, false)
-                    for revision in 1...50 {
+                    var revision = 0
+                    while true {
                         try await Task.sleep(nanoseconds: 400_000_000)
                         try Task.checkCancellation()
                         if JourneyTransport.store.secondSpeechMayFinish() {
@@ -156,6 +161,7 @@ import UserNotifications
                             JourneyTransport.store.deliveredSpeech()
                             return
                         }
+                        revision = revision % 50 + 1
                         deliver(text + String(repeating: ".", count: revision), false)
                     }
                 } catch { /* Real Stop/background cancels this producer. */ }
