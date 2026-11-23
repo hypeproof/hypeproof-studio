@@ -1,20 +1,20 @@
-☀️ **Daily digest — {{ date }}**{% if tenant_slug %} · `{{ tenant_slug }}`{% endif %}
+☀️ **일일 요약 — {{ date }}**{% if tenant_slug %} · `{{ tenant_slug }}`{% endif %}
 
-**Yesterday:**
-- 💬 {{ chat_count or 0 }} chat queries{% if unique_askers %} ({{ unique_askers }} people){% endif %}
-- 📝 {{ new_decisions or 0 }} new decisions extracted{% if new_actions %} · {{ new_actions }} actions{% endif %}
-- 📥 {{ ingested_artifacts or 0 }} new artifacts ingested
-{% if cost_usd is defined %}- 💰 ${{ "%.2f" | format(cost_usd) }} LLM spend{% if budget_usd %} ({{ "%.0f" | format(cost_usd / budget_usd * 100) }}% of daily budget){% endif %}{% endif %}
+**어제**
+- 💬 {{ chat_count or 0 }}건 질문{% if unique_askers %} ({{ unique_askers }}명){% endif %}
+- 📝 {{ new_decisions or 0 }}건 결정 추출{% if new_actions %} · {{ new_actions }}건 할 일{% endif %}
+- 📥 {{ ingested_artifacts or 0 }}건 자료 수집
+{% if cost_usd is defined %}- 💰 ${{ "%.2f" | format(cost_usd) }} 모델 비용{% if budget_usd %} (일 예산의 {{ "%.0f" | format(cost_usd / budget_usd * 100) }}%){% endif %}{% endif %}
 
 {% if top_sources %}
-**Top sources cited:**
+**많이 인용된 출처**
 {% for s in top_sources[:3] %}
-- `{{ s.ref }}` ({{ s.cite_count }} cites)
+- `{{ s.ref }}` ({{ s.cite_count }}회)
 {% endfor %}
 {% endif %}
 
 {% if new_decisions_list %}
-**Decisions:**
+**결정**
 {% for d in new_decisions_list[:3] %}
 > {{ d.summary | truncate(120) }}{% if d.ref %} — `{{ d.ref }}`{% endif %}
 {% endfor %}

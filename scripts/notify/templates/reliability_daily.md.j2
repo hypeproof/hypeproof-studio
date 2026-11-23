@@ -1,12 +1,10 @@
-🧭 **Sediment reliability — {{ status or "unknown" }}** · `{{ tenant_slug or "?" }}`
+🧭 **Sediment 상태 — {{ {"ok": "정상", "degraded": "저하", "critical": "심각"}.get(status, status or "알 수 없음") }}** · `{{ tenant_slug or "?" }}`
 
-- warnings: {{ warning_count or 0 }}
-- critical: {{ critical_count or 0 }}
-- major: {{ major_count or 0 }}
-- report: `{{ report_path or "n/a" }}`
+경고 {{ warning_count or 0 }}건 (심각 {{ critical_count or 0 }} · 주요 {{ major_count or 0 }})
+리포트: `{{ report_path or "없음" }}`
 
 {% if warnings %}
-**Top warnings:**
+**주요 경고**
 {% for w in warnings[:5] %}
 - `{{ w.code }}` · {{ w.severity }} — {{ w.message }}
 {% endfor %}

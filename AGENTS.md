@@ -255,7 +255,6 @@ Fix stale/missing preparation instead of bypassing it with direct `gh pr create`
 The common contract is `docs/AGENT-GUIDE.ko.md`; commands are in `docs/HYPE-PR.ko.md`.
 This adds no GitHub required check and does not grant human approval or merge authority.
 <!-- hype-pr-skill:end -->
-
 ## Release completion recovery
 
 For the 2026-11-19 recovery, follow [release recovery policy](policy/release-recovery.md).
