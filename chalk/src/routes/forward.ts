@@ -55,7 +55,10 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   // source after 0.1.5 (the pinned 0.1.5 tarball does not); until Chalk's pin includes it, it is named here. Same issuer-from-connection path as every write;
   // the Service re-checks the issuer and can_start_session on the cohort.
   const updateFreeze = (method === 'PUT' || method === 'DELETE') && /^\/admin\/cohorts\/[^/]+\/update-freeze$/.test(url.pathname);
-  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !sectionRevision && !updateFreeze) {
+  // A curriculum project's team (/manage): read the director's projects, replace one team. Not /admin paths, so they are
+  // named here rather than in the shared predicate. The Service re-checks the issuer, cohort + profile scope and roster.
+  const curriculumTeam = (method === 'GET' && url.pathname === '/v1/curriculum/director/projects') || (method === 'PUT' && /^\/v1\/curriculum\/projects\/[^/]+\/members$/.test(url.pathname));
+  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !sectionRevision && !updateFreeze && !curriculumTeam) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
       404,
