@@ -28,11 +28,12 @@ they change no test, wait, limit or result (#4432 F6).
 
 `stall-watch` runs beside the test like `terminate-watch`. For each new main-thread stall that the
 app reports while it is still going on ("HPStudio main stall (ongoing): ... since uptime <start>"),
-at most STALL_CAPTURES per shard, it runs `sample` on this shard's app process (the newest host
-HPStudio whose executable is under this shard's simulator device, so another shard or simulator
-on the same host is never sampled) for
+at most STALL_CAPTURES per shard, it runs `sample` on this shard's app process for
 SAMPLE_SECONDS, with its own limit, so the main thread's stack during the stall is recorded
-(#4432 F11). Samples go to <evidence>/stall-sample-<n>.txt, with one header in
+(#4432 F11). The app names its own pid in the line ("; pid <n>;"), so no process table is read
+(run 45132515641: `ps -axo` did not return within its limit on a saturated host). Only a line
+without a valid pid falls back to `ps`: the newest host HPStudio whose executable is under this
+shard's simulator device, so another shard or simulator on the same host is never sampled. Samples go to <evidence>/stall-sample-<n>.txt, with one header in
 <evidence>/stall-samples.txt and one row per capture. Diagnostics only, like the others.
 
 Rows go to <evidence>/simulator-steps.jsonl in the format the approval push job writes.
@@ -123,8 +124,11 @@ LOG_SHOW_WINDOW = "3m"
 LOG_SHOW_PREDICATE = 'process IN {"runningboardd", "SpringBoard", "testmanagerd"}'
 TERMINATE_FILE = "terminate-diagnostics.txt"
 STALL_ONGOING = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms")
+STALL_PID = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms; pid ([0-9]{1,10});")
 STALL_CAPTURES = 3
-SAMPLE_SECONDS = 3
+# One second, with -mayDie (symbols are read at once): run 45132515641 had a 3 s sample not return
+# within SAMPLE_LIMIT on a saturated host.
+SAMPLE_SECONDS = 1
 SAMPLE_LIMIT = 30
 PS_LIMIT = 10
 APP_EXECUTABLE = re.compile(r"/HPStudio\.app/HPStudio(\s|$)")
@@ -232,6 +236,16 @@ def stall_starts(log_text):
     return seen
 
 
+def stall_pids(log_text):
+    """Pid that the app named for each ongoing stall start; a value that is not a valid pid is left out."""
+    pids = {}
+    for start, pid in STALL_PID.findall(log_text):
+        value = int(pid)
+        if start not in pids and 0 < value < 2 ** 31:
+            pids[start] = value
+    return pids
+
+
 def captured_stalls(evidence):
     path = evidence / STALL_FILE
     if not path.exists():
@@ -250,20 +264,23 @@ def app_pid(ps_text, device):
     return max(pids) if pids else None
 
 
-def capture_stall(evidence, device, start, index, *, run=None):
+def capture_stall(evidence, device, start, index, *, pid=None, run=None):
     run = run or run_bounded
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    table = run(["ps", "-axo", "pid=,command="], PS_LIMIT)
-    pid = None if table.startswith("<") else app_pid(table, device)
+    source = "line"
+    if pid is None:
+        source = "ps"
+        table = run(["ps", "-axo", "pid=,command="], PS_LIMIT)
+        pid = None if table.startswith("<") else app_pid(table, device)
     target = evidence / f"stall-sample-{index}.txt"
     if pid is not None:
-        out = run(["sample", str(pid), str(SAMPLE_SECONDS), "-file", str(target)], SAMPLE_LIMIT)
+        out = run(["sample", str(pid), str(SAMPLE_SECONDS), "-mayDie", "-file", str(target)], SAMPLE_LIMIT)
         outcome = "timeout" if out.startswith("<") else ("sampled" if target.exists() else "failed")
     else:
         out = table.strip() if table.startswith("<") else f"<no HPStudio process under device {device}>"
         outcome = "ps timeout" if table.startswith("<") else "no process"
     push.record(evidence, step="stall", command="sample", sample=index, utc=wall, start=int(start),
-                pid=pid, outcome=outcome)
+                pid=pid, pid_from=source, outcome=outcome)
     with (evidence / STALL_FILE).open("a") as header:
         header.write(f"== stall {index} start {start} {wall} pid {pid if pid is not None else '-'} {outcome}\n{out.strip()[-2000:]}\n")
 
@@ -275,13 +292,14 @@ def scan_stall(evidence, device, log_path, *, run=None):
     except OSError:
         return 0
     done = captured_stalls(evidence)
+    pids = stall_pids(text)
     taken = 0
     for start in stall_starts(text):
         if start in done:
             continue
         if len(done) >= STALL_CAPTURES:
             break
-        capture_stall(evidence, device, start, len(done) + 1, run=run)
+        capture_stall(evidence, device, start, len(done) + 1, pid=pids.get(start), run=run)
         done.append(start)
         taken += 1
     return taken
