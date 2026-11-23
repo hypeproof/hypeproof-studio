@@ -569,16 +569,33 @@ class StallSamples(unittest.TestCase):
         return (f'<unknown>:0: warning: -[HPStudioUITests.TeamEntryUITests testA] : HPStudio main stall (ongoing): '
                 f'{length} ms since uptime {start} ms; outstanding ping {length} ms; 0 slow pings answered; render changes: none\n')
 
-    def scan(self, evidence, text, pid='4242', sample_out=''):
+    DEVICE = SimObserve.DEVICE
+    OTHER = 'FFFFFFFF-0000-4000-8000-000000000000'
+
+    def app(self, pid, device):
+        return f'{pid} /Users/runner/Library/Developer/CoreSimulator/Devices/{device}/data/Containers/Bundle/Application/AB12/HPStudio.app/HPStudio\n'
+
+    def table(self):
+        # Another shard's newer app, this device's two apps, and this device's UI test runner.
+        return ('  1 /sbin/launchd\n' + self.app(4242, self.DEVICE) + self.app(4100, self.DEVICE) + self.app(9999, self.OTHER)
+                + f'5000 /Users/runner/Library/Developer/CoreSimulator/Devices/{self.DEVICE}/data/Containers/Bundle/Application/CD34/HPStudioUITests-Runner.app/HPStudioUITests-Runner\n')
+
+    def scan(self, evidence, text, ps=None, sample_out=''):
         log = evidence / 'simulator-test.log'; log.write_text(text)
         calls = []
         def run(args, limit):
             calls.append((args, limit))
-            if args[0] == 'pgrep':
-                return pid
+            if args[0] == 'ps':
+                return self.table() if ps is None else ps
             Path(args[args.index('-file') + 1]).write_text('Call graph:\n    main-thread\n')
             return sample_out
-        return observe.scan_stall(evidence, log, run=run), calls
+        return observe.scan_stall(evidence, self.DEVICE, log, run=run), calls
+
+    def test_only_this_devices_app_is_chosen(self):
+        self.assertEqual(observe.app_pid(self.table(), self.DEVICE), 4242)
+        self.assertEqual(observe.app_pid(self.table(), self.OTHER), 9999)
+        self.assertIsNone(observe.app_pid(self.app(9999, self.OTHER), self.DEVICE))
+        self.assertIsNone(observe.app_pid(f'5000 /x/CoreSimulator/Devices/{self.DEVICE}/y/HPStudioUITests-Runner.app/HPStudioUITests-Runner\n', self.DEVICE))
 
     def test_the_20_and_40_second_lines_are_not_new_stalls(self):
         text = self.line(10034, 1572426) + self.line(40012, 1572426) + 'HPStudio main stall: 50112 ms from uptime 1572426 ms\n' + self.line(10483, 1662585)
@@ -590,7 +607,7 @@ class StallSamples(unittest.TestCase):
             evidence = Path(directory)
             taken, calls = self.scan(evidence, self.line(10034, 1572426) + self.line(20019, 1572426))
             self.assertEqual(taken, 1)
-            self.assertEqual(calls, [(['pgrep', '-n', '-x', 'HPStudio'], 10),
+            self.assertEqual(calls, [(['ps', '-axo', 'pid=,command='], 10),
                                      (['sample', '4242', '3', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
             self.assertEqual(self.scan(evidence, self.line(40012, 1572426)), (0, []))
             row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
@@ -603,12 +620,15 @@ class StallSamples(unittest.TestCase):
     def test_no_app_process_and_a_hung_sample_are_recorded_not_raised(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
-            self.assertEqual(self.scan(evidence, self.line(10034, 1), pid='')[0], 1)
+            # Only another device's app on the host: nothing is sampled.
+            self.assertEqual(self.scan(evidence, self.line(10034, 1), ps=self.app(9999, self.OTHER))[0], 1)
             log = evidence / 'simulator-test.log'; log.write_text(self.line(10034, 2))
-            hung = observe.scan_stall(evidence, log, run=lambda args, limit: '4242' if args[0] == 'pgrep' else '<sample did not return within 30s>')
+            hung = observe.scan_stall(evidence, self.DEVICE, log, run=lambda args, limit: self.table() if args[0] == 'ps' else '<sample did not return within 30s>')
             self.assertEqual(hung, 1)
+            log.write_text(self.line(10034, 3))
+            self.assertEqual(observe.scan_stall(evidence, self.DEVICE, log, run=lambda args, limit: '<ps did not return within 10s>'), 1)
             rows = [json.loads(l) for l in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
-        self.assertEqual([(r['pid'], r['outcome']) for r in rows], [(None, 'no process'), (4242, 'timeout')])
+        self.assertEqual([(r['pid'], r['outcome']) for r in rows], [(None, 'no process'), (4242, 'timeout'), (None, 'ps timeout')])
 
     def test_samples_stop_at_the_per_shard_cap(self):
         text = ''.join(self.line(10000, start) for start in (1, 2, 3, 4, 5))
@@ -621,7 +641,7 @@ class StallSamples(unittest.TestCase):
 
     def test_a_missing_log_takes_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
-            self.assertEqual(observe.scan_stall(Path(directory), Path(directory) / 'none.log',
+            self.assertEqual(observe.scan_stall(Path(directory), self.DEVICE, Path(directory) / 'none.log',
                                                 run=lambda *_: self.fail('no command without a log')), 0)
 
 
