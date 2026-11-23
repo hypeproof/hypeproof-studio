@@ -4,14 +4,16 @@ import SwiftUI
     @Published var state = TeamTextRevisionController.View()
     var controller: TeamTextRevisionController?
 }
-struct TeamTextRevisionScreen: View {
+struct TeamTextRevisionScreen: View, Equatable {
     @StateObject private var model: TeamTextRevisionPresentation
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
     @State private var confirmSend = false
     @State private var confirmLeave = false
     @State private var editing = false
-    init(make: @escaping @MainActor () -> TeamTextRevisionPresentation) { _model = StateObject(wrappedValue: make()) }
+    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamTextRevisionPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("text", a.key, b.key) }
     private var allowed: Bool { model.controller?.editingAllowed == true }
     private func date(_ value: Double) -> String { Date(timeIntervalSince1970: value / 1000).formatted() }
     private func version(_ item: TeamTextVersion, identifier: String) -> some View {

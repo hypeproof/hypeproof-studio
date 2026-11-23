@@ -78,7 +78,7 @@ struct TeamIntakeSelection: Codable { var principalID: String? }
     func invalidate() { entries.removeAll { $0.value == nil }; entries.forEach { $0.value?.invalidate() } }
 }
 
-struct TeamIntakeScreen: View {
+struct TeamIntakeScreen: View, Equatable {
     @StateObject private var model: TeamIntakePresentation
     @State private var confirm = false
     @State private var confirmPolicy = false
@@ -87,7 +87,9 @@ struct TeamIntakeScreen: View {
     @State private var association = false
     @FocusState private var focused: String?
     @Environment(\.dismiss) private var dismiss
-    init(make: @escaping @MainActor () -> TeamIntakePresentation) { _model = StateObject(wrappedValue: make()) }
+    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamIntakePresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("intake", a.key, b.key) }
     private var locked: Bool { model.state.busy || !model.storageReady || !model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<IntakeProposal, String>, _ id: String) -> some View {
         TextField(title, text: Binding(get: { model.summary[keyPath: key] }, set: { text in model.edit { $0[keyPath: key] = text } }), axis: .vertical)
@@ -158,7 +160,7 @@ struct TeamIntakeScreen: View {
         .onAppear { teamRenderCount("appear.intake") }
         .teamPublishCount(model.objectWillChange, "pub.intake").teamChangeCount(focused, "focus.intake")
         .onDisappear { if model.principal == nil { try? model.device?.cancel() } }
-        .navigationDestination(isPresented: $association) { if let github = model.github { TeamGitHubScreen(model: github) } }
+        .navigationDestination(isPresented: $association) { if let github = model.github { TeamGitHubScreen(model: github).equatable() } }
         .navigationBarBackButtonHidden(locked).interactiveDismissDisabled(locked)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {

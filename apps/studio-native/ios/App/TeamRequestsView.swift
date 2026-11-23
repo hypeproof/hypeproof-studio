@@ -30,6 +30,15 @@ func teamRenderCount(_ key: String) {
     TeamRenderTrace.shared.count(key)
 #endif
 }
+/// Equality of a pushed screen on its value key (#4432 F11-destination). In DEBUG each call is counted under
+/// "eq.<name>.same" or "eq.<name>.diff" (stall lines only). If a screen re-runs with no count, SwiftUI did not ask.
+nonisolated func teamScreenEqual(_ name: String, _ a: TeamScreenKey, _ b: TeamScreenKey) -> Bool {
+    let same = a == b
+#if DEBUG
+    teamRenderCount("eq." + name + (same ? ".same" : ".diff"))
+#endif
+    return same
+}
 /// Records, once per process, the first write of `what` that runs off the main thread (#4432 F5).
 /// Diagnostics only: it changes no behaviour. Run 44994131331 logged "Updating ObservedObject<TeamRequestPresentation>
 /// from background threads"; code reading and a strict-concurrency type-check found no off-main writer.
@@ -132,7 +141,7 @@ func teamOffMainCheck(_ what: String) {
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
     /// Push marks, publish counters ("pub.") and focus counters ("focus.") feed only the stall lines.
-    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "disappear.", "pub.", "focus.", "probe.", "dest."]
+    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "disappear.", "pub.", "focus.", "probe.", "dest.", "eq."]
     /// Destination body and observation-factory counters (F11 GitHub loop) go only to the stall lines.
     /// Keeping them out of the trace keeps its value the same length as before (#4457).
     private static let logOnlyKeys: Set<String> = ["body.requests", "body.workflow", "body.outcome", "body.delivery", "body.github", "body.intake", "body.text", "body.observations", "body.subscription", "make.observations"]
@@ -697,22 +706,30 @@ private struct TeamDetailDestination: View, Equatable {
     var target = ""
     var inbox: TeamInboxPresentation?
     nonisolated static func == (a: Self, b: Self) -> Bool {
-        a.kind == b.kind && a.model === b.model && a.requestID == b.requestID && a.product == b.product && a.target == b.target && a.inbox === b.inbox
+        let same = a.kind == b.kind && a.model === b.model && a.requestID == b.requestID && a.product == b.product && a.target == b.target && a.inbox === b.inbox
+#if DEBUG
+        // Is `==` asked at all when the wrapper re-runs (#4432 F11-destination)? Stall lines only.
+        teamRenderCount("eq." + a.kind.counterKey + (same ? ".same" : ".diff"))
+#endif
+        return same
     }
     var body: some View {
         // Does the Equatable wrapper re-run with the pushed screen (#4432 F22)? Log-only key.
         let _ = teamRenderCount(kind.counterKey)
         let _ = teamWhy(Self.self)
         let model = model, requestID = requestID, product = product, target = target
+        // Each screen is Equatable on these inputs (#4432 F11-destination). Run 45200802507 re-ran this wrapper 1205
+        // times with no detail pass, and each new `make:` closure made the text screen "@self" changed 1:1 with it.
+        let key = TeamScreenKey(requests: model, requestID: requestID, product: product, target: target, source: inbox)
         switch kind {
-        case .workflow: TeamWorkflowScreen(make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, product) }, requests: model)
-        case .outcome: TeamOutcomeView(make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) })
-        case .delivery: TeamDeliveryScreen(make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) })
-        case .github: TeamGitHubScreen(make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) })
+        case .workflow: TeamWorkflowScreen(key: key, make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, product) }, requests: model).equatable()
+        case .outcome: TeamOutcomeView(key: key, make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) }).equatable()
+        case .delivery: TeamDeliveryScreen(key: key, make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) }).equatable()
+        case .github: TeamGitHubScreen(key: key, make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) }).equatable()
         case .subscription: if let inbox { TeamSubscriptionScreen(model: inbox, product: product, request: requestID) }
-        case .intake: TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) })
-        case .text: TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) })
-        case .relations: TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model)
+        case .intake: TeamIntakeScreen(key: key, make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }).equatable()
+        case .text: TeamTextRevisionScreen(key: key, make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) }).equatable()
+        case .relations: TeamRelationScreen(key: key, make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model).equatable()
         }
     }
 }
@@ -724,13 +741,15 @@ private struct TeamDetailDestination: View, Equatable {
 private func workflowLabel(_ value: String) -> String {
     ["submitted":"접수됨", "discussing":"논의 중", "on_hold":"보류", "duplicate":"중복 연결", "rejected":"반려", "unclassified":"미정", "low":"낮음", "normal":"보통", "high":"높음"][value] ?? value
 }
-private struct TeamWorkflowScreen: View {
+private struct TeamWorkflowScreen: View, Equatable {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: TeamWorkflowPresentation
     let requests: TeamRequestPresentation
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(make: @escaping @MainActor () -> TeamWorkflowPresentation, requests: TeamRequestPresentation) { _model = StateObject(wrappedValue: make()); self.requests = requests }
+    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamWorkflowPresentation, requests: TeamRequestPresentation) { self.key = key; _model = StateObject(wrappedValue: make()); self.requests = requests }
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("workflow", a.key, b.key) }
     private var editable: Bool { model.state.page?.can_manage == true && model.state.page?.retention?.hidden != true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
     private func memberName(_ id: String?) -> String {
         guard let id else { return "담당 미정" }
@@ -827,13 +846,15 @@ private struct TeamWorkflowScreen: View {
     var controller: TeamGitHubController?
     var makeObservations: (() -> TeamGitHubObservationPresentation)?
 }
-struct TeamGitHubScreen: View {
+struct TeamGitHubScreen: View, Equatable {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: TeamGitHubPresentation
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(make: @escaping @MainActor () -> TeamGitHubPresentation) { _model = StateObject(wrappedValue: make()) }
-    init(model: TeamGitHubPresentation) { self.init(make: { model }) }
+    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamGitHubPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
+    init(model: TeamGitHubPresentation) { self.init(key: TeamScreenKey(source: model), make: { model }) }
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("github", a.key, b.key) }
     private var editable: Bool { model.state.page?.can_manage == true && model.state.page?.retention?.hidden != true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<TeamGitHubDraft, String>, _ identifier: String) -> some View {
         TextField(title, text: Binding(get: { model.state.draft?[keyPath: key] ?? "" }, set: { value in model.controller?.edit { $0[keyPath: key] = value } }))
@@ -864,7 +885,7 @@ struct TeamGitHubScreen: View {
 #endif
 
             if let make = model.makeObservations {
-                NavigationLink { TeamGitHubObservationScreen(make: { teamRenderCount("make.observations"); return make() }) } label: { Text("최근 확인한 GitHub 상태") }
+                NavigationLink { TeamGitHubObservationScreen(key: TeamScreenKey(source: model), make: { teamRenderCount("make.observations"); return make() }).equatable() } label: { Text("최근 확인한 GitHub 상태") }
                     .disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamGitHubObservationsOpen")
             }
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamGitHubMessage") }
@@ -929,9 +950,11 @@ struct TeamGitHubScreen: View {
     @Published var state = TeamDeliveryController.View()
     var controller: TeamDeliveryController?
 }
-private struct TeamDeliveryScreen: View {
+private struct TeamDeliveryScreen: View, Equatable {
     @StateObject private var model: TeamDeliveryPresentation
-    init(make: @escaping @MainActor () -> TeamDeliveryPresentation) { _model = StateObject(wrappedValue: make()) }
+    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamDeliveryPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("delivery", a.key, b.key) }
     private func date(_ time: Double) -> String { Date(timeIntervalSince1970: time / 1000).formatted(date: .abbreviated, time: .shortened) }
     @ViewBuilder private func record(_ event: TeamDeliveryEvent, now: Date) -> some View {
         if let proof = event.evidence {

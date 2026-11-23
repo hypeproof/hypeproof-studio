@@ -4,14 +4,16 @@ import SwiftUI
     @Published var state=TeamRelationController.View()
     var controller:TeamRelationController?
 }
-struct TeamRelationScreen:View {
+struct TeamRelationScreen:View, Equatable {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model:TeamRelationPresentation
     @ObservedObject var requests:TeamRequestPresentation
     @State private var confirmSend=false
     @State private var confirmLeave=false
     @FocusState private var reasonFocused:Bool
-    init(make:@escaping @MainActor()->TeamRelationPresentation,requests:TeamRequestPresentation){_model=StateObject(wrappedValue:make());self.requests=requests}
+    init(key:TeamScreenKey,make:@escaping @MainActor()->TeamRelationPresentation,requests:TeamRequestPresentation){self.key=key;_model=StateObject(wrappedValue:make());self.requests=requests}
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("relations", a.key, b.key) }
     private var canManage:Bool{model.state.list?.can_manage==true && model.state.history?.can_manage==true && model.state.history?.target_request_id==model.state.draft?.targetID}
     private var editable:Bool{canManage && !model.state.busy && model.state.storageReady && model.state.draft?.phase == .draft}
     private func label(_ target:String)->String{model.state.targets.first(where:{$0.id==target}).map{String($0.body.prefix(100))} ?? "요청 " + String(target.suffix(8))}
