@@ -4,12 +4,14 @@ import SwiftUI
     @Published var state = TeamOutcomeController.View()
     var controller: TeamOutcomeController?
 }
-struct TeamOutcomeView: View {
+struct TeamOutcomeView: View, Equatable {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: TeamOutcomePresentation
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(make: @escaping @MainActor () -> TeamOutcomePresentation) { _model = StateObject(wrappedValue: make()) }
+    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamOutcomePresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
+    let key: TeamScreenKey
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("outcome", a.key, b.key) }
     private var editable: Bool { model.state.page?.can_respond == true && !model.state.busy && model.state.storageReady && model.state.draft?.phase == .draft }
     private func event(_ item: TeamOutcomeEvent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
