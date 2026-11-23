@@ -36,6 +36,7 @@ struct TeamSubscriptionScreen: View {
     let product: String
     let request: String
     var body: some View {
+        let _ = teamRenderCount("body.subscription")
         List {
             if !model.state.message.isEmpty { Text(model.state.message) }
             TeamSubscriptionControls(model: model, product: product, request: request)

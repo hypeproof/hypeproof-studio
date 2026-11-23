@@ -22,6 +22,7 @@ struct TeamTextRevisionScreen: View {
         }
     }
     var body: some View {
+        let _ = teamRenderCount("body.text")
         List {
 #if DEBUG
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic text trace").font(.caption2).accessibilityIdentifier("teamTextTrace").accessibilityValue(TeamEntryFixture.trace) } }

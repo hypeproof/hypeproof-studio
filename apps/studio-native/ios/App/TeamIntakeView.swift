@@ -97,6 +97,7 @@ struct TeamIntakeScreen: View {
         Group { Text(p.title).font(.headline); Text(p.intent); Text(p.requested_change); ForEach(Array(p.acceptance.enumerated()), id: \.offset) { Text($0.element) }; ForEach(Array(p.references.enumerated()), id: \.offset) { Text($0.element) }; Text("공개 위치: \(p.target_repo)") }
     }
     var body: some View {
+        let _ = teamRenderCount("body.intake")
         List {
 #if DEBUG
             if TeamIntakeFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic Intake trace").accessibilityIdentifier("teamIntakeTrace").accessibilityValue(TeamIntakeFixture.trace) } }
