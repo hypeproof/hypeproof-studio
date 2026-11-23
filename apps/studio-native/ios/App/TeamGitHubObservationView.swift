@@ -6,7 +6,8 @@ import SwiftUI
 }
 struct TeamGitHubObservationScreen: View {
     @StateObject private var model: TeamGitHubObservationPresentation
-    init(model: TeamGitHubObservationPresentation) { _model = StateObject(wrappedValue: model) }
+    /// The model is built once per screen identity, not on every TeamGitHubScreen body pass (#4432 F11).
+    init(make: @escaping @MainActor () -> TeamGitHubObservationPresentation) { _model = StateObject(wrappedValue: make()) }
     private func date(_ milliseconds: Double) -> String { Date(timeIntervalSince1970: milliseconds / 1000).formatted(date: .abbreviated, time: .shortened) }
     private func status(_ ci: TeamGitHubObservation.CI) -> String {
         guard ci.status == "completed" else { return ["queued","waiting","pending","requested"].contains(ci.status) ? "대기 중" : "진행 중" }

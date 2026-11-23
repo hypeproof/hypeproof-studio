@@ -318,21 +318,21 @@ struct TeamRequestDetailView: View {
                         Text("작성 시각 기준이에요. 답변 여부나 해결 상태를 뜻하지 않아요.").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Section { NavigationLink("담당·진행 상태와 이력") { TeamWorkflowScreen(make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, detail.request.product) }, requests: model) }.accessibilityIdentifier("teamWorkflowEntry") }
-                Section { NavigationLink("해결 여부 확인") { TeamOutcomeView(make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
-                Section { NavigationLink("배포 버전과 확인 안내") { TeamDeliveryScreen(make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
+                Section { NavigationLink("담당·진행 상태와 이력") { TeamDetailDestination(kind: .workflow, model: model, requestID: requestID, product: detail.request.product).equatable() }.accessibilityIdentifier("teamWorkflowEntry") }
+                Section { NavigationLink("해결 여부 확인") { TeamDetailDestination(kind: .outcome, model: model, requestID: requestID).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
+                Section { NavigationLink("배포 버전과 확인 안내") { TeamDetailDestination(kind: .delivery, model: model, requestID: requestID).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { Button("공개 요청으로 제안") {
                     teamRenderCount("tap.intake"); commentFocused = false; intakeProduct = detail.request.product; let expected = generation
                     DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { teamRenderCount("async.intake"); showIntake = true } }
                 }.disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
-                Section { NavigationLink("GitHub 연결과 근거") { TeamGitHubScreen(make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) }) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
+                Section { NavigationLink("GitHub 연결과 근거") { TeamDetailDestination(kind: .github, model: model, requestID: requestID).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
                     Button("관련 요청") {
                         teamRenderCount("tap.related"); commentFocused = false; relatedProduct = detail.request.product
                         let expected = generation
                         // Commit focus resignation before NavigationStack captures the source view.
                         DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.related"); showRelated = true } }
                     }.disabled(busy || !storageReady).accessibilityIdentifier("teamRelationsEntry") }
-                if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamSubscriptionScreen(model: inbox, product: detail.request.product, request: requestID) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
+                if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamDetailDestination(kind: .subscription, model: model, requestID: requestID, product: detail.request.product, inbox: inbox).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
                     ForEach(comments) { comment in
                         VStack(alignment: .leading, spacing: 6) {
@@ -386,9 +386,11 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.accessibilityIdentifier("teamRequestDetailList").navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $showIntake) { let product = intakeProduct; TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }) }
-            .navigationDestination(isPresented: $showTextHistory) { let target = textTarget, product = textProduct; TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) }) }
-            .navigationDestination(isPresented: $showRelated) { let product = relatedProduct; TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model) }
+            // Each destination is an Equatable value (#4432 F11): a detail body pass that
+            // leaves its inputs unchanged does not re-run the pushed screen's body.
+            .navigationDestination(isPresented: $showIntake) { TeamDetailDestination(kind: .intake, model: model, requestID: requestID, product: intakeProduct).equatable() }
+            .navigationDestination(isPresented: $showTextHistory) { TeamDetailDestination(kind: .text, model: model, requestID: requestID, product: textProduct, target: textTarget).equatable() }
+            .navigationDestination(isPresented: $showRelated) { TeamDetailDestination(kind: .relations, model: model, requestID: requestID, product: relatedProduct).equatable() }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -499,6 +501,38 @@ struct TeamRequestDetailView: View {
         } catch SyncFailure.http(409, "team_reply_target_unavailable") {
             if g == generation { message = "답글 대상을 지금 확인할 수 없어요. 원래 글과 전송 번호는 유지돼요. 새로고침해 주세요."; reject("team_reply_target_unavailable", generation:g) }
         } catch { if g == generation { message = "접수 여부를 확인하지 못했어요. 댓글과 전송 번호는 유지돼요." } }
+    }
+}
+
+/// One request-detail destination as a value (#4432 F11). Main runs showed TeamRequestDetailView.body and the
+/// pushed screen's body re-running about 1:1 in a main-thread loop. The pushed screen used to be built inline
+/// with a `make:` closure, which SwiftUI cannot compare, so every detail body pass re-ran the pushed body.
+/// `==` covers every input the screen is built from; each screen observes its own state (StateObject or
+/// ObservedObject), so skipping a pass with equal inputs drops no update. The factories run, and are counted,
+/// exactly where they were before: inside the screens' StateObject autoclosures.
+private struct TeamDetailDestination: View, Equatable {
+    enum Kind { case workflow, outcome, delivery, github, subscription, intake, text, relations }
+    let kind: Kind
+    let model: TeamRequestPresentation
+    let requestID: String
+    var product = ""
+    var target = ""
+    var inbox: TeamInboxPresentation?
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.kind == b.kind && a.model === b.model && a.requestID == b.requestID && a.product == b.product && a.target == b.target && a.inbox === b.inbox
+    }
+    var body: some View {
+        let model = model, requestID = requestID, product = product, target = target
+        switch kind {
+        case .workflow: TeamWorkflowScreen(make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, product) }, requests: model)
+        case .outcome: TeamOutcomeView(make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) })
+        case .delivery: TeamDeliveryScreen(make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) })
+        case .github: TeamGitHubScreen(make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) })
+        case .subscription: if let inbox { TeamSubscriptionScreen(model: inbox, product: product, request: requestID) }
+        case .intake: TeamIntakeScreen(make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) })
+        case .text: TeamTextRevisionScreen(make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) })
+        case .relations: TeamRelationScreen(make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model)
+        }
     }
 }
 
@@ -645,7 +679,7 @@ struct TeamGitHubScreen: View {
 #endif
 
             if let make = model.makeObservations {
-                NavigationLink { TeamGitHubObservationScreen(model: { teamRenderCount("make.observations"); return make() }()) } label: { Text("최근 확인한 GitHub 상태") }
+                NavigationLink { TeamGitHubObservationScreen(make: { teamRenderCount("make.observations"); return make() }) } label: { Text("최근 확인한 GitHub 상태") }
                     .disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamGitHubObservationsOpen")
             }
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamGitHubMessage") }
