@@ -30,11 +30,13 @@ public enum SwiftUIChangeSummary {
     }
 
     /// The "<View>.<property>" terms of one line, or [] if the line is not in the expected shape.
+    /// "View: unchanged." (a body pass with no recorded change, from `_printChanges()`) is "View.(unchanged)".
     static func properties(_ text: String) -> [String] {
         guard let colon = text.firstIndex(of: ":") else { return [] }
         let type = text[..<colon].trimmingCharacters(in: .whitespaces)
         guard !type.isEmpty, type.allSatisfy(isIdentifier) else { return [] }
         var rest = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        if rest == "unchanged." { return [type + ".(unchanged)"] }
         guard rest.hasSuffix(" changed.") else { return [] }
         rest.removeLast(" changed.".count)
         let names = rest.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
@@ -67,6 +69,23 @@ public enum SwiftUIChangeSummary {
             if out.count >= 32 { break }
         }
         return out
+    }
+
+    /// One verbatim sample of a system placeholder line, with its count in `lines`: `sample "<a b [c d]>"+N`.
+    /// Run 45132515641: every iOS simulator line had the shape "<w_w_[w_w]>" and an empty format string.
+    /// Only a line with an empty format string that is ASCII letters in exactly that shape is copied. With no
+    /// format string there is no logged argument, and the shape leaves no room for digits or other text.
+    /// The most frequent such text is used; nil if there is none.
+    public static func placeholderSample(_ lines: [SwiftUIChangeLine]) -> String? {
+        var counts: [String: Int] = [:]
+        for line in lines where line.format.isEmpty && isPlaceholder(line.text) { counts[line.text, default: 0] += 1 }
+        guard let best = counts.min(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }) else { return nil }
+        return "sample \"" + best.key + "\"+" + String(best.value)
+    }
+
+    private static let placeholder = try! NSRegularExpression(pattern: "^<[A-Za-z]+ [A-Za-z]+ \\[[A-Za-z]+ [A-Za-z]+\\]>\\z")
+    static func isPlaceholder(_ text: String) -> Bool {
+        placeholder.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     private static func isIdentifier(_ ch: Character) -> Bool {

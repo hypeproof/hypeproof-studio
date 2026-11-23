@@ -565,9 +565,10 @@ class SimObserve(unittest.TestCase):
 class StallSamples(unittest.TestCase):
     """ios-sim-observe.py stall-watch (#4432 F11): diagnostics only."""
 
-    def line(self, length, start):
+    def line(self, length, start, pid=None):
+        named = '' if pid is None else f'; pid {pid}'
         return (f'<unknown>:0: warning: -[HPStudioUITests.TeamEntryUITests testA] : HPStudio main stall (ongoing): '
-                f'{length} ms since uptime {start} ms; outstanding ping {length} ms; 0 slow pings answered; render changes: none\n')
+                f'{length} ms since uptime {start} ms{named}; outstanding ping {length} ms; 0 slow pings answered; render changes: none\n')
 
     DEVICE = SimObserve.DEVICE
     OTHER = 'FFFFFFFF-0000-4000-8000-000000000000'
@@ -608,14 +609,35 @@ class StallSamples(unittest.TestCase):
             taken, calls = self.scan(evidence, self.line(10034, 1572426) + self.line(20019, 1572426))
             self.assertEqual(taken, 1)
             self.assertEqual(calls, [(['ps', '-axo', 'pid=,command='], 10),
-                                     (['sample', '4242', '3', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
+                                     (['sample', '4242', '1', '-mayDie', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
             self.assertEqual(self.scan(evidence, self.line(40012, 1572426)), (0, []))
             row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
             self.assertIn('main-thread', (evidence / 'stall-sample-1.txt').read_text())
             header = (evidence / 'stall-samples.txt').read_text()
-        self.assertEqual({k: row[k] for k in ('step', 'command', 'sample', 'start', 'pid', 'outcome')},
-                         {'step': 'stall', 'command': 'sample', 'sample': 1, 'start': 1572426, 'pid': 4242, 'outcome': 'sampled'})
+        self.assertEqual({k: row[k] for k in ('step', 'command', 'sample', 'start', 'pid', 'pid_from', 'outcome')},
+                         {'step': 'stall', 'command': 'sample', 'sample': 1, 'start': 1572426, 'pid': 4242, 'pid_from': 'ps', 'outcome': 'sampled'})
         self.assertRegex(header, r'^== stall 1 start 1572426 \S+ pid 4242 sampled\n')
+
+    def test_the_pid_the_app_names_is_sampled_without_ps(self):
+        # Run 45132515641: ps -axo did not return within 10 s during a stall. The app's own pid needs no ps.
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, self.line(3012, 1572426, pid=31337) + self.line(10034, 1572426, pid=31337))
+            self.assertEqual(taken, 1)
+            self.assertEqual(calls, [(['sample', '31337', '1', '-mayDie', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+        self.assertEqual((row['pid'], row['pid_from'], row['outcome']), (31337, 'line', 'sampled'))
+
+    def test_a_pid_that_is_not_valid_falls_back_to_ps(self):
+        self.assertEqual(observe.stall_pids(self.line(3000, 7, pid=0) + self.line(3000, 8, pid=99999999999)
+                                            + self.line(3000, 9, pid='12x') + self.line(3000, 10, pid=55) + self.line(10000, 10, pid=66)),
+                         {'10': 55})
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, self.line(3000, 7, pid=0))
+            self.assertEqual(taken, 1)
+            self.assertEqual([args[0] for args, _ in calls], ['ps', 'sample'])
+            self.assertEqual(calls[1][0][1], '4242')
 
     def test_no_app_process_and_a_hung_sample_are_recorded_not_raised(self):
         with tempfile.TemporaryDirectory() as directory:
