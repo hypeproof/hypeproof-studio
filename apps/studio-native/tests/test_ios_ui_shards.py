@@ -603,6 +603,21 @@ class HostSnapshots(unittest.TestCase):
             text = (evidence / observe.HOST_FILE).read_text()
         return host, calls, text
 
+    def test_uptime_uses_the_macos_uptime_clock_and_falls_back_to_monotonic_elsewhere(self):
+        # Runs on every platform: the clock is injected. On macOS UPTIME_CLOCK is CLOCK_UPTIME_RAW, the clock
+        # of ProcessInfo.systemUptime in the app's stall lines; the Linux contract job has no such clock.
+        self.assertEqual(observe.UPTIME_CLOCK, getattr(time, 'CLOCK_UPTIME_RAW', None))
+        with mock.patch.object(observe.time, 'clock_gettime', return_value=12.3456) as gettime, \
+             mock.patch.object(observe.time, 'monotonic', return_value=99.0):
+            self.assertEqual(observe.uptime_ms(clock=8), 12345)
+            gettime.assert_called_once_with(8)
+            with mock.patch.object(observe, 'UPTIME_CLOCK', 8):
+                self.assertEqual(observe.uptime_ms(), 12345)
+            with mock.patch.object(observe, 'UPTIME_CLOCK', None):
+                self.assertEqual(observe.uptime_ms(), 99000)
+            self.assertEqual(gettime.call_count, 2)
+        self.assertEqual(observe.MAXRSS_PER_MB, 1048576 if sys.platform == 'darwin' else 1024)
+
     def test_only_the_second_top_sample_is_read_and_names_keep_their_spaces(self):
         rows = observe.top_rows(HOST_TOP_OUTPUT)
         self.assertEqual(len(rows), 9)

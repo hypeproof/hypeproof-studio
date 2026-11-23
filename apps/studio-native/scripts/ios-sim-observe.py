@@ -186,9 +186,18 @@ HOST_GROUPS = (
 MEM_VALUE = re.compile(r"^(\d+(?:\.\d+)?)([BKMG])[+-]?$")
 
 
-def uptime_ms():
-    """System uptime in ms: the clock of the app's stall lines and of the UI test's trace reads."""
-    return int(time.clock_gettime(time.CLOCK_UPTIME_RAW) * 1000)
+# The clock of the app's stall lines and of the UI test's trace reads (ProcessInfo.systemUptime) on the
+# macOS host. CLOCK_UPTIME_RAW exists only on macOS; elsewhere (the Linux contract job runs these tests)
+# time.monotonic stands in, which matches no app line but keeps every reading working.
+UPTIME_CLOCK = getattr(time, "CLOCK_UPTIME_RAW", None)
+# ru_maxrss is in bytes on macOS and in KiB on Linux.
+MAXRSS_PER_MB = 1048576 if sys.platform == "darwin" else 1024
+
+
+def uptime_ms(clock=None):
+    """System uptime in ms from `clock` (a time.clock_gettime id; default UPTIME_CLOCK), or monotonic time."""
+    clock = UPTIME_CLOCK if clock is None else clock
+    return int((time.clock_gettime(clock) if clock is not None else time.monotonic()) * 1000)
 
 
 def measured(run, args, limit, costs, name=None):
@@ -315,7 +324,7 @@ def host_snapshot(evidence, *, step, sample, vm_stat=None, run=None, with_top=Tr
             "free_pages": vm_value(vm_stat, "Pages free"), "wired_pages": vm_value(vm_stat, "Pages wired down"),
             "compressor_pages": vm_value(vm_stat, "Pages occupied by compressor"), "swapouts": vm_value(vm_stat, "Swapouts"),
             "table": source, "groups": group_sums(list(rows.values())), "costs": costs,
-            "children_maxrss_mb": round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1048576, 1)}
+            "children_maxrss_mb": round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / MAXRSS_PER_MB, 1)}
     with (evidence / HOST_FILE).open("a") as target:
         target.write(f"== {step} sample {sample} uptime {taken_ms} {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n")
         target.write("-- sysctl\n" + "\n".join(f"{k}: {v}" for k, v in values.items()) + "\n")
