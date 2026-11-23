@@ -32,5 +32,10 @@ try {
   assert.equal(forwardTimeoutMs('/admin/cohorts/c/authoring/k/proposal', 'POST', false), 8_000);
   assert.equal(forwardTimeoutMs('/workshop/boa-tokens', 'POST', true), 60_000);
   assert.equal(forwardTimeoutMs('/workshop/boa-tokens', 'GET', true), 8_000);
+  // A report advance waits on one evaluator call the Service allows 90 s; a shorter forward turns it into a 502. Neighbours keep 8 s.
+  const batch = '/admin/cohorts/c/classroom/runs/r/report-batches/b';
+  assert.ok(forwardTimeoutMs(batch + '/advance', 'POST', false) > 90_000);
+  assert.equal(forwardTimeoutMs(batch + '/advance', 'GET', false), 8_000);
+  assert.equal(forwardTimeoutMs(batch + '/reconcile', 'POST', false), 8_000);
   console.log('PASS plan-section forward: POST section-revision forwarded byte-for-byte with the connected issuer, 45 s budget, nothing else admitted');
 } finally { globalThis.fetch = original; }

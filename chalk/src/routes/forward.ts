@@ -28,9 +28,12 @@ import { CONNECT_SECRET_HEADER, connectSecret, instructorAuthorization } from ".
 const SECTION_REVISION = /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/plan\/section-revision$/;
 export const isSectionRevision = (pathname: string, method: string) => method === "POST" && SECTION_REVISION.test(pathname);
 // The section revision waits on one Haiku call (Service timeout 30 s); every other forward keeps its short budget.
+// One report advance waits on one evaluator call, which the Service bounds at 90 s (worker/src/lib/classroom-evaluator.ts).
+const REPORT_ADVANCE = /^\/admin\/cohorts\/[^/]+\/classroom\/runs\/[^/]+\/report-batches\/[^/]+\/advance$/;
 export function forwardTimeoutMs(pathname: string, method: string, distribution: boolean): number {
   if (distribution && method === "POST") return 60_000;
   if (isSectionRevision(pathname, method)) return 45_000;
+  if (method === "POST" && REPORT_ADVANCE.test(pathname)) return 100_000;
   return 8_000;
 }
 
