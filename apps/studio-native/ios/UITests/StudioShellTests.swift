@@ -983,6 +983,8 @@ final class StudioJourneyTests: XCTestCase {
         waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 3)
         let result = try trace(app)
         XCTAssertEqual(result["accepted_turns"] as? Int, 2)
+        XCTAssertEqual(result["voice_endpoint_finishes"] as? Int, 0, "The second capture must end by its delivered final, not by endpoint silence.")
+        XCTAssertEqual(result["voice_finalize_timeouts"] as? Int, 0, "No turn may be sent by the 4 s finalize timeout.")
         XCTAssertEqual(result["submitted_texts"] as? [String], ["I want to understand my next step", "I can send a second spoken thought"])
         let ids = result["submitted_ids"] as? [String] ?? []
         XCTAssertEqual(ids.count, 2); XCTAssertEqual(Set(ids).count, 2)

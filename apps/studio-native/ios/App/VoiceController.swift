@@ -172,8 +172,9 @@ private struct VoiceInventory: @unchecked Sendable {
                 self?.receiveTranscript(text, isFinal: isFinal, token: token)
             }, prepareEndpoint: { [weak self] held in
                 guard let self, self.turn.token == token else { return }
-                // Only the real-playback journey's synthetic second capture is
-                // held for the actual UI Stop. Production endpoint time is real.
+                // Held only for the real-playback journey's second capture (ended
+                // by the actual UI Stop) and the periodic-poll journey's second
+                // capture (ended by its synthetic final). Production endpoint time is real.
                 self.fixtureEndpointTime = held ? ProcessInfo.processInfo.systemUptime : nil
                 self.endpoint = VoiceEndpoint(now: self.endpointNow)
                 self.watchEndpoint(token)
@@ -282,7 +283,11 @@ private struct VoiceInventory: @unchecked Sendable {
                     try? await Task.sleep(nanoseconds: 200_000_000)
                     guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .listening else { return }
                     switch self.endpoint?.decision(now: self.endpointNow) {
-                    case .finish: self.endSpeech(); return
+                    case .finish:
+#if DEBUG
+                        NativeJourneyFixture.voiceEndpointFinished()
+#endif
+                        self.endSpeech(); return
                     case .noSpeech: self.finish("", token: token); return
                     default: break
                     }
@@ -299,6 +304,9 @@ private struct VoiceInventory: @unchecked Sendable {
             guard !Task.isCancelled, let self, self.turn.token == token, self.turn.phase == .finalizing else { return }
             // Some on-device recognizers never emit a final result after endAudio.
             // The stable partial is already visible; use it once after endpoint detection.
+#if DEBUG
+            NativeJourneyFixture.voiceFinalizeTimedOut()
+#endif
             self.finish(self.endpoint?.transcript ?? "", token: token)
         }
     }
