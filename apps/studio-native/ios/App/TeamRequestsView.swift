@@ -31,7 +31,7 @@ func teamRenderCount(_ key: String) {
 /// Records, once per process, the first write of `what` that runs off the main thread (#4432 F5).
 /// Diagnostics only: it changes no behaviour. Run 44994131331 logged "Updating ObservedObject<TeamRequestPresentation>
 /// from background threads"; code reading and a strict-concurrency type-check found no off-main writer.
-/// The record goes to the team trace JSON ("offMain") and to the runtime-issue log, which XCTest reports as a test warning.
+/// The record goes to the runtime-issue log (the team trace JSON gets only "offMain": 1), which XCTest reports as a test warning.
 func teamOffMainCheck(_ what: String) {
 #if DEBUG
     guard !Thread.isMainThread else { return }
@@ -41,10 +41,12 @@ func teamOffMainCheck(_ what: String) {
 #if DEBUG
 /// DEBUG-only render counters for #4432. Each key keeps its count and the first and last
 /// system uptime in ms, so a reader can tell bounded render work from an unbounded update loop.
+/// The trace JSON shows the counts only; the uptimes appear in the main-stall line.
 /// Trace tickers are deliberately not counted: the trace is an accessibility value, and a count that
 /// changed on every 0.25 s tick flooded testmanagerd with accessibility notifications while idle.
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
+    private static let pushMarkPrefixes = ["tap.", "async.", "appear."]
     private let lock = NSLock()
     private var rows: [String: (count: Int, first: Int, last: Int)] = [:]
     func count(_ key: String) {
@@ -74,13 +76,18 @@ final class TeamRenderTrace: @unchecked Sendable {
         return rows.mapValues { ["count": $0.count, "first_ms": $0.first, "last_ms": $0.last] }
     }
     /// Adds the counters to a trace JSON object under "render"; other keys stay unchanged.
+    /// The trace is an accessibility value, and a long value can lose its later keys before a test
+    /// reads them (#4432 F12). So the trace carries only short values: "render" holds counts only
+    /// (first_ms/last_ms feed the stall line), plus "offMain": 1 and "stalls": N.
+    /// The off-main stack and the stall details stay in their runtime-issue lines, and the push marks
+    /// (tap., async., appear.) only feed the stall line.
     static func merged(into trace: String) -> String {
         guard var object = (try? JSONSerialization.jsonObject(with: Data(trace.utf8))) as? [String: Any] else { return trace }
-        object["render"] = shared.snapshot()
-        shared.lock.lock(); let offMain = shared.offMain; shared.lock.unlock()
-        if let offMain { object["offMain"] = offMain }
-        let stalls = TeamMainStallWatch.shared.reported()
-        if !stalls.isEmpty { object["stalls"] = stalls }
+        object["render"] = shared.snapshot().filter { key, _ in !pushMarkPrefixes.contains { key.hasPrefix($0) } }.mapValues { $0["count"] ?? 0 }
+        shared.lock.lock(); let offMain = shared.offMain != nil; shared.lock.unlock()
+        if offMain { object["offMain"] = 1 }
+        let stalls = TeamMainStallWatch.shared.reportCount()
+        if stalls > 0 { object["stalls"] = stalls }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return trace }
         return String(data: data, encoding: .utf8) ?? trace
     }
@@ -90,10 +97,10 @@ final class TeamRenderTrace: @unchecked Sendable {
 /// at most every 0.5 s. A ping answered after 100 ms or more starts or extends a stall. Three fast
 /// answers in a row end it, because a render loop leaves short gaps in which one ping can be answered
 /// quickly. A stall longer than 2 s (first slow ping to last slow answer) is reported once: one
-/// runtime-issue line (an XCTest warning) and one "stalls" record in the team trace JSON. Both list the
-/// render counters that changed from the last quiet ping until the stall ended, each with its last
-/// uptime, so tap, async, make and appear can be ordered against "start_ms". The trace changes only
-/// when a stall is reported, never on a ping. At most 8 reports per process.
+/// runtime-issue line (an XCTest warning). It lists the render counters that changed from the last
+/// quiet ping until the stall ended, each with its last uptime, so tap, async, make and appear can be
+/// ordered against the stall start. The team trace JSON gets only the count ("stalls": N), so it
+/// changes only when a stall is reported, never on a ping. At most 8 reports per process.
 final class TeamMainStallWatch: @unchecked Sendable {
     static let shared = TeamMainStallWatch()
     private static let interval = 0.5, slowMs = 100, quietPings = 3, reportMs = 2_000, maxReports = 8
@@ -107,7 +114,7 @@ final class TeamMainStallWatch: @unchecked Sendable {
     private var quietBefore: [String: [String: Int]] = [:]
     private var stall: (start: Int, end: Int, pings: Int, fast: Int, quiet: Int, worst: Int, before: [String: [String: Int]])?
     private let lock = NSLock()
-    private var records: [[String: Any]] = []
+    private var reportedStalls = 0
     func start() {
         queue.async { [self] in
             guard timer == nil else { return }
@@ -117,7 +124,7 @@ final class TeamMainStallWatch: @unchecked Sendable {
             timer = source; source.resume()
         }
     }
-    func reported() -> [[String: Any]] { lock.lock(); defer { lock.unlock() }; return records }
+    func reportCount() -> Int { lock.lock(); defer { lock.unlock() }; return reportedStalls }
     private func ping() {
         guard !waiting else { return }
         guard reports < Self.maxReports else { timer?.cancel(); return }
@@ -146,9 +153,7 @@ final class TeamMainStallWatch: @unchecked Sendable {
             let count = (row["count"] ?? 0) - (s.before[key]?["count"] ?? 0)
             return count > 0 ? (key, count, row["last_ms"] ?? 0) : nil
         }.sorted { $0.last < $1.last }
-        let render = Dictionary(uniqueKeysWithValues: changed.map { ($0.key, ["count": $0.count, "last_ms": $0.last]) })
-        let record: [String: Any] = ["start_ms": s.start, "ms": length, "slow_pings": s.pings, "fast_pings": s.fast, "worst_ms": s.worst, "render": render]
-        lock.lock(); records.append(record); lock.unlock()
+        lock.lock(); reportedStalls += 1; lock.unlock()
         let text = "HPStudio main stall: \(length) ms from uptime \(s.start) ms; \(s.pings) slow and \(s.fast) fast pings, worst \(s.worst) ms; render changes: "
             + (changed.isEmpty ? "none" : changed.map { "\($0.key)+\($0.count)@\($0.last)" }.joined(separator: " "))
         os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
@@ -156,7 +161,7 @@ final class TeamMainStallWatch: @unchecked Sendable {
 }
 /// Runtime issues are expected to surface as XCTest warnings only when the log call names a system
 /// image (as SwiftUI's own "Updating ObservedObject" issue did), so the issue uses SwiftUI's image handle.
-/// If the lookup fails it falls back to this image; the trace JSON "offMain" record is kept either way.
+/// If the lookup fails it falls back to this image; the trace JSON "offMain" marker is kept either way.
 nonisolated(unsafe) private let teamRuntimeIssueDSO: UnsafeRawPointer? = {
     var info = Dl_info()
     guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "$s7SwiftUI4ViewMp"), dladdr(symbol, &info) != 0, let base = info.dli_fbase else { return nil }
