@@ -14,12 +14,25 @@ import UserNotifications
     }
     static var trace: String {
         let value = JourneyTransport.store.trace()
-        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty,
+        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty || !signInTiming.isEmpty,
               var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
         if !emptyStopBoundary.isEmpty { fields["empty_stop_boundary"] = emptyStopBoundary }
         if !retryStages.isEmpty { fields["retry_stages"] = retryStages }
+        if !signInTiming.isEmpty { fields["sign_in_timing"] = signInTiming.fields }
         if !requestedPlaybackVoice.isEmpty { fields["requested_playback_voice"] = requestedPlaybackVoice }
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
+    }
+    /// Sign-in tap to signed-in marks (#4432 F23). Diagnostics only: the trace gets them as
+    /// "sign_in_timing" and each finished attempt logs one "HPStudio sign-in timing" line.
+    private static var signInTiming = SignInTiming()
+    private static func uptimeMs() -> Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
+    static func signInTap() { guard enabled else { return }; signInTiming.tap(at: uptimeMs()) }
+    static func signInAudio(_ result: String) { guard enabled else { return }; signInTiming.audio(result) }
+    static func signInVoiceStopped() { guard enabled else { return }; signInTiming.voiceStopped(at: uptimeMs()) }
+    static func signInMark(_ name: String) { guard enabled else { return }; signInTiming.mark(name, at: uptimeMs()) }
+    static func signInFinished(_ outcome: String) {
+        guard enabled, !signInTiming.isEmpty else { return }
+        signInTiming.mark(outcome, at: uptimeMs()); teamRuntimeIssue(signInTiming.summary)
     }
     private static var retryStages: [String] = []
     static func recordRetry(_ stage: String) {

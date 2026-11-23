@@ -360,6 +360,10 @@ nonisolated(unsafe) private let teamRuntimeIssueDSO: UnsafeRawPointer? = {
     guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "$s7SwiftUI4ViewMp"), dladdr(symbol, &info) != 0, let base = info.dli_fbase else { return nil }
     return UnsafeRawPointer(base)
 }()
+/// One line as an XCTest warning, through the same runtime-issue channel as the stall lines (#4432 F23).
+func teamRuntimeIssue(_ text: String) {
+    os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
+}
 #endif
 
 struct TeamRequestsView: View {
