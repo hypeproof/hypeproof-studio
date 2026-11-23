@@ -790,7 +790,17 @@ struct SharedConversationView: View {
             .accessibilityLabel(label).accessibilityValue(value).accessibilityIdentifier(id)
     }
 #endif
-    private func startLogin() { voice.stop(); focused = false; model.login() }
+    private func startLogin() {
+#if DEBUG
+        // Tap → voice.stop → busy → signed in, as uptime marks (#4432 F23). Diagnostics only.
+        NativeJourneyFixture.signInTap()
+#endif
+        voice.stop()
+#if DEBUG
+        NativeJourneyFixture.signInVoiceStopped()
+#endif
+        focused = false; model.login()
+    }
     private func insert(_ text: String) { voice.stop(); focused = true; guard model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {
 #if DEBUG

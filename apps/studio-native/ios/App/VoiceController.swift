@@ -65,6 +65,8 @@ private struct VoiceInventory: @unchecked Sendable {
     private var fixtureUtterance: AVSpeechUtterance?
 #endif
     private var tapInstalled = false
+    /// One claim for the process: the audio session is shared by every controller.
+    private static var audioClaim = AudioSessionClaim()
     private var utteranceID: ObjectIdentifier?
     private var authorizedToken: UUID?
     private var transcript: (String) -> Void = { _ in }
@@ -197,7 +199,7 @@ private struct VoiceInventory: @unchecked Sendable {
             // Keep system-selected built-in/wired input and admit HFP microphones.
             // Playback remains a separate, capture-off phase.
             try audio.setCategory(.record, mode: .measurement, options: [.allowBluetoothHFP])
-            try audio.setActive(true)
+            Self.audioClaim.activating(); try audio.setActive(true)
             guard let route = audio.currentRoute.inputs.first else {
                 record(.inputUnavailable)
                 fail("사용할 수 있는 마이크가 없어요. 연결을 확인하거나 글로 계속할 수 있어요."); return
@@ -465,7 +467,7 @@ private struct VoiceInventory: @unchecked Sendable {
     }
     @inline(never) private func activatePlaybackSession() throws {
         try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-        try AVAudioSession.sharedInstance().setActive(true)
+        Self.audioClaim.activating(); try AVAudioSession.sharedInstance().setActive(true)
     }
     @inline(never) private func makeUtterance(_ text: String, voice: AVSpeechSynthesisVoice) -> AVSpeechUtterance {
         let utterance = AVSpeechUtterance(string: text)
@@ -519,7 +521,7 @@ private struct VoiceInventory: @unchecked Sendable {
         guard !isCapturing, turn.phase != .waiting, turn.phase != .speaking, let reviewData else { return }
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-            try AVAudioSession.sharedInstance().setActive(true)
+            Self.audioClaim.activating(); try AVAudioSession.sharedInstance().setActive(true)
             let player = try AVAudioPlayer(data: reviewData); player.delegate = self; reviewPlayer = player
             guard player.play() else { throw StudioError.message("녹음을 재생하지 못했어요.") }
             status = "내 목소리를 다시 듣고 있어요. 다른 화면으로 이동하거나 다음 녹음을 시작하면 원음을 지워요."
@@ -561,9 +563,30 @@ private struct VoiceInventory: @unchecked Sendable {
         engine.stop()
         if tapInstalled { engine.inputNode.removeTap(onBus: 0); tapInstalled = false }
     }
+    /// Deactivates only a session this app activated and has not released yet (#4432 F23). Every stop after an
+    /// activation still deactivates, and a failed deactivation is tried again on the next stop. Shared by both
+    /// controllers, so one controller's stop still releases a session the other one activated, as before.
     private func deactivateAudio() {
-        do { try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
-        catch { record(.audioDeactivationFailed) }
+        guard Self.audioClaim.release() else {
+#if DEBUG
+            NativeJourneyFixture.signInAudio("skipped")
+#endif
+            return
+        }
+#if DEBUG
+        let started = ProcessInfo.processInfo.systemUptime
+#endif
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+#if DEBUG
+            NativeJourneyFixture.signInAudio("\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) ms")
+#endif
+        } catch {
+            Self.audioClaim.deactivationFailed(); record(.audioDeactivationFailed)
+#if DEBUG
+            NativeJourneyFixture.signInAudio("failed \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) ms")
+#endif
+        }
     }
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
         let id = ObjectIdentifier(utterance)

@@ -856,17 +856,32 @@ private struct SharedCacheFile: Codable {
         // Keep an in-flight refresh alive to store rotated credentials. No new reads are scheduled in background.
     }
     func login() {
+#if DEBUG
+        // Which guard returned, if any (#4432 F23: run 44866066162 never sent the sign-in start).
+        if busy || syncing || stoppingReflection || !accountStorageReady {
+            NativeJourneyFixture.signInFinished(busy ? "ignored.busy" : syncing ? "ignored.syncing" : stoppingReflection ? "ignored.stopping" : "ignored.storage")
+        }
+#endif
         guard !busy, !syncing, !stoppingReflection else { return }
         guard accountStorageReady else { error = "계정 저장소를 먼저 다시 확인해 주세요."; return }
         busy = true; error = nil; loginStatus = "계정 로그인 화면을 열고 있어요."; let attempt = epoch
+#if DEBUG
+        NativeJourneyFixture.signInMark("busy")
+#endif
         operation = Task {
             var acquired: AccountTokens?
             do {
                 let proof = NativeAccountProof()
                 let start = try await service.startNativeSignIn(proof)
+#if DEBUG
+                NativeJourneyFixture.signInMark("started")
+#endif
                 guard epoch == attempt else { return }
                 loginStatus = "계정 로그인을 마치면 자동으로 돌아와요."
                 let callback = try await browser.authenticate(start.authorization_uri, expiresIn: start.expires_in)
+#if DEBUG
+                NativeJourneyFixture.signInMark("callback")
+#endif
                 try Task.checkCancellation()
                 guard epoch == attempt else { return }
                 loginStatus = "로그인을 마무리하고 있어요."
@@ -886,12 +901,18 @@ private struct SharedCacheFile: Codable {
                 catch { accountStorageReady = false; throw error }
                 tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); teamRequests.controller?.invalidate(); teamInbox.controller?.invalidate(); deliveryControllers.invalidate(); outcomeControllers.invalidate(); githubObservationControllers.invalidate(); relationControllers.invalidate(); textRevisionControllers.invalidate(); invalidateIntake(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
+#if DEBUG
+                NativeJourneyFixture.signInFinished("signedIn")
+#endif
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
                 // guest writing. This changes a local draft, never the outbox.
                 _ = adoptGuestDraft()
                 discoverApprovals()
             } catch {
+#if DEBUG
+                NativeJourneyFixture.signInFinished("failed")
+#endif
                 if let acquired { try? await service.logout(acquired.access_token) }
                 if epoch == attempt {
                     if error is CancellationError || (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
