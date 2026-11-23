@@ -5,15 +5,17 @@ import SwiftUI
     var controller:TeamRelationController?
 }
 struct TeamRelationScreen:View, Equatable {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var model:TeamRelationPresentation
+    @ObservedObject private var model:TeamRelationPresentation
     @ObservedObject var requests:TeamRequestPresentation
+    let router:TeamRouter
+    let step:TeamStep
+    private let identity:ObjectIdentifier
     @State private var confirmSend=false
     @State private var confirmLeave=false
     @FocusState private var reasonFocused:Bool
-    init(key:TeamScreenKey,make:@escaping @MainActor()->TeamRelationPresentation,requests:TeamRequestPresentation){self.key=key;_model=StateObject(wrappedValue:make());self.requests=requests}
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("relations", a.key, b.key) }
+    /// The router's store keeps the presentation for this step (#4432 F11-D); pushes and leaving go through the router.
+    init(model:TeamRelationPresentation,requests:TeamRequestPresentation,router:TeamRouter,step:TeamStep){self.model=model;self.requests=requests;self.router=router;self.step=step;identity=ObjectIdentifier(model)}
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("relations", (a.step, a.identity), (b.step, b.identity)) }
     private var canManage:Bool{model.state.list?.can_manage==true && model.state.history?.can_manage==true && model.state.history?.target_request_id==model.state.draft?.targetID}
     private var editable:Bool{canManage && !model.state.busy && model.state.storageReady && model.state.draft?.phase == .draft}
     private func label(_ target:String)->String{model.state.targets.first(where:{$0.id==target}).map{String($0.body.prefix(100))} ?? "요청 " + String(target.suffix(8))}
@@ -36,7 +38,7 @@ struct TeamRelationScreen:View, Equatable {
                 Section("관련된 요청"){
                     if model.state.items.isEmpty{Text("현재 연결된 관련 요청이 없어요.").accessibilityIdentifier("teamRelatedEmpty")}
                     ForEach(model.state.items){event in
-                        NavigationLink{TeamRequestDetailView(model:requests,requestID:event.other(page.request_id))}label:{Text(label(event.other(page.request_id)))}.disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamRelatedOriginal-"+event.other(page.request_id))
+                        TeamPushRow(label(event.other(page.request_id))){router.push(.detail(request:event.other(page.request_id)),above:step)}.disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamRelatedOriginal-"+event.other(page.request_id))
                         Button("연결 이력 보기"){reasonFocused=false;Task{await model.controller?.inspect(event.other(page.request_id))}}.disabled(model.state.busy)
                     }
                     if page.next_cursor != nil && model.state.items.count<500{Button("관련 요청 더 보기"){Task{await model.controller?.more("list")}}.disabled(model.state.busy)}
@@ -56,7 +58,7 @@ struct TeamRelationScreen:View, Equatable {
                 Section("선택한 요청"){
                     Text(label(draft.targetID)).accessibilityIdentifier("teamRelatedTarget")
                     Text("요청 번호: "+draft.targetID).font(.caption).textSelection(.enabled)
-                    if model.state.history != nil{NavigationLink("요청 원문 보기"){TeamRequestDetailView(model:requests,requestID:draft.targetID)}.disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamRelatedSelectedOriginal")}
+                    if model.state.history != nil{TeamPushRow("요청 원문 보기"){router.push(.detail(request:draft.targetID),above:step)}.disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamRelatedSelectedOriginal")}
                     if draft.phase == .received{Text("변경이 저장됐어요.").accessibilityIdentifier("teamRelatedReceipt")}
                     if canManage{
                         if draft.phase == .draft || draft.phase == .uncertain || draft.phase == .conflict{
@@ -97,6 +99,6 @@ struct TeamRelationScreen:View, Equatable {
                     Text(verbatim: [title, draft.targetID, action, draft.reason].joined(separator: "\n"))
                 }
             }
-            .alert("저장되지 않은 변경이 있어요",isPresented:$confirmLeave){Button("계속 작성",role:.cancel){};Button("나가기",role:.destructive){dismiss()}}message:{Text("나가기 전에 연결 초안을 내보내 주세요.")}
+            .alert("저장되지 않은 변경이 있어요",isPresented:$confirmLeave){Button("계속 작성",role:.cancel){};Button("나가기",role:.destructive){router.pop(step)}}message:{Text("나가기 전에 연결 초안을 내보내 주세요.")}
     }
 }

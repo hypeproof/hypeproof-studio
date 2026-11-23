@@ -51,7 +51,8 @@ struct TeamInboxView: View {
     @ObservedObject var requests: TeamRequestPresentation
     @Environment(\.dismiss) private var dismiss
     @State private var product = "studio"
-    @State private var path: [String] = []
+    /// The inbox stack's path and screen presentations (#4432 F11-D).
+    @StateObject private var router = TeamRouter()
     @State private var initialRequestConsumed = false
     let initialRequest: String?
     init(model: TeamInboxPresentation, requests: TeamRequestPresentation, initialRequest: String? = nil) { self.model = model; self.requests = requests; self.initialRequest = initialRequest }
@@ -65,7 +66,7 @@ struct TeamInboxView: View {
         }
     }
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: router.steps) {
             List {
 #if DEBUG
                 if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic inbox trace").accessibilityIdentifier("teamInboxTrace").accessibilityValue(TeamEntryFixture.trace) } }
@@ -81,7 +82,7 @@ struct TeamInboxView: View {
                 Section("팀 알림") {
                     if model.state.page != nil, model.state.items.isEmpty { Text("새 알림이 없어요.").accessibilityIdentifier("teamInboxEmpty") }
                     ForEach(model.state.items) { item in
-                        Button { Task { if let request = await model.controller?.openItem(item) { path.append(request) } } } label: {
+                        Button { Task { if let request = await model.controller?.openItem(item) { router.push(.detail(request: request), above: nil) } } } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(title(item)).font(.headline)
                                 if let version = item.version, let build = item.build { Text("버전 \(version) · 빌드 \(build)") }
@@ -96,7 +97,7 @@ struct TeamInboxView: View {
                     }
                 }
             }.navigationTitle("팀 알림함")
-                .navigationDestination(for: String.self) { TeamRequestDetailView(model: requests, requestID: $0) }
+                .teamRoutes(router, requests: requests)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
                     ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy) }
@@ -105,7 +106,7 @@ struct TeamInboxView: View {
                     await model.controller?.open()
                     if !model.state.products.contains(product), let first = model.state.products.first { product = first }
                     if !initialRequestConsumed, let initialRequest, !model.state.products.isEmpty {
-                        initialRequestConsumed = true; path = [initialRequest]
+                        initialRequestConsumed = true; router.reset([.detail(request: initialRequest)])
                     }
                 }
         }
