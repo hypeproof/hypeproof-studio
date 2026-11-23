@@ -5,6 +5,24 @@ import Foundation
 final class SwiftUIPrintChangesTests: XCTestCase {
     private func feed(_ ring: SwiftUIPrintChangeRing, _ text: String, at uptime: Int) { ring.feed(Data(text.utf8), uptimeMs: uptime) }
 
+    func testLogPathIsOffOnlyWhenThePrintPathIsActive() {
+        let active = SwiftUIChangePaths(printActive: true)
+        XCTAssertTrue(active.printChanges)
+        XCTAssertFalse(active.logChanges)
+        var reads = 0
+        XCTAssertEqual(active.logPart { reads += 1; return "store summary" }, "off (print active)")
+        XCTAssertEqual(reads, 0)
+    }
+
+    func testLogPathRunsAsBeforeWhenTheTeeFailed() {
+        let fallback = SwiftUIChangePaths(printActive: false)
+        XCTAssertFalse(fallback.printChanges)
+        XCTAssertTrue(fallback.logChanges)
+        var reads = 0
+        XCTAssertEqual(fallback.logPart { reads += 1; return "store summary" }, "store summary")
+        XCTAssertEqual(reads, 1)
+    }
+
     func testRingKeepsOnlyChangeLinesAcrossChunks() {
         let ring = SwiftUIPrintChangeRing()
         feed(ring, "TeamRequestDetailView: @self, _dism", at: 100)

@@ -35,6 +35,10 @@ SAMPLE_SECONDS, with its own limit, so the main thread's stack during the stall 
 without a valid pid falls back to `ps`: the newest host HPStudio whose executable is under this
 shard's simulator device, so another shard or simulator on the same host is never sampled. Samples go to <evidence>/stall-sample-<n>.txt, with one header in
 <evidence>/stall-samples.txt and one row per capture. Diagnostics only, like the others.
+The last capture is kept for a stall that matters most (#4432 F22): one whose ongoing line shows a
+render loop (a "body.<screen>+N" render change with N >= LOOP_PASSES) or that has reached LONG_STALL_MS.
+Other stalls use only the captures before it. A stall passed over at its 3 s line can still be
+taken at a later line (run 45179328976: three short stalls used every capture, then a loop got none).
 
 Every `watch` reading and every stall capture also takes one host snapshot (#4432 F21): the host's
 memory size, CPU count, swap and memory level (`sysctl`), and the 15 processes using the most memory
@@ -150,6 +154,12 @@ TERMINATE_FILE = "terminate-diagnostics.txt"
 STALL_ONGOING = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms")
 STALL_PID = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms; pid ([0-9]{1,10});")
 STALL_CAPTURES = 3
+# A body pass count in one ongoing line at or above this marks a render loop (run 45179328976: +304 at 3 s;
+# the other stall lines of that run had at most +6). A classification value, not a test limit.
+LOOP_PASSES = 100
+LONG_STALL_MS = 10_000
+STALL_LINE = re.compile(r"HPStudio main stall \(ongoing\): (\d+) ms since uptime (\d+) ms;([^\n]*)")
+BODY_PASSES = re.compile(r"(?:^|\s)body\.[A-Za-z0-9_.]+\+(\d+)@")
 # One second, with -mayDie (symbols are read at once): run 45132515641 had a 3 s sample not return
 # within SAMPLE_LIMIT on a saturated host.
 SAMPLE_SECONDS = 1
@@ -445,6 +455,16 @@ def stall_pids(log_text):
     return pids
 
 
+def stall_priority(log_text):
+    """For each ongoing stall start: True if any of its lines so far shows a render loop or reached LONG_STALL_MS."""
+    kept = {}
+    for length, start, rest in STALL_LINE.findall(log_text):
+        changes = rest.split("render changes: ", 1)[-1].split("; why:", 1)[0] if "render changes: " in rest else ""
+        loop = any(int(n) >= LOOP_PASSES for n in BODY_PASSES.findall(changes))
+        kept[start] = kept.get(start, False) or loop or int(length) >= LONG_STALL_MS
+    return kept
+
+
 def captured_stalls(evidence):
     path = evidence / STALL_FILE
     if not path.exists():
@@ -497,11 +517,14 @@ def scan_stall(evidence, device, log_path, *, run=None):
     done = captured_stalls(evidence)
     pids = stall_pids(text)
     taken = 0
+    kept = stall_priority(text)
     for start in stall_starts(text):
         if start in done:
             continue
         if len(done) >= STALL_CAPTURES:
             break
+        if len(done) >= STALL_CAPTURES - 1 and not kept.get(start, False):
+            continue
         capture_stall(evidence, device, start, len(done) + 1, pid=pids.get(start), run=run)
         done.append(start)
         taken += 1

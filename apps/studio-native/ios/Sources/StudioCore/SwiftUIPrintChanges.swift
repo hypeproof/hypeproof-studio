@@ -3,6 +3,20 @@ import Foundation
 import Darwin
 #endif
 
+/// Which change-report path the DEBUG stall watcher uses (#4432 F22).
+/// With the print path active (the standard-output tee is set up), `_logChanges()` is not called and the log
+/// store is not read. On the iOS simulator those entries carried no names (a placeholder shape in every run
+/// since 45132515641), each body pass wrote one on the main thread, and the read scanned the whole store
+/// for seconds on the watcher's queue. If the tee could not be set up, the log path runs as before.
+public struct SwiftUIChangePaths: Sendable, Equatable {
+    public let printChanges: Bool
+    public let logChanges: Bool
+    public static let logOff = "off (print active)"
+    public init(printActive: Bool) { printChanges = printActive; logChanges = !printActive }
+    /// The "log:" part of a stall line. `read` runs only when the log path is on.
+    public func logPart(_ read: () -> String) -> String { logChanges ? read() : Self.logOff }
+}
+
 /// Bounded record of SwiftUI `_printChanges()` lines for the DEBUG stall watcher (#4432 F11).
 ///
 /// Run 45132515641: on the iOS simulator every `_logChanges()` entry read back from the log store had an

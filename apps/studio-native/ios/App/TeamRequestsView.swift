@@ -37,13 +37,15 @@ func teamRenderCount(_ key: String) {
 /// Logs which properties changed for this body pass (#4432 F11). DEBUG simulator journeys only.
 /// `_printChanges()` writes to standard output, which `TeamPrintChanges` copies into a bounded ring
 /// (run 45132515641: the `_logChanges()` entries read back on the iOS simulator had no format string and
-/// no readable names). `_logChanges()` (iOS 17.1+) still runs, so the log path can be compared.
+/// no readable names). `_logChanges()` (iOS 17.1+) runs only when that pipe could not be set up (#4432 F22):
+/// `SwiftUIChangePaths` decides.
 /// The stall watcher adds both summaries to its stall lines. The trace JSON never carries them.
 @MainActor func teamWhy<V: View>(_ view: V.Type) {
 #if DEBUG
     guard NativeJourneyFixture.enabled else { return }
-    if TeamPrintChanges.active { V._printChanges() }
-    if #available(iOS 17.1, macOS 14.1, *) { V._logChanges() }
+    let paths = SwiftUIChangePaths(printActive: TeamPrintChanges.active)
+    if paths.printChanges { V._printChanges() }
+    if paths.logChanges, #available(iOS 17.1, macOS 14.1, *) { V._logChanges() }
 #endif
 }
 extension View {
@@ -79,7 +81,7 @@ extension View {
     /// DEBUG only; log-only keys.
     func teamScreenProbe(_ screen: String) -> some View {
 #if DEBUG
-        background(TeamDismissProbe(key: "probe.\(screen).dismiss"))
+        background(TeamDismissProbe(key: "probe.\(screen).dismiss").equatable())
             .onAppear { teamRenderCount("appear.\(screen)") }.onDisappear { teamRenderCount("disappear.\(screen)") }
 #else
         self
@@ -89,9 +91,13 @@ extension View {
 #if DEBUG
 /// Reads one dependency, `\.dismiss`, and counts its own body. Its only stored input is a constant key, so
 /// a parent pass alone does not re-run it. Zero size and hidden from accessibility.
-private struct TeamDismissProbe: View {
+/// Equatable on that key (#4432 F22): in run 45179328976 its count followed body.detail 1:1 while the detail's
+/// `_printChanges()` named no `_dismiss` change, so a parent pass may have re-run it on iOS. With `.equatable()`
+/// only an environment change re-runs it.
+private struct TeamDismissProbe: View, Equatable {
     @Environment(\.dismiss) private var dismiss
     let key: String
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.key == b.key }
     var body: some View {
         let _ = teamRenderCount(key)
         Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
@@ -126,10 +132,10 @@ func teamOffMainCheck(_ what: String) {
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
     /// Push marks, publish counters ("pub.") and focus counters ("focus.") feed only the stall lines.
-    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "disappear.", "pub.", "focus.", "probe."]
+    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "disappear.", "pub.", "focus.", "probe.", "dest."]
     /// Destination body and observation-factory counters (F11 GitHub loop) go only to the stall lines.
     /// Keeping them out of the trace keeps its value the same length as before (#4457).
-    private static let logOnlyKeys: Set<String> = ["body.workflow", "body.outcome", "body.delivery", "body.github", "body.intake", "body.text", "body.observations", "body.subscription", "make.observations"]
+    private static let logOnlyKeys: Set<String> = ["body.requests", "body.workflow", "body.outcome", "body.delivery", "body.github", "body.intake", "body.text", "body.observations", "body.subscription", "make.observations"]
     private let lock = NSLock()
     private var rows: [String: (count: Int, first: Int, last: Int)] = [:]
     func count(_ key: String) {
@@ -252,11 +258,13 @@ final class TeamMainStallWatch: @unchecked Sendable {
     private let launched = Date()
     /// Body-change lines already counted at the previous report (touched only on `queue`).
     private var whyLinesSeen = 0
-    /// "<print summary> (print window ...); log: <log summary>". The print path is `TeamPrintChanges` (its
+    /// "<print summary> (print window ...); log: <log summary>", or "log: off (print active)" with the print path on
+    /// (#4432 F22: no log store read then). The print path is `TeamPrintChanges` (its
     /// window starts 0.5 s before the stall, like the log path); "print unavailable" if its pipe was not set up.
     private func why(since start: Int) -> String {
-        let printed = TeamPrintChanges.active ? TeamPrintChanges.ring.window(since: start - 500) : "print unavailable"
-        return printed + "; log: " + logWhy(since: start)
+        let active = TeamPrintChanges.active
+        let printed = active ? TeamPrintChanges.ring.window(since: start - 500) : "print unavailable"
+        return printed + "; log: " + SwiftUIChangePaths(printActive: active).logPart { logWhy(since: start) }
     }
     /// Which body properties changed since `start` (uptime ms), from the `teamWhy` lines in this process's
     /// log store, most frequent first. The tail gives the window count, the process total (a non-zero total
@@ -351,6 +359,9 @@ struct TeamRequestsView: View {
     @State private var confirmSend = false
     @State private var confirmClose = false
     var body: some View {
+        // Does the stack's root re-run while a pushed screen loops (#4432 F22)? Log-only key.
+        let _ = teamRenderCount("body.requests")
+        let _ = teamWhy(Self.self)
         NavigationStack {
             List {
 #if DEBUG
@@ -440,7 +451,10 @@ struct TeamRequestDetailView: View {
     @State private var storageReady = true
     @State private var confirmSend = false
     @State private var message = ""
-    @State private var generation = UUID()
+    /// Changes on every disappear, so async work started before it is dropped. An Int, not a UUID: a State default
+    /// that differs on every init makes each re-created detail value unequal, so every parent pass re-ran this body
+    /// ("@self" 1:1 with the pushed screen, #4432 F22; measured in a macOS SwiftUI harness).
+    @State private var generation = 0
     var body: some View {
         let _ = teamRenderCount("body.detail")
         let _ = teamWhy(Self.self)
@@ -547,7 +561,7 @@ struct TeamRequestDetailView: View {
             .task(id: requestID) {
                 do { draft = try model.loadComment(requestID) } catch { storageReady = false; message = "저장된 댓글을 읽지 못했어요. 원본을 유지했어요." }
                 await refresh()
-            }.onDisappear { commentFocused = false; generation = UUID(); busy = false; history.clear() }
+            }.onDisappear { commentFocused = false; generation &+= 1; busy = false; history.clear() }
             .teamPublishCount(model.objectWillChange, "pub.requests.detail").teamChangeCount(commentFocused, "focus.detail")
             // Which of this screen's own inputs change during a stall with no publish and no focus change (#4432 F11).
             .teamScreenProbe("detail")
@@ -587,7 +601,7 @@ struct TeamRequestDetailView: View {
         do { let next = try draft.freshReplyChoice(); try model.saveComment(next); self.draft = next; message = "답글 대상을 다시 선택해 주세요. 글은 유지했어요." }
         catch { storageReady = false; message = "새 선택을 저장하지 못했어요. 원래 글과 전송 번호는 유지했어요." }
     }
-    private func reject(_ code: String, generation expected: UUID) {
+    private func reject(_ code: String, generation expected: Int) {
         guard generation == expected, var local = draft, local.recordDefinitiveRejection(code) else { return }
         draft = local
         do { try model.saveComment(local) } catch { storageReady = false; message = "서버 결과를 기기에 저장하지 못했어요. 원래 글을 내보내 주세요." }
@@ -661,7 +675,21 @@ struct TeamRequestDetailView: View {
 /// ObservedObject), so skipping a pass with equal inputs drops no update. The factories run, and are counted,
 /// exactly where they were before: inside the screens' StateObject autoclosures.
 private struct TeamDetailDestination: View, Equatable {
-    enum Kind { case workflow, outcome, delivery, github, subscription, intake, text, relations }
+    enum Kind {
+        case workflow, outcome, delivery, github, subscription, intake, text, relations
+        var counterKey: String {
+            switch self {
+            case .workflow: return "dest.workflow"
+            case .outcome: return "dest.outcome"
+            case .delivery: return "dest.delivery"
+            case .github: return "dest.github"
+            case .subscription: return "dest.subscription"
+            case .intake: return "dest.intake"
+            case .text: return "dest.text"
+            case .relations: return "dest.relations"
+            }
+        }
+    }
     let kind: Kind
     let model: TeamRequestPresentation
     let requestID: String
@@ -672,6 +700,9 @@ private struct TeamDetailDestination: View, Equatable {
         a.kind == b.kind && a.model === b.model && a.requestID == b.requestID && a.product == b.product && a.target == b.target && a.inbox === b.inbox
     }
     var body: some View {
+        // Does the Equatable wrapper re-run with the pushed screen (#4432 F22)? Log-only key.
+        let _ = teamRenderCount(kind.counterKey)
+        let _ = teamWhy(Self.self)
         let model = model, requestID = requestID, product = product, target = target
         switch kind {
         case .workflow: TeamWorkflowScreen(make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, product) }, requests: model)
