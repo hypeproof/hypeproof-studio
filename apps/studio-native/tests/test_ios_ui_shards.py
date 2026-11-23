@@ -925,6 +925,59 @@ class StallSamples(unittest.TestCase):
             self.assertEqual(len(calls), (2 + len(SNAPSHOT_CALLS)) * observe.STALL_CAPTURES)
             self.assertEqual(self.scan(evidence, text), (0, []))
 
+    def loop_line(self, length, start, passes, pid=None):
+        named = '' if pid is None else f'; pid {pid}'
+        return (f'<unknown>:0: warning: -[HPStudioUITests.TeamEntryUITests testB] : HPStudio main stall (ongoing): '
+                f'{length} ms since uptime {start} ms{named}; outstanding ping {length} ms; 0 slow pings answered; '
+                f'render changes: make.github+1@876009 pub.github+1@876035 probe.detail.dismiss+{passes}@879505 '
+                f'body.github+{passes}@879506 body.detail+{passes}@879513; why: TeamGitHubScreen.@self+80 '
+                f'(print window 161 of 175 lines, other 0); log: off (print active)\n')
+
+    def sampled_starts(self, evidence):
+        return [int(start) for start in observe.captured_stalls(evidence)]
+
+    def test_the_last_capture_is_kept_for_a_loop(self):
+        # Run 45179328976: three short stalls (no render changes, 3-8 s) took every capture before the loop.
+        short = ''.join(self.line(3005, start) for start in (1, 2, 3))
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            self.assertEqual(self.scan(evidence, short)[0], 2)
+            self.assertEqual(self.sampled_starts(evidence), [1, 2])
+            self.assertEqual(self.scan(evidence, short + self.loop_line(3086, 876428, 304))[0], 1)
+            self.assertEqual(self.sampled_starts(evidence), [1, 2, 876428])
+            self.assertEqual(self.scan(evidence, short + self.loop_line(3086, 876428, 304) + self.loop_line(3000, 9, 500)), (0, []))
+
+    def test_a_short_stall_passed_over_is_taken_when_it_reaches_10_s(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            text = ''.join(self.line(3005, start) for start in (1, 2, 3))
+            self.assertEqual(self.scan(evidence, text)[0], 2)
+            self.assertEqual(self.scan(evidence, text)[0], 0)
+            self.assertEqual(self.scan(evidence, text + self.line(10012, 3))[0], 1)
+            self.assertEqual(self.sampled_starts(evidence), [1, 2, 3])
+
+    def test_loops_take_every_capture_in_order(self):
+        text = ''.join(self.loop_line(3000, start, 150) for start in (1, 2, 3, 4))
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            self.assertEqual(self.scan(evidence, text)[0], observe.STALL_CAPTURES)
+            self.assertEqual(self.sampled_starts(evidence), [1, 2, 3])
+
+    def test_the_loop_mark_counts_only_body_render_changes(self):
+        self.assertEqual(observe.LOOP_PASSES, 100)
+        self.assertEqual(observe.LONG_STALL_MS, 10_000)
+        self.assertEqual(observe.stall_priority(self.loop_line(3000, 1, 99) + self.loop_line(3000, 2, 100) + self.line(9999, 3)
+                                                + self.line(10000, 4)),
+                         {'1': False, '2': True, '3': False, '4': True})
+        # Large counts outside "render changes" (why, log) or on other keys do not mark a loop.
+        other = (self.line(3000, 5).replace('render changes: none', 'render changes: pub.text+900@1 focus.text+400@2')
+                 .rstrip('\n') + '; why: TeamGitHubScreen.@self+290; log: shape[w]+2016 body.planted+900@3\n')
+        self.assertEqual(observe.stall_priority(other), {'5': False})
+        # A later line of the same stall keeps an earlier mark.
+        self.assertEqual(observe.stall_priority(self.loop_line(3000, 6, 300)
+                                                + self.line(3500, 6).replace('render changes: none', 'render changes: body.detail+2@1')),
+                         {'6': True})
+
     def test_a_missing_log_takes_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(observe.scan_stall(Path(directory), self.DEVICE, Path(directory) / 'none.log',
