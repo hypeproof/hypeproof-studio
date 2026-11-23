@@ -211,28 +211,16 @@ final class TeamMainStallWatch: @unchecked Sendable {
         guard let store = try? OSLogStore(scope: .currentProcessIdentifier) else { return "store unavailable" }
         let predicate = NSPredicate(format: "subsystem == %@ AND category == %@", "com.apple.SwiftUI", "Changed Body Properties")
         guard let entries = try? store.getEntries(at: store.position(date: launched), matching: predicate) else { return "read failed" }
-        let lines = entries.compactMap { entry -> (date: Date, text: String)? in
-            (entry as? OSLogEntryLog).map { ($0.date, $0.composedMessage) }
+        let lines = entries.compactMap { entry -> (date: Date, line: SwiftUIChangeLine)? in
+            (entry as? OSLogEntryLog).map { ($0.date, SwiftUIChangeLine(text: $0.composedMessage, format: $0.formatString)) }
         }
         let previous = min(whyLinesSeen, lines.count); whyLinesSeen = lines.count
-        let window = lines.filter { $0.date >= cutoff }.map(\.text)
+        let window = lines.filter { $0.date >= cutoff }.map(\.line)
         let newest = lines.last.map { String(format: "%.1f", Date().timeIntervalSince($0.date)) } ?? "-"
         let tail = " (window \(window.count) of \(lines.count) lines; newest line \(newest)s ago)"
-        if !window.isEmpty { return Self.summary(window) + tail }
-        if lines.count > previous { return "since last report: " + Self.summary(lines[previous...].map(\.text)) + tail }
+        if !window.isEmpty { return SwiftUIChangeSummary.summary(window) + tail }
+        if lines.count > previous { return "since last report: " + SwiftUIChangeSummary.summary(lines[previous...].map(\.line)) + tail }
         return "none" + tail
-    }
-    /// "TeamIntakeScreen: _dismiss, _model changed." lines as "<View>.<property>+N", 12 most frequent.
-    private static func summary(_ lines: [String]) -> String {
-        var counts: [String: Int] = [:]
-        for line in lines {
-            guard let colon = line.firstIndex(of: ":") else { continue }
-            let type = line[..<colon]
-            var rest = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            if rest.hasSuffix(" changed.") { rest.removeLast(" changed.".count) }
-            for part in rest.split(separator: ",") { counts[type + "." + part.trimmingCharacters(in: .whitespaces), default: 0] += 1 }
-        }
-        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(12).map { "\($0.key)+\($0.value)" }.joined(separator: " ")
     }
     /// Render counters that grew since `before`, oldest last change first.
     private func changes(since before: [String: [String: Int]]) -> String {
