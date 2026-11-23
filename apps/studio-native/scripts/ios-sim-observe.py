@@ -210,10 +210,14 @@ HOST_GROUPS = (
     ("system", re.compile(r"^(kernel_task|WindowServer|launchd|mds|mds_stores|mdworker|mdworker_shared|corespotlightd)$")),
 )
 # The simulator's render processes, read every watch cycle (#4432 F21 2c). pgrep matches the process name
-# only and `ps -p` reads only the named pids, so the reading stays small when the full ps table times out.
+# only and `top -pid` reads only the named pids, so the reading stays small when the full ps table times out.
+# The size is top's MEM column (the host table's column), not ps RSS: in run 45275644733 shard 2 ps RSS
+# said 9.5 MB for SimRenderServer while top MEM said 1638 MB (RSS leaves out most of the render memory).
 RENDER_NAMES = "SimRenderServer|SimMetalHost"
 RENDER_PGREP = ["pgrep", "-lx", RENDER_NAMES]
 RENDER_LIMIT = 10
+# One top sample is enough for MEM (CPU would need two).
+RENDER_TOP_STATS = "pid,mem"
 # The test the watch row falls in: the last "Test Case ... started" and the last step time in the test log.
 LOG_TAIL_BYTES = 262144
 TEST_STARTED = re.compile(r"Test Case '-\[[\w.]+ (\w+)\]' started")
@@ -324,7 +328,7 @@ def vm_value(vm_stat, label):
 
 
 def render_reading(run=None):
-    """{"processes": [{"pid", "name", "rss_mb"}], "costs": [...]} of SimRenderServer and SimMetalHost.
+    """{"processes": [{"pid", "name", "mem_mb"}], "costs": [...]} of SimRenderServer and SimMetalHost.
 
     A command that does not return leaves "processes" empty and its outcome in "costs"."""
     run = run or push.bounded
@@ -336,13 +340,172 @@ def render_reading(run=None):
         if len(parts) == 2 and parts[0].isdigit():
             names[int(parts[0])] = parts[1].strip()
     if names:
-        out = measured(run, ["ps", "-o", "pid=,rss=", "-p", ",".join(str(pid) for pid in sorted(names))], RENDER_LIMIT, costs,
-                       name="ps render")
+        args = ["top", "-l", "1"] + [part for pid in sorted(names) for part in ("-pid", str(pid))] + ["-stats", RENDER_TOP_STATS]
+        out = measured(run, args, RENDER_LIMIT, costs, name="top render")
+        table = False
         for line in [] if out.startswith("<") else out.splitlines():
             parts = line.split()
-            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit() and int(parts[0]) in names:
-                processes.append({"pid": int(parts[0]), "name": names[int(parts[0])], "rss_mb": round(int(parts[1]) / 1024, 1)})
+            if parts[:2] == ["PID", "MEM"]:
+                table = True
+                continue
+            if table and len(parts) == 2 and parts[0].isdigit() and int(parts[0]) in names:
+                size = mem_mb(parts[1])
+                if size is not None:
+                    processes.append({"pid": int(parts[0]), "name": names[int(parts[0])], "mem_mb": size})
+        processes.sort(key=lambda row: row["pid"])
     return {"processes": processes, "costs": costs}
+
+
+# Poster probe (#4432 F21 2a): is the simulator's wallpaper a poster that SpringBoard's PosterBoardUpdate
+# task re-renders? Runs 45263058705 and 45275644733 had one such task per shard ("posterboardupdate.prewarm",
+# about 2 min) with SimRenderServer at 983-1837 MB. This records only what is on the device; it changes nothing.
+POSTER_FILE = "poster-probe.txt"
+POSTER_WALK_LIMIT = 10        # seconds for the file walk
+POSTER_WALK_ENTRIES = 20000   # directory entries visited at most
+POSTER_WALK_DEPTH = 6         # levels below data/Library
+POSTER_DIR = re.compile(r"(PosterBoard|Poster|Wallpaper)", re.IGNORECASE)
+POSTER_JOB = re.compile(r"(poster|wallpaper)", re.IGNORECASE)  # matched on names only
+POSTER_COMPONENT = re.compile(r"/([^/\s]*(?:poster|wallpaper)[^/\s]*)", re.IGNORECASE)
+# Provider bundle ids that name a poster kind in PosterBoard's paths (for example com.apple.EmojiPoster...).
+POSTER_PROVIDER = re.compile(r"com\.apple\.[A-Za-z0-9.]*Poster[A-Za-z0-9.]*")
+# Files SpringBoard has used for a still image wallpaper (Guess: names from older iOS layouts).
+STILL_WALLPAPER = re.compile(r"^(LockBackground|HomeBackground)[^/]*$")
+
+
+def devices_root():
+    return Path.home() / "Library/Developer/CoreSimulator/Devices"
+
+
+POSTER_COUNT_LIMIT = 2000      # files counted per matching directory at most
+
+
+def bounded_file_count(path):
+    """Files below `path`, counting at most POSTER_COUNT_LIMIT (then ">=" that number); None if unreadable."""
+    count = 0
+    try:
+        for entry in path.rglob("*"):
+            if entry.is_file():
+                count += 1
+                if count >= POSTER_COUNT_LIMIT:
+                    return f">={POSTER_COUNT_LIMIT}"
+    except OSError:
+        return None
+    return count
+
+
+def poster_files(library, *, clock=time.monotonic):
+    """Walk `library` (bounded by POSTER_WALK_LIMIT seconds, POSTER_WALK_ENTRIES entries, POSTER_WALK_DEPTH levels).
+
+    Returns {"dirs": {relative dir: file count}, "providers": [bundle ids in paths], "still": [still image files],
+    "visited": entries, "stopped": None or why the walk stopped early}."""
+    started, visited, stopped = clock(), 0, None
+    dirs, providers, still = {}, set(), []
+    stack = [(library, 0)]
+    while stack:
+        path, depth = stack.pop()
+        try:
+            entries = sorted(path.iterdir(), key=lambda entry: entry.name)
+        except OSError:
+            continue
+        for entry in entries:
+            visited += 1
+            if visited > POSTER_WALK_ENTRIES:
+                stopped = f"entry limit {POSTER_WALK_ENTRIES}"
+                break
+            if clock() - started > POSTER_WALK_LIMIT:
+                stopped = f"time limit {POSTER_WALK_LIMIT}s"
+                break
+            relative = str(entry.relative_to(library))
+            providers.update(POSTER_PROVIDER.findall(entry.name))
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                if POSTER_DIR.search(entry.name):
+                    dirs[relative] = bounded_file_count(entry)
+                if depth + 1 < POSTER_WALK_DEPTH:
+                    stack.append((entry, depth + 1))
+            elif STILL_WALLPAPER.match(entry.name):
+                still.append(relative)
+        if stopped:
+            break
+    return {"dirs": dict(sorted(dirs.items())), "providers": sorted(providers), "still": sorted(still),
+            "visited": visited, "stopped": stopped}
+
+
+def wallpaper_kind(files):
+    """"poster" when PosterBoard data names poster providers, "still" when only still image files exist,
+    "both", or "unknown". A label for the record only (Guess: from file names, not from SpringBoard)."""
+    poster, still = bool(files["providers"]), bool(files["still"])
+    return "both" if poster and still else "poster" if poster else "still" if still else "unknown"
+
+
+def poster_jobs(ps_text, device):
+    """(running, runtime_root) from a `ps -axro pid,ppid,stat,etime,%cpu,%mem,command` table: the processes of this
+    device's launchd_sim whose command names a poster or wallpaper, and the simulator runtime's RuntimeRoot path."""
+    rows = []
+    for line in ps_text.splitlines()[1:]:
+        parts = line.split(None, 6)
+        if len(parts) == 7 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append(parts)
+    launchd = {row[0] for row in rows if row[6].startswith("launchd_sim ") and f"/Devices/{device}/" in row[6]}
+    children = [row for row in rows if row[1] in launchd]
+    # Runtime paths contain spaces ("iOS 27.2.simruntime"), so the command is not split on whitespace: the last
+    # path component that names a poster or wallpaper is the process's name here.
+    running = []
+    for row in children:
+        names = POSTER_COMPONENT.findall(row[6])
+        if names:
+            running.append(f"{row[0]} {names[-1]}")
+    roots = [row[6].split("/RuntimeRoot/", 1)[0] + "/RuntimeRoot" for row in children if "/RuntimeRoot/" in row[6]]
+    return running, (roots[0] if roots else None)
+
+
+def defined_jobs(runtime_root):
+    """Launchd job files of the simulator runtime whose names mention a poster or wallpaper."""
+    if not runtime_root:
+        return []
+    found = []
+    for folder in ("System/Library/LaunchDaemons", "System/Library/LaunchAgents"):
+        try:
+            found += [f"{folder}/{entry.name}" for entry in sorted(Path(runtime_root, folder).iterdir()) if POSTER_JOB.search(entry.name)]
+        except OSError:
+            continue
+    return found
+
+
+def poster_probe(evidence, device, *, run=None, root=None):
+    """Write POSTER_FILE: PosterBoard's data paths, poster and wallpaper launchd jobs, and the wallpaper kind.
+
+    It reads files and the host process table only: no simctl spawn, nothing inside the simulator, and no
+    simulator-steps.jsonl row, so the shard's commands and pre-test rows stay as they were. Never raises
+    through the command (main wraps it in safely)."""
+    run = run or push.bounded
+    wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    costs = []
+    library = (root or devices_root()) / device / "data/Library"
+    started = time.monotonic()
+    files = poster_files(library) if library.is_dir() else {"dirs": {}, "providers": [], "still": [], "visited": 0,
+                                                           "stopped": "no device data directory"}
+    costs.append(f"walk {int((time.monotonic() - started) * 1000)} ms {'returned' if files['stopped'] is None else 'stopped'}")
+    table = measured(run, PS, push.DIAGNOSTIC_LIMIT, [], name="ps")
+    running, runtime_root = ([], None) if table.startswith("<") else poster_jobs(table, device)
+    defined = defined_jobs(runtime_root)
+    kind = wallpaper_kind(files)
+    with (evidence / POSTER_FILE).open("a") as target:
+        target.write(f"== poster probe {device} {wall}\n-- wallpaper kind (from file names): {kind}\n")
+        target.write(f"-- PosterBoard / poster / wallpaper directories under data/Library ({files['visited']} entries"
+                     f"{', stopped: ' + files['stopped'] if files['stopped'] else ''})\n")
+        target.write("".join(f"{path} files {count}\n" for path, count in files["dirs"].items()) or "<none>\n")
+        target.write("-- poster providers named in paths\n" + ("\n".join(files["providers"]) or "<none>") + "\n")
+        target.write("-- still wallpaper files\n" + ("\n".join(files["still"]) or "<none>") + "\n")
+        target.write("-- running poster/wallpaper processes of this device (host ps)\n"
+                     + (table.strip() if table.startswith("<") else "\n".join(running) or "<none>") + "\n")
+        target.write(f"-- poster/wallpaper launchd job files in the runtime ({runtime_root or 'runtime not found'})\n"
+                     + ("\n".join(defined) or "<none>") + "\n")
+        target.write("-- costs\n" + "\n".join(costs) + "\n")
+    print(f"poster probe: wallpaper {kind}; {len(files['providers'])} poster providers, {len(files['still'])} still files, "
+          f"{len(running)} running and {len(defined)} defined poster/wallpaper jobs", flush=True)
+    return kind
 
 
 def current_test(log_path):
@@ -768,14 +931,15 @@ def main(argv=None):
     verdict = commands.add_parser("boundary-verdict")
     verdict.add_argument("--evidence", type=Path, required=True)
     verdict.add_argument("--log", type=Path, required=True)
-    for name in ("sample", "watch", "settle", "terminate-watch", "terminate-scan", "stall-watch"):
+    for name in ("sample", "watch", "once", "settle", "terminate-watch", "terminate-scan", "stall-watch", "posters"):
         sub = commands.add_parser(name)
         sub.add_argument("--evidence", type=Path, required=True)
         sub.add_argument("--device", required=True)
         if name == "sample":
             sub.add_argument("--index", type=int, required=True)
-        elif name == "watch":
-            sub.add_argument("--interval", type=float, default=60)
+        elif name in ("watch", "once"):
+            if name == "watch":
+                sub.add_argument("--interval", type=float, default=60)
             sub.add_argument("--log", type=Path, default=None)
         elif name.startswith("terminate-") or name == "stall-watch":
             sub.add_argument("--log", type=Path, required=True)
@@ -794,6 +958,13 @@ def main(argv=None):
         return 0
     if args.command == "settle":
         settle(args.evidence, args.device)
+        return 0
+    if args.command == "once":
+        # One watch reading now (the approval push job takes one when its test fails, #4432).
+        safely(lambda: take(args.evidence, args.device, step="test", sample=0, full_table=False, log=args.log), "once")
+        return 0
+    if args.command == "posters":
+        safely(lambda: poster_probe(args.evidence, args.device), "posters")
         return 0
     if args.command.startswith("terminate-"):
         # A stopped watcher also stops the capture command it is waiting on.

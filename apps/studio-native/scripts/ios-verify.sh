@@ -174,6 +174,12 @@ fi
 printf 'native verification: simulator warm-up\n'
 timed warm-up xcrun simctl launch "$device" com.apple.Preferences > /dev/null
 timed warm-up xcrun simctl terminate "$device" com.apple.Preferences || true
+if [ "$mode" = shard ]; then
+  # Is the wallpaper a poster that SpringBoard's PosterBoardUpdate task re-renders (#4432 F21)? Records
+  # PosterBoard's data paths, poster/wallpaper launchd jobs and the wallpaper kind from files and host ps only
+  # (no simctl spawn); changes nothing, never fails.
+  python3 ../scripts/ios-sim-observe.py posters --evidence ../evidence --device "$device" || echo "::warning::poster probe not recorded"
+fi
 test_status=0
 # Simulator Keychain checks require an actual app identity. No distribution key is used.
 common_test=(-destination "platform=iOS Simulator,id=$device" -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240)
