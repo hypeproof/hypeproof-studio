@@ -65,10 +65,11 @@ read -r device_type runtime <<< "$selection"
 device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" "$device_type" "$runtime")
 sampler_pid=
 terminate_watch_pid=
+stall_watch_pid=
 # The shard's background observers (ios-sim-observe.py watch and terminate-watch) never outlive the test.
 stop_sampler() {
   local pid
-  for pid in "$sampler_pid" "$terminate_watch_pid"; do
+  for pid in "$sampler_pid" "$terminate_watch_pid" "$stall_watch_pid"; do
     if [ -n "$pid" ]; then
       kill "$pid" 2> /dev/null || true
       wait "$pid" 2> /dev/null || true
@@ -76,6 +77,7 @@ stop_sampler() {
   done
   sampler_pid=
   terminate_watch_pid=
+  stall_watch_pid=
 }
 cleanup_simulator() {
   local original_status=$1 cleanup_status=0
@@ -186,6 +188,10 @@ if [ "$mode" = shard ]; then
   : > ../evidence/simulator-test.log
   python3 ../scripts/ios-sim-observe.py terminate-watch --evidence ../evidence --device "$device" --log ../evidence/simulator-test.log &
   terminate_watch_pid=$!
+  # On "HPStudio main stall (ongoing)", sample the app's host process for a few seconds so the
+  # main thread's stack during the stall is recorded (#4432 F11). Diagnostics only, own limits.
+  python3 ../scripts/ios-sim-observe.py stall-watch --evidence ../evidence --device "$device" --log ../evidence/simulator-test.log &
+  stall_watch_pid=$!
   xcodebuild -xctestrun "$xctestrun" "${common_test[@]}" "${shard_arguments[@]}" test-without-building 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
   stop_sampler
   # A failure in the last seconds of the log, which the stopped watcher had not reached yet.

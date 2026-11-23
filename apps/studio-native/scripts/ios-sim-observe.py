@@ -25,6 +25,13 @@ once, after the test, for a line the watcher was stopped before reaching. Output
 <evidence>/terminate-diagnostics.txt plus one row per capture. Both are diagnostics only:
 they change no test, wait, limit or result (#4432 F6).
 
+`stall-watch` runs beside the test like `terminate-watch`. For each new main-thread stall that the
+app reports while it is still going on ("HPStudio main stall (ongoing): ... since uptime <start>"),
+at most STALL_CAPTURES per shard, it runs `sample` on the newest host HPStudio process for
+SAMPLE_SECONDS, with its own limit, so the main thread's stack during the stall is recorded
+(#4432 F11). Samples go to <evidence>/stall-sample-<n>.txt, with one header in
+<evidence>/stall-samples.txt and one row per capture. Diagnostics only, like the others.
+
 Rows go to <evidence>/simulator-steps.jsonl in the format the approval push job writes.
 """
 import argparse
@@ -108,6 +115,12 @@ LOG_SHOW_LIMIT = 60
 LOG_SHOW_WINDOW = "3m"
 LOG_SHOW_PREDICATE = 'process IN {"runningboardd", "SpringBoard", "testmanagerd"}'
 TERMINATE_FILE = "terminate-diagnostics.txt"
+STALL_ONGOING = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms")
+STALL_CAPTURES = 3
+SAMPLE_SECONDS = 3
+SAMPLE_LIMIT = 30
+PGREP_LIMIT = 10
+STALL_FILE = "stall-samples.txt"
 _running = None
 
 
@@ -191,6 +204,57 @@ def scan_terminate(evidence, device, log_path, *, run=None):
     return taken
 
 
+def stall_starts(log_text):
+    """Start uptime of each distinct ongoing stall in order; its 20 s and 40 s lines are not new ones."""
+    seen = []
+    for start in STALL_ONGOING.findall(log_text):
+        if start not in seen:
+            seen.append(start)
+    return seen
+
+
+def captured_stalls(evidence):
+    path = evidence / STALL_FILE
+    if not path.exists():
+        return []
+    return re.findall(r"^== stall \d+ start (\d+) ", path.read_text(), re.MULTILINE)
+
+
+def capture_stall(evidence, start, index, *, run=None):
+    run = run or run_bounded
+    wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    found = run(["pgrep", "-n", "-x", "HPStudio"], PGREP_LIMIT).strip()
+    target = evidence / f"stall-sample-{index}.txt"
+    if found.isdigit():
+        out = run(["sample", found, str(SAMPLE_SECONDS), "-file", str(target)], SAMPLE_LIMIT)
+        outcome = "timeout" if out.startswith("<") else ("sampled" if target.exists() else "failed")
+    else:
+        out, outcome = found or "<no HPStudio process>", "no process"
+    push.record(evidence, step="stall", command="sample", sample=index, utc=wall, start=int(start),
+                pid=int(found) if found.isdigit() else None, outcome=outcome)
+    with (evidence / STALL_FILE).open("a") as header:
+        header.write(f"== stall {index} start {start} {wall} pid {found or '-'} {outcome}\n{out.strip()[-2000:]}\n")
+
+
+def scan_stall(evidence, log_path, *, run=None):
+    """Sample each ongoing stall in the log not yet sampled, up to STALL_CAPTURES. Returns how many it took."""
+    try:
+        text = Path(log_path).read_text(errors="replace")
+    except OSError:
+        return 0
+    done = captured_stalls(evidence)
+    taken = 0
+    for start in stall_starts(text):
+        if start in done:
+            continue
+        if len(done) >= STALL_CAPTURES:
+            break
+        capture_stall(evidence, start, len(done) + 1, run=run)
+        done.append(start)
+        taken += 1
+    return taken
+
+
 def time_command(evidence, step, command):
     started = time.monotonic()
     status = subprocess.run(command).returncode
@@ -236,7 +300,7 @@ def main(argv=None):
     timer.add_argument("--evidence", type=Path, required=True)
     timer.add_argument("--step", required=True)
     timer.add_argument("rest", nargs=argparse.REMAINDER)
-    for name in ("sample", "watch", "settle", "terminate-watch", "terminate-scan"):
+    for name in ("sample", "watch", "settle", "terminate-watch", "terminate-scan", "stall-watch"):
         sub = commands.add_parser(name)
         sub.add_argument("--evidence", type=Path, required=True)
         sub.add_argument("--device", required=True)
@@ -244,10 +308,10 @@ def main(argv=None):
             sub.add_argument("--index", type=int, required=True)
         elif name == "watch":
             sub.add_argument("--interval", type=float, default=60)
-        elif name.startswith("terminate-"):
+        elif name.startswith("terminate-") or name == "stall-watch":
             sub.add_argument("--log", type=Path, required=True)
-            if name == "terminate-watch":
-                sub.add_argument("--interval", type=float, default=5)
+            if name.endswith("-watch"):
+                sub.add_argument("--interval", type=float, default=2 if name == "stall-watch" else 5)
     args = parser.parse_args(argv)
     args.evidence.mkdir(parents=True, exist_ok=True)
     if args.command == "time":
@@ -266,6 +330,13 @@ def main(argv=None):
             safely(lambda: scan_terminate(args.evidence, args.device, args.log), "terminate")
             if args.command == "terminate-scan":
                 return 0
+            time.sleep(args.interval)
+    if args.command == "stall-watch":
+        # A stopped watcher also stops the sample it is waiting on.
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(signum, stop_running)
+        while True:
+            safely(lambda: scan_stall(args.evidence, args.log), "stall")
             time.sleep(args.interval)
     if args.command == "sample":
         safely(lambda: take(args.evidence, args.device, step="boot", sample=args.index, full_table=True), args.index)

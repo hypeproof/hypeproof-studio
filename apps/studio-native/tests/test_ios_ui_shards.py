@@ -373,6 +373,10 @@ class ShardShell(unittest.TestCase):
         self.assertNotEqual(alive.returncode, 0, alive.stdout)
         watcher = subprocess.run(['pgrep', '-f', f'ios-sim-observe.py terminate-watch --evidence ../evidence --device {cleanup_suite.DEVICE}'], capture_output=True)
         self.assertNotEqual(watcher.returncode, 0, watcher.stdout)
+        stall = subprocess.run(['pgrep', '-f', f'ios-sim-observe.py stall-watch --evidence ../evidence --device {cleanup_suite.DEVICE}'], capture_output=True)
+        self.assertNotEqual(stall.returncode, 0, stall.stdout)
+        # No "HPStudio main stall (ongoing)" in the log: no sample.
+        self.assertFalse((evidence / 'stall-samples.txt').exists())
         # No "Failed to terminate" in the log: no capture, no spawn.
         self.assertFalse((evidence / 'terminate-diagnostics.txt').exists())
         self.assertFalse(any(c['args'][:2] == ['simctl', 'spawn'] for c in commands))
@@ -557,6 +561,69 @@ class SimObserve(unittest.TestCase):
         self.assertEqual({(r['step'], r['command']) for r in rows}, {('test', 'observe')})
         self.assertEqual([r['sample'] for r in rows[:2]], [1, 2])
         self.assertIn(rows[0]['outcome'], ('no device', 'timeout'))
+
+class StallSamples(unittest.TestCase):
+    """ios-sim-observe.py stall-watch (#4432 F11): diagnostics only."""
+
+    def line(self, length, start):
+        return (f'<unknown>:0: warning: -[HPStudioUITests.TeamEntryUITests testA] : HPStudio main stall (ongoing): '
+                f'{length} ms since uptime {start} ms; outstanding ping {length} ms; 0 slow pings answered; render changes: none\n')
+
+    def scan(self, evidence, text, pid='4242', sample_out=''):
+        log = evidence / 'simulator-test.log'; log.write_text(text)
+        calls = []
+        def run(args, limit):
+            calls.append((args, limit))
+            if args[0] == 'pgrep':
+                return pid
+            Path(args[args.index('-file') + 1]).write_text('Call graph:\n    main-thread\n')
+            return sample_out
+        return observe.scan_stall(evidence, log, run=run), calls
+
+    def test_the_20_and_40_second_lines_are_not_new_stalls(self):
+        text = self.line(10034, 1572426) + self.line(40012, 1572426) + 'HPStudio main stall: 50112 ms from uptime 1572426 ms\n' + self.line(10483, 1662585)
+        self.assertEqual(observe.stall_starts(text), ['1572426', '1662585'])
+        self.assertEqual(observe.stall_starts('HPStudio main stall: 3163 ms from uptime 1499916 ms\n'), [])
+
+    def test_each_stall_is_sampled_once_with_bounded_commands(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, self.line(10034, 1572426) + self.line(20019, 1572426))
+            self.assertEqual(taken, 1)
+            self.assertEqual(calls, [(['pgrep', '-n', '-x', 'HPStudio'], 10),
+                                     (['sample', '4242', '3', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
+            self.assertEqual(self.scan(evidence, self.line(40012, 1572426)), (0, []))
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+            self.assertIn('main-thread', (evidence / 'stall-sample-1.txt').read_text())
+            header = (evidence / 'stall-samples.txt').read_text()
+        self.assertEqual({k: row[k] for k in ('step', 'command', 'sample', 'start', 'pid', 'outcome')},
+                         {'step': 'stall', 'command': 'sample', 'sample': 1, 'start': 1572426, 'pid': 4242, 'outcome': 'sampled'})
+        self.assertRegex(header, r'^== stall 1 start 1572426 \S+ pid 4242 sampled\n')
+
+    def test_no_app_process_and_a_hung_sample_are_recorded_not_raised(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            self.assertEqual(self.scan(evidence, self.line(10034, 1), pid='')[0], 1)
+            log = evidence / 'simulator-test.log'; log.write_text(self.line(10034, 2))
+            hung = observe.scan_stall(evidence, log, run=lambda args, limit: '4242' if args[0] == 'pgrep' else '<sample did not return within 30s>')
+            self.assertEqual(hung, 1)
+            rows = [json.loads(l) for l in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertEqual([(r['pid'], r['outcome']) for r in rows], [(None, 'no process'), (4242, 'timeout')])
+
+    def test_samples_stop_at_the_per_shard_cap(self):
+        text = ''.join(self.line(10000, start) for start in (1, 2, 3, 4, 5))
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, text)
+            self.assertEqual(taken, observe.STALL_CAPTURES)
+            self.assertEqual(len(calls), 2 * observe.STALL_CAPTURES)
+            self.assertEqual(self.scan(evidence, text), (0, []))
+
+    def test_a_missing_log_takes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(observe.scan_stall(Path(directory), Path(directory) / 'none.log',
+                                                run=lambda *_: self.fail('no command without a log')), 0)
+
 
 class TerminateDiagnostics(unittest.TestCase):
     """ios-sim-observe.py terminate-watch/terminate-scan (#4432 F6): diagnostics only."""
