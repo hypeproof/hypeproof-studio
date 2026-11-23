@@ -484,13 +484,25 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func waitForTraceCount(_ key: String, atLeast count: Int, in app: XCUIApplication) throws -> [String: Any] {
         let node = diagnostic("nativeJourneyTrace", in: app)
+        // Diagnostics only (#4432 F21): the time and the key's value of each `node.value` read that the
+        // predicate already makes. No AX query is added, and the wait, limit and assertion are unchanged.
+        let polls = RequestBoundaryPolls(key: key, count: count, limitMs: 10_000)
         let observed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let text = node.value as? String,
-                  let value = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
-            return (value[key] as? Int ?? 0) >= count
+            let begin = RequestBoundaryPolls.uptimeMs()
+            let text = node.value as? String
+            let end = RequestBoundaryPolls.uptimeMs()
+            let value = text.flatMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
+            let seen = value.map { $0[key] as? Int ?? 0 }
+            polls.add(startMs: begin, durationMs: end - begin, value: seen)
+            guard let seen else { return false }
+            return seen >= count
         }, object: node)
         let result = XCTWaiter.wait(for: [observed], timeout: 10)
-        if result != .completed { readinessFailure("request-boundary-" + key, app: app, queries: [("trace", node)]) }
+        if result != .completed {
+            readinessFailure("request-boundary-" + key, app: app, queries: [("trace", node)])
+            let record = XCTAttachment(string: polls.text(result: result.rawValue))
+            record.name = "request-boundary-" + key + "-polls"; record.lifetime = .keepAlways; add(record)
+        }
         XCTAssertEqual(result, .completed, "Observe the actual request boundary before judging readiness.")
         return try trace(app)
     }
@@ -1663,5 +1675,33 @@ final class StudioSignInBoundaryTests: XCTestCase {
         XCTAssertTrue(again.waitForExistence(timeout: 15))
         XCTAssertTrue(again.isEnabled, "Cancelling the system browser must end waiting and allow another attempt.")
         XCTAssertFalse(app.buttons["accountCancel"].exists)
+    }
+}
+
+/// Each trace read of one request-boundary wait: start (system uptime ms, the clock of the app's stall
+/// lines), how long the `node.value` read took and the key's value (-1 when the trace could not be read).
+/// At most `capacity` reads are kept; later ones are counted as dropped. `ios-sim-observe.py
+/// boundary-verdict` reads the text. Integers only: the trace text itself is never copied (#4432 F21).
+final class RequestBoundaryPolls: @unchecked Sendable {
+    static let capacity = 64
+    static func uptimeMs() -> Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
+    private let lock = NSLock()
+    private let key: String, count: Int, startMs: Int, limitMs: Int
+    private var rows: [(start: Int, duration: Int, value: Int)] = []
+    private var dropped = 0
+    init(key: String, count: Int, limitMs: Int) {
+        self.key = key; self.count = count; self.limitMs = limitMs; startMs = Self.uptimeMs()
+    }
+    func add(startMs: Int, durationMs: Int, value: Int?) {
+        lock.lock(); defer { lock.unlock() }
+        if rows.count < Self.capacity { rows.append((startMs, durationMs, value ?? -1)) } else { dropped += 1 }
+    }
+    func text(result: Int) -> String {
+        lock.lock(); defer { lock.unlock() }
+        var lines = ["request-boundary polls v1",
+                     "key \(key); count \(count); wait start \(startMs); deadline \(startMs + limitMs); result \(result); ended \(Self.uptimeMs())"]
+        lines += rows.map { "poll \($0.start) \($0.duration) \($0.value)" }
+        lines.append("dropped \(dropped)")
+        return lines.joined(separator: "\n") + "\n"
     }
 }

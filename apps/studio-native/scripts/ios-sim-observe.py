@@ -36,6 +36,21 @@ without a valid pid falls back to `ps`: the newest host HPStudio whose executabl
 shard's simulator device, so another shard or simulator on the same host is never sampled. Samples go to <evidence>/stall-sample-<n>.txt, with one header in
 <evidence>/stall-samples.txt and one row per capture. Diagnostics only, like the others.
 
+Every `watch` reading and every stall capture also takes one host snapshot (#4432 F21): the host's
+memory size, CPU count, swap and memory level (`sysctl`), and the 15 processes using the most memory
+and the most CPU (`top -l 2`, its second sample, so %CPU is over one second). A `sample` (boot) reading,
+which the shard waits for, takes only the `sysctl` part, so the runner's size is known from the start. The commands run
+one at a time, each with its own limit; one that does not return is recorded as "<cmd> did not return
+within Ns" and the next one runs. Only process names are read, never arguments. Each row says how long
+each command took and the CPU time it used, so the cost of these diagnostics is measured too.
+Snapshots go to <evidence>/host-snapshots.txt; the row keeps the per-group sums (`host`).
+
+`boundary-verdict` runs once after the test. For each "request-boundary polls" attachment (the UI
+test's record of its trace reads during a request-boundary wait that did not complete) it judges
+`runner-ax`, `app` or `unknown` from those reads and the app's stall lines, and marks
+`host saturated` from the host snapshots of that time (BOUNDARY_RULES). It prints one line each and
+writes <evidence>/boundary-verdicts.txt. It decides nothing about the job.
+
 Rows go to <evidence>/simulator-steps.jsonl in the format the approval push job writes.
 """
 import argparse
@@ -44,6 +59,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import resource
 import signal
 import subprocess
 import sys
@@ -87,10 +103,18 @@ def free_pages(vm_stat):
 
 def take(evidence, device, *, step, sample, full_table):
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    table = push.bounded(PS)
-    vm_stat = push.bounded(["vm_stat"])
-    row = {"step": step, "command": "observe", "sample": sample, "utc": wall,
-           "loadavg": push.bounded(["sysctl", "-n", "vm.loadavg"]).strip(), "free_pages": free_pages(vm_stat)}
+    costs = []
+    started_ms = uptime_ms()
+    table = measured(push.bounded, PS, push.DIAGNOSTIC_LIMIT, costs)
+    vm_stat = measured(push.bounded, ["vm_stat"], push.DIAGNOSTIC_LIMIT, costs)
+    loadavg = measured(push.bounded, ["sysctl", "-n", "vm.loadavg"], push.DIAGNOSTIC_LIMIT, costs, name="sysctl loadavg")
+    row = {"step": step, "command": "observe", "sample": sample, "utc": wall, "uptime_ms": started_ms,
+           "loadavg": loadavg.strip(), "free_pages": free_pages(vm_stat)}
+    # After the existing reading, so its timing is unchanged; its own commands are bounded the same way.
+    # The shard waits for the boot readings, so they take only sysctl (host size) and no top.
+    host = host_snapshot(evidence, step=step, sample=sample, vm_stat=vm_stat, with_top=step != "boot")
+    host["costs"] = costs + host["costs"]
+    row["host"] = host
     if table.startswith("<"):
         # bounded() reports a ps that did not return within its limit this way.
         row.update(outcome="timeout", detail=table.strip())
@@ -134,6 +158,171 @@ PS_LIMIT = 10
 APP_EXECUTABLE = re.compile(r"/HPStudio\.app/HPStudio(\s|$)")
 STALL_FILE = "stall-samples.txt"
 _running = None
+
+# Host snapshot (#4432 F21). Names only: `top` and `ps -c` read each process's name, not its arguments.
+HOST_SYSCTL = ["sysctl", "hw.memsize", "hw.ncpu", "vm.swapusage", "kern.memorystatus_level", "vm.pagesize"]
+HOST_SYSCTL_LIMIT = 10
+HOST_TOP_ROWS = 15
+TOP_STATS = "pid,ppid,mem,cpu,threads,state,command"
+HOST_TOP = {order: ["top", "-l", "2", "-s", "1", "-n", str(HOST_TOP_ROWS), "-o", order, "-stats", TOP_STATS]
+            for order in ("mem", "cpu")}
+HOST_TOP_LIMIT = 20
+HOST_PS = ["ps", "-axco", "pid,ppid,rss,pcpu,state,comm"]
+HOST_PS_LIMIT = 15
+HOST_FILE = "host-snapshots.txt"
+# Group of a process by its (top-truncated, 16 character) name. First match wins; a process whose parent
+# is a launchd_sim and that matches nothing earlier is the simulator's.
+HOST_GROUPS = (
+    ("ui-runner", re.compile(r"^(HPStudioUITests|XCTRunner|xctest|testmanagerd)")),
+    ("app", re.compile(r"^HPStudio$")),
+    ("instruments", re.compile(r"^(python3?(\.\d+)?|Python|sample|log|simctl|top|ps|sysctl|vm_stat)$")),
+    ("logging", re.compile(r"^(logd|logd_helper|diagnosticd)$")),
+    ("ax", re.compile(r"(ccessib|^axassetsd$|^AX)")),
+    ("xcodebuild", re.compile(r"^(xcodebuild|XCBBuildServic|SWBBuildServic)")),
+    ("simulator", re.compile(r"^(launchd_sim|CoreSimulator|com\.apple\.CoreSi|SimulatorTrampo|simdiskimaged|Simulator)")),
+    ("runner-agent", re.compile(r"^Runner\.")),
+    ("system", re.compile(r"^(kernel_task|WindowServer|launchd|mds|mds_stores|mdworker|mdworker_shared|corespotlightd)$")),
+)
+MEM_VALUE = re.compile(r"^(\d+(?:\.\d+)?)([BKMG])[+-]?$")
+
+
+def uptime_ms():
+    """System uptime in ms: the clock of the app's stall lines and of the UI test's trace reads."""
+    return int(time.clock_gettime(time.CLOCK_UPTIME_RAW) * 1000)
+
+
+def measured(run, args, limit, costs, name=None):
+    """run(args, limit), and append its time, its children's CPU time and whether it returned to `costs`."""
+    before, started = resource.getrusage(resource.RUSAGE_CHILDREN), time.monotonic()
+    out = run(args, limit)
+    after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    cpu = (after.ru_utime + after.ru_stime) - (before.ru_utime + before.ru_stime)
+    outcome = ("timeout" if "did not return within" in out else "unavailable") if out.startswith("<") else "returned"
+    costs.append({"command": name or args[0], "ms": int((time.monotonic() - started) * 1000), "cpu_ms": int(cpu * 1000),
+                  "outcome": outcome})
+    return out
+
+
+def sysctl_values(text):
+    """name -> value text of `sysctl <names>` output; a name it does not know is left out."""
+    values = {}
+    for line in text.splitlines():
+        name, sep, value = line.partition(": ")
+        if sep and re.fullmatch(r"[a-z_.]+", name):
+            values[name] = value.strip()
+    return values
+
+
+def mem_mb(value):
+    match = MEM_VALUE.match(value)
+    if not match:
+        return None
+    return round(float(match[1]) * {"B": 1 / 1048576, "K": 1 / 1024, "M": 1, "G": 1024}[match[2]], 1)
+
+
+def top_rows(text):
+    """Rows of the last sample in `top -l 2 -stats TOP_STATS` output: pid, ppid, mem_mb, cpu, state, command."""
+    block = text.split("\nProcesses:")[-1] if "\nProcesses:" in text else text
+    rows, table = [], False
+    for line in block.splitlines():
+        if line.startswith("PID"):
+            table = True
+            continue
+        parts = line.split(None, 6)
+        if not table or len(parts) < 7 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        try:
+            cpu = float(parts[3])
+        except ValueError:
+            continue
+        rows.append({"pid": int(parts[0]), "ppid": int(parts[1]), "mem_mb": mem_mb(parts[2]), "cpu": cpu,
+                     "state": parts[5], "command": parts[6].strip()})
+    return rows
+
+
+def ps_rows(text):
+    """Rows of `ps -axco pid,ppid,rss,pcpu,state,comm` in the same shape as top_rows."""
+    rows = []
+    for line in text.splitlines()[1:]:
+        parts = line.split(None, 5)
+        if len(parts) < 6 or not parts[0].isdigit():
+            continue
+        try:
+            rows.append({"pid": int(parts[0]), "ppid": int(parts[1]), "mem_mb": round(int(parts[2]) / 1024, 1),
+                         "cpu": float(parts[3]), "state": parts[4], "command": parts[5].strip()})
+        except ValueError:
+            continue
+    return rows
+
+
+def process_group(row, simulator_pids):
+    for name, pattern in HOST_GROUPS:
+        if pattern.search(row["command"]):
+            return name
+    return "simulator" if row["ppid"] in simulator_pids else "other"
+
+
+def group_sums(rows):
+    """{group: {"mem_mb", "cpu", "processes"}} of the given rows."""
+    simulator = {row["pid"] for row in rows if row["command"].startswith("launchd_sim")}
+    sums = {}
+    for row in rows:
+        entry = sums.setdefault(process_group(row, simulator), {"mem_mb": 0.0, "cpu": 0.0, "processes": 0})
+        entry["mem_mb"] = round(entry["mem_mb"] + (row["mem_mb"] or 0), 1)
+        entry["cpu"] = round(entry["cpu"] + row["cpu"], 1)
+        entry["processes"] += 1
+    return sums
+
+
+def vm_value(vm_stat, label):
+    match = re.search(rf"^{re.escape(label)}:\s+(\d+)\.", vm_stat, re.MULTILINE)
+    return int(match[1]) if match else None
+
+
+def host_snapshot(evidence, *, step, sample, vm_stat=None, run=None, with_top=True):
+    """One host snapshot (sysctl, vm_stat unless given, top by memory and by CPU, ps -c only if both tops
+    did not return). Commands run one at a time with their own limits. Returns the row's `host` value.
+    With with_top=False (the boot readings, which the shard waits for) only sysctl and vm_stat run."""
+    run = run or push.bounded
+    costs, sections = [], []
+    taken_ms = uptime_ms()
+    values = sysctl_values(measured(run, HOST_SYSCTL, HOST_SYSCTL_LIMIT, costs))
+    if vm_stat is None:
+        vm_stat = measured(run, ["vm_stat"], HOST_SYSCTL_LIMIT, costs)
+    tops = {}
+    for order, args in HOST_TOP.items() if with_top else ():
+        out = measured(run, args, HOST_TOP_LIMIT, costs, name=f"top -o {order}")
+        tops[order] = out
+        sections.append((f"top -o {order} (limit {HOST_TOP_LIMIT}s)", out if out.startswith("<") else
+                         "\n".join(f"{r['pid']} {r['ppid']} {r['mem_mb']} {r['cpu']} {r['state']} {r['command']}" for r in top_rows(out))))
+    rows = {}
+    for out in tops.values():
+        for row in [] if out.startswith("<") else top_rows(out):
+            rows.setdefault(row["pid"], row)
+    source = "top" if tops else "none"
+    if tops and all(out.startswith("<") for out in tops.values()):
+        source = "ps -c"
+        out = measured(run, HOST_PS, HOST_PS_LIMIT, costs, name="ps -c")
+        listed = [] if out.startswith("<") else sorted(ps_rows(out), key=lambda r: -(r["mem_mb"] or 0))
+        rows = {row["pid"]: row for row in listed[:HOST_TOP_ROWS]}
+        sections.append((f"ps -c (limit {HOST_PS_LIMIT}s)", out.strip()[:200] if out.startswith("<") else
+                         "\n".join(f"{r['pid']} {r['ppid']} {r['mem_mb']} {r['cpu']} {r['state']} {r['command']}" for r in listed[:HOST_TOP_ROWS])))
+    page = int(values["vm.pagesize"]) if values.get("vm.pagesize", "").isdigit() else None
+    memsize = int(values["hw.memsize"]) if values.get("hw.memsize", "").isdigit() else None
+    host = {"uptime_ms": taken_ms, "memsize": memsize, "ncpu": int(values["hw.ncpu"]) if values.get("hw.ncpu", "").isdigit() else None,
+            "swapusage": values.get("vm.swapusage"), "memory_level": values.get("kern.memorystatus_level"),
+            "total_pages": memsize // page if memsize and page else None,
+            "free_pages": vm_value(vm_stat, "Pages free"), "wired_pages": vm_value(vm_stat, "Pages wired down"),
+            "compressor_pages": vm_value(vm_stat, "Pages occupied by compressor"), "swapouts": vm_value(vm_stat, "Swapouts"),
+            "table": source, "groups": group_sums(list(rows.values())), "costs": costs,
+            "children_maxrss_mb": round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1048576, 1)}
+    with (evidence / HOST_FILE).open("a") as target:
+        target.write(f"== {step} sample {sample} uptime {taken_ms} {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n")
+        target.write("-- sysctl\n" + "\n".join(f"{k}: {v}" for k, v in values.items()) + "\n")
+        target.write("-- costs\n" + "\n".join(f"{c['command']} {c['ms']} ms cpu {c['cpu_ms']} ms {c['outcome']}" for c in costs) + "\n")
+        for title, body in sections:
+            target.write(f"-- {title} (pid ppid mem_mb cpu state command)\n{body.strip()}\n")
+    return host
 
 
 def run_bounded(args, limit):
@@ -190,18 +379,19 @@ def captured_failures(evidence):
 def capture_terminate(evidence, device, bundle, pid, index, *, run=None):
     run = run or run_bounded
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    launchctl = run(["xcrun", "simctl", "spawn", device, "launchctl", "list"], LAUNCHCTL_LIMIT)
+    costs = []
+    launchctl = measured(run, ["xcrun", "simctl", "spawn", device, "launchctl", "list"], LAUNCHCTL_LIMIT, costs, name="simctl launchctl")
     if launchctl.startswith("<"):
         app_rows, launchctl_outcome = launchctl.strip(), "timeout"
     else:
         rows = [line for line in launchctl.splitlines() if "hypeproof" in line.lower()]
         app_rows = "\n".join(rows) if rows else "<no hypeproof entry>"
         launchctl_outcome = "listed" if rows else "absent"
-    log = run(["xcrun", "simctl", "spawn", device, "log", "show", "--last", LOG_SHOW_WINDOW, "--style", "compact",
-               "--info", "--predicate", LOG_SHOW_PREDICATE], LOG_SHOW_LIMIT)
+    log = measured(run, ["xcrun", "simctl", "spawn", device, "log", "show", "--last", LOG_SHOW_WINDOW, "--style", "compact",
+                         "--info", "--predicate", LOG_SHOW_PREDICATE], LOG_SHOW_LIMIT, costs, name="simctl log show")
     log_outcome = "timeout" if log.startswith("<") else "shown"
     push.record(evidence, step="terminate", command="diagnose", sample=index, utc=wall, bundle=bundle, pid=int(pid),
-                launchctl=launchctl_outcome, log=log_outcome, log_lines=len(log.splitlines()))
+                launchctl=launchctl_outcome, log=log_outcome, log_lines=len(log.splitlines()), costs=costs)
     with (evidence / TERMINATE_FILE).open("a") as target:
         target.write(f"== terminate {index} {bundle}:{pid} {wall}\n")
         target.write(f"-- launchctl list (hypeproof rows, limit {LAUNCHCTL_LIMIT}s)\n{app_rows}\n")
@@ -267,20 +457,24 @@ def app_pid(ps_text, device):
 def capture_stall(evidence, device, start, index, *, pid=None, run=None):
     run = run or run_bounded
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    costs = []
     source = "line"
     if pid is None:
         source = "ps"
-        table = run(["ps", "-axo", "pid=,command="], PS_LIMIT)
+        table = measured(run, ["ps", "-axo", "pid=,command="], PS_LIMIT, costs)
         pid = None if table.startswith("<") else app_pid(table, device)
     target = evidence / f"stall-sample-{index}.txt"
     if pid is not None:
-        out = run(["sample", str(pid), str(SAMPLE_SECONDS), "-mayDie", "-file", str(target)], SAMPLE_LIMIT)
+        out = measured(run, ["sample", str(pid), str(SAMPLE_SECONDS), "-mayDie", "-file", str(target)], SAMPLE_LIMIT, costs)
         outcome = "timeout" if out.startswith("<") else ("sampled" if target.exists() else "failed")
     else:
         out = table.strip() if table.startswith("<") else f"<no HPStudio process under device {device}>"
         outcome = "ps timeout" if table.startswith("<") else "no process"
+    # The host snapshot comes after the sample, so the sample of a short stall is not delayed by it.
+    host = host_snapshot(evidence, step="stall", sample=index, run=run)
+    host["costs"] = costs + host["costs"]
     push.record(evidence, step="stall", command="sample", sample=index, utc=wall, start=int(start),
-                pid=pid, pid_from=source, outcome=outcome)
+                pid=pid, pid_from=source, outcome=outcome, host=host)
     with (evidence / STALL_FILE).open("a") as header:
         header.write(f"== stall {index} start {start} {wall} pid {pid if pid is not None else '-'} {outcome}\n{out.strip()[-2000:]}\n")
 
@@ -303,6 +497,130 @@ def scan_stall(evidence, device, log_path, *, run=None):
         done.append(start)
         taken += 1
     return taken
+
+
+# boundary-verdict (#4432 F21). The UI test writes one "request-boundary polls v1" attachment per
+# request-boundary wait that did not complete (StudioShellTests.RequestBoundaryPolls).
+POLLS_HEADER = "request-boundary polls v1"
+POLLS_WAIT = re.compile(r"key ([A-Za-z0-9_]+); count (\d+); wait start (\d+); deadline (\d+); result (\d+); ended (\d+)")
+POLL_ROW = re.compile(r"poll (\d+) (\d+) (-?\d+)")
+STALL_SPAN = re.compile(r"HPStudio main stall(?: \(ongoing\))?: (\d+) ms (?:from|since) uptime (\d+) ms")
+# BOUNDARY_RULES. runner-ax: no app main stall overlaps the wait, and a read that started before the deadline
+# returned the awaited value only after it, or one read took AX_SLOW_MS or more. app: a main stall overlaps
+# the wait, or every read was fast (each under FAST_MS, no gap over MAX_POLL_GAP_MS up to the deadline) and
+# none saw the value. Anything else is unknown. Host saturated: two or more SATURATION markers in host
+# snapshots within HOST_WINDOW_MS of the wait.
+AX_SLOW_MS = 5000
+FAST_MS = 1000
+MAX_POLL_GAP_MS = 2500
+HOST_WINDOW_MS = 60000
+FREE_FRACTION = 0.01
+SLOW_COMMAND_MS = 10000
+WATCH_GAP_MS = 90000
+VERDICT_FILE = "boundary-verdicts.txt"
+
+
+def parse_polls(text):
+    """The wait and its reads from one polls attachment, or None if the text is not one."""
+    lines = text.splitlines()
+    if len(lines) < 2 or lines[0].strip() != POLLS_HEADER:
+        return None
+    wait = POLLS_WAIT.fullmatch(lines[1].strip())
+    if not wait:
+        return None
+    key, count, start, deadline, result, ended = wait.groups()
+    polls = [tuple(int(v) for v in match.groups()) for match in map(POLL_ROW.fullmatch, (l.strip() for l in lines[2:])) if match]
+    dropped = next((int(l.split()[1]) for l in lines if re.fullmatch(r"dropped \d+", l.strip())), 0)
+    return {"key": key, "count": int(count), "start": int(start), "deadline": int(deadline), "result": int(result),
+            "ended": int(ended), "polls": polls, "dropped": dropped}
+
+
+def stall_spans(log_text):
+    """(start, end) uptime ms of each main stall the app reported, longest report per start."""
+    spans = {}
+    for length, start in STALL_SPAN.findall(log_text):
+        spans[int(start)] = max(spans.get(int(start), 0), int(start) + int(length))
+    return sorted(spans.items())
+
+
+def classify_wait(wait, spans):
+    """(verdict, reason) for one wait: runner-ax, app or unknown (BOUNDARY_RULES)."""
+    if wait is None or not wait["polls"]:
+        return "unknown", "no trace reads recorded"
+    start, deadline, count, polls = wait["start"], wait["deadline"], wait["count"], wait["polls"]
+    overlapping = [(s, e) for s, e in spans if s < deadline and e > start]
+    if overlapping:
+        s, e = overlapping[0]
+        return "app", f"app main stall {e - s} ms from uptime {s} overlaps the wait"
+    late = [p for p in polls if p[0] < deadline and p[2] >= count and p[0] + p[1] > deadline]
+    if late:
+        p = late[0]
+        return "runner-ax", f"read from uptime {p[0]} saw {p[2]} but returned {p[0] + p[1] - deadline} ms after the deadline"
+    slow = [p for p in polls if p[1] >= AX_SLOW_MS]
+    if slow:
+        return "runner-ax", f"one trace read took {max(p[1] for p in slow)} ms"
+    starts = [start] + [p[0] for p in polls] + [deadline]
+    gap = max(b - a for a, b in zip(starts, starts[1:]))
+    if all(p[1] < FAST_MS for p in polls) and all(p[2] < count for p in polls) and gap <= MAX_POLL_GAP_MS:
+        return "app", f"{len(polls)} fast reads up to the deadline, none saw {count}"
+    return "unknown", f"{len(polls)} reads, longest gap {gap} ms, slowest {max(p[1] for p in polls)} ms"
+
+
+def saturation(wait, rows):
+    """Markers of host saturation in the host snapshots near the wait (empty list: none or no snapshot)."""
+    if wait is None:
+        return []
+    low, high = wait["start"] - HOST_WINDOW_MS, wait["ended"] + HOST_WINDOW_MS
+    hosts = sorted((row["host"] for row in rows if isinstance(row.get("host"), dict) and isinstance(row["host"].get("uptime_ms"), int)),
+                   key=lambda host: host["uptime_ms"])
+    near = [host for host in hosts if low <= host["uptime_ms"] <= high]
+    markers = []
+    if any(h.get("total_pages") and h.get("free_pages") is not None and h["free_pages"] < FREE_FRACTION * h["total_pages"] for h in near):
+        markers.append("free memory under 1%")
+    if any(low <= b["uptime_ms"] <= high and isinstance(a.get("swapouts"), int) and isinstance(b.get("swapouts"), int)
+           and b["swapouts"] > a["swapouts"] for a, b in zip(hosts, hosts[1:])):
+        markers.append("swapouts rose")
+    if any(c.get("ms", 0) >= SLOW_COMMAND_MS or c.get("outcome") == "timeout" for h in near for c in h.get("costs", [])):
+        markers.append("a snapshot command took 10 s or did not return")
+    watch = sorted(row["uptime_ms"] for row in rows if row.get("step") == "test" and row.get("command") == "observe"
+                   and isinstance(row.get("uptime_ms"), int))
+    if any(b - a >= WATCH_GAP_MS and a <= high and b >= low for a, b in zip(watch, watch[1:])):
+        markers.append("watch readings 90 s or more apart")
+    return markers
+
+
+def boundary_verdicts(evidence, log_path, attachments=None):
+    """Judge each polls attachment; write VERDICT_FILE and one row each; return the printed lines."""
+    attachments = attachments or evidence / "journey-attachments"
+    waits = []
+    for path in sorted(attachments.iterdir()) if attachments.is_dir() else []:
+        if path.is_file() and not path.is_symlink() and path.stat().st_size < 65536:
+            wait = parse_polls(path.read_text(errors="replace"))
+            if wait is not None:
+                waits.append(wait)
+    try:
+        spans = stall_spans(Path(log_path).read_text(errors="replace"))
+    except OSError:
+        spans = []
+    steps = evidence / "simulator-steps.jsonl"
+    rows = []
+    for line in steps.read_text().splitlines() if steps.exists() else []:
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
+    lines = []
+    for wait in waits:
+        verdict, reason = classify_wait(wait, spans)
+        markers = saturation(wait, rows)
+        saturated = len(markers) >= 2
+        line = (f"request-boundary verdict: {wait['key']} {verdict}{'; host saturated' if saturated else ''} ({reason}; "
+                f"host: {', '.join(markers) if markers else 'no marker'})")
+        push.record(evidence, step="boundary", command="verdict", key=wait["key"], verdict=verdict, saturated=saturated,
+                    markers=markers, reason=reason, reads=len(wait["polls"]), dropped=wait["dropped"])
+        lines.append(line)
+    (evidence / VERDICT_FILE).write_text("".join(l + "\n" for l in lines) or "no request-boundary polls attachment\n")
+    return lines
 
 
 def time_command(evidence, step, command):
@@ -350,6 +668,9 @@ def main(argv=None):
     timer.add_argument("--evidence", type=Path, required=True)
     timer.add_argument("--step", required=True)
     timer.add_argument("rest", nargs=argparse.REMAINDER)
+    verdict = commands.add_parser("boundary-verdict")
+    verdict.add_argument("--evidence", type=Path, required=True)
+    verdict.add_argument("--log", type=Path, required=True)
     for name in ("sample", "watch", "settle", "terminate-watch", "terminate-scan", "stall-watch"):
         sub = commands.add_parser(name)
         sub.add_argument("--evidence", type=Path, required=True)
@@ -369,6 +690,10 @@ def main(argv=None):
         if not command:
             parser.error("time needs a command after --")
         return time_command(args.evidence, args.step, command)
+    if args.command == "boundary-verdict":
+        safely(lambda: print("\n".join(boundary_verdicts(args.evidence, args.log)) or "request-boundary verdict: no polls attachment",
+                             flush=True), "boundary")
+        return 0
     if args.command == "settle":
         settle(args.evidence, args.device)
         return 0
