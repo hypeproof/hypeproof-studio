@@ -30,10 +30,11 @@ func teamRenderCount(_ key: String) {
     TeamRenderTrace.shared.count(key)
 #endif
 }
-/// Equality of a pushed screen on its value key (#4432 F11-destination). In DEBUG each call is counted under
-/// "eq.<name>.same" or "eq.<name>.diff" (stall lines only). If a screen re-runs with no count, SwiftUI did not ask.
-nonisolated func teamScreenEqual(_ name: String, _ a: TeamScreenKey, _ b: TeamScreenKey) -> Bool {
-    let same = a == b
+/// Equality of a pushed screen on its step and its presentation's identity (#4432 F11-D). In DEBUG each call is
+/// counted under "eq.<name>.same" or "eq.<name>.diff" (stall lines only). If a screen re-runs with no count,
+/// SwiftUI did not ask.
+nonisolated func teamScreenEqual(_ name: String, _ a: (TeamStep, ObjectIdentifier), _ b: (TeamStep, ObjectIdentifier)) -> Bool {
+    let same = a.0 == b.0 && a.1 == b.1
 #if DEBUG
     teamRenderCount("eq." + name + (same ? ".same" : ".diff"))
 #endif
@@ -141,7 +142,7 @@ func teamOffMainCheck(_ what: String) {
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
     /// Push marks, publish counters ("pub.") and focus counters ("focus.") feed only the stall lines.
-    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "disappear.", "pub.", "focus.", "probe.", "dest.", "eq."]
+    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "disappear.", "pub.", "focus.", "probe.", "eq.", "route.", "closure.", "store."]
     /// Destination body and observation-factory counters (F11 GitHub loop) go only to the stall lines.
     /// Keeping them out of the trace keeps its value the same length as before (#4457).
     private static let logOnlyKeys: Set<String> = ["body.requests", "body.workflow", "body.outcome", "body.delivery", "body.github", "body.intake", "body.text", "body.observations", "body.subscription", "make.observations"]
@@ -362,16 +363,123 @@ nonisolated(unsafe) private let teamRuntimeIssueDSO: UnsafeRawPointer? = {
 }()
 #endif
 
+/// The path of one team stack and the presentation of each pushed screen (#4432 F11-D). Owned by the stack's root
+/// as a StateObject. Screens get it as a plain `let`: they push and pop through it but never observe it, so a push
+/// re-runs only the root. Presentations live while their step is in the path (`TeamStepStore`).
+@MainActor final class TeamRouter: ObservableObject {
+    @Published private(set) var path = TeamPath()
+    private var store = TeamStepStore<AnyObject>()
+    /// The stack's binding. Only a prefix of the current path is accepted (system back and swipe).
+    var steps: Binding<[TeamStep]> { Binding(get: { self.path.steps }, set: { self.path.accept($0); self.prune() }) }
+    /// Pushes `route` while `screen` is on top (`nil`: the root list).
+    func push(_ route: TeamRoute, above screen: TeamStep?) {
+        guard let step = path.push(route, above: screen) else { teamRenderCount("route.push.ignored." + route.kind); return }
+        teamRenderCount("route.push." + step.route.kind)
+    }
+    /// Leaves `step`: it and everything above it are removed.
+    func pop(_ step: TeamStep) { path.pop(step); prune() }
+    func reset(_ routes: [TeamRoute]) { path.reset(routes); prune() }
+    func parent(of step: TeamStep) -> TeamStep? { path.parent(of: step) }
+    /// The presentation of `step`, made by `make` the first time the step is shown.
+    func model<T: AnyObject>(_ step: TeamStep, _ make: () -> T) -> T {
+        let result = store.value(for: step) { make() }
+        teamRenderCount("store." + step.route.kind + (result.created ? ".new" : ".reuse"))
+        guard let value = result.value as? T else { return make() }  // a step's route, and so its type, never changes
+        return value
+    }
+    func existing<T: AnyObject>(_ step: TeamStep, as: T.Type) -> T? { store.existing(step) as? T }
+    private func prune() { store.retain(path.steps) }
+}
+
+/// A row that pushes a screen: the look of a NavigationLink row, as a Button (#4432 F11-D).
+struct TeamPushRow<Label: View>: View {
+    @Environment(\.isEnabled) private var isEnabled
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                label().foregroundStyle(isEnabled ? Color.primary : Color.secondary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary).accessibilityHidden(true)
+            }.contentShape(Rectangle())
+        }
+    }
+}
+extension TeamPushRow where Label == Text {
+    init(_ title: String, action: @escaping () -> Void) { self.init(action: action) { Text(title) } }
+}
+
+/// The one destination of a team stack (#4432 F11-D). Its stored inputs are the step (a value) and two objects
+/// compared by identity, so SwiftUI's own comparison and `==` agree.
+struct TeamRouteView: View, Equatable {
+    let step: TeamStep
+    let router: TeamRouter
+    let requests: TeamRequestPresentation
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        let same = a.step == b.step && a.router === b.router && a.requests === b.requests
+#if DEBUG
+        teamRenderCount("eq.route." + a.step.route.kind + (same ? ".same" : ".diff"))
+#endif
+        return same
+    }
+    var body: some View {
+        let _ = teamRenderCount("route." + step.route.kind)
+        let _ = teamWhy(Self.self)
+        let requests = requests
+        switch step.route {
+        case .detail(let request):
+            TeamRequestDetailView(model: requests, requestID: request, router: router, step: step)
+        case .workflow(let request, let product):
+            TeamWorkflowScreen(model: router.model(step) { teamRenderCount("make.workflow"); return requests.makeWorkflow(request, product) }, requests: requests, router: router, step: step).equatable()
+        case .outcome(let request):
+            TeamOutcomeView(model: router.model(step) { teamRenderCount("make.outcome"); return requests.makeOutcome(request) }, router: router, step: step).equatable()
+        case .delivery(let request):
+            TeamDeliveryScreen(model: router.model(step) { teamRenderCount("make.delivery"); return requests.makeDelivery(request) }, step: step).equatable()
+        case .github(let request):
+            TeamGitHubScreen(model: router.model(step) { teamRenderCount("make.github"); return requests.makeGitHub(request) }, router: router, step: step).equatable()
+        case .subscription(let request, let product):
+            if let inbox = requests.inbox { TeamSubscriptionScreen(model: inbox, product: product, request: request) }
+        case .intake(let request, let product):
+            TeamIntakeScreen(model: router.model(step) { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return requests.makeIntake(request, product) }, router: router, step: step).equatable()
+        case .text(let request, let target, let product):
+            TeamTextRevisionScreen(model: router.model(step) { teamRenderCount("make.text"); return requests.makeTextHistory(request, target, product) }, router: router, step: step).equatable()
+        case .relations(let request, let product):
+            TeamRelationScreen(model: router.model(step) { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return requests.makeRelations(request, product) }, requests: requests, router: router, step: step).equatable()
+        case .observations:
+            // The GitHub screen directly below owns the factory, as its NavigationLink did.
+            if let parent = router.parent(of: step), let github = router.existing(parent, as: TeamGitHubPresentation.self), let make = github.makeObservations {
+                TeamGitHubObservationScreen(model: router.model(step) { teamRenderCount("make.observations"); return make() }, step: step).equatable()
+            }
+        case .intakeGitHub:
+            // The intake screen directly below prepared this GitHub presentation, as its isPresented push did.
+            if let parent = router.parent(of: step), let intake = router.existing(parent, as: TeamIntakePresentation.self), let github = intake.github {
+                TeamGitHubScreen(model: router.model(step) { github }, router: router, step: step).equatable()
+            }
+        }
+    }
+}
+extension View {
+    /// The team stack's one destination (#4432 F11-D). "closure.route" counts how often the stack evaluates it.
+    func teamRoutes(_ router: TeamRouter, requests: TeamRequestPresentation) -> some View {
+        navigationDestination(for: TeamStep.self) { step in
+            let _ = teamRenderCount("closure.route")
+            TeamRouteView(step: step, router: router, requests: requests).equatable()
+        }
+    }
+}
+
 struct TeamRequestsView: View {
     @ObservedObject var model: TeamRequestPresentation
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var router = TeamRouter()
     @State private var confirmSend = false
     @State private var confirmClose = false
     var body: some View {
         // Does the stack's root re-run while a pushed screen loops (#4432 F22)? Log-only key.
         let _ = teamRenderCount("body.requests")
         let _ = teamWhy(Self.self)
-        NavigationStack {
+        NavigationStack(path: router.steps) {
             List {
 #if DEBUG
                 if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic request trace").font(.caption2).accessibilityIdentifier("teamRequestTrace").accessibilityValue(TeamEntryFixture.trace) } }
@@ -396,7 +504,7 @@ struct TeamRequestsView: View {
                         }
                         if let receipt = draft.receipt {
                             Text("접수 번호: \(receipt)").font(.caption).textSelection(.enabled).accessibilityIdentifier("teamRequestReceipt")
-                            NavigationLink("요청과 논의 보기") { TeamRequestDetailView(model: model, requestID: receipt) }
+                            TeamPushRow("요청과 논의 보기") { router.push(.detail(request: receipt), above: nil) }
                             Button("새 요청 작성") { model.controller?.newDraft() }.disabled(model.state.busy || !model.state.storageReady)
                         } else {
                             if draft.phase == .uncertain {
@@ -413,7 +521,7 @@ struct TeamRequestsView: View {
                     Section("\(productLabel(draft.product))의 요청") {
                         if model.state.requests.isEmpty && !model.state.busy { Text("표시할 요청이 없어요.").foregroundStyle(.secondary) }
                         ForEach(model.state.requests) { request in
-                            NavigationLink { TeamRequestDetailView(model: model, requestID: request.id) } label: {
+                            TeamPushRow { router.push(.detail(request: request.id), above: nil) } label: {
                                 VStack(alignment: .leading, spacing: 6) { Text(request.body).lineLimit(3); Text("접수됨 · \(request.account_id)").font(.caption).foregroundStyle(.secondary) }
                             }
                         }
@@ -421,6 +529,7 @@ struct TeamRequestsView: View {
                     }
                 }
             }.navigationTitle("팀 요청").navigationBarTitleDisplayMode(.inline)
+                .teamRoutes(router, requests: model)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy || !model.state.storageReady) }
                     ToolbarItem(placement: .confirmationAction) { Button("닫기") { if !model.state.storageReady { confirmClose = true } else { dismiss() } }.accessibilityIdentifier("teamRequestClose") }
@@ -439,22 +548,17 @@ struct TeamRequestsView: View {
 }
 
 struct TeamRequestDetailView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var confirmLeave = false
     @ObservedObject var model: TeamRequestPresentation
     let requestID: String
+    /// Pushes and leaves go through the stack's router; this screen reads no `\.dismiss` (#4432 F11-D).
+    let router: TeamRouter
+    let step: TeamStep
     @State private var history = TeamCommentHistory()
     private var detail: TeamRequestDetail? { history.detail }
     private var comments: [TeamRequestComment] { history.comments }
     @State private var commentSchemas: [String] = []
     @FocusState private var commentFocused: Bool
-    @State private var showIntake = false
-    @State private var intakeProduct = "studio"
-    @State private var showRelated = false
-    @State private var relatedProduct = "studio"
-    @State private var showTextHistory = false
-    @State private var textTarget = ""
-    @State private var textProduct = "studio"
     @State private var draft: TeamCommentDraft?
     @State private var busy = false
     @State private var storageReady = true
@@ -483,21 +587,21 @@ struct TeamRequestDetailView: View {
                         Text("작성 시각 기준이에요. 답변 여부나 해결 상태를 뜻하지 않아요.").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Section { NavigationLink("담당·진행 상태와 이력") { TeamDetailDestination(kind: .workflow, model: model, requestID: requestID, product: detail.request.product).equatable() }.accessibilityIdentifier("teamWorkflowEntry") }
-                Section { NavigationLink("해결 여부 확인") { TeamDetailDestination(kind: .outcome, model: model, requestID: requestID).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
-                Section { NavigationLink("배포 버전과 확인 안내") { TeamDetailDestination(kind: .delivery, model: model, requestID: requestID).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
+                Section { TeamPushRow("담당·진행 상태와 이력") { router.push(.workflow(request: requestID, product: detail.request.product), above: step) }.accessibilityIdentifier("teamWorkflowEntry") }
+                Section { TeamPushRow("해결 여부 확인") { router.push(.outcome(request: requestID), above: step) }.disabled(busy || !storageReady).accessibilityIdentifier("teamOutcomeEntry") }
+                Section { TeamPushRow("배포 버전과 확인 안내") { router.push(.delivery(request: requestID), above: step) }.disabled(busy || !storageReady).accessibilityIdentifier("teamDeliveryEntry") }
                 Section { Button("공개 요청으로 제안") {
-                    teamRenderCount("tap.intake"); commentFocused = false; intakeProduct = detail.request.product; let expected = generation
-                    DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { teamRenderCount("async.intake"); showIntake = true } }
+                    teamRenderCount("tap.intake"); commentFocused = false; let product = detail.request.product; let expected = generation
+                    DispatchQueue.main.async { if generation == expected && !busy && storageReady && self.detail?.retention?.hidden != true { teamRenderCount("async.intake"); router.push(.intake(request: requestID, product: product), above: step) } }
                 }.disabled(busy || !storageReady || detail.retention?.hidden == true).accessibilityIdentifier("teamIntakeEntry") }
-                Section { NavigationLink("GitHub 연결과 근거") { TeamDetailDestination(kind: .github, model: model, requestID: requestID).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
+                Section { TeamPushRow("GitHub 연결과 근거") { router.push(.github(request: requestID), above: step) }.disabled(busy || !storageReady).accessibilityIdentifier("teamGitHubEntry")
                     Button("관련 요청") {
-                        teamRenderCount("tap.related"); commentFocused = false; relatedProduct = detail.request.product
+                        teamRenderCount("tap.related"); commentFocused = false; let product = detail.request.product
                         let expected = generation
                         // Commit focus resignation before NavigationStack captures the source view.
-                        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.related"); showRelated = true } }
+                        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.related"); router.push(.relations(request: requestID, product: product), above: step) } }
                     }.disabled(busy || !storageReady).accessibilityIdentifier("teamRelationsEntry") }
-                if let inbox = model.inbox { Section { NavigationLink("이 요청의 알림 설정") { TeamDetailDestination(kind: .subscription, model: model, requestID: requestID, product: detail.request.product, inbox: inbox).equatable() }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
+                if model.inbox != nil { Section { TeamPushRow("이 요청의 알림 설정") { router.push(.subscription(request: requestID, product: detail.request.product), above: step) }.disabled(busy || !storageReady).accessibilityIdentifier("teamRequestSubscription") } }
                 Section("논의") {
                     ForEach(comments) { comment in
                         VStack(alignment: .leading, spacing: 6) {
@@ -551,21 +655,16 @@ struct TeamRequestDetailView: View {
                     } header: { Text("댓글 남기기") } footer: { Text("댓글도 이 제품 권한이 있는 내부 멤버 전체가 볼 수 있어요. 전송 결과를 모를 때 같은 번호로 다시 보내면 중복 댓글을 만들지 않아요.") }
             }
         }.accessibilityIdentifier("teamRequestDetailList").navigationTitle("요청과 논의").navigationBarTitleDisplayMode(.inline)
-            // Each destination is an Equatable value (#4432 F11): a detail body pass that
-            // leaves its inputs unchanged does not re-run the pushed screen's body.
-            .navigationDestination(isPresented: $showIntake) { TeamDetailDestination(kind: .intake, model: model, requestID: requestID, product: intakeProduct).equatable() }
-            .navigationDestination(isPresented: $showTextHistory) { TeamDetailDestination(kind: .text, model: model, requestID: requestID, product: textProduct, target: textTarget).equatable() }
-            .navigationDestination(isPresented: $showRelated) { TeamDetailDestination(kind: .relations, model: model, requestID: requestID, product: relatedProduct).equatable() }
             .navigationBarBackButtonHidden(!storageReady || busy)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if !storageReady || busy { Button("뒤로") { if !storageReady { confirmLeave = true } else { dismiss() } }.accessibilityIdentifier("teamCommentBack") }
+                    if !storageReady || busy { Button("뒤로") { if !storageReady { confirmLeave = true } else { router.pop(step) } }.accessibilityIdentifier("teamCommentBack") }
                 }
                 ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await refresh() } }.disabled(busy || !storageReady) }
             }
             .interactiveDismissDisabled(busy || !storageReady)
             .alert("저장되지 않은 댓글이 있어요", isPresented: $confirmLeave) {
-                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
+                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { router.pop(step) }
             } message: { Text("나가기 전에 댓글 내용을 내보내 주세요. 저장되지 않은 수정은 사라질 수 있어요.") }
             .task(id: requestID) {
                 do { draft = try model.loadComment(requestID) } catch { storageReady = false; message = "저장된 댓글을 읽지 못했어요. 원본을 유지했어요." }
@@ -577,7 +676,6 @@ struct TeamRequestDetailView: View {
             .teamStateProbe("detail", ["generation": generation, "busy": busy, "storageReady": storageReady, "message": message,
                                        "loaded": detail != nil, "comments": comments.count, "schemas": commentSchemas,
                                        "draftPhase": draft.map { String(describing: $0.phase) } ?? "none",
-                                       "showIntake": showIntake, "showText": showTextHistory, "showRelated": showRelated,
                                        "confirmSend": confirmSend, "confirmLeave": confirmLeave])
             .alert("댓글을 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await submit() } }
@@ -585,9 +683,9 @@ struct TeamRequestDetailView: View {
     }
     private func openTextHistory(_ target: String, product: String) {
         guard !busy, storageReady, TeamTextVersion.validTarget(target, request: requestID) else { return }
-        teamRenderCount("tap.text"); commentFocused = false; textTarget = target; textProduct = product
+        teamRenderCount("tap.text"); commentFocused = false
         let expected = generation
-        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.text"); showTextHistory = true } }
+        DispatchQueue.main.async { if generation == expected && !busy && storageReady { teamRenderCount("async.text"); router.push(.text(request: requestID, target: target, product: product), above: step) } }
     }
     private var canChooseIntent: Bool { detail?.retention?.hidden != true && !busy && storageReady && draft?.phase == .draft && commentSchemas.contains("hps-team-comment/2") }
     private func intentLabel(_ intent: String) -> String { ["discussion":"논의", "question":"질문", "reply":"답글"][intent] ?? "논의" }
@@ -677,63 +775,6 @@ struct TeamRequestDetailView: View {
     }
 }
 
-/// One request-detail destination as a value (#4432 F11). Main runs showed TeamRequestDetailView.body and the
-/// pushed screen's body re-running about 1:1 in a main-thread loop. The pushed screen used to be built inline
-/// with a `make:` closure, which SwiftUI cannot compare, so every detail body pass re-ran the pushed body.
-/// `==` covers every input the screen is built from; each screen observes its own state (StateObject or
-/// ObservedObject), so skipping a pass with equal inputs drops no update. The factories run, and are counted,
-/// exactly where they were before: inside the screens' StateObject autoclosures.
-private struct TeamDetailDestination: View, Equatable {
-    enum Kind {
-        case workflow, outcome, delivery, github, subscription, intake, text, relations
-        var counterKey: String {
-            switch self {
-            case .workflow: return "dest.workflow"
-            case .outcome: return "dest.outcome"
-            case .delivery: return "dest.delivery"
-            case .github: return "dest.github"
-            case .subscription: return "dest.subscription"
-            case .intake: return "dest.intake"
-            case .text: return "dest.text"
-            case .relations: return "dest.relations"
-            }
-        }
-    }
-    let kind: Kind
-    let model: TeamRequestPresentation
-    let requestID: String
-    var product = ""
-    var target = ""
-    var inbox: TeamInboxPresentation?
-    nonisolated static func == (a: Self, b: Self) -> Bool {
-        let same = a.kind == b.kind && a.model === b.model && a.requestID == b.requestID && a.product == b.product && a.target == b.target && a.inbox === b.inbox
-#if DEBUG
-        // Is `==` asked at all when the wrapper re-runs (#4432 F11-destination)? Stall lines only.
-        teamRenderCount("eq." + a.kind.counterKey + (same ? ".same" : ".diff"))
-#endif
-        return same
-    }
-    var body: some View {
-        // Does the Equatable wrapper re-run with the pushed screen (#4432 F22)? Log-only key.
-        let _ = teamRenderCount(kind.counterKey)
-        let _ = teamWhy(Self.self)
-        let model = model, requestID = requestID, product = product, target = target
-        // Each screen is Equatable on these inputs (#4432 F11-destination). Run 45200802507 re-ran this wrapper 1205
-        // times with no detail pass, and each new `make:` closure made the text screen "@self" changed 1:1 with it.
-        let key = TeamScreenKey(requests: model, requestID: requestID, product: product, target: target, source: inbox)
-        switch kind {
-        case .workflow: TeamWorkflowScreen(key: key, make: { teamRenderCount("make.workflow"); return model.makeWorkflow(requestID, product) }, requests: model).equatable()
-        case .outcome: TeamOutcomeView(key: key, make: { teamRenderCount("make.outcome"); return model.makeOutcome(requestID) }).equatable()
-        case .delivery: TeamDeliveryScreen(key: key, make: { teamRenderCount("make.delivery"); return model.makeDelivery(requestID) }).equatable()
-        case .github: TeamGitHubScreen(key: key, make: { teamRenderCount("make.github"); return model.makeGitHub(requestID) }).equatable()
-        case .subscription: if let inbox { TeamSubscriptionScreen(model: inbox, product: product, request: requestID) }
-        case .intake: TeamIntakeScreen(key: key, make: { teamRenderCount("make.intake"); teamRenderCount("arg.intake." + product); return model.makeIntake(requestID, product) }).equatable()
-        case .text: TeamTextRevisionScreen(key: key, make: { teamRenderCount("make.text"); return model.makeTextHistory(requestID, target, product) }).equatable()
-        case .relations: TeamRelationScreen(key: key, make: { teamRenderCount("make.relations"); teamRenderCount("arg.relations." + product); return model.makeRelations(requestID, product) }, requests: model).equatable()
-        }
-    }
-}
-
 @MainActor final class TeamWorkflowPresentation: ObservableObject {
     @Published var state = TeamWorkflowController.View()
     var controller: TeamWorkflowController?
@@ -742,14 +783,18 @@ private func workflowLabel(_ value: String) -> String {
     ["submitted":"접수됨", "discussing":"논의 중", "on_hold":"보류", "duplicate":"중복 연결", "rejected":"반려", "unclassified":"미정", "low":"낮음", "normal":"보통", "high":"높음"][value] ?? value
 }
 private struct TeamWorkflowScreen: View, Equatable {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var model: TeamWorkflowPresentation
+    @ObservedObject private var model: TeamWorkflowPresentation
     let requests: TeamRequestPresentation
+    let router: TeamRouter
+    let step: TeamStep
+    private let identity: ObjectIdentifier
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamWorkflowPresentation, requests: TeamRequestPresentation) { self.key = key; _model = StateObject(wrappedValue: make()); self.requests = requests }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("workflow", a.key, b.key) }
+    /// The router's store keeps the presentation for this step (#4432 F11-D); no StateObject closure per init.
+    init(model: TeamWorkflowPresentation, requests: TeamRequestPresentation, router: TeamRouter, step: TeamStep) {
+        self.model = model; self.requests = requests; self.router = router; self.step = step; identity = ObjectIdentifier(model)
+    }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("workflow", (a.step, a.identity), (b.step, b.identity)) }
     private var editable: Bool { model.state.page?.can_manage == true && model.state.page?.retention?.hidden != true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
     private func memberName(_ id: String?) -> String {
         guard let id else { return "담당 미정" }
@@ -766,7 +811,7 @@ private struct TeamWorkflowScreen: View, Equatable {
                     LabeledContent("담당", value: memberName(page.current.assignee_account_id))
                     LabeledContent("우선순위", value: workflowLabel(page.current.priority))
                     if let next = page.current.next_action { Text("다음 행동: \(next)") }
-                    if let target = page.current.duplicate_request_id { NavigationLink("대표 요청 보기") { TeamRequestDetailView(model: requests, requestID: target) }.disabled(model.state.busy || !model.state.storageReady) }
+                    if let target = page.current.duplicate_request_id { TeamPushRow("대표 요청 보기") { router.push(.detail(request: target), above: step) }.disabled(model.state.busy || !model.state.storageReady) }
                     if !page.can_manage { Text("현재 권한으로 상태와 이력을 볼 수 있어요. 담당·상태 변경 권한은 별도로 확인해요.").font(.caption).foregroundStyle(.secondary) }
                 }
             }
@@ -825,7 +870,7 @@ private struct TeamWorkflowScreen: View, Equatable {
             .navigationBarBackButtonHidden(!model.state.storageReady || model.state.busy)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy || !model.state.storageReady) }
-                ToolbarItem(placement: .topBarLeading) { if !model.state.storageReady || model.state.busy { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { dismiss() } } } }
+                ToolbarItem(placement: .topBarLeading) { if !model.state.storageReady || model.state.busy { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { router.pop(step) } } } }
             }
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }
@@ -836,7 +881,7 @@ private struct TeamWorkflowScreen: View, Equatable {
                 Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }
             } message: { Text("표시된 담당자·상태·다음 행동과 변경 사유를 내부 팀의 이력에 남겨요.") }
             .alert("저장되지 않은 변경이 있어요", isPresented: $confirmLeave) {
-                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
+                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { router.pop(step) }
             } message: { Text("나가기 전에 변경 내용을 내보내 주세요.") }
     }
 }
@@ -847,14 +892,14 @@ private struct TeamWorkflowScreen: View, Equatable {
     var makeObservations: (() -> TeamGitHubObservationPresentation)?
 }
 struct TeamGitHubScreen: View, Equatable {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var model: TeamGitHubPresentation
+    @ObservedObject private var model: TeamGitHubPresentation
+    let router: TeamRouter
+    let step: TeamStep
+    private let identity: ObjectIdentifier
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamGitHubPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
-    init(model: TeamGitHubPresentation) { self.init(key: TeamScreenKey(source: model), make: { model }) }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("github", a.key, b.key) }
+    init(model: TeamGitHubPresentation, router: TeamRouter, step: TeamStep) { self.model = model; self.router = router; self.step = step; identity = ObjectIdentifier(model) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("github", (a.step, a.identity), (b.step, b.identity)) }
     private var editable: Bool { model.state.page?.can_manage == true && model.state.page?.retention?.hidden != true && model.state.draft?.phase == .draft && !model.state.busy && model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<TeamGitHubDraft, String>, _ identifier: String) -> some View {
         TextField(title, text: Binding(get: { model.state.draft?[keyPath: key] ?? "" }, set: { value in model.controller?.edit { $0[keyPath: key] = value } }))
@@ -884,8 +929,8 @@ struct TeamGitHubScreen: View, Equatable {
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic GitHub trace").font(.caption2).accessibilityIdentifier("teamGitHubTrace").accessibilityValue(TeamEntryFixture.trace) } }
 #endif
 
-            if let make = model.makeObservations {
-                NavigationLink { TeamGitHubObservationScreen(key: TeamScreenKey(source: model), make: { teamRenderCount("make.observations"); return make() }).equatable() } label: { Text("최근 확인한 GitHub 상태") }
+            if model.makeObservations != nil {
+                TeamPushRow("최근 확인한 GitHub 상태") { router.push(.observations, above: step) }
                     .disabled(model.state.busy || !model.state.storageReady).accessibilityIdentifier("teamGitHubObservationsOpen")
             }
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamGitHubMessage") }
@@ -931,7 +976,7 @@ struct TeamGitHubScreen: View, Equatable {
             .navigationBarBackButtonHidden(!model.state.storageReady || model.state.busy)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy || !model.state.storageReady) }
-                ToolbarItem(placement: .topBarLeading) { if !model.state.storageReady || model.state.busy { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { dismiss() } }.accessibilityIdentifier("teamGitHubBack") } }
+                ToolbarItem(placement: .topBarLeading) { if !model.state.storageReady || model.state.busy { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { router.pop(step) } }.accessibilityIdentifier("teamGitHubBack") } }
             }
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }
@@ -941,7 +986,7 @@ struct TeamGitHubScreen: View, Equatable {
                 Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }
             } message: { Text("서버가 GitHub 기록을 확인한 뒤 연결 사유와 함께 내부 이력에 저장해요. 공개 GitHub 글을 작성하지 않아요.") }
             .alert("저장되지 않은 연결 초안이 있어요", isPresented: $confirmLeave) {
-                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
+                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { router.pop(step) }
             } message: { Text("나가기 전에 연결 초안을 내보내 주세요.") }
     }
 }
@@ -951,10 +996,11 @@ struct TeamGitHubScreen: View, Equatable {
     var controller: TeamDeliveryController?
 }
 private struct TeamDeliveryScreen: View, Equatable {
-    @StateObject private var model: TeamDeliveryPresentation
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamDeliveryPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("delivery", a.key, b.key) }
+    @ObservedObject private var model: TeamDeliveryPresentation
+    let step: TeamStep
+    private let identity: ObjectIdentifier
+    init(model: TeamDeliveryPresentation, step: TeamStep) { self.model = model; self.step = step; identity = ObjectIdentifier(model) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("delivery", (a.step, a.identity), (b.step, b.identity)) }
     private func date(_ time: Double) -> String { Date(timeIntervalSince1970: time / 1000).formatted(date: .abbreviated, time: .shortened) }
     @ViewBuilder private func record(_ event: TeamDeliveryEvent, now: Date) -> some View {
         if let proof = event.evidence {

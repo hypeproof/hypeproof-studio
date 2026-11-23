@@ -5,13 +5,15 @@ import SwiftUI
     var controller: TeamOutcomeController?
 }
 struct TeamOutcomeView: View, Equatable {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var model: TeamOutcomePresentation
+    @ObservedObject private var model: TeamOutcomePresentation
+    let router: TeamRouter
+    let step: TeamStep
+    private let identity: ObjectIdentifier
     @State private var confirmSend = false
     @State private var confirmLeave = false
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamOutcomePresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("outcome", a.key, b.key) }
+    /// The router's store keeps the presentation for this step (#4432 F11-D); leaving goes through the router.
+    init(model: TeamOutcomePresentation, router: TeamRouter, step: TeamStep) { self.model = model; self.router = router; self.step = step; identity = ObjectIdentifier(model) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("outcome", (a.step, a.identity), (b.step, b.identity)) }
     private var editable: Bool { model.state.page?.can_respond == true && !model.state.busy && model.state.storageReady && model.state.draft?.phase == .draft }
     private func event(_ item: TeamOutcomeEvent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -71,7 +73,7 @@ struct TeamOutcomeView: View, Equatable {
             .navigationBarBackButtonHidden(model.state.busy || !model.state.storageReady)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy || !model.state.storageReady) }
-                ToolbarItem(placement: .topBarLeading) { if model.state.busy || !model.state.storageReady { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { dismiss() } } } }
+                ToolbarItem(placement: .topBarLeading) { if model.state.busy || !model.state.storageReady { Button("뒤로") { if !model.state.storageReady { confirmLeave = true } else { router.pop(step) } } } }
             }
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }.onDisappear { model.controller?.invalidate() }
@@ -80,7 +82,7 @@ struct TeamOutcomeView: View, Equatable {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await model.controller?.submit() } }
             } message: { Text(model.state.draft?.exportText ?? "") }
             .alert("저장되지 않은 결과 초안이 있어요", isPresented: $confirmLeave) {
-                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
+                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { router.pop(step) }
             } message: { Text("나가기 전에 결과 초안을 내보내 주세요.") }
     }
 }

@@ -5,11 +5,12 @@ import SwiftUI
     var controller: TeamGitHubObservationController?
 }
 struct TeamGitHubObservationScreen: View, Equatable {
-    @StateObject private var model: TeamGitHubObservationPresentation
-    /// The model is built once per screen identity, not on every TeamGitHubScreen body pass (#4432 F11).
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamGitHubObservationPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("observations", a.key, b.key) }
+    @ObservedObject private var model: TeamGitHubObservationPresentation
+    let step: TeamStep
+    private let identity: ObjectIdentifier
+    /// The router's store builds the model once per step, not on every TeamGitHubScreen body pass (#4432 F11-D).
+    init(model: TeamGitHubObservationPresentation, step: TeamStep) { self.model = model; self.step = step; identity = ObjectIdentifier(model) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("observations", (a.step, a.identity), (b.step, b.identity)) }
     private func date(_ milliseconds: Double) -> String { Date(timeIntervalSince1970: milliseconds / 1000).formatted(date: .abbreviated, time: .shortened) }
     private func status(_ ci: TeamGitHubObservation.CI) -> String {
         guard ci.status == "completed" else { return ["queued","waiting","pending","requested"].contains(ci.status) ? "대기 중" : "진행 중" }

@@ -5,15 +5,17 @@ import SwiftUI
     var controller: TeamTextRevisionController?
 }
 struct TeamTextRevisionScreen: View, Equatable {
-    @StateObject private var model: TeamTextRevisionPresentation
-    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var model: TeamTextRevisionPresentation
+    let router: TeamRouter
+    let step: TeamStep
+    private let identity: ObjectIdentifier
     @FocusState private var focused: Bool
     @State private var confirmSend = false
     @State private var confirmLeave = false
     @State private var editing = false
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamTextRevisionPresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("text", a.key, b.key) }
+    /// The router's store keeps the presentation for this step (#4432 F11-D); leaving goes through the router.
+    init(model: TeamTextRevisionPresentation, router: TeamRouter, step: TeamStep) { self.model = model; self.router = router; self.step = step; identity = ObjectIdentifier(model) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("text", (a.step, a.identity), (b.step, b.identity)) }
     private var allowed: Bool { model.controller?.editingAllowed == true }
     private func date(_ value: Double) -> String { Date(timeIntervalSince1970: value / 1000).formatted() }
     private func version(_ item: TeamTextVersion, identifier: String) -> some View {
@@ -90,7 +92,7 @@ struct TeamTextRevisionScreen: View, Equatable {
                 Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }
             } message: { Text("원문과 수정 이력은 유지돼요. 질문 종류나 답글 대상은 바뀌지 않아요.") }
             .alert("기기에 저장하지 못한 수정 내용이 있어요", isPresented: $confirmLeave) {
-                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { dismiss() }
+                Button("계속 작성", role: .cancel) {}; Button("나가기", role: .destructive) { router.pop(step) }
             } message: { Text("필요한 글은 먼저 내보내 주세요.") }
     }
 }

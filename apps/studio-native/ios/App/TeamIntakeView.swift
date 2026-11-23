@@ -79,17 +79,18 @@ struct TeamIntakeSelection: Codable { var principalID: String? }
 }
 
 struct TeamIntakeScreen: View, Equatable {
-    @StateObject private var model: TeamIntakePresentation
+    @ObservedObject private var model: TeamIntakePresentation
+    let router: TeamRouter
+    let step: TeamStep
+    private let identity: ObjectIdentifier
     @State private var confirm = false
     @State private var confirmPolicy = false
     @State private var policyToConfirm: String?
     @State private var leave = false
-    @State private var association = false
     @FocusState private var focused: String?
-    @Environment(\.dismiss) private var dismiss
-    init(key: TeamScreenKey, make: @escaping @MainActor () -> TeamIntakePresentation) { self.key = key; _model = StateObject(wrappedValue: make()) }
-    let key: TeamScreenKey
-    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("intake", a.key, b.key) }
+    /// The router's store keeps the presentation for this step (#4432 F11-D); pushes and leaving go through the router.
+    init(model: TeamIntakePresentation, router: TeamRouter, step: TeamStep) { self.model = model; self.router = router; self.step = step; identity = ObjectIdentifier(model) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("intake", (a.step, a.identity), (b.step, b.identity)) }
     private var locked: Bool { model.state.busy || !model.storageReady || !model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<IntakeProposal, String>, _ id: String) -> some View {
         TextField(title, text: Binding(get: { model.summary[keyPath: key] }, set: { text in model.edit { $0[keyPath: key] = text } }), axis: .vertical)
@@ -131,7 +132,7 @@ struct TeamIntakeScreen: View, Equatable {
                         Button("기존 결과 다시 확인") { Task { await model.controller?.reconcileKnown() } }.disabled(locked)
                         if ["reviewed", "held"].contains(receipt.state), receipt.issueURL == nil { Button("현재 결과를 읽고 요약 수정") { Task { await model.controller?.prepareExisting(proposal: model.summary) } }.disabled(locked) }
                         if ["approved", "publishing", "issued"].contains(receipt.state) { Button("기존 요청의 게시 다시 확인 준비") { Task { await model.controller?.prepareExisting(retryPublication: true); if let proposal = model.state.operation?.proposal { model.summary = proposal } } }.disabled(locked) }
-                        if receipt.issueURL != nil, model.canAssociate { Button("이 내부 요청에 연결하기") { Task { association = await model.prepareAssociation() } }.disabled(locked).accessibilityIdentifier("teamIntakeAssociate") }
+                        if receipt.issueURL != nil, model.canAssociate { Button("이 내부 요청에 연결하기") { Task { if await model.prepareAssociation() { router.push(.intakeGitHub, above: step) } } }.disabled(locked).accessibilityIdentifier("teamIntakeAssociate") }
                         else if receipt.issueURL != nil { Text("내부 요청 연결은 제품 운영자가 할 수 있어요. 게시된 요청은 그대로 유지돼요.").font(.caption) }
                     }
                 }
@@ -160,7 +161,6 @@ struct TeamIntakeScreen: View, Equatable {
         .onAppear { teamRenderCount("appear.intake") }
         .teamPublishCount(model.objectWillChange, "pub.intake").teamChangeCount(focused, "focus.intake")
         .onDisappear { if model.principal == nil { try? model.device?.cancel() } }
-        .navigationDestination(isPresented: $association) { if let github = model.github { TeamGitHubScreen(model: github).equatable() } }
         .navigationBarBackButtonHidden(locked).interactiveDismissDisabled(locked)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -171,6 +171,6 @@ struct TeamIntakeScreen: View, Equatable {
         }
         .alert("현재 정책으로 기존 전송을 확인할까요?", isPresented: $confirmPolicy) { Button("취소", role: .cancel) {}; Button("같은 요약 복구에 동의") { Task { if let revision = policyToConfirm { await model.controller?.confirmRecoveryUnderCurrentPolicy(expectedPolicyRevision: revision) } } } } message: { Text("표시된 공개 요약과 위치, 전송 번호를 그대로 유지하며 게시 정책 \(policyToConfirm ?? "")에 동의해요. 동의만으로 전송하지 않으며, 이후 다시 확인 버튼을 눌러 주세요.") }
         .alert("이 내용으로 공개 요청을 제안할까요?", isPresented: $confirm) { Button("취소", role: .cancel) {}; Button("확인하고 전송") { Task { if model.state.operation?.phase == .preview { await model.controller?.confirm() }; await model.controller?.send() } } } message: { Text("표시된 Lab 계정과 공개 위치로 전송해요. GitHub 요청이 즉시 생성될 수 있어요.") }
-        .alert("저장하지 못한 내용이 있어요", isPresented: $leave) { Button("계속 작성", role: .cancel) {}; Button("내보낸 뒤 닫기", role: .destructive) { dismiss() } } message: { Text("먼저 작성 내용을 내보내 주세요. 닫으면 저장하지 못한 내용은 사라질 수 있어요.") }
+        .alert("저장하지 못한 내용이 있어요", isPresented: $leave) { Button("계속 작성", role: .cancel) {}; Button("내보낸 뒤 닫기", role: .destructive) { router.pop(step) } } message: { Text("먼저 작성 내용을 내보내 주세요. 닫으면 저장하지 못한 내용은 사라질 수 있어요.") }
     }
 }
