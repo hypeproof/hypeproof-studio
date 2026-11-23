@@ -98,6 +98,7 @@ struct TeamIntakeScreen: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.intake")
+        let _ = teamWhy(Self.self)
         List {
 #if DEBUG
             if TeamIntakeFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic Intake trace").accessibilityIdentifier("teamIntakeTrace").accessibilityValue(TeamIntakeFixture.trace) } }
@@ -155,6 +156,7 @@ struct TeamIntakeScreen: View {
             Button("연결 새로고침") { Task { await model.open() } }.disabled(model.state.busy).accessibilityIdentifier("teamIntakeRefresh")
         }.accessibilityIdentifier("teamIntakeForm").navigationTitle("공개 요청 제안").task { await model.open() }
         .onAppear { teamRenderCount("appear.intake") }
+        .teamPublishCount(model.objectWillChange, "pub.intake").teamChangeCount(focused, "focus.intake")
         .onDisappear { if model.principal == nil { try? model.device?.cancel() } }
         .navigationDestination(isPresented: $association) { if let github = model.github { TeamGitHubScreen(model: github) } }
         .navigationBarBackButtonHidden(locked).interactiveDismissDisabled(locked)

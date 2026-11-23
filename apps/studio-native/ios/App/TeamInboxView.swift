@@ -37,10 +37,12 @@ struct TeamSubscriptionScreen: View {
     let request: String
     var body: some View {
         let _ = teamRenderCount("body.subscription")
+        let _ = teamWhy(Self.self)
         List {
             if !model.state.message.isEmpty { Text(model.state.message) }
             TeamSubscriptionControls(model: model, product: product, request: request)
         }.navigationTitle("이 요청의 알림").task { await model.controller?.open() }
+            .teamPublishCount(model.objectWillChange, "pub.subscription")
             .toolbar { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy) }
     }
 }

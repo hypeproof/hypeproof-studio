@@ -21,6 +21,7 @@ struct TeamOutcomeView: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.outcome")
+        let _ = teamWhy(Self.self)
         List {
 #if DEBUG
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic outcome trace").font(.caption2).accessibilityIdentifier("teamOutcomeTrace").accessibilityValue(TeamEntryFixture.trace) } }
@@ -72,6 +73,7 @@ struct TeamOutcomeView: View {
             }
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }.onDisappear { model.controller?.invalidate() }
+            .teamPublishCount(model.objectWillChange, "pub.outcome")
             .alert("이 버전의 확인 결과를 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await model.controller?.submit() } }
             } message: { Text(model.state.draft?.exportText ?? "") }

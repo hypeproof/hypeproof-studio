@@ -1,6 +1,8 @@
 import SwiftUI
+import Combine
 #if DEBUG
 import os
+import OSLog
 #endif
 
 @MainActor final class TeamRequestPresentation: ObservableObject {
@@ -32,6 +34,33 @@ func teamRenderCount(_ key: String) {
 /// Diagnostics only: it changes no behaviour. Run 44994131331 logged "Updating ObservedObject<TeamRequestPresentation>
 /// from background threads"; code reading and a strict-concurrency type-check found no off-main writer.
 /// The record goes to the runtime-issue log (the team trace JSON gets only "offMain": 1), which XCTest reports as a test warning.
+/// Logs which properties changed for this body pass (#4432 F11), via SwiftUI's `_logChanges()`.
+/// DEBUG simulator journeys only, iOS 17.1+. The stall watcher reads these lines back from this
+/// process's log store and adds the counts to its stall lines. The trace JSON never carries them.
+@MainActor func teamWhy<V: View>(_ view: V.Type) {
+#if DEBUG
+    guard NativeJourneyFixture.enabled else { return }
+    if #available(iOS 17.1, macOS 14.1, *) { V._logChanges() }
+#endif
+}
+extension View {
+    /// Counts each `objectWillChange` of an observed model under `key` (#4432 F11). DEBUG only; log-only key.
+    func teamPublishCount<P: Publisher>(_ publisher: P, _ key: String) -> some View where P.Failure == Never {
+#if DEBUG
+        onReceive(publisher) { _ in teamRenderCount(key) }
+#else
+        self
+#endif
+    }
+    /// Counts each change of a focus value under `key` (#4432 F11). DEBUG only; log-only key.
+    func teamChangeCount<T: Equatable>(_ value: T, _ key: String) -> some View {
+#if DEBUG
+        onChange(of: value) { teamRenderCount(key) }
+#else
+        self
+#endif
+    }
+}
 func teamOffMainCheck(_ what: String) {
 #if DEBUG
     guard !Thread.isMainThread else { return }
@@ -46,7 +75,8 @@ func teamOffMainCheck(_ what: String) {
 /// changed on every 0.25 s tick flooded testmanagerd with accessibility notifications while idle.
 final class TeamRenderTrace: @unchecked Sendable {
     static let shared = TeamRenderTrace()
-    private static let pushMarkPrefixes = ["tap.", "async.", "appear."]
+    /// Push marks, publish counters ("pub.") and focus counters ("focus.") feed only the stall lines.
+    private static let pushMarkPrefixes = ["tap.", "async.", "appear.", "pub.", "focus."]
     /// Destination body and observation-factory counters (F11 GitHub loop) go only to the stall lines.
     /// Keeping them out of the trace keeps its value the same length as before (#4457).
     private static let logOnlyKeys: Set<String> = ["body.workflow", "body.outcome", "body.delivery", "body.github", "body.intake", "body.text", "body.observations", "body.subscription", "make.observations"]
@@ -163,8 +193,33 @@ final class TeamMainStallWatch: @unchecked Sendable {
         guard length >= Self.interimMs[interimDone] else { return }
         interimDone += 1; interimTotal += 1
         let text = "HPStudio main stall (ongoing): \(length) ms since uptime \(start) ms; outstanding ping \(outstanding) ms; \(stall?.pings ?? 0) slow pings answered; render changes: "
-            + changes(since: stall?.before ?? quietBefore)
+            + changes(since: stall?.before ?? quietBefore) + "; why: " + why(since: start)
         os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
+    }
+    private let launched = Date()
+    /// Which body properties changed since `start` (uptime ms), from the `teamWhy` lines in this process's
+    /// log store, most frequent first. If there are none, it states how many such lines the whole process has:
+    /// a non-zero count shows the probe works and the stall simply had no body pass (positive control).
+    private func why(since start: Int) -> String {
+        let back = Double(Self.now() - start) / 1000 + 0.5
+        guard let store = try? OSLogStore(scope: .currentProcessIdentifier) else { return "store unavailable" }
+        let predicate = NSPredicate(format: "subsystem == %@ AND category == %@", "com.apple.SwiftUI", "Changed Body Properties")
+        func read(from date: Date) -> [String]? {
+            guard let entries = try? store.getEntries(at: store.position(date: date), matching: predicate) else { return nil }
+            return entries.compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+        }
+        guard let lines = read(from: Date().addingTimeInterval(-back)) else { return "read failed" }
+        var counts: [String: Int] = [:]
+        for line in lines {
+            // "TeamIntakeScreen: _dismiss, _model changed."
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let type = line[..<colon]
+            var rest = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            if rest.hasSuffix(" changed.") { rest.removeLast(" changed.".count) }
+            for part in rest.split(separator: ",") { counts[type + "." + part.trimmingCharacters(in: .whitespaces), default: 0] += 1 }
+        }
+        if counts.isEmpty { return "none (\(read(from: launched)?.count ?? -1) body-change lines in process)" }
+        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(12).map { "\($0.key)+\($0.value)" }.joined(separator: " ")
     }
     /// Render counters that grew since `before`, oldest last change first.
     private func changes(since before: [String: [String: Int]]) -> String {
@@ -191,6 +246,7 @@ final class TeamMainStallWatch: @unchecked Sendable {
         reports += 1
         lock.lock(); reportedStalls += 1; lock.unlock()
         let text = "HPStudio main stall: \(length) ms from uptime \(s.start) ms; \(s.pings) slow and \(s.fast) fast pings, worst \(s.worst) ms; render changes: " + changed
+            + "; why: " + why(since: s.start)
         os_log("%{public}@", dso: teamRuntimeIssueDSO ?? #dsohandle, log: OSLog(subsystem: "com.apple.runtime-issues", category: "HPStudio"), type: .fault, text as NSString)
     }
 }
@@ -302,6 +358,7 @@ struct TeamRequestDetailView: View {
     @State private var generation = UUID()
     var body: some View {
         let _ = teamRenderCount("body.detail")
+        let _ = teamWhy(Self.self)
         List {
             if !message.isEmpty { Text(message).accessibilityIdentifier("teamCommentStatus") }
             if let detail {
@@ -406,6 +463,7 @@ struct TeamRequestDetailView: View {
                 do { draft = try model.loadComment(requestID) } catch { storageReady = false; message = "저장된 댓글을 읽지 못했어요. 원본을 유지했어요." }
                 await refresh()
             }.onDisappear { commentFocused = false; generation = UUID(); busy = false; history.clear() }
+            .teamPublishCount(model.objectWillChange, "pub.requests.detail").teamChangeCount(commentFocused, "focus.detail")
             .alert("댓글을 보낼까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("보내기") { Task { await submit() } }
             } message: { Text("이 제품 권한이 있는 내부 멤버에게 \(intentLabel(draft?.discussionIntent ?? "discussion"))를 공유해요. \(draft?.replyTo.map(targetLabel) ?? "")") }
@@ -557,6 +615,7 @@ private struct TeamWorkflowScreen: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.workflow")
+        let _ = teamWhy(Self.self)
         List {
             if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamWorkflowMessage") }
             if let page = model.state.page {
@@ -629,6 +688,7 @@ private struct TeamWorkflowScreen: View {
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }
             .onDisappear { model.controller?.invalidate() }
+            .teamPublishCount(model.objectWillChange, "pub.workflow")
             .alert("담당·상태 변경을 저장할까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }
             } message: { Text("표시된 담당자·상태·다음 행동과 변경 사유를 내부 팀의 이력에 남겨요.") }
@@ -673,6 +733,7 @@ struct TeamGitHubScreen: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.github")
+        let _ = teamWhy(Self.self)
         List {
 #if DEBUG
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic GitHub trace").font(.caption2).accessibilityIdentifier("teamGitHubTrace").accessibilityValue(TeamEntryFixture.trace) } }
@@ -730,6 +791,7 @@ struct TeamGitHubScreen: View {
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }
             .onDisappear { model.controller?.invalidate() }
+            .teamPublishCount(model.objectWillChange, "pub.github")
             .alert("GitHub 기록을 연결할까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}; Button("저장") { Task { await model.controller?.submit() } }
             } message: { Text("서버가 GitHub 기록을 확인한 뒤 연결 사유와 함께 내부 이력에 저장해요. 공개 GitHub 글을 작성하지 않아요.") }
@@ -759,6 +821,7 @@ private struct TeamDeliveryScreen: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.delivery")
+        let _ = teamWhy(Self.self)
         TimelineView(.periodic(from: .now, by: 1)) { context in
             List {
                 if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamDeliveryUnavailable") }
@@ -782,5 +845,6 @@ private struct TeamDeliveryScreen: View {
             .toolbar { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy) }
             .task { await model.controller?.open() }
             .onDisappear { model.controller?.invalidate() }
+            .teamPublishCount(model.objectWillChange, "pub.delivery")
     }
 }
