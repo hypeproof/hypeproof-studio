@@ -96,6 +96,53 @@ final class TeamRequestTests: XCTestCase {
         XCTAssertEqual(disk?.phase, .uncertain); XCTAssertEqual(disk?.key, unknown.key)
     }
 
+    // #4432 F24: a dropped edit names its guard, in the old guard order, and open() reports its marks.
+    @MainActor func testEditNamesTheGuardThatDroppedIt() async throws {
+        let identity = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
+        var disk: TeamRequestDraft?, failSave = false, duringOpen: TeamRequestController.EditOutcome?
+        var box: TeamRequestController?
+        let controller = TeamRequestController(identity: { identity }, access: { _ in self.rights() },
+            list: { _, _, _ in duringOpen = box?.edit(body: "열리는 중", product: "lab", category: "bug"); return TeamRequestPage(requests: [], next_cursor: nil) },
+            send: { _, draft in self.receipt(draft) }, recover: { _, _ in nil }, load: { _ in disk },
+            save: { if failSave { throw URLError(.cannotWriteToFile) }; disk = $0 }, changed: { _ in })
+        box = controller
+        XCTAssertEqual(controller.edit(body: "초안 전", product: "lab", category: "bug"), .noDraft)
+        await controller.open()
+        XCTAssertEqual(duringOpen, .busy, "An edit while open() runs must report busy.")
+        XCTAssertEqual(controller.view.draft?.product, "studio", "The busy edit must change nothing.")
+        XCTAssertEqual(controller.edit(body: "Lab 요청", product: "lab", category: "bug"), .applied)
+        XCTAssertEqual(controller.view.draft?.product, "lab"); XCTAssertEqual(disk?.product, "lab")
+        XCTAssertEqual(controller.edit(body: "Lab 요청", product: "foundry", category: "bug"), .access)
+        XCTAssertEqual(controller.edit(body: String(repeating: "a", count: 5001), product: "lab", category: "bug"), .length)
+        XCTAssertEqual(controller.view.draft?.product, "lab"); XCTAssertEqual(controller.view.draft?.body, "Lab 요청")
+        XCTAssertEqual(controller.edit(body: String(repeating: "a", count: 5001), product: "foundry", category: "bug"), .access, "access is checked before length, as before.")
+        await controller.submit(); XCTAssertEqual(controller.view.draft?.phase, .received)
+        XCTAssertEqual(controller.edit(body: "접수 뒤", product: "studio", category: "bug"), .phase)
+        controller.newDraft(); failSave = true
+        XCTAssertEqual(controller.edit(body: "저장 실패", product: "lab", category: "bug"), .saveFailed)
+        XCTAssertFalse(controller.view.storageReady)
+        XCTAssertEqual(controller.edit(body: "저장 실패", product: "studio", category: "bug"), .storage)
+    }
+    @MainActor func testOpenReportsStartDraftResetAndBusyMarks() async throws {
+        var account = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
+        var disk: [String: TeamRequestDraft] = [:], marks: [String] = [], reentered = false
+        var box: TeamRequestController?
+        let controller = TeamRequestController(identity: { account }, access: { identity in self.rights(identity.accountID) },
+            list: { _, _, _ in
+                if !reentered { reentered = true; await box?.open() }
+                return TeamRequestPage(requests: [], next_cursor: nil)
+            }, send: { _, draft in self.receipt(draft) }, recover: { _, _ in nil }, load: { disk[$0] },
+            save: { disk[$0.accountID] = $0 }, changed: { _ in })
+        box = controller; controller.observe = { marks.append($0) }
+        await controller.open()
+        XCTAssertEqual(marks, ["open.start", "open.reset", "open.draft.none", "open.busy"])
+        controller.edit(body: "Lab 요청", product: "lab", category: "bug"); marks = []
+        await controller.open()
+        XCTAssertEqual(marks, ["open.start", "open.draft.lab"], "The same account reloads the saved draft without a reset.")
+        account = MemberApprovalIdentity(accountID: "B", sessionID: "session-B"); marks = []
+        await controller.open()
+        XCTAssertEqual(marks, ["open.start", "open.reset", "open.draft.none"])
+    }
 }
 
 final class TeamWorkflowTests: XCTestCase {
@@ -225,52 +272,5 @@ final class TeamGitHubTests: XCTestCase {
         let bad = try JSONDecoder().decode(TeamGitHubEvent.self, from: JSONSerialization.data(withJSONObject: value)); XCTAssertThrowsError(try bad.validate(request: request))
         let unordered = TeamGitHubPage(schema: "hps-team-github-links/1", request_id: request, can_manage: true, current: good, events: [good, good], next_cursor: nil)
         XCTAssertThrowsError(try unordered.validate(request: request))
-    }
-    // #4432 F24: a dropped edit names its guard, in the old guard order, and open() reports its marks.
-    @MainActor func testEditNamesTheGuardThatDroppedIt() async throws {
-        let identity = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
-        var disk: TeamRequestDraft?, failSave = false, duringOpen: TeamRequestController.EditOutcome?
-        var box: TeamRequestController?
-        let controller = TeamRequestController(identity: { identity }, access: { _ in self.rights() },
-            list: { _, _, _ in duringOpen = box?.edit(body: "열리는 중", product: "lab", category: "bug"); return TeamRequestPage(requests: [], next_cursor: nil) },
-            send: { _, draft in self.receipt(draft) }, recover: { _, _ in nil }, load: { _ in disk },
-            save: { if failSave { throw URLError(.cannotWriteToFile) }; disk = $0 }, changed: { _ in })
-        box = controller
-        XCTAssertEqual(controller.edit(body: "초안 전", product: "lab", category: "bug"), .noDraft)
-        await controller.open()
-        XCTAssertEqual(duringOpen, .busy, "An edit while open() runs must report busy.")
-        XCTAssertEqual(controller.view.draft?.product, "studio", "The busy edit must change nothing.")
-        XCTAssertEqual(controller.edit(body: "Lab 요청", product: "lab", category: "bug"), .applied)
-        XCTAssertEqual(controller.view.draft?.product, "lab"); XCTAssertEqual(disk?.product, "lab")
-        XCTAssertEqual(controller.edit(body: "Lab 요청", product: "foundry", category: "bug"), .access)
-        XCTAssertEqual(controller.edit(body: String(repeating: "a", count: 5001), product: "lab", category: "bug"), .length)
-        XCTAssertEqual(controller.view.draft?.product, "lab"); XCTAssertEqual(controller.view.draft?.body, "Lab 요청")
-        XCTAssertEqual(controller.edit(body: String(repeating: "a", count: 5001), product: "foundry", category: "bug"), .access, "access is checked before length, as before.")
-        await controller.submit(); XCTAssertEqual(controller.view.draft?.phase, .received)
-        XCTAssertEqual(controller.edit(body: "접수 뒤", product: "studio", category: "bug"), .phase)
-        controller.newDraft(); failSave = true
-        XCTAssertEqual(controller.edit(body: "저장 실패", product: "lab", category: "bug"), .saveFailed)
-        XCTAssertFalse(controller.view.storageReady)
-        XCTAssertEqual(controller.edit(body: "저장 실패", product: "studio", category: "bug"), .storage)
-    }
-    @MainActor func testOpenReportsStartDraftResetAndBusyMarks() async throws {
-        var account = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
-        var disk: [String: TeamRequestDraft] = [:], marks: [String] = [], reentered = false
-        var box: TeamRequestController?
-        let controller = TeamRequestController(identity: { account }, access: { identity in self.rights(identity.accountID) },
-            list: { _, _, _ in
-                if !reentered { reentered = true; await box?.open() }
-                return TeamRequestPage(requests: [], next_cursor: nil)
-            }, send: { _, draft in self.receipt(draft) }, recover: { _, _ in nil }, load: { disk[$0] },
-            save: { disk[$0.accountID] = $0 }, changed: { _ in })
-        box = controller; controller.observe = { marks.append($0) }
-        await controller.open()
-        XCTAssertEqual(marks, ["open.start", "open.reset", "open.draft.none", "open.busy"])
-        controller.edit(body: "Lab 요청", product: "lab", category: "bug"); marks = []
-        await controller.open()
-        XCTAssertEqual(marks, ["open.start", "open.draft.lab"], "The same account reloads the saved draft without a reset.")
-        account = MemberApprovalIdentity(accountID: "B", sessionID: "session-B"); marks = []
-        await controller.open()
-        XCTAssertEqual(marks, ["open.start", "open.reset", "open.draft.none"])
     }
 }
