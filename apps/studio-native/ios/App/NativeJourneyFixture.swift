@@ -90,6 +90,9 @@ import UserNotifications
         }
     }
     static func finishSecondSpeech() { if periodicVoice { JourneyTransport.store.finishSecondSpeech() } }
+    /// Counts the real controller's endpoint and finalize-timeout paths (fixture runs only).
+    static func voiceEndpointFinished() { if enabled { JourneyTransport.store.voiceEndpointFinished() } }
+    static func voiceFinalizeTimedOut() { if enabled { JourneyTransport.store.voiceFinalizeTimedOut() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
         guard enabled else { return }
         JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
@@ -133,7 +136,10 @@ import UserNotifications
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
         let heldPlaybackContinuation = realPlayback && capture == 2
-        prepareEndpoint(heldPlaybackContinuation)
+        // The periodic-poll second capture ends only by its synthetic final after
+        // the test's finish tap. Hold its endpoint clock as well: a host stall
+        // longer than the 1.6 s endpoint gap must not end it with a partial.
+        prepareEndpoint(heldPlaybackContinuation || (periodicVoice && capture == 2))
         if periodicVoice && capture == 2 {
             return Task { @MainActor in
                 let text = "I can send a second spoken thought"
@@ -410,6 +416,8 @@ private final class JourneyStore: @unchecked Sendable {
     private var periodicHistoryHolds = 0
     private var secondSpeechReleaseRequests = 0
     private var secondSpeechDelivered = false
+    private var voiceEndpointFinishes = 0
+    private var voiceFinalizeTimeouts = 0
     private var pushEvents: [String] = []
     private var pushInstallation: String?
     init() {
@@ -440,7 +448,7 @@ private final class JourneyStore: @unchecked Sendable {
     private func save() { if let bytes = try? JSONEncoder().encode(value) { defaults.set(bytes, forKey: key) } }
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
-        let trace: [String: Any] = ["schema": "hps-native-journey-trace/1", "scenario": JourneyConfiguration.scenario,
+        var trace: [String: Any] = ["schema": "hps-native-journey-trace/1", "scenario": JourneyConfiguration.scenario,
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
             "cancelled_requests": value.cancelledRequests ?? [], "held_response_returns": value.heldResponseReturns ?? 0,
             "accepted_turns": value.accepted.count, "failed_turns": failedTurns.count, "browser_callbacks": value.callbacks,
@@ -471,6 +479,11 @@ private final class JourneyStore: @unchecked Sendable {
             "logout_during_history": logoutDuringHistory,
             "push_events": pushEvents,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
+        if JourneyConfiguration.scenario == "voice-periodic-poll" {
+            // Only this journey asserts them; other traces keep their keys.
+            trace["voice_endpoint_finishes"] = voiceEndpointFinishes
+            trace["voice_finalize_timeouts"] = voiceFinalizeTimeouts
+        }
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
     func beginHeldPushRegistration(_ request: URLRequest) throws -> (Int, [String: Any])? {
@@ -583,6 +596,12 @@ private final class JourneyStore: @unchecked Sendable {
         guard JourneyConfiguration.scenario == "voice-periodic-poll", automaticSynchronization,
               !activeHistoryReads.isEmpty, value.speechCaptures == 2, value.accepted.count == 1 else { return }
         secondSpeechReleaseRequests += 1
+    }
+    func voiceEndpointFinished() {
+        lock.lock(); defer { lock.unlock() }; voiceEndpointFinishes += 1
+    }
+    func voiceFinalizeTimedOut() {
+        lock.lock(); defer { lock.unlock() }; voiceFinalizeTimeouts += 1
     }
     func secondSpeechMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }; return secondSpeechReleaseRequests == 1
