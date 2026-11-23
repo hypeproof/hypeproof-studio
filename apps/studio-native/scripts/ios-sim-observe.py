@@ -105,7 +105,7 @@ def free_pages(vm_stat):
     return int(match[1]) if match else None
 
 
-def take(evidence, device, *, step, sample, full_table):
+def take(evidence, device, *, step, sample, full_table, log=None):
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
     costs = []
     started_ms = uptime_ms()
@@ -119,6 +119,16 @@ def take(evidence, device, *, step, sample, full_table):
     host = host_snapshot(evidence, step=step, sample=sample, vm_stat=vm_stat, with_top=step != "boot")
     host["costs"] = costs + host["costs"]
     row["host"] = host
+    if step != "boot":
+        # After the existing readings too, so their timing is unchanged (#4432 F21 2c). The row's
+        # uptime_ms and the render reading's own uptime are on the app's stall-line clock.
+        render = render_reading()
+        render["uptime_ms"] = uptime_ms()
+        host["render"] = render["processes"]
+        host["render_uptime_ms"] = render["uptime_ms"]
+        host["costs"] += render["costs"]
+        if log is not None:
+            row["test"], row["test_t"] = current_test(log)
     if table.startswith("<"):
         # bounded() reports a ps that did not return within its limit this way.
         row.update(outcome="timeout", detail=table.strip())
@@ -182,6 +192,11 @@ HOST_PS_LIMIT = 15
 HOST_FILE = "host-snapshots.txt"
 # Group of a process by its (top-truncated, 16 character) name. First match wins; a process whose parent
 # is a launchd_sim and that matches nothing earlier is the simulator's.
+# SimRenderServer and SimMetalHost are host processes (parent launchd, not launchd_sim) that draw the
+# simulator's screen; run 45263058705 had them in "other" at 983-1837 MB (#4432 F21). PosterBoard, its
+# poster extensions and widget extensions run inside the simulator; they get their own group so a burst of
+# them is not hidden in "simulator". A widget extension whose 16-character name lost "Widget" (for example
+# "HealthMedication") is not recognised by name and stays in "simulator" through its parent.
 HOST_GROUPS = (
     ("ui-runner", re.compile(r"^(HPStudioUITests|XCTRunner|xctest|testmanagerd)")),
     ("app", re.compile(r"^HPStudio$")),
@@ -189,10 +204,20 @@ HOST_GROUPS = (
     ("logging", re.compile(r"^(logd|logd_helper|diagnosticd)$")),
     ("ax", re.compile(r"(ccessib|^axassetsd$|^AX)")),
     ("xcodebuild", re.compile(r"^(xcodebuild|XCBBuildServic|SWBBuildServic)")),
-    ("simulator", re.compile(r"^(launchd_sim|CoreSimulator|com\.apple\.CoreSi|SimulatorTrampo|simdiskimaged|Simulator)")),
+    ("springboard-ext", re.compile(r"(Poster|Widget)")),
+    ("simulator", re.compile(r"^(launchd_sim|CoreSimulator|com\.apple\.CoreSi|SimulatorTrampo|simdiskimaged|Simulator|SimRenderServer|SimMetalHost)")),
     ("runner-agent", re.compile(r"^Runner\.")),
     ("system", re.compile(r"^(kernel_task|WindowServer|launchd|mds|mds_stores|mdworker|mdworker_shared|corespotlightd)$")),
 )
+# The simulator's render processes, read every watch cycle (#4432 F21 2c). pgrep matches the process name
+# only and `ps -p` reads only the named pids, so the reading stays small when the full ps table times out.
+RENDER_NAMES = "SimRenderServer|SimMetalHost"
+RENDER_PGREP = ["pgrep", "-lx", RENDER_NAMES]
+RENDER_LIMIT = 10
+# The test the watch row falls in: the last "Test Case ... started" and the last step time in the test log.
+LOG_TAIL_BYTES = 262144
+TEST_STARTED = re.compile(r"Test Case '-\[[\w.]+ (\w+)\]' started")
+TEST_STEP = re.compile(r"^\s+t =\s+([0-9]+(?:\.[0-9]+)?)s ", re.MULTILINE)
 MEM_VALUE = re.compile(r"^(\d+(?:\.\d+)?)([BKMG])[+-]?$")
 
 
@@ -296,6 +321,46 @@ def group_sums(rows):
 def vm_value(vm_stat, label):
     match = re.search(rf"^{re.escape(label)}:\s+(\d+)\.", vm_stat, re.MULTILINE)
     return int(match[1]) if match else None
+
+
+def render_reading(run=None):
+    """{"processes": [{"pid", "name", "rss_mb"}], "costs": [...]} of SimRenderServer and SimMetalHost.
+
+    A command that does not return leaves "processes" empty and its outcome in "costs"."""
+    run = run or push.bounded
+    costs, processes = [], []
+    listed = measured(run, RENDER_PGREP, RENDER_LIMIT, costs, name="pgrep render")
+    names = {}
+    for line in [] if listed.startswith("<") else listed.splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            names[int(parts[0])] = parts[1].strip()
+    if names:
+        out = measured(run, ["ps", "-o", "pid=,rss=", "-p", ",".join(str(pid) for pid in sorted(names))], RENDER_LIMIT, costs,
+                       name="ps render")
+        for line in [] if out.startswith("<") else out.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit() and int(parts[0]) in names:
+                processes.append({"pid": int(parts[0]), "name": names[int(parts[0])], "rss_mb": round(int(parts[1]) / 1024, 1)})
+    return {"processes": processes, "costs": costs}
+
+
+def current_test(log_path):
+    """(test name, last step t in s) at the end of the test log; (None, None) before the first test or without a log."""
+    try:
+        with Path(log_path).open("rb") as source:
+            source.seek(0, 2)
+            size = source.tell()
+            source.seek(max(0, size - LOG_TAIL_BYTES))
+            tail = source.read().decode(errors="replace")
+    except (OSError, TypeError):
+        return None, None
+    starts = list(TEST_STARTED.finditer(tail))
+    if not starts:
+        return None, None
+    last = starts[-1]
+    steps = TEST_STEP.findall(tail, last.end())
+    return last.group(1), float(steps[-1]) if steps else None
 
 
 def host_snapshot(evidence, *, step, sample, vm_stat=None, run=None, with_top=True):
@@ -711,6 +776,7 @@ def main(argv=None):
             sub.add_argument("--index", type=int, required=True)
         elif name == "watch":
             sub.add_argument("--interval", type=float, default=60)
+            sub.add_argument("--log", type=Path, default=None)
         elif name.startswith("terminate-") or name == "stall-watch":
             sub.add_argument("--log", type=Path, required=True)
             if name.endswith("-watch"):
@@ -752,7 +818,7 @@ def main(argv=None):
     index = 0
     while True:
         index += 1
-        safely(lambda: take(args.evidence, args.device, step="test", sample=index, full_table=False), f"test {index}")
+        safely(lambda: take(args.evidence, args.device, step="test", sample=index, full_table=False, log=args.log), f"test {index}")
         time.sleep(args.interval)
 
 
