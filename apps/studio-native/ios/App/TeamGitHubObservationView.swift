@@ -30,6 +30,7 @@ struct TeamGitHubObservationScreen: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.observations")
+        let _ = teamWhy(Self.self)
         TimelineView(.periodic(from: .now, by: 1)) { context in
             List {
                 if !model.state.message.isEmpty { Text(model.state.message).accessibilityIdentifier("teamObservationUnavailable") }
@@ -60,6 +61,7 @@ struct TeamGitHubObservationScreen: View {
         }.navigationTitle("GitHub 상태 기록").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("새로고침") { Task { await model.controller?.open() } }.disabled(model.state.busy).accessibilityIdentifier("teamObservationRefresh") } }
             .task { await model.controller?.open() }
+            .teamPublishCount(model.objectWillChange, "pub.observations")
             .onDisappear { model.controller?.invalidate() }
     }
 }

@@ -23,6 +23,7 @@ struct TeamTextRevisionScreen: View {
     }
     var body: some View {
         let _ = teamRenderCount("body.text")
+        let _ = teamWhy(Self.self)
         List {
 #if DEBUG
             if TeamEntryFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic text trace").font(.caption2).accessibilityIdentifier("teamTextTrace").accessibilityValue(TeamEntryFixture.trace) } }
@@ -80,6 +81,7 @@ struct TeamTextRevisionScreen: View {
             }
             .interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task { await model.controller?.open() }
+            .teamPublishCount(model.objectWillChange, "pub.text").teamChangeCount(focused, "focus.text")
             .onAppear { teamRenderCount("appear.text") }
             .onDisappear { focused = false; model.controller?.invalidate() }
             .alert("이 내용으로 수정할까요?", isPresented: $confirmSend) {

@@ -24,6 +24,7 @@ struct TeamRelationScreen:View {
     }
     var body:some View{
         let _=teamRenderCount("body.related")
+        let _=teamWhy(Self.self)
         List{
 #if DEBUG
             if TeamEntryFixture.enabled{TimelineView(.periodic(from:.now,by:0.25)){_ in Text("Synthetic related trace").font(.caption2).accessibilityIdentifier("teamRelatedTrace").accessibilityValue(TeamEntryFixture.trace)}}
@@ -83,6 +84,7 @@ struct TeamRelationScreen:View {
                 ToolbarItem(placement:.topBarLeading){if !model.state.storageReady{Button("뒤로"){confirmLeave=true}}}
             }.interactiveDismissDisabled(model.state.busy || !model.state.storageReady)
             .task{await model.controller?.open()}.onAppear{teamRenderCount("appear.related")}.onDisappear{model.controller?.invalidate()}
+            .teamPublishCount(model.objectWillChange,"pub.related").teamPublishCount(requests.objectWillChange,"pub.requests.related").teamChangeCount(reasonFocused,"focus.related")
             .alert("관련 요청 연결을 변경할까요?", isPresented: $confirmSend) {
                 Button("취소", role: .cancel) {}
                 Button("저장") { Task { await model.controller?.submit() } }
