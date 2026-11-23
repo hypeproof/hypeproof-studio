@@ -17,7 +17,8 @@ one speech probe so the device's voice list is loaded before the test. It writes
 still runs; the test alone decides the job.
 
 `terminate-watch` runs beside the test like `watch`. Every few seconds it reads the shard's
-xcodebuild log; for each new "Failed to terminate <bundle>:<pid>" line (at most
+xcodebuild log; for each new "Failed to terminate <bundle>:<pid>" line, or "Application '<bundle>' does not
+have a process ID" after a launch that stalled at its "Terminate <bundle>:<pid>" step (at most
 TERMINATE_CAPTURES per shard) it records, while the device is still in that state, the
 device's `launchctl list` rows for the app and the last 3 minutes of runningboardd,
 SpringBoard and testmanagerd log, each with its own limit. `terminate-scan` is the same pass
@@ -111,6 +112,10 @@ def take(evidence, device, *, step, sample, full_table):
 
 
 TERMINATE_FAILURE = re.compile(r"Failed to terminate ([A-Za-z0-9.-]+):(\d+)")
+# A launch that hangs in its own "Terminate <bundle>:<pid>" step ends, after the time allowance, with
+# "Application '<bundle>' does not have a process ID" (run 45116092106 shard 1). That pid is the one used.
+TERMINATE_STEP = re.compile(r"\bTerminate ([A-Za-z0-9.-]+):(\d+)\s*$")
+NO_PROCESS = re.compile(r"Application '([A-Za-z0-9.-]+)' does not have a process ID")
 TERMINATE_CAPTURES = 3
 LAUNCHCTL_LIMIT = 30
 LOG_SHOW_LIMIT = 60
@@ -152,11 +157,22 @@ def stop_running(signum, _frame):
 
 
 def terminate_failures(log_text):
-    """(bundle, pid) of each distinct "Failed to terminate" in order; the inner ":0" retry is not a new one."""
-    seen = []
-    for bundle, pid in TERMINATE_FAILURE.findall(log_text):
+    """(bundle, pid) of each distinct terminate failure in order; the inner ":0" retry is not a new one.
+
+    A "does not have a process ID" line counts with the pid of the last "Terminate <bundle>:<pid>" step."""
+    seen, last_step = [], {}
+    def add(bundle, pid):
         if pid != "0" and (bundle, pid) not in seen:
             seen.append((bundle, pid))
+    for line in log_text.splitlines():
+        step = TERMINATE_STEP.search(line)
+        if step:
+            last_step[step.group(1)] = step.group(2)
+        for bundle, pid in TERMINATE_FAILURE.findall(line):
+            add(bundle, pid)
+        missing = NO_PROCESS.search(line)
+        if missing and missing.group(1) in last_step:
+            add(missing.group(1), last_step[missing.group(1)])
     return seen
 
 

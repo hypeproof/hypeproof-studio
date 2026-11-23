@@ -667,6 +667,19 @@ class TerminateDiagnostics(unittest.TestCase):
                          [('ai.hypeproof.studio.mobile', '9784'), ('ai.hypeproof.studio.mobile', '30189')])
         self.assertEqual(observe.terminate_failures("Test Case '-[A testB]' passed\n"), [])
 
+    def test_a_launch_stuck_at_its_terminate_step_counts_with_that_pid(self):
+        # Run 45116092106 shard 1: the launch hung at "Terminate …:18637", then the allowance ran out.
+        hung = ('    t =     0.05s     Launch ai.hypeproof.studio.mobile\n'
+                '    t =     0.05s         Terminate ai.hypeproof.studio.mobile:18637\n'
+                "Test Case '-[HPStudioUITests.TeamEntryUITests testA]' exceeded execution time allowance of 3 minutes.\n"
+                "<unknown>:0: error: -[HPStudioUITests.TeamEntryUITests testA] : Application 'ai.hypeproof.studio.mobile' does not have a process ID\n")
+        self.assertEqual(observe.terminate_failures(hung), [('ai.hypeproof.studio.mobile', '18637')])
+        # A launch whose terminate step succeeded is not a failure, and no step means no pid to use.
+        self.assertEqual(observe.terminate_failures('    t =     0.05s         Terminate ai.hypeproof.studio.mobile:18637\n'), [])
+        self.assertEqual(observe.terminate_failures(hung.split('\n', 2)[2]), [])
+        # The same pid reported both ways is one failure.
+        self.assertEqual(observe.terminate_failures(hung + self.line(18637)), [('ai.hypeproof.studio.mobile', '18637')])
+
     def test_each_failure_is_captured_once_with_bounded_commands(self):
         listing = 'PID\tStatus\tLabel\n-\t0\tUIKitApplication:ai.hypeproof.studio.mobile[1a2b][rb-legacy]\n412\t0\tcom.apple.other\n'
         outputs = {'launchctl': listing, 'log': 'runningboardd: [app<ai.hypeproof.studio.mobile>:9784] termination reported\n'}
