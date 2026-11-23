@@ -205,6 +205,11 @@ fi
 attachment_status=0
 xcrun xcresulttool export attachments --path ../evidence/Studio.xcresult --output-path ../evidence/journey-attachments > ../evidence/attachment-export.log 2>&1 || attachment_status=$?
 printf 'attachment_export_exit=%s\n' "$attachment_status" >> ../evidence/attachment-export.log
+if [ "$mode" = shard ]; then
+  # For each request-boundary wait that did not complete, judge runner/AX, app or unknown from the
+  # test's trace reads, the app's stall lines and the host snapshots (#4432 F21). Diagnostics only.
+  python3 ../scripts/ios-sim-observe.py boundary-verdict --evidence ../evidence --log ../evidence/simulator-test.log || true
+fi
 sim_app=DerivedData/Build/Products/Debug-iphonesimulator/HPStudio.app
 codesign -d --entitlements :- "$sim_app" > ../evidence/simulator-entitlements.plist 2> ../evidence/simulator-signature.log || true
 if [ "$mode" = shard ]; then

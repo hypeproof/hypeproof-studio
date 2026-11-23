@@ -467,6 +467,28 @@ class ShardShell(unittest.TestCase):
 OBSERVE_SPEC = importlib.util.spec_from_file_location('ios_sim_observe', NATIVE / 'scripts/ios-sim-observe.py')
 observe = importlib.util.module_from_spec(OBSERVE_SPEC); OBSERVE_SPEC.loader.exec_module(observe)
 
+# One `top -l 2 -stats pid,ppid,mem,cpu,threads,state,command` output: the first sample's %CPU is not over
+# an interval, so only the second sample counts (its values differ on purpose).
+HOST_TOP_HEADER = 'Processes: 512 total, 3 running, 509 sleeping, 2400 threads\nPhysMem: 6900M used (1900M wired), 80M unused.\n\n'
+HOST_TOP_TABLE = 'PID    PPID  MEM   %CPU #TH   STATE    COMMAND\n'
+HOST_TOP_OUTPUT = (HOST_TOP_HEADER + HOST_TOP_TABLE + '8208   1587  9M    0.0  4     sleeping HPStudio\n'
+                   + HOST_TOP_HEADER + HOST_TOP_TABLE
+                   + '8208   1587  812M  97.5 31    running  HPStudio\n'
+                   + '8100   1587  420M+ 12.0 116/1 running  HPStudioUITests-\n'
+                   + '1587   1500  31M   0.4  3     sleeping launchd_sim\n'
+                   + '1600   1587  60M   3.0  8     sleeping SpringBoard\n'
+                   + '1601   1587  40M   1.0  6     sleeping AccessibilityUIS\n'
+                   + '90     1     51M-  6.0  12    sleeping logd\n'
+                   + '700    1     2G    1.0  40    sleeping Google Chrome He\n'
+                   + '701    1     12M   30.0 2     running  sample\n'
+                   + '702    1     14M   0.0  1     stuck    Runner.Worker\n')
+HOST_SYSCTL_OUTPUT = ('hw.memsize: 7516192768\nhw.ncpu: 3\nvm.swapusage: total = 1024.00M  used = 272.00M  free = 752.00M  (encrypted)\n'
+                      'kern.memorystatus_level: 3\nvm.pagesize: 16384\n')
+HOST_VM_STAT = ('Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:      4848.\n'
+                'Pages wired down:      125972.\nPages occupied by compressor:      99350.\nSwapouts:      0.\n')
+HOST_OUTPUTS = {'sysctl': HOST_SYSCTL_OUTPUT, 'vm_stat': HOST_VM_STAT, 'top': HOST_TOP_OUTPUT}
+SNAPSHOT_CALLS = [(observe.HOST_SYSCTL, 10), (['vm_stat'], 10), (observe.HOST_TOP['mem'], 20), (observe.HOST_TOP['cpu'], 20)]
+
 
 class SimObserve(unittest.TestCase):
     """ios-sim-observe.py readings: device age, timeouts, and the background sampler."""
@@ -487,12 +509,17 @@ class SimObserve(unittest.TestCase):
         self.assertEqual(observe.device_reading(self.table(), self.DEVICE), (3, 2, 285))
         self.assertIsNone(observe.device_reading(self.table().replace(self.DEVICE, 'OTHER'), self.DEVICE))
 
-    def take(self, table):
-        outputs = {'ps': table, 'vm_stat': 'Pages free:                               4298.\n', 'sysctl': '{ 353.66 142.08 64.21 }\n'}
+    def take(self, table, step='boot'):
+        outputs = {'ps': table, 'vm_stat': 'Pages free:                               4298.\n', 'top': HOST_TOP_OUTPUT}
+        def bounded(args, limit=30):
+            if args[0] == 'sysctl':
+                return '{ 353.66 142.08 64.21 }\n' if args[1] == '-n' else HOST_SYSCTL_OUTPUT
+            return outputs[args[0]]
         with tempfile.TemporaryDirectory() as directory, \
-             mock.patch.object(observe.push, 'bounded', side_effect=lambda args, limit=30: outputs[args[0]]):
+             mock.patch.object(observe.push, 'bounded', side_effect=bounded) as called:
             evidence = Path(directory)
-            observe.take(evidence, self.DEVICE, step='boot', sample=1, full_table=True)
+            observe.take(evidence, self.DEVICE, step=step, sample=1, full_table=True)
+            self.commands = [call.args[0][0] for call in called.call_args_list]
             row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
             ps = (evidence / 'simulator-ps.txt').read_text()
         return row, ps
@@ -562,6 +589,239 @@ class SimObserve(unittest.TestCase):
         self.assertEqual([r['sample'] for r in rows[:2]], [1, 2])
         self.assertIn(rows[0]['outcome'], ('no device', 'timeout'))
 
+class HostSnapshots(unittest.TestCase):
+    """ios-sim-observe.py host snapshot (#4432 F21): who uses the runner's memory and CPU. Diagnostics only."""
+
+    def snapshot(self, outputs, *, with_top=True):
+        calls = []
+        def run(args, limit):
+            calls.append((args, limit))
+            return outputs[args[0]]
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            host = observe.host_snapshot(evidence, step='test', sample=4, run=run, with_top=with_top)
+            text = (evidence / observe.HOST_FILE).read_text()
+        return host, calls, text
+
+    def test_uptime_uses_the_macos_uptime_clock_and_falls_back_to_monotonic_elsewhere(self):
+        # Runs on every platform: the clock is injected. On macOS UPTIME_CLOCK is CLOCK_UPTIME_RAW, the clock
+        # of ProcessInfo.systemUptime in the app's stall lines; the Linux contract job has no such clock.
+        self.assertEqual(observe.UPTIME_CLOCK, getattr(time, 'CLOCK_UPTIME_RAW', None))
+        with mock.patch.object(observe.time, 'clock_gettime', return_value=12.3456) as gettime, \
+             mock.patch.object(observe.time, 'monotonic', return_value=99.0):
+            self.assertEqual(observe.uptime_ms(clock=8), 12345)
+            gettime.assert_called_once_with(8)
+            with mock.patch.object(observe, 'UPTIME_CLOCK', 8):
+                self.assertEqual(observe.uptime_ms(), 12345)
+            with mock.patch.object(observe, 'UPTIME_CLOCK', None):
+                self.assertEqual(observe.uptime_ms(), 99000)
+            self.assertEqual(gettime.call_count, 2)
+        self.assertEqual(observe.MAXRSS_PER_MB, 1048576 if sys.platform == 'darwin' else 1024)
+
+    def test_only_the_second_top_sample_is_read_and_names_keep_their_spaces(self):
+        rows = observe.top_rows(HOST_TOP_OUTPUT)
+        self.assertEqual(len(rows), 9)
+        self.assertEqual(rows[0], {'pid': 8208, 'ppid': 1587, 'mem_mb': 812.0, 'cpu': 97.5, 'state': 'running', 'command': 'HPStudio'})
+        self.assertEqual(rows[1]['mem_mb'], 420.0)
+        self.assertEqual(next(r for r in rows if r['pid'] == 700)['command'], 'Google Chrome He')
+        self.assertEqual(next(r for r in rows if r['pid'] == 700)['mem_mb'], 2048.0)
+        self.assertEqual(observe.top_rows('<top -l 2 did not return within 20s>'), [])
+
+    def test_processes_are_grouped_by_name_and_simulator_parent(self):
+        groups = observe.group_sums(observe.top_rows(HOST_TOP_OUTPUT))
+        self.assertEqual(groups['app'], {'mem_mb': 812.0, 'cpu': 97.5, 'processes': 1})
+        self.assertEqual(groups['ui-runner'], {'mem_mb': 420.0, 'cpu': 12.0, 'processes': 1})
+        # launchd_sim by name, SpringBoard because its parent is a launchd_sim.
+        self.assertEqual(groups['simulator'], {'mem_mb': 91.0, 'cpu': 3.4, 'processes': 2})
+        self.assertEqual(groups['ax']['processes'], 1)
+        self.assertEqual(groups['logging'], {'mem_mb': 51.0, 'cpu': 6.0, 'processes': 1})
+        self.assertEqual(groups['instruments'], {'mem_mb': 12.0, 'cpu': 30.0, 'processes': 1})
+        self.assertEqual(groups['runner-agent']['processes'], 1)
+        self.assertEqual(groups['other'], {'mem_mb': 2048.0, 'cpu': 1.0, 'processes': 1})
+
+    def test_a_snapshot_runs_its_commands_one_at_a_time_and_records_size_memory_and_costs(self):
+        host, calls, text = self.snapshot(HOST_OUTPUTS)
+        self.assertEqual(calls, SNAPSHOT_CALLS)
+        self.assertEqual((host['memsize'], host['ncpu'], host['total_pages'], host['memory_level']), (7516192768, 3, 458752, '3'))
+        self.assertEqual((host['free_pages'], host['wired_pages'], host['compressor_pages'], host['swapouts']), (4848, 125972, 99350, 0))
+        self.assertEqual(host['table'], 'top')
+        self.assertEqual([c['command'] for c in host['costs']], ['sysctl', 'vm_stat', 'top -o mem', 'top -o cpu'])
+        self.assertTrue(all(c['outcome'] == 'returned' and isinstance(c['ms'], int) and isinstance(c['cpu_ms'], int) for c in host['costs']))
+        self.assertIsInstance(host['uptime_ms'], int)
+        self.assertIn('8208 1587 812.0 97.5 running HPStudio', text)
+        self.assertIn('hw.ncpu: 3', text)
+
+    def test_a_top_that_does_not_return_is_one_line_and_the_next_command_still_runs(self):
+        outputs = dict(HOST_OUTPUTS, top=None)
+        def run(args, limit):
+            if args[0] == 'top' and args[args.index('-o') + 1] == 'mem':
+                return f'<{" ".join(args)} did not return within {limit}s>'
+            return HOST_OUTPUTS[args[0]]
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            host = observe.host_snapshot(evidence, step='test', sample=1, run=lambda a, l: calls.append(a) or run(a, l))
+            text = (evidence / observe.HOST_FILE).read_text()
+        self.assertEqual([a[0] for a in calls], ['sysctl', 'vm_stat', 'top', 'top'])
+        self.assertIn(f'did not return within {observe.HOST_TOP_LIMIT}s', text)
+        self.assertEqual([c['outcome'] for c in host['costs']], ['returned', 'returned', 'timeout', 'returned'])
+        # The CPU table alone still gives the groups; ps -c is not needed.
+        self.assertEqual(host['table'], 'top')
+        self.assertEqual(host['groups']['app']['processes'], 1)
+
+    def test_ps_c_runs_only_when_both_tops_do_not_return(self):
+        ps = '  PID  PPID    RSS  %CPU STAT COMM\n 8208  1587 831488  97.5 R    HPStudio\n   90     1  52224   6.0 Ss   logd\n'
+        timeout = '<top did not return within 20s>'
+        host, calls, text = self.snapshot({'sysctl': HOST_SYSCTL_OUTPUT, 'vm_stat': HOST_VM_STAT, 'top': timeout, 'ps': ps})
+        self.assertEqual([a for a, _ in calls][-1], observe.HOST_PS)
+        self.assertEqual(calls[-1][1], observe.HOST_PS_LIMIT)
+        self.assertEqual(host['table'], 'ps -c')
+        self.assertEqual(host['groups']['app'], {'mem_mb': 812.0, 'cpu': 97.5, 'processes': 1})
+        everything = {'sysctl': '<sysctl did not return within 10s>', 'vm_stat': '<vm_stat did not return within 10s>',
+                      'top': timeout, 'ps': '<ps did not return within 15s>'}
+        host, calls, text = self.snapshot(everything)
+        self.assertEqual(len(calls), 5)
+        self.assertEqual((host['memsize'], host['free_pages'], host['groups']), (None, None, {}))
+        self.assertEqual([c['outcome'] for c in host['costs']], ['timeout'] * 5)
+
+    def test_boot_readings_record_the_runner_size_without_top(self):
+        row, _ = SimObserve().take(SimObserve().table())
+        self.assertEqual((row['host']['memsize'], row['host']['ncpu']), (7516192768, 3))
+        self.assertEqual(row['host']['table'], 'none')
+        self.assertEqual(row['host']['groups'], {})
+        case = SimObserve(); case.take(case.table())
+        self.assertNotIn('top', case.commands)
+        self.assertEqual(case.commands[:3], ['ps', 'vm_stat', 'sysctl'])
+        # The existing reading is unchanged and comes first; the watch readings add top.
+        row, _ = case.take(case.table(), step='test')
+        self.assertEqual(case.commands, ['ps', 'vm_stat', 'sysctl', 'sysctl', 'top', 'top'])
+        self.assertEqual(row['host']['groups']['app']['processes'], 1)
+        self.assertEqual([c['command'] for c in row['host']['costs']][:3], ['ps', 'vm_stat', 'sysctl loadavg'])
+        self.assertIsInstance(row['uptime_ms'], int)
+
+
+class BoundaryVerdicts(unittest.TestCase):
+    """ios-sim-observe.py boundary-verdict (#4432 F21): runner-ax, app, unknown, and host saturated."""
+    START, DEADLINE = 100_000, 110_000
+
+    def wait(self, polls, count=1):
+        lines = [observe.POLLS_HEADER,
+                 f'key active_history_reads; count {count}; wait start {self.START}; deadline {self.DEADLINE}; result 2; ended 112000']
+        lines += [f'poll {a} {b} {c}' for a, b, c in polls] + ['dropped 0']
+        return observe.parse_polls('\n'.join(lines) + '\n')
+
+    def fast(self, value=0):
+        return [(self.START + 1000 * i, 40, value) for i in range(11)]
+
+    def test_runner_ax_when_a_read_saw_the_value_only_after_the_deadline(self):
+        # Run 45149803423 shape: the value was there, the read took 11.5 s.
+        wait = self.wait([(self.START, 30, 0), (self.START + 1000, 11_500, 1)])
+        self.assertEqual(observe.classify_wait(wait, [])[0], 'runner-ax')
+        self.assertIn('after the deadline', observe.classify_wait(wait, [])[1])
+
+    def test_runner_ax_when_one_read_took_five_seconds(self):
+        wait = self.wait([(self.START, 30, 0), (self.START + 1000, 5000, 0), (self.START + 6100, 30, 0)])
+        self.assertEqual(observe.classify_wait(wait, []), ('runner-ax', 'one trace read took 5000 ms'))
+        # Just under the limit is not runner-ax, and not fast either: unknown.
+        self.assertEqual(observe.classify_wait(self.wait([(self.START, 4999, 0)] + self.fast()[5:]), [])[0], 'unknown')
+
+    def test_app_when_a_main_stall_overlaps_even_if_a_read_was_slow(self):
+        wait = self.wait([(self.START, 30, 0), (self.START + 1000, 11_500, 1)])
+        spans = observe.stall_spans('HPStudio main stall: 3026 ms from uptime 104000 ms; 1 slow\n'
+                                    'HPStudio main stall (ongoing): 3034 ms since uptime 200000 ms; pid 7\n')
+        self.assertEqual(spans, [(104000, 107026), (200000, 203034)])
+        self.assertEqual(observe.classify_wait(wait, spans)[0], 'app')
+        # A stall that ended before the wait started does not count.
+        self.assertEqual(observe.classify_wait(wait, [(90_000, 99_999)])[0], 'runner-ax')
+
+    def test_app_when_every_read_was_fast_and_none_saw_the_value(self):
+        self.assertEqual(observe.classify_wait(self.wait(self.fast()), []),
+                         ('app', '11 fast reads up to the deadline, none saw 1'))
+
+    def test_unknown_without_reads_or_with_a_gap_or_a_late_read_below_the_count(self):
+        self.assertEqual(observe.classify_wait(None, []), ('unknown', 'no trace reads recorded'))
+        self.assertEqual(observe.classify_wait(self.wait([]), [])[0], 'unknown')
+        gap = [p for p in self.fast() if not 3000 < p[0] - self.START < 7000]
+        self.assertEqual(observe.classify_wait(self.wait(gap), [])[0], 'unknown')
+        self.assertEqual(observe.classify_wait(self.wait([(self.START + 9000, 3000, 0)]), [])[0], 'unknown')
+        self.assertIsNone(observe.parse_polls('request-boundary polls v2\nkey a; count 1\n'))
+        self.assertIsNone(observe.parse_polls('any other attachment'))
+
+    def host(self, uptime, *, free=50_000, swapouts=0, slow=False):
+        return {'step': 'test', 'command': 'observe', 'uptime_ms': uptime,
+                'host': {'uptime_ms': uptime, 'total_pages': 458752, 'free_pages': free, 'swapouts': swapouts,
+                         'costs': [{'command': 'ps', 'ms': 31_000 if slow else 200, 'outcome': 'timeout' if slow else 'returned'}]}}
+
+    def test_host_saturated_needs_two_markers_near_the_wait(self):
+        wait = self.wait(self.fast())
+        quiet = [self.host(50_000), self.host(110_000)]
+        self.assertEqual(observe.saturation(wait, quiet), [])
+        one = [self.host(50_000), self.host(110_000, free=4000)]
+        self.assertEqual(observe.saturation(wait, one), ['free memory under 1%'])
+        two = [self.host(50_000), self.host(155_000, free=4000, swapouts=17_432)]
+        self.assertEqual(observe.saturation(wait, two), ['free memory under 1%', 'swapouts rose', 'watch readings 90 s or more apart'])
+        slow = [self.host(60_000), self.host(111_000, slow=True)]
+        self.assertEqual(observe.saturation(wait, slow), ['a snapshot command took 10 s or did not return'])
+        # Snapshots far from the wait say nothing about it.
+        self.assertEqual(observe.saturation(wait, [self.host(500_000, free=10), self.host(600_000, free=10, swapouts=9)]), [])
+
+    def test_the_command_writes_one_verdict_per_polls_attachment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); attachments = evidence / 'journey-attachments'; attachments.mkdir()
+            late = '\n'.join([observe.POLLS_HEADER, f'key active_history_reads; count 1; wait start {self.START}; deadline {self.DEADLINE}; result 2; ended 112000',
+                              f'poll {self.START} 30 0', f'poll {self.START + 1000} 11500 1', 'dropped 0']) + '\n'
+            (attachments / 'request-boundary-active_history_reads-polls_0_A.txt').write_text(late)
+            (attachments / 'other-screen.png').write_bytes(b'\x89PNG')
+            (attachments / 'manifest.json').write_text('[]')
+            rows = [self.host(50_000), self.host(155_000, free=4000, swapouts=17_432)]
+            (evidence / 'simulator-steps.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+            log = evidence / 'simulator-test.log'; log.write_text('Test Case started\n')
+            lines = observe.boundary_verdicts(evidence, log)
+            written = (evidence / observe.VERDICT_FILE).read_text()
+            verdict = json.loads((evidence / 'simulator-steps.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith('request-boundary verdict: active_history_reads runner-ax; host saturated ('), lines[0])
+        self.assertEqual(written, lines[0] + '\n')
+        self.assertEqual((verdict['step'], verdict['verdict'], verdict['saturated'], verdict['reads']), ('boundary', 'runner-ax', True, 2))
+        # One marker alone is not saturation.
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); attachments = evidence / 'journey-attachments'; attachments.mkdir()
+            (attachments / 'polls.txt').write_text(late)
+            rows = [self.host(50_000), self.host(110_000, free=4000)]
+            (evidence / 'simulator-steps.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+            lines = observe.boundary_verdicts(evidence, evidence / 'none.log')
+        self.assertEqual(lines, ['request-boundary verdict: active_history_reads runner-ax (read from uptime 101000 saw 1 but returned '
+                                 '2500 ms after the deadline; host: free memory under 1%)'])
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(observe.boundary_verdicts(Path(directory), Path(directory) / 'none.log'), [])
+            self.assertEqual((Path(directory) / observe.VERDICT_FILE).read_text(), 'no request-boundary polls attachment\n')
+
+    def test_the_ui_test_writes_the_format_the_verdict_reads(self):
+        source = (NATIVE / 'ios/UITests/StudioShellTests.swift').read_text()
+        self.assertIn(f'"{observe.POLLS_HEADER}"', source)
+        wait = re.search(r'"(key \\\(key\); count .*?)"\]', source)
+        self.assertIsNotNone(wait)
+        rendered = re.sub(r'\\\((key)\)', 'active_history_reads', wait[1])
+        rendered = re.sub(r'\\\([^)]*\)\)?', '7', rendered)
+        self.assertRegex(rendered, observe.POLLS_WAIT)
+        poll = re.search(r'"(poll \\\(.*?)"', source)[1]
+        self.assertRegex(re.sub(r'\\\([^)]*\)', '7', poll), observe.POLL_ROW)
+        self.assertIn('static let capacity = 64', source)
+        # No AX query is added: the wait reads node.value once per evaluation, as before.
+        body = source[source.index('private func waitForTraceCount'):source.index('func testPersonalQuestionReadyAndSendWhileDesktopListIsHeld')]
+        self.assertEqual(body.count('node.value as?'), 1)
+        self.assertEqual(body.count('app.'), 0)
+        # The wait itself is unchanged: one 10 s XCTWaiter and the same assertion.
+        self.assertIn('let result = XCTWaiter.wait(for: [observed], timeout: 10)', source)
+        self.assertIn('XCTAssertEqual(result, .completed, "Observe the actual request boundary before judging readiness.")', source)
+
+    def test_the_shard_runs_the_verdict_after_the_attachment_export_and_ignores_its_exit(self):
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        line = 'python3 ../scripts/ios-sim-observe.py boundary-verdict --evidence ../evidence --log ../evidence/simulator-test.log || true'
+        self.assertIn(line, script)
+        self.assertLess(script.index('xcrun xcresulttool export attachments'), script.index(line))
+
+
 class StallSamples(unittest.TestCase):
     """ios-sim-observe.py stall-watch (#4432 F11): diagnostics only."""
 
@@ -588,6 +848,8 @@ class StallSamples(unittest.TestCase):
             calls.append((args, limit))
             if args[0] == 'ps':
                 return self.table() if ps is None else ps
+            if args[0] in HOST_OUTPUTS:
+                return HOST_OUTPUTS[args[0]]
             Path(args[args.index('-file') + 1]).write_text('Call graph:\n    main-thread\n')
             return sample_out
         return observe.scan_stall(evidence, self.DEVICE, log, run=run), calls
@@ -609,7 +871,8 @@ class StallSamples(unittest.TestCase):
             taken, calls = self.scan(evidence, self.line(10034, 1572426) + self.line(20019, 1572426))
             self.assertEqual(taken, 1)
             self.assertEqual(calls, [(['ps', '-axo', 'pid=,command='], 10),
-                                     (['sample', '4242', '1', '-mayDie', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
+                                     (['sample', '4242', '1', '-mayDie', '-file', str(evidence / 'stall-sample-1.txt')], 30)]
+                             + SNAPSHOT_CALLS)
             self.assertEqual(self.scan(evidence, self.line(40012, 1572426)), (0, []))
             row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
             self.assertIn('main-thread', (evidence / 'stall-sample-1.txt').read_text())
@@ -624,7 +887,8 @@ class StallSamples(unittest.TestCase):
             evidence = Path(directory)
             taken, calls = self.scan(evidence, self.line(3012, 1572426, pid=31337) + self.line(10034, 1572426, pid=31337))
             self.assertEqual(taken, 1)
-            self.assertEqual(calls, [(['sample', '31337', '1', '-mayDie', '-file', str(evidence / 'stall-sample-1.txt')], 30)])
+            self.assertEqual(calls, [(['sample', '31337', '1', '-mayDie', '-file', str(evidence / 'stall-sample-1.txt')], 30)]
+                             + SNAPSHOT_CALLS)
             row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
         self.assertEqual((row['pid'], row['pid_from'], row['outcome']), (31337, 'line', 'sampled'))
 
@@ -636,7 +900,7 @@ class StallSamples(unittest.TestCase):
             evidence = Path(directory)
             taken, calls = self.scan(evidence, self.line(3000, 7, pid=0))
             self.assertEqual(taken, 1)
-            self.assertEqual([args[0] for args, _ in calls], ['ps', 'sample'])
+            self.assertEqual([args[0] for args, _ in calls], ['ps', 'sample', 'sysctl', 'vm_stat', 'top', 'top'])
             self.assertEqual(calls[1][0][1], '4242')
 
     def test_no_app_process_and_a_hung_sample_are_recorded_not_raised(self):
@@ -658,7 +922,7 @@ class StallSamples(unittest.TestCase):
             evidence = Path(directory)
             taken, calls = self.scan(evidence, text)
             self.assertEqual(taken, observe.STALL_CAPTURES)
-            self.assertEqual(len(calls), 2 * observe.STALL_CAPTURES)
+            self.assertEqual(len(calls), (2 + len(SNAPSHOT_CALLS)) * observe.STALL_CAPTURES)
             self.assertEqual(self.scan(evidence, text), (0, []))
 
     def test_a_missing_log_takes_nothing(self):

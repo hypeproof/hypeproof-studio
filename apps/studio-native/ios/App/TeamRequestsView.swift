@@ -270,17 +270,20 @@ final class TeamMainStallWatch: @unchecked Sendable {
     /// newest window entry, never their values.
     private func logWhy(since start: Int) -> String {
         let cutoff = Date().addingTimeInterval(-(Double(Self.now() - start) / 1000 + 0.5))
+        let readStart = Self.now()
         guard let store = try? OSLogStore(scope: .currentProcessIdentifier) else { return "store unavailable" }
         let predicate = NSPredicate(format: "subsystem == %@ AND category == %@", "com.apple.SwiftUI", "Changed Body Properties")
         guard let entries = try? store.getEntries(at: store.position(date: launched), matching: predicate) else { return "read failed" }
         let lines = entries.compactMap { entry -> (date: Date, line: SwiftUIChangeLine, entry: OSLogEntryLog)? in
             (entry as? OSLogEntryLog).map { ($0.date, SwiftUIChangeLine(text: $0.composedMessage, format: $0.formatString), $0) }
         }
+        // What the read itself cost, as integers only (#4432 F21): this read runs during a stall report.
+        let read = "log read \(Self.now() - readStart) ms, \(lines.count) entries; "
         let previous = min(whyLinesSeen, lines.count); whyLinesSeen = lines.count
         let windowed = lines.filter { $0.date >= cutoff }
         let window = windowed.map(\.line)
         let newest = lines.last.map { String(format: "%.1f", Date().timeIntervalSince($0.date)) } ?? "-"
-        let tail = " (window \(window.count) of \(lines.count) lines; newest line \(newest)s ago)"
+        let tail = " (" + read + "window \(window.count) of \(lines.count) lines; newest line \(newest)s ago)"
         var extra = SwiftUIChangeSummary.placeholderSample(window).map { " " + $0 } ?? ""
         if let last = windowed.last?.entry { extra += " " + Self.components(last) }
         if !window.isEmpty { return SwiftUIChangeSummary.summary(window) + extra + tail }
