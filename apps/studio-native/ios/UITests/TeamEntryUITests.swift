@@ -1023,16 +1023,18 @@ final class TeamEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10)); app.buttons["linkDesktop"].tap()
         XCTAssertTrue(app.buttons["teamRequestHomeEntry"].waitForExistence(timeout: 10)); app.buttons["teamRequestHomeEntry"].tap()
         let body = app.textViews["teamRequestBody"]; XCTAssertTrue(body.waitForExistence(timeout: 10)); body.tap(); body.typeText("Lab fixture request")
-        // The menu Picker is exposed as one Button labelled "<title>, <selection>" (run 44922434581 hierarchy).
-        let product = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "제품, ")).firstMatch
-        XCTAssertTrue(product.waitForExistence(timeout: 10)); githubReveal(app, product); product.tap()
-        XCTAssertTrue(app.buttons["Lab"].waitForExistence(timeout: 5)); app.buttons["Lab"].tap()
-        // #4432 F24: read the label first, at the same moment as before; the evidence below is read after it,
-        // so it adds no time before the read. Attachment only: no wait, retry or second tap.
-        let picked = product.label
-        let pick = XCTAttachment(string: "label=\(picked)\nmenuItemLab=\(app.buttons["Lab"].exists)\ntrace=\(app.staticTexts["teamRequestTrace"].value as? String ?? "missing trace")\n\(app.debugDescription)")
+        // The product Picker is segmented (#4432 F24, F1): one tap on the Lab segment, no menu to open.
+        let product = app.segmentedControls["teamRequestProduct"]
+        XCTAssertTrue(product.waitForExistence(timeout: 10)); githubReveal(app, product)
+        let lab = product.buttons["Lab"]; lab.tap()
+        // Both reads come right after the tap, as the menu label read did: the segment's selection and the
+        // section title are two reads of draft.product. The evidence is read after them. No wait, retry or second tap.
+        let selectedLab = lab.isSelected
+        let titled = app.staticTexts["Lab의 요청"].exists
+        let pick = XCTAttachment(string: "selectedLab=\(selectedLab)\nsectionTitle=\(titled)\ntrace=\(app.staticTexts["teamRequestTrace"].value as? String ?? "missing trace")\n\(app.debugDescription)")
         pick.name = "team-product-pick"; pick.lifetime = .keepAlways; add(pick)
-        XCTAssertEqual(picked, "제품, Lab", "The request must be created for Lab, not the Studio default.")
+        XCTAssertTrue(selectedLab, "The request must be created for Lab, not the Studio default.")
+        XCTAssertTrue(titled, "The request section must name Lab once Lab is picked.")
         githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()
