@@ -53,7 +53,8 @@ for (const [ending, said] of [['exhausted', /체험에서 쓸 수 있는 AI 요�
   // Not the classroom or operator voice, not a retry invitation.
   assert.doesNotMatch(text, /코드 발급 담당자|강사|운영 담당자|다시 시도|API Error/);
   // The banner frames it as the trial ending, not a fault, a network drop or a spent pass.
-  assert.deepEqual(errorBannerPresentation(text), { icon: '⏳', title: '체험이 끝났어요' });
+  // REQ-0015: the exact chat copy is a notice, so the banner offers no retry.
+  assert.deepEqual(errorBannerPresentation(text), { icon: '⏳', title: '체험이 끝났어요', tone: 'notice' });
 }
 // Banner controls: the existing pass and network banners are unchanged.
 assert.equal(errorBannerPresentation(p.PASS_SPENT_FRIENDLY).title, '이용권을 더 쓸 수 없어요');
