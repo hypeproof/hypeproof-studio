@@ -1009,6 +1009,83 @@ class ApprovalPushWatch(unittest.TestCase):
         self.assertIn('render', rows[0]['host'])
 
 
+class PosterTrigger(unittest.TestCase):
+    """ios-sim-observe.py posters --when end (#4432 F21 step 1): the poster record again at the end of the shard, and
+    the names of the poster update task's schedule state under the device data. Files only; never fails the shard."""
+    DEVICE = SimObserve.DEVICE
+
+    def data(self, root):
+        data = root / self.DEVICE / 'data'
+        (data / 'Library/BackgroundTasks').mkdir(parents=True)
+        (data / 'Library/BackgroundTasks/com.apple.springboard.posterboardupdate.prewarm.plist').write_bytes(b'x' * 7)
+        (data / 'private/var/db/dasd').mkdir(parents=True)
+        (data / 'private/var/db/dasd/store.db').write_bytes(b'y' * 12)
+        (data / 'Library/Preferences').mkdir(parents=True)
+        (data / 'Library/Preferences/com.apple.other.plist').write_text('z')
+        (data / 'Library/dasdLink').symlink_to(data / 'private')
+        return data
+
+    def test_schedule_names_with_sizes_and_links_listed_not_followed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = self.data(Path(directory))
+            found = observe.schedule_files(data)
+        self.assertIsNone(found['stopped'])
+        self.assertEqual(sorted(found['matches']), [
+            ('Library/BackgroundTasks', 'dir 1 files'),
+            ('Library/BackgroundTasks/com.apple.springboard.posterboardupdate.prewarm.plist', '7'),
+            ('Library/dasdLink', str(len(str(data / 'private')))),
+            ('private/var/db/dasd', 'dir 1 files'),
+        ])
+        self.assertNotIn('Library/dasdLink/var', [path for path, _ in found['matches']], 'A link is not followed.')
+
+    def test_the_schedule_walk_is_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = self.data(Path(directory))
+            with mock.patch.object(observe, 'SCHEDULE_WALK_ENTRIES', 2):
+                self.assertEqual(observe.schedule_files(data)['stopped'], 'entry limit 2')
+            ticks = iter([0, 0, 11])
+            self.assertEqual(observe.schedule_files(data, clock=lambda: next(ticks, 99))['stopped'], f'time limit {observe.SCHEDULE_WALK_LIMIT}s')
+            with mock.patch.object(observe, 'SCHEDULE_WALK_DEPTH', 2):
+                self.assertNotIn('private/var/db/dasd', [p for p, _ in observe.schedule_files(data)['matches']])
+            with mock.patch.object(observe, 'SCHEDULE_ROWS', 1):
+                self.assertEqual(len(observe.schedule_files(data)['matches']), 1)
+
+    def test_the_end_record_names_itself_and_lists_the_schedule_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'Devices'
+            self.data(root)
+            evidence = Path(directory) / 'evidence'; evidence.mkdir()
+            with mock.patch('builtins.print') as printed:
+                observe.poster_probe(evidence, self.DEVICE, run=lambda a, l: '', root=root, when='end')
+            text = (evidence / observe.POSTER_FILE).read_text()
+            self.assertFalse((evidence / 'simulator-steps.jsonl').exists())
+        self.assertRegex(text.splitlines()[0], r'^== poster probe \S+ \S+ \(end\)$')
+        section = text.split('-- schedule state names (posterboardupdate|dasd|BackgroundTask) under data/')[1].split('\n-- ')[0]
+        self.assertIn('Library/BackgroundTasks/com.apple.springboard.posterboardupdate.prewarm.plist 7', section)
+        self.assertIn('private/var/db/dasd dir 1 files', section)
+        self.assertIn('schedule walk', text.split('-- costs')[1])
+        self.assertIn('poster probe (end): ', printed.call_args[0][0])
+        self.assertIn('4 schedule state names', printed.call_args[0][0])
+
+    def test_the_command_passes_when_and_never_fails(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe, 'poster_probe') as probe:
+            self.assertEqual(observe.main(['posters', '--evidence', directory, '--device', self.DEVICE, '--when', 'end']), 0)
+            self.assertEqual(probe.call_args.kwargs['when'], 'end')
+            self.assertEqual(observe.main(['posters', '--evidence', directory, '--device', self.DEVICE]), 0)
+            self.assertEqual(probe.call_args.kwargs['when'], 'start')
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe, 'poster_probe', side_effect=RuntimeError('boom')):
+            self.assertEqual(observe.main(['posters', '--evidence', directory, '--device', self.DEVICE, '--when', 'end']), 0)
+
+    def test_the_shard_takes_the_end_record_after_the_test_and_its_terminate_scan(self):
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        line = 'python3 ../scripts/ios-sim-observe.py posters --evidence ../evidence --device "$device" --when end || echo "::warning::poster probe not recorded"'
+        self.assertEqual(script.count(line), 1)
+        test = script.index('test-without-building 2>&1 | tee ../evidence/simulator-test.log || test_status=$?')
+        scan = script.index('terminate-scan --evidence ../evidence')
+        self.assertLess(test, scan); self.assertLess(scan, script.index(line))
+        self.assertLess(script.index(line), script.index("printf 'native verification: iPhone simulator journeys\\n'"), 'Shard mode only.')
+
+
 class BoundaryVerdicts(unittest.TestCase):
     """ios-sim-observe.py boundary-verdict (#4432 F21): runner-ax, app, unknown, and host saturated."""
     START, DEADLINE = 100_000, 110_000

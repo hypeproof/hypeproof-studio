@@ -203,6 +203,9 @@ if [ "$mode" = shard ]; then
   stop_sampler
   # A failure in the last seconds of the log, which the stopped watcher had not reached yet.
   python3 ../scripts/ios-sim-observe.py terminate-scan --evidence ../evidence --device "$device" --log ../evidence/simulator-test.log || true
+  # The same poster record again at the end, and where the poster update task's schedule lives (#4432 F21):
+  # files and host ps only, never fails.
+  python3 ../scripts/ios-sim-observe.py posters --evidence ../evidence --device "$device" --when end || echo "::warning::poster probe not recorded"
 else
   printf 'native verification: iPhone simulator journeys\n'
   xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -derivedDataPath DerivedData "${common_test[@]}" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
