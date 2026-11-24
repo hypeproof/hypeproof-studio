@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { build } from "esbuild";
 
-const { closePendingLine } = await import("../src/chatPanelHelpers.ts");
+const { closePendingLine, pendingCloseLabel } = await import("../src/chatPanelHelpers.ts");
 const { PublishReadGate } = await import("../src/publishReadGate.ts");
 
 // The real provider and WorkLine, driven by a real sendMessage. Only the SDK runtime and
@@ -154,7 +154,7 @@ function providerFixture(toolActivity, { throwOnFirstClose = false } = {}) {
   const shownCloses = () => posts
     .filter((event) => event.type === "toolLog" && String(event.id).startsWith("pending-") && event.state === "done")
     .map((event) => event.label);
-  return { send, closeCalls, logCalls, shownCloses };
+  return { send, closeCalls, logCalls, shownCloses, posts };
 }
 
 const use = (args, id, name) => args.onActivity({ kind: "tool_use", id, name, input: { file_path: "notes.txt" } });
@@ -259,6 +259,57 @@ async function test_tc_0089_provider_new_request_does_not_inherit_write() {
   }
 }
 
+const pendingPosts = (f) => f.posts.filter((event) => event.type === "toolLog" && String(event.id).startsWith("pending-"));
+
+function test_tc_0082_pending_close_label_rule() {
+  assert.equal(pendingCloseLabel(true), "고쳤어요");
+  assert.equal(pendingCloseLabel(false), "생각했어요");
+}
+
+async function test_tc_0083_turn_without_write_call_closes_with_thought() {
+  for (const mode of ["summary", "detailed"]) {
+    const f = providerFixture(mode);
+    await f.send((args) => { readOnly(args); args.onDelta("그건 제가 할 수 없어요. 어떤 파일인가요?"); });
+    assert.deepEqual(f.shownCloses(), ["생각했어요"], mode);
+    assert.equal(f.shownCloses().includes("고쳤어요"), false, mode);
+  }
+}
+
+async function test_tc_0084_only_error_write_results_close_with_thought() {
+  for (const mode of ["summary", "detailed"]) {
+    const f = providerFixture(mode);
+    await f.send(failedWriteThenRead);
+    assert.deepEqual(f.shownCloses(), ["생각했어요"], mode);
+  }
+}
+
+async function test_tc_0085_error_then_success_write_closes_done_with_fixed() {
+  for (const mode of ["summary", "detailed"]) {
+    const f = providerFixture(mode);
+    await f.send(retriedWrite);
+    assert.deepEqual(f.shownCloses(), ["고쳤어요"], mode);
+    const closes = f.posts.filter((event) => event.type === "toolLog" && String(event.id).startsWith("pending-") && event.state === "done");
+    assert.equal(closes.length, 1, mode);
+    assert.equal(closes[0].state, "done");
+  }
+}
+
+async function test_tc_0086_text_only_turn_never_posts_pending_line() {
+  for (const mode of ["summary", "detailed"]) {
+    const f = providerFixture(mode);
+    await f.send((args) => args.onDelta("바로 답변"));
+    assert.deepEqual(pendingPosts(f), [], mode);
+  }
+}
+
+async function test_tc_0087_summary_workline_label_follows_write_success() {
+  const f = providerFixture("summary");
+  await f.send((args) => { use(args, "write-1", "Write"); result(args, "write-1"); });
+  await f.send(readOnly);
+  assert.deepEqual(f.closeCalls, ["고쳤어요", "생각했어요"]);
+  assert.deepEqual(f.logCalls, []);
+}
+
 function run({ summary, wroteOk, pendingShown }) {
   const closeCalls = [];
   const logCalls = [];
@@ -316,6 +367,12 @@ function test_clear_pending_source_uses_helper() {
 }
 
 for (const t of [
+  test_tc_0082_pending_close_label_rule,
+  test_tc_0083_turn_without_write_call_closes_with_thought,
+  test_tc_0084_only_error_write_results_close_with_thought,
+  test_tc_0085_error_then_success_write_closes_done_with_fixed,
+  test_tc_0086_text_only_turn_never_posts_pending_line,
+  test_tc_0087_summary_workline_label_follows_write_success,
   test_tc_0088_summary_mode_close_without_write,
   test_tc_0089_normal_mode_close_without_write,
   test_tc_0090_summary_mode_close_after_write,
