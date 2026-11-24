@@ -115,7 +115,7 @@ for (const [label, error, ending] of [['exhausted', SDK_EXHAUSTED, 'exhausted'],
     assert.match(r.posts[0].error, /만든 파일과 대화는 그대로 있어요/);
     assert.doesNotMatch(r.posts[0].error, /이용권/);
     assert.doesNotMatch(r.posts[0].error, /API Error|코드 발급 담당자|다시 시도/);
-    assert.deepEqual(structuredClone(errorBannerPresentation(r.posts[0].error)), { icon: '⏳', title: '체험이 끝났어요' });
+    assert.deepEqual(structuredClone(errorBannerPresentation(r.posts[0].error)), { icon: '⏳', title: '체험이 끝났어요', tone: 'notice' });
     // Never opened for the person: no command (no purchase screen, no code box), no order, no credential touched.
     assert.deepEqual(r.commands, []);
     assert.deepEqual(r.requests, [], 'no catalogue read: the app no longer asks whether passes are sold');

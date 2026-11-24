@@ -190,8 +190,8 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.deepEqual({ ...b(purchase.FREE_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '무료 사용량을 모두 썼어요' });
   assert.deepEqual({ ...b(purchase.FREE_EXPIRED_FRIENDLY) }, { icon: '⏳', title: '무료 사용 시간이 끝났어요' });
   assert.deepEqual({ ...b(purchase.FREE_DAILY_CAP_NOTICE) }, { icon: '🌙', title: '오늘 무료 사용량이 모두 소진됐어요', tone: 'notice' }, 'positive: the cap notice is a calm notice, not a lost connection (D4)');
-  for (const m of [purchase.FREE_EXHAUSTED_FRIENDLY, purchase.TRIAL_EXHAUSTED_FRIENDLY, ...unrelated.map((e) => e.message)]) assert.equal(b(m).tone, undefined, `negative: only the daily cap is a notice: ${m}`);
-  assert.deepEqual({ ...b(purchase.TRIAL_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '체험이 끝났어요' }, 'negative: code trial banner unchanged');
+  for (const m of [purchase.FREE_EXHAUSTED_FRIENDLY, ...unrelated.map((e) => e.message)]) assert.equal(b(m).tone, undefined, `negative: a free-seat or unrelated message is not a notice: ${m}`);
+  assert.deepEqual({ ...b(purchase.TRIAL_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '체험이 끝났어요', tone: 'notice' }, 'positive: an ended code trial is a calm notice (REQ-0015)');
   for (const e of unrelated) assert.notEqual(b(e.message).icon, '⏳', `negative: ${e.message}`);
   assert.equal(b('무료 이미지 생성은 지원하지 않습니다.').title, '문제가 생겼어요');
 }

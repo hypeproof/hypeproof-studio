@@ -31,7 +31,8 @@ export function errorBannerPresentation(message: string): ErrorBannerPresentatio
   if (/무료 사용 시간이 끝났(?:어요|습니다)/.test(message)) return { icon: "⏳", title: "무료 사용 시간이 끝났어요" };
   // REQ-L12 (13) — a free trial that ran out is checked first: its copy says "시간", but it is
   // neither a network drop nor a spent pass.
-  if (/체험에서 쓸 수 있는 AI 요청을 모두 썼어요|체험 시간이 끝났어요/.test(message)) return { icon: "⏳", title: "체험이 끝났어요" };
+  // REQ-0015 — this is the copy the chat actually shows, so it is a calm notice with no retry too.
+  if (/체험에서 쓸 수 있는 AI 요청을 모두 썼어요|체험 시간이 끝났어요/.test(message)) return { icon: "⏳", title: "체험이 끝났어요", tone: "notice" };
   // An ended trial is also account state. Checked before the connection frame because
   // "체험 시간이 끝났습니다" contains "시간" and used to read as a lost connection.
   const isTrialEnd = !isPass && TRIAL_END.test(message);
@@ -40,16 +41,14 @@ export function errorBannerPresentation(message: string): ErrorBannerPresentatio
   // REQ-0015 — an ended personal trial is a calm notice: no retry invitation.
   if (isTrialEnd) return { icon: "⏳", title: "체험이 끝났어요", tone: "notice" };
   return {
-    icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isInstall ? "🧰" : !isRateLimited && isAuth ? "🔒" : !isRateLimited && isConn ? "🔌" : "⚠️",
+    icon: isPass ? "🎟️" : isInstall ? "🧰" : !isRateLimited && isAuth ? "🔒" : !isRateLimited && isConn ? "🔌" : "⚠️",
     title: isPass
       ? "이용권을 더 쓸 수 없어요"
-      : isTrialEnd
-        ? "체험이 끝났어요"
-        : isInstall
-          ? "설치를 마무리해야 해요"
-          : isRateLimited
-            ? "AI 요청이 제한됐어요"
-            : isAuth
+      : isInstall
+        ? "설치를 마무리해야 해요"
+        : isRateLimited
+          ? "AI 요청이 제한됐어요"
+          : isAuth
             ? "잠시 멈춰요"
             : isConn
               ? "연결이 끊겼어요"

@@ -76,6 +76,10 @@ function test_tc_0016_connection_failure_keeps_connection_frame() {
 }
 function test_tc_0017_trial_end_is_notice_and_connection_has_no_tone() {
   assert.equal(errorBannerPresentation('개인 체험 시간이 끝났습니다.').tone, 'notice');
+  // The sentences the chat itself shows (passPurchase.trialEndNotice) must be notices too.
+  for (const m of ['체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.', '체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.']) {
+    assert.deepEqual(errorBannerPresentation(m), TRIAL_END, m);
+  }
   assert.equal(errorBannerPresentation('네트워크 연결이 끊겼습니다. 시간 초과').tone, undefined);
   assert.equal(errorBannerPresentation('stream interrupted').tone, undefined);
 }
