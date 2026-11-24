@@ -153,11 +153,35 @@ class NativeMergeGate(unittest.TestCase):
         self.r.receipt.write_text(json.dumps(original)); self.assertNotEqual(self.r.cli('verify', candidate=False).returncode, 0)
         self.r.receipt.unlink(); self.assertNotEqual(self.r.cli('verify', candidate=False, states=skipped).returncode, 0)
 
-    def test_unknown_mixed_control_and_shared_inputs_retain_full_native(self):
-        for path in ('docs/unaudited.md', 'config/traceability.json', 'package-lock.json', SCRIPT, IDENTITY, WORKFLOW, 'scripts/release/select-cases.mjs'):
+    def test_any_native_input_mixed_with_other_changes_keeps_full_native(self):
+        # D3 (JY 2026-11-24): the native inputs are the app, its control scripts and workflows, and
+        # the release casebook files the contract job's tests read. One of them in a mixed diff is FULL.
+        for path in (NATIVE, SCRIPT, IDENTITY, WORKFLOW, '.github/workflows/studio-apple-testflight.yml',
+                     '.github/workflows/release-cut.yml', '.github/workflows/verify-unified-release.yml',
+                     'config/release-auto.json', 'config/release-platforms.json', 'scripts/release/select-cases.mjs',
+                     'docs/operations/release-casebook/cases.yaml', 'apps/studio-native/android/app/build.gradle'):
             with self.subTest(path=path), tempfile.TemporaryDirectory() as t:
                 r = GitFixture(Path(t)); r.merge({path: 'changed\n', DESKTOP: 'changed desktop\n'})
-                self.assertEqual(r.scope()['decision'], 'FULL')
+                result = r.scope(); self.assertEqual((result['decision'], result['reason']), ('FULL', 'native_input_changed'))
+
+    def test_known_answers_docs_chalk_app_and_workflow_pull_requests(self):
+        # Before D3, the docs, Chalk, shared-metadata and other-workflow cases were FULL: only audited
+        # desktop paths were excluded. None of them is read by the native app, its tests or the
+        # contract job (counted on main 75f7c192), so they are now NOT_APPLICABLE.
+        cases = [
+            ('docs only', {'docs/unaudited.md': 'doc\n', 'docs/testing/other.md': 'doc\n'}, 'NOT_APPLICABLE'),
+            ('Chalk only', {'chalk/src/index.ts': 'chalk\n', 'extensions/hypeproof-chat/src/chalk/x.ts': 'chalk\n'}, 'NOT_APPLICABLE'),
+            ('desktop only', {DESKTOP: 'desktop\n'}, 'NOT_APPLICABLE'),
+            ('shared metadata', {'config/traceability.json': '{}\n', 'package-lock.json': '{}\n', 'package.json': '{}\n'}, 'NOT_APPLICABLE'),
+            ('another workflow', {'.github/workflows/pr-ci.yml': 'name: x\n'}, 'NOT_APPLICABLE'),
+            ('app', {NATIVE: 'app\n'}, 'FULL'),
+            ('app beside docs', {NATIVE: 'app\n', 'docs/unaudited.md': 'doc\n'}, 'FULL'),
+            ('native workflow', {WORKFLOW: 'name: x\n'}, 'FULL'),
+            ('TestFlight workflow', {'.github/workflows/studio-apple-testflight.yml': 'name: x\n'}, 'FULL'),
+        ]
+        for name, edits, decision in cases:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as t:
+                r = GitFixture(Path(t)); r.merge(edits); self.assertEqual(r.scope()['decision'], decision)
 
     def test_complete_diff_cannot_hide_native_change_behind_last_desktop_commit(self):
         self.r.git('checkout', '-qb', 'candidate', self.r.base)
@@ -171,9 +195,32 @@ class NativeMergeGate(unittest.TestCase):
         self.assertEqual(self.r.scope(base='0' * 40)['decision'], 'FULL')
         self.assertEqual(self.r.scope(event='push')['decision'], 'FULL')
 
-    def test_deletion_and_cross_scope_move_are_not_exclusions(self):
-        self.r.merge({DESKTOP: None, 'docs/moved.tsx': 'moved\n'})
-        self.assertEqual(self.r.scope()['decision'], 'FULL')
+    def test_native_deletion_move_and_special_files_are_not_exclusions(self):
+        # A native file deleted or moved out of the app is a native change. Before D3 a desktop
+        # deletion was FULL too; it reads no native input, so it is now NOT_APPLICABLE.
+        for name, edits, decision in [('native deleted', {NATIVE: None}, 'FULL'),
+                                      ('native moved out', {NATIVE: None, 'docs/moved.swift': 'native baseline\n'}, 'FULL'),
+                                      ('desktop deleted', {DESKTOP: None, 'docs/moved.tsx': 'moved\n'}, 'NOT_APPLICABLE')]:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as t:
+                r = GitFixture(Path(t)); r.merge(edits); self.assertEqual(r.scope()['decision'], decision)
+        # A symlink outside the native inputs keeps full native, even one that names no native path.
+        for target in ('apps/studio-native/ios/App', 'docs'):
+            with self.subTest(symlink=target), tempfile.TemporaryDirectory() as t:
+                r = GitFixture(Path(t)); r.git('checkout', '-qb', 'feature', r.base)
+                (r.repo / 'link').symlink_to(target); r.commit('symlink'); r.head = r.git('rev-parse', 'HEAD').strip()
+                r.git('checkout', '-q', 'main'); r.git('merge', '--no-ff', '-qm', 'tested merge', r.head)
+                r.checkout = r.git('rev-parse', 'HEAD').strip()
+                result = r.scope(); self.assertEqual((result['decision'], result['reason']), ('FULL', 'special_file_outside_native_inputs'))
+
+    def test_approval_push_job_follows_the_same_scope(self):
+        lines = (ROOT / WORKFLOW).read_text().splitlines()
+        start = lines.index('  approval-push-simulator:')
+        end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith('  ') and not lines[i].startswith('   ') and lines[i].endswith(':'))
+        job = lines[start:end]
+        self.assertIn('    needs: scope', job)
+        condition = next(line for line in job if line.startswith('    if: '))
+        for part in ("github.event_name == 'pull_request'", "needs.scope.result == 'success'", "needs.scope.outputs.run_native != 'false'"):
+            self.assertIn(part, condition)
 
     def test_first_adoption_workflow_requires_all_three_jobs_and_current_receipt(self):
         with tempfile.TemporaryDirectory() as t:

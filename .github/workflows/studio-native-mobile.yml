@@ -88,7 +88,9 @@ jobs:
         run: node --test scripts/release/test/select-cases.test.mjs scripts/release/test/publish-gate.test.mjs
   approval-push-simulator:
     name: iOS approval push simulator
-    if: github.event_name == 'pull_request'
+    # Pull requests only, and only when the scope job found a native input changed (D3).
+    needs: scope
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.scope.result == 'success' && needs.scope.outputs.run_native != 'false' }}
     # The preview xcode-27 image has intermittently lost its iOS runtime during boot.
     runs-on: macos-26
     env:

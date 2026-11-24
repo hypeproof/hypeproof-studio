@@ -5,13 +5,27 @@ every pull request. It joins the existing contract, iOS and Android jobs; it doe
 not execute another native suite. Existing main path selection and manual
 invocation retain full native acceptance.
 
-A complete base/head/actual-merge Git comparison may prove an unrelated change.
-The initial audited inputs are desktop extension source, webview source, desktop
-tests and the named desktop smoke scheduling document. Shared manifests,
-requirements/traceability, release casebooks, scripts, workflows, native changes,
-deletions, special files and unknown inputs retain full native scope. No blanket
-documentation exclusion applies. Adding a native dependency on an excluded input
-requires updating this reviewed policy.
+A pull request runs native only when it changes a native input (D3, JY
+2026-11-24). Before D3 the policy was the reverse: only audited desktop paths
+were excluded, so almost every pull request ran the full native suite. The
+native inputs are the paths the native app, its tests and the contract job read,
+counted on main `75f7c192`:
+
+- `apps/studio-native/`: the app, its scripts (including this classifier and the
+  identity module) and its tests;
+- `.github/workflows/studio-native-mobile.yml` and `studio-apple-testflight.yml`;
+- the release casebook the contract job's `select-cases` and `publish-gate`
+  tests read: `scripts/release/`, `docs/operations/release-casebook/`,
+  `config/release-auto.json`, `config/release-platforms.json`,
+  `.github/workflows/release-cut.yml` and `verify-unified-release.yml`.
+
+The native app installs no shared contract package. A change anywhere else is
+`NOT_APPLICABLE`: documentation, Chalk, desktop, shared manifests and
+traceability, and other workflows. A symlink, submodule or type change outside
+the native inputs keeps full native scope. A native deletion, or a native file
+moved out of the app, is a native change. Adding a native dependency on another
+path requires adding that path here and in the classifier. The approval push
+simulator job follows the same scope.
 
 Both scope and aggregate execute the helper and existing native identity module
 from the immutable event base. The helper embeds its versioned conservative

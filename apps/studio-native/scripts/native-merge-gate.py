@@ -10,11 +10,15 @@ import subprocess
 
 SELF = 'apps/studio-native/scripts/native-merge-gate.py'
 IDENTITY = 'apps/studio-native/scripts/verify-native-candidate.py'
-# Audited desktop-only inputs; shared manifests, workflows, docs and unknown paths
-# retain native coverage. Any change to this policy itself runs full native.
-UNRELATED = ('extensions/hypeproof-chat/src/', 'extensions/hypeproof-chat/webview-ui/src/',
-             'extensions/hypeproof-chat/test/')
-DOCS = ('docs/testing/desktop-smoke-scope.md',)
+# Native inputs (D3, JY 2026-11-24): a pull request runs native only when it changes one of
+# these. They are what the native app, its tests and the contract job read, counted on main
+# 75f7c192 (docs/testing/native-merge-acceptance.md). Main and dispatch always run full native.
+# This file and the identity module are under apps/studio-native/, so changing the policy
+# runs full native.
+NATIVE_PREFIXES = ('apps/studio-native/', 'scripts/release/', 'docs/operations/release-casebook/')
+NATIVE_FILES = ('.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml',
+                '.github/workflows/release-cut.yml', '.github/workflows/verify-unified-release.yml',
+                'config/release-auto.json', 'config/release-platforms.json')
 SCHEMA = 'hps-native-merge-scope/1'
 
 
@@ -99,13 +103,16 @@ def scope(repo, event, base, head, checkout, run_id, attempt):
             raise ValueError('empty diff is not an exclusion proof')
         for row in result['changes'] + result['merge_changes']:
             path = row['path']
-            if (row['status'] not in ('A', 'M') or row['old_mode'] not in (':000000', ':100644', ':100755')
-                    or row['new_mode'] not in ('100644', '100755')
-                    or Path(path).name in ('package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock')
-                    or not (path in DOCS or path.startswith(UNRELATED))):
-                result['reason'] = 'native_shared_unknown_or_special_file'
+            if path in NATIVE_FILES or path.startswith(NATIVE_PREFIXES):
+                result['reason'] = 'native_input_changed'
                 return result
-        result.update(decision='NOT_APPLICABLE', reason='proven_unrelated_desktop_or_audited_doc')
+            # Outside the native inputs, only plain files may be excluded; a symlink, submodule
+            # or type change keeps full native.
+            if (row['status'] not in ('A', 'M', 'D') or row['old_mode'] not in (':000000', ':100644', ':100755')
+                    or row['new_mode'] not in ('000000', '100644', '100755')):
+                result['reason'] = 'special_file_outside_native_inputs'
+                return result
+        result.update(decision='NOT_APPLICABLE', reason='no_native_input_changed')
     except (ValueError, OSError, UnicodeError) as error:
         result['reason'] = 'full_fallback:' + str(error)
     return result
