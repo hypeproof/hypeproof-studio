@@ -28,3 +28,9 @@ export function rehearsalReportRejectionSentence(input: RehearsalReportRejection
       return typeof input.status === "number" ? `${REHEARSAL_REPORT_NOT_SENT.slice(0, -1)} (상태 ${input.status}).` : REHEARSAL_REPORT_NOT_SENT;
   }
 }
+
+// #4501 — the subscription turn upload. Shown only on the rehearsal seat, above the sticky input.
+export const REHEARSAL_ISSUER_MISSING = "강사 연결 정보가 이 창에 없어 리허설 결과를 보낼 수 없습니다. 강사 창에서 리허설을 다시 여세요.";
+export function rehearsalUploadPendingSentence(count: number): string {
+  return `대화 ${count}개를 서버에 올리지 못했습니다. 연결을 확인한 뒤 다시 보내세요.`;
+}

@@ -48,7 +48,9 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import { mustStayLocal } from './rehearsalRoute';
-import { rehearsalReportRejectionSentence } from './rehearsalReportReason';
+import { rehearsalReportRejectionSentence, REHEARSAL_ISSUER_MISSING, rehearsalUploadPendingSentence } from './rehearsalReportReason';
+import { rehearsalTurnBody, helpReceiptFor, uploadRehearsalTurn } from './rehearsalTurnUpload';
+import { adminBaseFrom } from './serverBase';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -5493,6 +5495,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** #751 native help — set by extension.ts. The provider only relays; the host adapter re-checks the learner on every call. */
   helpSource: import("./classroomHelpHost").ClassroomHelpHost | null = null;
+  // #4501 — subscription rehearsal turns the Service has not accepted yet (turn_id → upload body). Host memory only.
+  private rehearsalUploadUnsent = new Map<string, Record<string, unknown>>();
+  private rehearsalUploadHeldOnce = false;
   // #1298 — called when the auto-read whoami path gets a rejected result (401/403).
   // Extension sets this to delete the issuer token and show the student start page once.
   onIssuerAutoRejected?: () => void;
@@ -11204,9 +11209,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          // #4501 — what the subscription turn upload needs: whether text came back, and the tool names (never inputs).
+          const rehearsalFacts = { answered: false, toolNames: [] as string[] };
+          const rehearsalDelta = (t: string) => { if (t.trim()) rehearsalFacts.answered = true; onDelta(t); };
+          const rehearsalActivity = (a: Parameters<typeof onActivity>[0]) => { if (a.kind === "tool_use" && typeof a.name === "string") rehearsalFacts.toolNames.push(a.name); onActivity(a); };
           const result=await runLocalCoach({config:local,profile,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
-            signal:ctrl.signal,onDelta,onRefusal,onActivity,
+            signal:ctrl.signal,onDelta:rehearsalDelta,onRefusal,onActivity:rehearsalActivity,
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
@@ -11216,6 +11225,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
+          if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, mode: String(mode), model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
         }
       } else if (this._instructorMode.isInstructor === true) {
         throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
@@ -12472,9 +12482,45 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private async sendRehearsalReport(steps: import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
+  // #4501 — fire-and-forget after the turn result is drawn. A failure is counted for the report; the student is not blocked.
+  private uploadRehearsalTurnFor(f: { turnId: string; mode: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { sha256: string; content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
+    const rehearsal = f.profile.rehearsal as { course_id?: unknown; id?: unknown } | undefined;
+    const lesson = f.profile.lesson;
+    if (!rehearsal || !lesson) return Promise.resolve();
+    const step = lesson.content.steps.find(s => s.id === f.step);
+    const body = rehearsalTurnBody({
+      turnId: f.turnId, mode: f.mode, model: f.model, toolNames: f.toolNames, answered: f.answered, at: new Date().toISOString(),
+      courseId: String(rehearsal.course_id ?? ""), rehearsalId: String(rehearsal.id ?? ""), lessonSha256: lesson.sha256,
+      stepId: f.step ?? null, helpReceipt: helpReceiptFor(step, f.helpMode),
+    });
+    const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
+    return uploadRehearsalTurn({ secrets: this.context.secrets, adminBase: adminBaseFrom(cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")), body, log: l => this.ensureLogChannel().appendLine(l) })
+      .then(o => {
+        const ok = typeof o.status === "number" && o.status >= 200 && o.status < 300;
+        if (ok) this.rehearsalUploadUnsent.delete(f.turnId); else this.rehearsalUploadUnsent.set(f.turnId, body);
+      }, () => { this.rehearsalUploadUnsent.set(f.turnId, body); });
+  }
+
+  private async sendRehearsalReport(steps:import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
     const profile = this.cachedProfile, lesson = profile?.lesson, token = await this.context.secrets.get(TOKEN_KEY);
     if (!profile?.rehearsal || !lesson || !token) { await this.post({ type: "rehearsalState", state: "error", message: "리허설 코드로 연 수업이 아닙니다." }); return; }
+    // #4501 — a subscription rehearsal: the report waits for the turn uploads. Without the instructor token nothing is sent.
+    if (mustStayLocal(profile.rehearsal)) {
+      const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
+      const issuerUp = await this.context.secrets.get(ISSUER_TOKEN_KEY).then(v => v, () => undefined);
+      if (!issuerUp) { await this.post({ type: "rehearsalState", state: "error", message: REHEARSAL_ISSUER_MISSING }); return; }
+      for (const [id, body] of [...this.rehearsalUploadUnsent]) {
+        const o = await uploadRehearsalTurn({ secrets: this.context.secrets, adminBase: adminBaseFrom(cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")), body, log: l => this.ensureLogChannel().appendLine(l) });
+        if (typeof o.status === "number" && o.status >= 200 && o.status < 300) this.rehearsalUploadUnsent.delete(id);
+      }
+      // The first press shows what is still unsent; the second press sends the report anyway (the Service judges it).
+      if (this.rehearsalUploadUnsent.size && !this.rehearsalUploadHeldOnce) {
+        this.rehearsalUploadHeldOnce = true;
+        await this.post({ type: "rehearsalState", state: "error", message: rehearsalUploadPendingSentence(this.rehearsalUploadUnsent.size) });
+        return;
+      }
+      this.rehearsalUploadHeldOnce = false;
+    }
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const pkg = this.context.extension.packageJSON as { version?: string; devDependencies?: Record<string, string> };
     // #4102 — the checklist is kept only for the stucks of this seat, and only what the person marked (nothing marked: no field).
