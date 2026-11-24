@@ -134,6 +134,78 @@ class PlanContracts(unittest.TestCase):
                 shards.discover(Path(directory))
 
 
+
+class PlanByDurations(unittest.TestCase):
+    """ios-ui-shards.py plan --durations (#4432 F21): regular shards balanced by measured time; unmeasured cases by count."""
+    CLASSES = {'AlphaTests': ['testA', 'testB', 'testC'], 'BetaTests': ['testD', 'testE', 'testF', 'testG']}
+    T = 'HPStudioUITests'
+
+    def case(self, name):
+        return f'{self.T}/{"AlphaTests" if name in "ABC" else "BetaTests"}/test{name}'
+
+    def test_longest_first_onto_the_least_loaded_shard_then_unmeasured_by_count(self):
+        durations = {self.case(n): s for n, s in {'A': 100, 'B': 90, 'C': 50, 'D': 40, 'E': 10}.items()}
+        doc = shards.plan(self.CLASSES, 2, (), durations)
+        first, second = doc['shards']
+        # Known answer, by hand: A->1 (100), B->2 (90), C->2 (140), D->1 (140), E->1 (tie, lowest shard; 150),
+        # then F (unmeasured) -> 2 (fewer cases: 2 against 3), G -> 1 (3 and 3, lowest shard).
+        self.assertEqual(first['cases'], [self.case(n) for n in 'ADEG'])
+        self.assertEqual(second['cases'], [self.case(n) for n in 'BCF'])
+        self.assertEqual((first['estimated_seconds'], second['estimated_seconds']), (150.0, 140.0))
+        self.assertEqual((first['unmeasured_cases'], second['unmeasured_cases']), (1, 1))
+        self.assertEqual((doc['balance'], doc['stale_durations']), ('durations', []))
+        # The catch-all contract is unchanged: the last shard skips the others' cases.
+        self.assertEqual(second['xcodebuild_arguments'], ['-skip-testing:' + c for c in first['cases']])
+        self.assertEqual(first['xcodebuild_arguments'], ['-only-testing:' + c for c in first['cases']])
+
+    def test_without_durations_the_plan_is_the_count_plan_as_before(self):
+        doc = shards.plan(self.CLASSES, 3)
+        self.assertEqual([row['cases'] for row in doc['shards']],
+                         [[self.case('A'), self.case('D'), self.case('G')], [self.case('B'), self.case('E')], [self.case('C'), self.case('F')]])
+        self.assertEqual(doc['balance'], 'count')
+        self.assertFalse(any('estimated_seconds' in row for row in doc['shards']))
+
+    def test_dedicated_cases_stay_in_their_row_and_stale_keys_are_reported_not_used(self):
+        durations = {self.case('A'): 300, self.case('B'): 5, f'{self.T}/GoneTests/testOld': 999}
+        doc = shards.plan(self.CLASSES, 2, [self.case('A')], durations)
+        *regular, own = doc['shards']
+        self.assertEqual((own['cases'], own['dedicated']), ([self.case('A')], True))
+        every = [c for row in regular for c in row['cases']]
+        self.assertEqual(sorted(every), sorted(self.case(n) for n in 'BCDEFG'))
+        self.assertEqual(doc['stale_durations'], [f'{self.T}/GoneTests/testOld'])
+        self.assertNotIn('GoneTests', json.dumps(regular))
+
+    def test_the_durations_file_is_read_strictly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, 'd.json')
+            for bad in ({'schema': 'other', 'cases': {}}, {'schema': shards.SCHEMA_DURATIONS, 'cases': {'x': 0}},
+                        {'schema': shards.SCHEMA_DURATIONS, 'cases': {'x': True}}, {'schema': shards.SCHEMA_DURATIONS, 'cases': []}):
+                path.write_text(json.dumps(bad))
+                with self.assertRaises(ValueError):
+                    shards.load_durations(path)
+
+    def test_the_shipped_table_balances_the_real_suite_and_names_its_source_runs(self):
+        table = NATIVE / 'scripts/ios-ui-durations.json'
+        document = json.loads(table.read_text())
+        self.assertTrue(document['source_runs'] and all(isinstance(run['run'], int) for run in document['source_runs']))
+        durations = shards.load_durations(table)
+        doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 4, [VOICE], durations)
+        *regular, voice = doc['shards']
+        self.assertEqual((voice['cases'], voice['dedicated']), ([VOICE], True))
+        every = [c for row in regular for c in row['cases']]
+        self.assertEqual(len(every), len(set(every)))
+        declared = {f'HPStudioUITests/{c}/{t}' for c, ts in shards.discover(NATIVE / 'ios/UITests').items() for t in ts}
+        self.assertEqual(set(every) | {VOICE}, declared)
+        estimates = [row['estimated_seconds'] for row in regular]
+        self.assertLessEqual(max(estimates) - min(estimates), max(durations.values()))
+        self.assertEqual(doc['stale_durations'], [])
+
+    def test_the_build_plans_with_the_shipped_table(self):
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        command = script[script.index('python3 ../scripts/ios-ui-shards.py plan'):script.index('exit 0', script.index('python3 ../scripts/ios-ui-shards.py plan'))]
+        self.assertIn('--durations ../scripts/ios-ui-durations.json', command)
+        self.assertIn('--dedicated ' + VOICE, command)
+
 class WorkflowShardCount(unittest.TestCase):
     def test_planned_shard_count_equals_the_ui_matrix(self):
         workflow = (ROOT / '.github/workflows/studio-native-mobile.yml').read_text()
