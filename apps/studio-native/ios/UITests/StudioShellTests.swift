@@ -1501,13 +1501,26 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], [])
         try evidence("journey-login-network-failure-not-expiry", app: app)
     }
+    /// `input.isEnabled && input.isHittable`, read once in the same order (isHittable only when enabled). When it is
+    /// false, the two values it was decided from are attached (#4432 F21: run 45338232297 failed here and the log
+    /// could not tell which half was false). The returned value is the one recorded; nothing is read twice.
+    @MainActor private func composerReachable(_ input: XCUIElement) -> Bool {
+        let enabled = input.isEnabled
+        let hittable: Bool? = enabled ? input.isHittable : nil
+        let reachable = enabled && hittable == true
+        if !reachable {
+            let record = XCTAttachment(string: "isEnabled=\(enabled) isHittable=\(hittable.map { String($0) } ?? "not read (disabled)")")
+            record.name = "composer-reachability"; record.lifetime = .keepAlways; add(record)
+        }
+        return reachable
+    }
     @MainActor func testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable() throws {
         let app = launch("first-answer", arguments: ["--journey-dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
         XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5))
         let dark = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'dark'"), object: diagnostic("nativeJourneyAppearance", in: app))
         XCTAssertEqual(XCTWaiter.wait(for: [dark], timeout: 5), .completed, "Observe the actual view environment, not just a launch preference.")
         let input = field(app)
-        XCTAssertTrue(input.isEnabled && input.isHittable)
+        XCTAssertTrue(composerReachable(input))
         try evidence("journey-first-use-dark-large-text", app: app)
         let thought = "This is my first thought\nI have more to say\nI want to understand it\nAnd keep these words\nBefore I sign in"
         input.tap(); input.typeText(thought)
@@ -1668,7 +1681,12 @@ final class StudioSignInBoundaryTests: XCTestCase {
         let browser = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
         let presented = browser.wait(for: .runningForeground, timeout: 60)
         attach("live-sign-in-browser", browser)
-        if !presented { attach("live-sign-in-consent-after-browser-failure", springboard) }
+        if !presented {
+            attach("live-sign-in-consent-after-browser-failure", springboard)
+            // Late transition or late report (#4432 F26: run 45324940623 found the page loaded after the wait).
+            let states = XCTAttachment(string: "browser.state=\(browser.state.rawValue) app.state=\(app.state.rawValue)")
+            states.name = "live-sign-in-browser-state"; states.lifetime = .keepAlways; add(states)
+        }
         XCTAssertTrue(presented, "The real system sign-in browser session must open after the live Service start.")
         let page = NSPredicate(format: "label CONTAINS[c] 'hypeproof' OR value CONTAINS[c] 'hypeproof' OR label CONTAINS[c] 'google' OR label CONTAINS[c] 'sign in' OR label CONTAINS[c] '로그인'")
         let loaded = browser.descendants(matching: .any).matching(page).firstMatch.waitForExistence(timeout: 45)

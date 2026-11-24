@@ -30,6 +30,7 @@ for observation only: they wait for nothing and decide nothing.
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -525,6 +526,66 @@ def one_reading(evidence, device, log):
 WATCH_READING_LIMIT = 180
 
 
+# After the push is injected, xcodebuild has EXIT_WAIT seconds to exit (unchanged). In run 45345206919 the
+# XCUITest passed and logged "** TEST EXECUTE SUCCEEDED **", but xcodebuild was still running 120 s after the
+# injection, and nothing recorded what it was doing (#4432). The wait below keeps the same limit and the same
+# TimeoutExpired; it polls once a second only to note when the result line first appeared.
+EXIT_WAIT = 120
+EXIT_POLL = 1
+EXIT_SAMPLE_FILE = "simctl-hang-xcodebuild-exit.txt"  # matches the job's simctl-hang-*.txt upload
+TEST_EXECUTE = "** TEST EXECUTE"
+RESULT_LINE = re.compile(r"^(\*\* TEST |Test Suite '.*' (passed|failed) at |\s*Executed \d+ tests?, )")
+
+
+class ExitWaitTimeout(subprocess.TimeoutExpired):
+    """subprocess.TimeoutExpired that also carries when the test's result line first appeared (s, or None)."""
+    def __init__(self, cmd, timeout, seen):
+        super().__init__(cmd, timeout)
+        self.seen = seen
+
+
+def test_execute_seen(log):
+    try:
+        return TEST_EXECUTE in log.read_text(errors="replace")
+    except OSError:
+        return False
+
+
+def wait_for_exit(process, log, *, limit=EXIT_WAIT, clock=time.monotonic, sleep=time.sleep):
+    """Like process.wait(timeout=limit): returns (exit status, seconds until the log first showed TEST_EXECUTE or
+    None), or raises ExitWaitTimeout when the process has not exited `limit` s after the call."""
+    started, seen = clock(), None
+    while True:
+        status = process.poll()
+        if seen is None and test_execute_seen(log):
+            seen = round(clock() - started, 1)
+        if status is not None:
+            return status, seen
+        if clock() - started >= limit:
+            raise ExitWaitTimeout(process.args, limit, seen)
+        sleep(EXIT_POLL)
+
+
+def exit_wait_diagnostics(evidence, process, log, seen, *, run=None):
+    """After ExitWaitTimeout: record the log's last result lines, the result bundle's summary and one `sample` of
+    xcodebuild, then return; the caller raises as before. Never raises; each command has its own limit."""
+    run = run or bounded
+    try:
+        lines = [line.strip() for line in log.read_text(errors="replace").splitlines() if RESULT_LINE.match(line)][-5:]
+    except OSError as error:
+        lines = [f"<log unreadable: {error}>"]
+    summary = run(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path",
+                   str(evidence / "ApprovalPush.xcresult")], limit=30)
+    try:
+        result = json.loads(summary).get("result")
+    except (ValueError, AttributeError):
+        result = None
+    sampled = run(["sample", str(process.pid), "1", "-file", str(evidence / EXIT_SAMPLE_FILE)], limit=30)
+    record(evidence, step="run", command="xcodebuild exit wait", outcome="timeout", limit=EXIT_WAIT,
+           test_execute_seen_s=seen, result_lines=lines, xcresult_result=result, xcresult_summary=summary[:400],
+           sample=(sampled.strip().splitlines() or ["<no output>"])[-1][:200])
+
+
 def run(evidence):
     state = load_state(evidence)
     if not state or "data" not in state:
@@ -560,9 +621,13 @@ def run(evidence):
                     # A hosted simulator may delay accepting the system notification.
                     # Keep this below the XCTest's Home banner wait.
                     simctl(evidence, "inject", ["push", device, BUNDLE, "-"], input=json.dumps(PAYLOAD), timeout=120)
-                    status = process.wait(timeout=120)
+                    try:
+                        status, seen = wait_for_exit(process, log)
+                    except ExitWaitTimeout as timeout:
+                        exit_wait_diagnostics(evidence, process, log, timeout.seen)
+                        raise
                     record(evidence, step="run", command="xcodebuild test-without-building", outcome=f"exit {status}",
-                           seconds=round(time.monotonic() - started, 1))
+                           seconds=round(time.monotonic() - started, 1), test_execute_seen_s=seen)
                     if status == 0:
                         export_screenshots(evidence)
                         print("PASS: system alert tapped, matching read-only card opened.", flush=True)
