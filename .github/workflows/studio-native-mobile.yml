@@ -2,7 +2,11 @@ name: Studio native mobile
 on:
   push:
     branches: ['main']
-    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
+    # The same native inputs as native-merge-gate.py's pull request scope (D3); a test keeps them equal.
+    paths: ['apps/studio-native/**', 'scripts/release/**', 'docs/operations/release-casebook/**',
+            '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml',
+            '.github/workflows/release-cut.yml', '.github/workflows/verify-unified-release.yml',
+            'config/release-auto.json', 'config/release-platforms.json']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -88,7 +92,9 @@ jobs:
         run: node --test scripts/release/test/select-cases.test.mjs scripts/release/test/publish-gate.test.mjs
   approval-push-simulator:
     name: iOS approval push simulator
-    if: github.event_name == 'pull_request'
+    # Pull requests only, and only when the scope job found a native input changed (D3).
+    needs: scope
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.scope.result == 'success' && needs.scope.outputs.run_native != 'false' }}
     # The preview xcode-27 image has intermittently lost its iOS runtime during boot.
     runs-on: macos-26
     env:
