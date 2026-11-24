@@ -43,7 +43,7 @@ assert.equal(p.passSpentNotice(new Error(PASS_SPENT_429)), p.PASS_SPENT_FRIENDLY
 assert.equal(p.passSpentNotice(new Error(SDK_EXHAUSTED)), null);
 
 // ── What the chat says ──────────────────────────────────────────────────────────────────
-for (const [ending, said] of [['exhausted', /체험에서 쓸 수 있는 AI 요청을 모두 썼어요/], ['expired', /체험 시간이 끝났어요/]]) {
+for (const [ending, said] of [['exhausted', /^이 활동에서 쓸 수 있는 AI 요청을 모두 썼어요/], ['expired', /^이 활동의 사용 시간이 끝났어요/]]) {
   const text = p.trialEndNotice(ending);
   assert.match(text, said);
   // CU-14: the work is still there.
@@ -53,7 +53,9 @@ for (const [ending, said] of [['exhausted', /체험에서 쓸 수 있는 AI 요�
   // Not the classroom or operator voice, not a retry invitation.
   assert.doesNotMatch(text, /코드 발급 담당자|강사|운영 담당자|다시 시도|API Error/);
   // The banner frames it as the trial ending, not a fault, a network drop or a spent pass.
-  assert.deepEqual(errorBannerPresentation(text), { icon: '⏳', title: '체험이 끝났어요' });
+  assert.deepEqual(errorBannerPresentation(text), { icon: '⏳', title: '사용이 끝났어요' });
+  // #4193 — no 체험 in what the chat says.
+  assert.doesNotMatch(text, /체험/);
 }
 // Banner controls: the existing pass and network banners are unchanged.
 assert.equal(errorBannerPresentation(p.PASS_SPENT_FRIENDLY).title, '이용권을 더 쓸 수 없어요');

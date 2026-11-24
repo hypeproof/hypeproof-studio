@@ -265,7 +265,7 @@ test('negative controls: mid-work, a code-issued trial and a pass end exactly as
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.requests, []);
   r = await present(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' });
-  assert.equal(r.posts[0].error, '체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
+  assert.equal(r.posts[0].error, '이 활동에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.requests, []);
   r = await present(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } });

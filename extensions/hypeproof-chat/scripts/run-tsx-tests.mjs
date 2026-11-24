@@ -63,6 +63,7 @@ const OVERRIDES = {
   "activity-home": { banner: BANNER_POSTED_STATE },
   "attachment-failure-ui": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
+  "no-trial-copy-chat": { banner: BANNER_POSTED },
   "activity-status-chatpanel": { banner: BANNER_POSTED },
   "quit-guard-queue": { banner: BANNER_POSTED },
   "publish-sharing-app": { banner: BANNER_POSTED },

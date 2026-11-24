@@ -3902,7 +3902,7 @@ function ErrorBanner({
   // Spot common transport-layer signals so the framing is honest about the
   // recovery path. We don't try to classify perfectly — just enough to pick
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
-  const { icon, title, tone } = errorBannerPresentation(message);
+  const { icon, title, tone, body } = errorBannerPresentation(message);
   // Free start D4 — a scheduled state (the drained daily cap) is announced politely and offers
   // only 닫기: there is nothing to report, retry or trace.
   const notice = tone === "notice";
@@ -3916,7 +3916,7 @@ function ErrorBanner({
       <div className="hps-error-banner-icon"><ChatIcon kind={glyphIconKind(icon)} size={24} /></div>
       <div className="hps-error-banner-body">
         <div className="hps-error-banner-title">{title}</div>
-        <div className="hps-error-banner-msg">{message}</div>
+        <div className="hps-error-banner-msg">{body ?? message}</div>
         {runbookUrl && (
           <div className="hps-error-banner-runbook">
             {/* CGP-ART-R-008: the host decides where a link opens; a raw target=_blank anchor would reach the system browser. */}

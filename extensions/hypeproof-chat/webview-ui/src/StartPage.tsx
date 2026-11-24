@@ -12,7 +12,6 @@ import { AccountEntry } from "./AccountEntry";
 import { InstructorInbox } from "./InstructorInbox";
 import { StartSettingsSheet } from "./StartSettingsSheet";
 import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
-import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice, freeEndedBody } from "../../src/freeStart";
 import { START_UPDATE_COPY, startUpdateNotice } from "../../src/startUpdateNotice";
 import { imeComposing } from "./imeGuard";
@@ -30,7 +29,7 @@ export function StartPage() {
   const [state, setState] = useState<StartState>({ checking: true, version: "" });
   const [token, setToken] = useState("");
   const [editing, setEditing] = useState(false);
-  const [entry, setEntry] = useState<"trial" | "classroom" | "purchase" | "account" | null>(null);
+  const [entry, setEntry] = useState<"classroom" | "purchase" | "account" | null>(null);
   const input = useRef<HTMLInputElement>(null);
   // CGP-SHELL-R-014 — "설정" opens the learner sheet here; the VS Code editor only via its "고급 설정".
   const [approvalsOpen, setApprovalsOpen] = useState(false);
@@ -72,15 +71,16 @@ export function StartPage() {
   const freeSeat = !!state.profile?.free;
   const activity = activityLabel(state.profile?.kind, state.profile?.pass, "활동", freeSeat);
   const passLeft = passSummary(state.profile?.pass);
-  // TUX-SP-12 — said before the choice: a code is needed today (until the Service advertises open entry), and the Service's allowance.
-  const trialNote = trialEntryNote(state.trialOffer);
+  // #4193 — no trial-code entry. Without the free card the chooser says whether free start is being
+  // checked or could not be confirmed, offers a re-check, and keeps the class code entry.
+  const freeCheck = state.freeStartCheck;
   // TUX-SP-13 — a trial seat's allowance (candidate), what is left (connected), or the ended card.
   // A pass keeps passSummary and is never read as a trial.
   const trial = state.profile?.pass ? undefined : state.profile?.trial;
   const ended = trialEndedFacts(trial, Date.now(), freeSeat);
   // A free seat shows no allowance while it is in use (Jay 2026-10-19); its end still draws the ended card.
   const trialLeft = ended || freeSeat ? null : state.candidate ? trialAllowance(trial, Date.now(), freeSeat) : trialSummary(trial, Date.now(), freeSeat);
-  const choose = (next: "trial" | "classroom") => { setToken(""); setEntry(next); setEditing(true); };
+  const choose = (next: "classroom") => { setToken(""); setEntry(next); setEditing(true); };
   // REQ-L12 ⑤ — only an order an older build started is shown here (no pass is sold and there is no
   // purchase view since 2026-11-13). The host owns the order; this view shows its stage and sends intents.
   const purchase = state.purchase;
@@ -163,13 +163,13 @@ export function StartPage() {
       </section>
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
         <div className="studio-card-top"><span className="studio-step">시작하기</span><span className="studio-dot"/></div>
-        <h2 id="connect-title">{accountEntry ? "내 계정으로 시작하기" : freeCard ? (state.account ? "내 계정 또는 무료로 시작하기" : freeTitle) : showProfile && ended ? ended.title : showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? (free ? "참여 코드로 시작하기" : "수업에 참여하기") : "어떻게 시작할까요?"}</h2>
-        <p className="studio-card-description">{accountEntry ? "무제한 권한이 있으면 로그인 후 바로 시작합니다. 그 외 받은 이용권도 여기서 사용할 수 있어요." : freeCard ? (freeBlocked ? FREE_START_COPY.under14Body : freeEnded ? freeEndedBody(free?.refillsAt) : freeCalm ? "" : (state.account ? "받은 이용권이 있다면 Google로 로그인하세요." : FREE_START_COPY.readyBody)) : showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? "" : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? (free ? "받은 참여 코드를 입력하세요." : "발급받은 참여 코드로 수업을 확인하세요.") : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
+        <h2 id="connect-title">{accountEntry ? "내 계정으로 시작하기" : freeCard ? (state.account ? "내 계정 또는 무료로 시작하기" : freeTitle) : showProfile && ended ? ended.title : showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "classroom" ? (free ? "참여 코드로 시작하기" : "수업에 참여하기") : "어떻게 시작할까요?"}</h2>
+        <p className="studio-card-description">{accountEntry ? "무제한 권한이 있으면 로그인 후 바로 시작합니다. 그 외 받은 이용권도 여기서 사용할 수 있어요." : freeCard ? (freeBlocked ? FREE_START_COPY.under14Body : freeEnded ? freeEndedBody(free?.refillsAt) : freeCalm ? "" : (state.account ? "받은 이용권이 있다면 Google로 로그인하세요." : FREE_START_COPY.readyBody)) : showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? "" : entry === "classroom" ? (free ? "받은 참여 코드를 입력하세요." : "발급받은 참여 코드로 수업을 확인하세요.") : "받은 참여 코드로 수업에 참여할 수 있습니다."}</p>
         {accountEntry && state.account ? <><div data-personal-question-flow><AccountEntry account={state.account} checking={state.checking} post={postToHost} /></div><button className="studio-text-button" onClick={() => { setEntry(null); setEditing(false); }}>돌아가기</button></> : freeCard ? <>{state.account && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}<FreeStartCard accountAvailable={!!state.account} free={free!} checking={state.checking} calm={freeCalm} error={freeError} onCode={openCode} onBack={state.profile && !freeEntering ? () => setEditing(false) : undefined} /></>
         : state.profile && !editing ? <>
-          <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}{ended ? <div><dt>{freeSeat ? "무료 사용" : "체험"}</dt><dd>{ended.row}</dd></div> : trialLeft && <div><dt>{state.candidate ? (freeSeat ? "무료 사용량" : "체험 한도") : (freeSeat ? "남은 무료 사용" : "남은 체험")}</dt><dd>{trialLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
+          <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}{ended ? <div><dt>{freeSeat ? "무료 사용" : "사용"}</dt><dd>{ended.row}</dd></div> : trialLeft && <div><dt>{state.candidate ? (freeSeat ? "무료 사용량" : "사용 한도") : (freeSeat ? "남은 무료 사용" : "남은 사용량")}</dt><dd>{trialLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
           {/* TUX-SP-13 — an ended trial has no "이어서 하기": peer choices only (SX-04). No pass is offered (2026-11-13). */}
-          {ended ? (ended.reason === "exhausted" && !state.candidate) && <div className="studio-entry-options" role="group" aria-label={freeSeat ? "무료 사용 이후 고르기" : "체험 이후 고르기"}>
+          {ended ? (ended.reason === "exhausted" && !state.candidate) && <div className="studio-entry-options" role="group" aria-label={freeSeat ? "무료 사용 이후 고르기" : "사용이 끝난 뒤 고르기"}>
             {ended.reason === "exhausted" && !state.candidate && <button className="studio-choice" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : "지난 대화 보기"} <span aria-hidden="true">→</span></button>}
           </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: state.automationsEnabled ? "openEmailAutomation" : "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.automationsEnabled ? "메일 자동화 열기" : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <ChatIcon kind="external" size={16} /></button>}
           {!ended && gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
@@ -194,15 +194,13 @@ export function StartPage() {
           </>}
         </div> : entry === null ? <div className="studio-entry-options" role="group" aria-label="시작 방법 고르기">
           {state.account && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}
-          {/* SX-04 — these two are **peer choices**. They both used to be Lime Primary,
-              which puts two emphasized buttons on one screen. The requirement names this
-              screen explicitly and writes "draw it as a list of options and do not draw
-              both as Primary". The "코드 확인하기" that appears after choosing is the only
-              Primary in this flow. */}
-          <div className="studio-choice-group">
-            <button className="studio-choice" disabled={state.checking} onClick={() => choose("trial")} aria-describedby={trialNote.code || trialNote.allowance ? "trial-entry-note" : undefined}>AI 체험하기 <span aria-hidden="true">→</span></button>
-            {(trialNote.code || trialNote.allowance) && <p id="trial-entry-note" className="studio-choice-note">{trialNote.code && <span>{trialNote.code}</span>}{trialNote.allowance && <span>{trialNote.allowance}</span>}</p>}
-          </div>
+          {/* SX-04 — peer choices, never Primary: the "코드 확인하기" that appears after choosing is the only
+              Primary in this flow. #4193 — there is no trial-code choice any more: free start is the way in
+              without a class, and while it cannot be confirmed this says so and offers a re-check. */}
+          {freeCheck && <div className="studio-choice-group" data-testid="free-start-check">
+            <button className="studio-choice" disabled={state.checking || freeCheck === "checking"} onClick={() => postToHost({ type: "freeStartRecheck" })} aria-describedby="free-start-check-note">{freeCheck === "checking" ? "확인하는 중…" : "무료 시작 다시 확인"} <span aria-hidden="true">→</span></button>
+            <p id="free-start-check-note" className="studio-choice-note" role="status"><span>{freeCheck === "checking" ? "무료로 시작할 수 있는지 확인하고 있습니다." : "지금은 무료로 시작할 수 있는지 확인하지 못했습니다. 잠시 후 다시 확인해 주세요."}</span></p>
+          </div>}
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("classroom")}>수업에 참여하기 <span aria-hidden="true">→</span></button>
           {state.profile && <button className="studio-text-button" onClick={() => { dropJoin(); setEditing(false); }}>기존 활동으로 돌아가기</button>}
           {/* REQ-L12 ⑤ — an order an older build started and the person left: they can pick its recovery up again. */}
@@ -212,7 +210,7 @@ export function StartPage() {
             <p className="studio-join-class"><span>참여 링크로 연 수업</span><strong>{joinClass}</strong></p>
             <p className="studio-join-help">링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은 코드를 직접 입력해 주세요.</p>
           </div>}
-          <label htmlFor="course-code">{free ? FREE_START_COPY.codeLabel : entry === "trial" ? "체험 참여 코드" : "수업 참여 코드"}</label>
+          <label htmlFor="course-code">{free ? FREE_START_COPY.codeLabel : "수업 참여 코드"}</label>
           {/* DES-SHELL-04 — type=password is what keeps the Korean IME out of the code: Chromium (Electron, the
               VS Code webview) gives password fields ASCII-only input on macOS and no IME on Windows and Linux.
               inputmode has no "latin" value and only steers on-screen keyboards; lang and autocapitalize do
@@ -231,7 +229,7 @@ export function StartPage() {
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}
         <div aria-live="polite" role="status" className="studio-status">{status}</div>
         {state.error && !fieldError && errorLine("studio-error")}
-        <div className="studio-card-footer">{freeCard ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : free && entry === "classroom" && !showProfile ? FREE_START_COPY.codeFooter : buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : showProfile && freeSeat ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
+        <div className="studio-card-footer">{freeCard ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : free && entry === "classroom" && !showProfile ? FREE_START_COPY.codeFooter : buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : showProfile && freeSeat ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
     <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <ChatIcon kind="external" size={16} /></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">만들기 · 검토하기 · 내 것으로</span></footer>
@@ -240,7 +238,7 @@ export function StartPage() {
 
 /**
  * TUX-SP-14/15/16 — the free start card. One question before first use (만 14세 이상인가요?), then one
- * Primary. No 체험/수업 choice: a code is a small secondary link. No pass is offered (2026-11-13). The host
+ * Primary. No separate choice between kinds of code: a code is a small secondary link. No pass is offered (2026-11-13). The host
  * owns the claim; this view sends intents only and never sees the install id or the issued token.
  */
 function FreeStartCard({ accountAvailable, free, checking, calm, error, onCode, onBack }: { accountAvailable?: boolean; free: NonNullable<StartState["freeStart"]>; checking: boolean; calm: string | null; error: string | null; onCode: () => void; onBack?: () => void }) {

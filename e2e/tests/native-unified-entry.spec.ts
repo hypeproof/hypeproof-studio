@@ -12,17 +12,16 @@ test('unified entry: choose without execution, authenticate existing code, start
     writeFileSync(original, 'synthetic original');
     const start = await startFrame(ctx.win);
     await expect(start.getByRole('heading', { name: '어떻게 시작할까요?' })).toBeVisible();
-    await start.getByRole('button', { name: 'AI 체험하기', exact: true }).click();
-    await expect(start.getByLabel('체험 참여 코드', { exact: true })).toBeVisible();
-    await expect(start.getByRole('button', { name: '코드 확인하기' })).toBeDisabled();
-    await start.getByRole('button', { name: '시작 방법 다시 선택' }).click();
+    // #4193 — no trial-code choice: an issued code of either kind goes through the class form.
+    await expect(start.getByRole('button', { name: 'AI 체험하기', exact: true })).toHaveCount(0);
     await start.getByRole('button', { name: '수업에 참여하기', exact: true }).click();
+    await expect(start.getByRole('button', { name: '코드 확인하기' })).toBeDisabled();
     await start.getByLabel('수업 참여 코드', { exact: true }).fill('synthetic-invalid');
     await start.getByRole('button', { name: '코드 확인하기' }).click();
     await expect(start.getByRole('alert')).toBeVisible();
     await start.getByLabel('수업 참여 코드', { exact: true }).fill(ctx.token);
     await start.getByRole('button', { name: '코드 확인하기' }).click();
-    await expect(start.locator('.studio-verified')).toHaveText(kind === 'trial' ? 'AI 체험' : '수업');
+    await expect(start.locator('.studio-verified')).toHaveText(kind === 'trial' ? '개인 작업' : '수업');
     await expect(start.locator('input[type=password]')).toHaveCount(0);
     await expect(start.getByRole('heading', { name: '이 활동으로 시작할까요?' })).toBeVisible();
     await start.getByRole('button', { name: '선택 취소', exact: true }).click();

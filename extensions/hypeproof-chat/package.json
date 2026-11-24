@@ -631,7 +631,7 @@
           "enumItemLabels": ["서비스 안내 따르기", "참여 코드로 시작"],
           "default": "service",
           "scope": "machine",
-          "description": "처음 열 때 코드 없이 시작할지 정합니다. service는 서비스의 체험 안내를 따르고, off는 참여 코드 입력 화면을 표시합니다."
+          "description": "처음 열 때 코드 없이 시작할지 정합니다. service는 서비스의 무료 시작 안내를 따르고, off는 참여 코드 입력 화면을 표시합니다."
         },
         "hypeproofChat.model": {
           "type": "string",

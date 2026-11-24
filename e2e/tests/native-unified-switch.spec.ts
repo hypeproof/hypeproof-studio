@@ -23,8 +23,9 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
  const connect=async(token:string)=>{
   const start=await startFrame(ctx.win);
   if(await start.getByRole('button',{name:'다른 활동 선택',exact:true}).count())await start.getByRole('button',{name:'다른 활동 선택',exact:true}).click();
-  await start.getByRole('button',{name:managed?'AI 체험하기':'수업에 참여하기',exact:true}).click();
-  await start.getByLabel(managed?'체험 참여 코드':'수업 참여 코드',{exact:true}).fill(token);
+  // #4193 — every issued code goes through the class form.
+  await start.getByRole('button',{name:'수업에 참여하기',exact:true}).click();
+  await start.getByLabel('수업 참여 코드',{exact:true}).fill(token);
   await start.getByRole('button',{name:'코드 확인하기',exact:true}).click();
   await expect(start.getByRole('button',{name:'이 활동 시작하기',exact:true})).toBeVisible();
  };
@@ -54,7 +55,7 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   writeFileSync(join(second,'original-b.txt'),'synthetic activity B');
   await connect(ctx.token);await pick(ctx.wsDir);await begin();
   let chat=await chatFrame(ctx.win);
-  await expect(chat.getByLabel('현재 활동')).toContainText(process.env.HPS_NATIVE_MANAGED==='1'?'AI 체험':'수업');
+  await expect(chat.getByLabel('현재 활동')).toContainText(process.env.HPS_NATIVE_MANAGED==='1'?'개인 작업':'수업');
   if(live)await turn(chat,ctx.wsDir,'SYNTHETIC_ACTIVITY_A_ONLY');
   await chat.getByRole('textbox',{name:/보낼 메시지/}).fill('A에서 작성 중인 합성 초안');
   await chat.getByRole('textbox',{name:/보낼 메시지/}).evaluate(input=>{

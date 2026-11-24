@@ -79,7 +79,7 @@ const factsAhead = labels.trialEndedFacts(spentAhead, now, true);
 assert.equal(factsAhead.description, purchase.FREE_REFILL_ENDED); assert.equal(factsAhead.title, '무료 사용이 끝났습니다');
 const factsOld = labels.trialEndedFacts(seat({ state: 'exhausted', requests_used: 30 }), now, true);
 assert.equal(factsOld.description, '무료 AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.', 'older Service: today');
-assert.equal(labels.trialEndedFacts(spentAhead, now, false).title, '체험이 끝났습니다', 'a code-issued trial keeps its card');
+assert.equal(labels.trialEndedFacts(spentAhead, now, false).title, '사용이 끝났습니다', 'a code-issued seat keeps its card, without 체험 (#4193)');
 assert.equal(labels.trialEndedFacts(seat({ refills_at: ahead }), now, true), null, 'a seat in use has no ended card');
 
 // ── 6. Allowance window: "오늘 밤 12시까지", never a 24-hour window, on a refilling free seat ─────────

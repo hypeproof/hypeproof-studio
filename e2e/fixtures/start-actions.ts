@@ -2,9 +2,9 @@ import { expect, type FrameLocator, type Locator } from '@playwright/test';
 
 // Code entry on the start page, whichever way the Service draws it (TUX-SP-14).
 // While the Service advertises free start, the start page shows the free card and a code
-// holder enters through "참여 코드가 있어요" (label "참여 코드"). Otherwise the peer choices
-// "AI 체험하기" / "수업에 참여하기" lead to the code form. An older App may show the form
-// already.
+// holder enters through "참여 코드가 있어요" (label "참여 코드"). Otherwise "수업에 참여하기"
+// leads to the code form; since #4193 there is no separate trial-code choice, and an issued
+// code of either kind is entered there. An older App may show the form already.
 //
 // The trial offer is read asynchronously after the page first renders. The peer choices can
 // be drawn and then replaced by the free card at any moment, so a single "look, then click"
@@ -18,7 +18,8 @@ type Start = FrameLocator | Locator;
 /** Opens the code form for `kind` and returns its input and whether the free card led there. */
 export async function openCodeEntry(start: Start, kind: 'trial' | 'classroom', timeout = 45000): Promise<{ input: Locator; free: boolean }> {
   const code = start.getByRole('button', { name: '참여 코드가 있어요', exact: true });
-  const choice = start.getByRole('button', { name: kind === 'trial' ? 'AI 체험하기' : '수업에 참여하기', exact: true });
+  // `kind` no longer picks a button (#4193): every code goes through the same form.
+  const choice = start.getByRole('button', { name: '수업에 참여하기', exact: true });
   const input = start.locator('#course-code');
   const label = start.locator('label[for="course-code"]');
   const end = Date.now() + timeout;

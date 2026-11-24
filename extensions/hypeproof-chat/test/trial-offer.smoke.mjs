@@ -1,5 +1,6 @@
-// TUX-SP-12 / ind-trial-card-disclosure — the "AI 체험하기" choice discloses, before it is
-// chosen, that a code is needed today and the allowance the Service advertises.
+// TUX-SP-12 — the start page reads the Service's offer once per window, without a credential.
+// #4193 — there is no trial-code choice any more: when the offer does not advertise free start,
+// the host says so (`freeStartCheck`) and re-reads it on `freeStartRecheck`.
 // Pure helpers (src/trialOffer.ts) and the start page host (src/startPage.ts) on a synthetic
 // Service. No network, no VS Code.
 //
@@ -8,10 +9,9 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { parseTrialOffer, trialEntryNote, fetchTrialOffer } from '../src/trialOffer.ts';
+import * as offerModule from '../src/trialOffer.ts';
+const { parseTrialOffer, fetchTrialOffer } = offerModule;
 const require = createRequire(import.meta.url);
-
-const CODE_LINE = '지금은 발급받은 체험 코드가 있어야 시작할 수 있습니다.';
 
 // ── parse: positive controls ──────────────────────────────────────────────────────────────
 {
@@ -37,22 +37,11 @@ const CODE_LINE = '지금은 발급받은 체험 코드가 있어야 시작할 �
   console.log('PASS parse: malformed answers are refused or lose only the numbers');
 }
 
-// ── the note: what the card says ──────────────────────────────────────────────────────────
+// ── #4193: the trial-code note is gone ───────────────────────────────────────────────────
 {
-  // Not advertised (old Service, offline): today's truth only, and no invented numbers.
-  assert.deepEqual(trialEntryNote(undefined), { code: CODE_LINE });
-  assert.deepEqual(trialEntryNote(null), { code: CODE_LINE });
-  // Code entry with the Service's allowance.
-  assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 1, requestLimit: 40 }), { code: CODE_LINE, allowance: '체험 1시간 · AI 요청 40번' });
-  // The numbers are the Service's, not constants: a different advertisement reads differently.
-  assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 1.5, requestLimit: 1200 }), { code: CODE_LINE, allowance: '체험 1시간 30분 · AI 요청 1,200번' });
-  assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 0.5, requestLimit: 10 }), { code: CODE_LINE, allowance: '체험 30분 · AI 요청 10번' });
-  assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 48, requestLimit: 10 }), { code: CODE_LINE, allowance: '체험 2일 · AI 요청 10번' });
-  // Open entry advertised: this build has only the code path, so the code line stays. Dropping it
-  // would make the card contradict the code screen the choice leads to.
-  assert.deepEqual(trialEntryNote({ entry: 'open', durationHours: 1, requestLimit: 40 }), { code: CODE_LINE, allowance: '체험 1시간 · AI 요청 40번' });
-  assert.deepEqual(trialEntryNote({ entry: 'open' }), { code: CODE_LINE });
-  console.log('PASS note: code line always (code-only client); allowance only from the Service');
+  assert.equal(offerModule.trialEntryNote, undefined, 'no trial-code note helper');
+  assert.equal(offerModule.TRIAL_CODE_LINE, undefined, 'no trial-code line');
+  console.log('PASS note: no trial-code note is exported');
 }
 
 // ── fetch: one unauthenticated GET, no credential, failures are "not advertised" ──────────
@@ -71,15 +60,15 @@ const CODE_LINE = '지금은 발급받은 체험 코드가 있어야 시작할 �
 
 // ── host: the start page reads the offer once and hands it to the webview ─────────────────
 const bundle = await build({ stdin: { contents: "export * from './src/startPage.ts';", resolveDir: new URL('..', import.meta.url).pathname, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
-function harness(offer) {
-  const world = { states: [], calls: [] };
+function harness(offer, setting = 'service') {
+  const world = { states: [], calls: [], offer };
   const ctx = { workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} }, secrets: { get: async () => undefined, store: async () => {}, delete: async () => {} }, extension: { packageJSON: { version: 'test' } }, subscriptions: [] };
   const chat = { openInEditor: async () => {}, ensureProfile: async () => null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => 'Coach', coachNameIsChosen: () => true };
-  const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (key, fallback) => key === 'proxyUrl' ? 'https://service.test/v1' : fallback }) }, window: {}, commands: { executeCommand: async () => {} }, Uri: { parse: s => s }, env: {} };
+  const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (key, fallback) => key === 'proxyUrl' ? 'https://service.test/v1' : key === 'freeStart' ? setting : fallback }) }, window: {}, commands: { executeCommand: async () => {} }, Uri: { parse: s => s }, env: {} };
   const fetch = async (url, init = {}) => {
     const u = new URL(url);
     world.calls.push({ path: u.pathname, auth: new Headers(init.headers).get('authorization') });
-    if (u.pathname === '/v1/trial/offer' && offer) return new Response(JSON.stringify(offer), { status: 200 });
+    if (u.pathname === '/v1/trial/offer' && world.offer) return new Response(JSON.stringify(world.offer), { status: 200 });
     return new Response('{}', { status: 404 });
   };
   const module = { exports: {} };
@@ -107,4 +96,45 @@ function harness(offer) {
   await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
   assert.equal(off.last().trialOffer, undefined, 'not advertised → no offer in state');
   console.log('PASS host: one credential-free read per window; absent when the Service does not advertise');
+}
+
+// ── #4193: without the free card the host says so and re-reads on request ────────────────
+{
+  const FULL = { entry: 'open', claim: '/v1/free/claim', available: true };
+  // A failed read: "unavailable", never a trial-code entry.
+  const h = harness(null);
+  await h.page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
+  assert.equal(h.last().freeStartCheck, 'unavailable', 'a failed offer read is said');
+  assert.equal(h.last().freeStart, undefined);
+  // The Service comes back: 다시 확인 reads again, once, without a credential, and the free card returns.
+  h.world.offer = FULL;
+  const before = h.world.calls.filter(c => c.path === '/v1/trial/offer').length;
+  await h.page.handle({ type: 'freeStartRecheck' });
+  assert.ok(h.world.states.some(m => m.state.freeStartCheck === 'checking'), 'the re-read is shown while it runs');
+  assert.equal(h.world.calls.filter(c => c.path === '/v1/trial/offer').length, before + 1, 'one re-read');
+  assert.ok(h.world.calls.every(c => c.auth === null), 'the re-read carries no credential');
+  assert.equal(h.last().freeStartCheck, undefined, 'free start advertised: no check line');
+  assert.ok(h.last().freeStart, 'the free card is drawn');
+  // Once the free card is on, a stray re-check reads nothing.
+  await h.page.handle({ type: 'freeStartRecheck' });
+  assert.equal(h.world.calls.filter(c => c.path === '/v1/trial/offer').length, before + 1, 'no read while free start is on');
+
+  // An answer that does not advertise free start (entry "code") is "unavailable" too; a re-read that fails again stays so.
+  const code = harness({ entry: 'code' });
+  await code.page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
+  assert.equal(code.last().freeStartCheck, 'unavailable');
+  await code.page.handle({ type: 'freeStartRecheck' });
+  assert.equal(code.last().freeStartCheck, 'unavailable', 'still not advertised after the re-read');
+
+  // Negative control: the machine switched free start off → no check line and no re-read.
+  const off = harness(FULL, 'off');
+  await off.page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
+  assert.equal(off.last().freeStartCheck, undefined, 'switched off: nothing to re-check');
+  const reads = off.world.calls.filter(c => c.path === '/v1/trial/offer').length;
+  await off.page.handle({ type: 'freeStartRecheck' });
+  assert.equal(off.world.calls.filter(c => c.path === '/v1/trial/offer').length, reads, 'switched off: no re-read');
+  console.log('PASS host: free start unavailable is said, re-read on request, and silent when switched off');
 }

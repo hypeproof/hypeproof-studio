@@ -201,7 +201,7 @@ const SAVED = () => ({ id: ID, secret: SECRET, productId: 'pass-30d', label: '30
 
 // ── REQ-L12 (13): after a free trial expired, the start page keeps the files and names no pass ──
 {
-  const TRIAL_ENDED = '체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.';
+  const TRIAL_ENDED = '이 활동의 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.';
   // The same code entered again: the Service answers 403 trial_expired (observed 2026-10-18).
   const again = harness({ settings: { profileStatus: 403 } });
   await again.page.handle({ type: 'startReady' });
