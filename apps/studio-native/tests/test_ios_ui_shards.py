@@ -1247,6 +1247,77 @@ class PosterWait(unittest.TestCase):
         self.assertIn(line, shard_block, 'Shard mode only.')
         self.assertEqual(observe.POSTER_WAIT_LIMIT, 540)
 
+
+class ApprovalExitWait(unittest.TestCase):
+    """verify-approval-push-simulator.py: after the push is injected xcodebuild still has 120 s to exit, with the same
+    TimeoutExpired; a timeout now records the result lines, the result bundle summary and one sample first (#4432)."""
+
+    class Process:
+        def __init__(self, exits_at=None):
+            self.polls, self.exits_at, self.pid, self.args = 0, exits_at, 4242, ['xcodebuild', 'test-without-building']
+        def poll(self):
+            self.polls += 1
+            return 0 if self.exits_at is not None and self.polls >= self.exits_at else None
+
+    def run_wait(self, process, *, line_at=None):
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        log = Path(temp.name) / 'xcodebuild.log'; log.write_text('Testing started\n')
+        now = [0.0]; sleeps = []
+        def sleep(seconds):
+            sleeps.append(seconds); now[0] += seconds
+            if line_at is not None and now[0] >= line_at and '** TEST EXECUTE' not in log.read_text():
+                log.write_text(log.read_text() + '** TEST EXECUTE SUCCEEDED **\n')
+        return push.wait_for_exit(process, log, clock=lambda: now[0], sleep=sleep), sleeps
+
+    def test_returns_the_exit_status_and_when_the_result_line_first_appeared(self):
+        (status, seen), sleeps = self.run_wait(self.Process(exits_at=6), line_at=3)
+        self.assertEqual((status, seen, len(sleeps)), (0, 3.0, 5))
+
+    def test_the_limit_is_still_120_s_and_the_exception_is_still_timeout_expired(self):
+        self.assertEqual(push.EXIT_WAIT, 120)
+        with self.assertRaises(subprocess.TimeoutExpired) as raised:
+            self.run_wait(self.Process(), line_at=27)
+        self.assertIsInstance(raised.exception, push.ExitWaitTimeout)
+        self.assertEqual((raised.exception.timeout, raised.exception.seen), (120, 27.0))
+        with self.assertRaises(push.ExitWaitTimeout) as raised:
+            self.run_wait(self.Process())
+        self.assertIsNone(raised.exception.seen)
+
+    def test_a_timeout_records_result_lines_bundle_summary_and_one_sample_and_never_raises(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); log = evidence / 'xcodebuild.log'
+            log.write_text("Test Case '-[A b]' passed (67.683 seconds).\nTest Suite 'StudioJourneyTests' passed at 2026-11-24 07:15:40.801.\n"
+                           "\t Executed 1 test, with 0 failures (0 unexpected) in 67.683 (67.693) seconds\nnoise\n** TEST EXECUTE SUCCEEDED **\n")
+            calls = []
+            def run(args, limit):
+                calls.append((args[0] if args[0] != 'xcrun' else args[1], limit))
+                return '{"result": "Passed", "totalTestCount": 1}' if args[0] == 'xcrun' else 'Sample analysis of process 4242 written to file x\n'
+            push.exit_wait_diagnostics(evidence, self.Process(), log, 26.8, run=run)
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text().splitlines()[-1])
+            # Unreadable outputs are recorded, not raised.
+            push.exit_wait_diagnostics(evidence, self.Process(), evidence / 'missing.log', None, run=lambda args, limit: '<x did not return within 30s>')
+            bad = json.loads((evidence / 'simulator-steps.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(calls, [('xcresulttool', 30), ('sample', 30)])
+        self.assertEqual((row['step'], row['command'], row['outcome'], row['limit'], row['test_execute_seen_s']),
+                         ('run', 'xcodebuild exit wait', 'timeout', 120, 26.8))
+        self.assertEqual(row['result_lines'], ["Test Suite 'StudioJourneyTests' passed at 2026-11-24 07:15:40.801.",
+                                               'Executed 1 test, with 0 failures (0 unexpected) in 67.683 (67.693) seconds',
+                                               '** TEST EXECUTE SUCCEEDED **'])
+        self.assertEqual(row['xcresult_result'], 'Passed')
+        self.assertIn('Sample analysis of process 4242', row['sample'])
+        self.assertIsNone(bad['xcresult_result']); self.assertTrue(bad['result_lines'][0].startswith('<log unreadable'))
+
+    def test_run_records_then_raises_as_before(self):
+        source = (NATIVE / 'scripts/verify-approval-push-simulator.py').read_text()
+        body = source[source.index('def run(evidence):'):source.index('def cleanup(evidence):')]
+        self.assertNotIn('process.wait(timeout=120)', body)
+        inner = body[body.index('status, seen = wait_for_exit(process, log)'):body.index('record(evidence, step="run", command="xcodebuild test-without-building"')]
+        self.assertLess(inner.index('except ExitWaitTimeout as timeout:'), inner.index('exit_wait_diagnostics(evidence, process, log, timeout.seen)'))
+        self.assertLess(inner.index('exit_wait_diagnostics('), inner.index('raise'))
+        self.assertEqual(push.EXIT_SAMPLE_FILE, 'simctl-hang-xcodebuild-exit.txt')
+        workflow = (NATIVE.parent.parent / '.github/workflows/studio-native-mobile.yml').read_text()
+        self.assertIn('apps/studio-native/evidence/approval-push/simctl-hang-*.txt', workflow, 'The sample is uploaded by the existing pattern.')
+
 class BoundaryVerdicts(unittest.TestCase):
     """ios-sim-observe.py boundary-verdict (#4432 F21): runner-ax, app, unknown, and host saturated."""
     START, DEADLINE = 100_000, 110_000
