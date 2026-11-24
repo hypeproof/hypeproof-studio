@@ -41,6 +41,11 @@ const fakeFetch = async (url, init = {}) => {
   if (u.includes('/classroom/rehearsal/turns')) {
     // Bodies that name a "fail-" turn are refused (500, kept unsent); "judged-" is refused with the Service reason 409.
     if (String(init.body).includes('"turn_id":"fail-')) return new Response('{}', { status: 500 });
+    // "retry-" turns: the first attempt fails, the second succeeds (same turn_id expected).
+    if (String(init.body).includes('"turn_id":"retry-')) {
+      const n = fetches.filter(f => f.url.includes('/classroom/rehearsal/turns') && String(f.init.body).includes('"turn_id":"retry-')).length;
+      return new Response('{}', { status: n === 1 ? 500 : 201 });
+    }
     if (String(init.body).includes('"turn_id":"judged-')) return new Response(JSON.stringify({ error: 'x', reason: 'already_judged' }), { status: 409 });
     return new Response(JSON.stringify({ stored: true }), { status: 201 });
   }
@@ -175,6 +180,20 @@ test('unsent turns: the first report press holds with the count, the second pres
   assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/report')).length, 1, 'the second press sends the report');
   assert.ok(!every(posted).includes(PLANT_CODE));
   assert.ok(!every(posted).includes(PLANT_RETURN));
+});
+
+// A turn that failed is re-sent from the held body: the retry carries the same turn_id and the same bytes.
+test('retry keeps the turn_id: the first upload fails, the report-press retry sends the identical body', async () => {
+  fetches.length = 0;
+  const { provider } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
+  await provider.uploadRehearsalTurnFor({
+    turnId: 'retry-1', mode: 'auto', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+  });
+  await provider.sendRehearsalReport(steps, undefined, undefined); // the report press retries the unsent turn once (201 now)
+  const uploads = fetches.filter(f => f.url.includes('/classroom/rehearsal/turns') && String(f.init.body).includes('"turn_id":"retry-1"'));
+  assert.equal(uploads.length, 2, 'one first attempt and one retry');
+  assert.equal(uploads[0].init.body, uploads[1].init.body, 'the retry body is byte-identical to the first');
+  assert.equal(JSON.parse(uploads[1].init.body).turn_id, 'retry-1');
 });
 
 test('a refused upload (Service reason 409 already_judged): the first press shows the W2 sentence, not the count', async () => {

@@ -50,6 +50,18 @@ t("body has no text, tool-input, or rehearsal-identity keys (the server takes th
   for (const tool of body.tools) assert.deepEqual(Object.keys(tool), ["name"]);
 });
 
+// Server allow-list (service PR #617 may tighten it): the body keys must equal this list exactly, no more and no fewer.
+const ALLOWED_BODY_KEYS = ["answered", "at", "help_receipt", "mode", "model", "step_id", "text_omitted", "tools", "turn_id"];
+t("body keys equal the allow-list exactly (no extra, no missing)", () => {
+  assert.deepEqual(Object.keys(body).sort(), ALLOWED_BODY_KEYS);
+  const noHelp = rehearsalTurnBody({ ...facts, stepId: null, helpReceipt: null });
+  assert.deepEqual(Object.keys(noHelp).sort(), ALLOWED_BODY_KEYS);
+});
+
+t("the body turn_id is the id the caller passed (no new id made in the body builder)", () => {
+  assert.equal(rehearsalTurnBody({ ...facts, turnId: "turn-retry-9" }).turn_id, "turn-retry-9");
+});
+
 t("planted student, answer, tool-input and code strings never reach the body", () => {
   for (const p of [PLANT_STUDENT, PLANT_ANSWER, PLANT_TOOL_INPUT, PLANT_CODE]) assert.ok(!bodyText.includes(p), p);
 });
