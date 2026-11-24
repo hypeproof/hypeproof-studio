@@ -48,6 +48,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import { mustStayLocal } from './rehearsalRoute';
+import { rehearsalReportRejectionSentence } from './rehearsalReportReason';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -12491,11 +12492,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const base = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1").replace(/\/$/, "");
       const r = await fetch(base + "/classroom/rehearsal/report", { method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify(report) });
       const j = await r.json().catch(() => ({})) as { verdict?: string; reasons?: string[]; reason?: string; error?: string };
-      if (!r.ok) { await this.post({ type: "rehearsalState", state: "error", message: j.reason === "no_request_yet" ? "아직 AI에게 한 번도 묻지 않았습니다. 단계마다 한 번 이상 물어본 뒤 보내세요." : (j.error ?? "보내지 못했습니다 (" + r.status + ")") }); return; }
+      if (!r.ok) { await this.post({ type: "rehearsalState", state: "error", message: rehearsalReportRejectionSentence({ status: r.status, reason: j.reason, subscription: mustStayLocal(profile.rehearsal) }) }); return; }
       await this.post({ type: "rehearsalState", state: "sent", verdict: j.verdict, reasons: j.reasons ?? [] });
       // #4048 — only a report that was sent reaches the question whether to return.
       await leaveRehearsalAfterReport();
-    } catch (err) { await this.post({ type: "rehearsalState", state: "error", message: "Service에 연결하지 못했습니다: " + (err as Error).message }); }
+    } catch { await this.post({ type: "rehearsalState", state: "error", message: rehearsalReportRejectionSentence({ subscription: mustStayLocal(profile.rehearsal) }) }); }
   }
 
   // #3563 — opens the Chalk instructor tab from the Studio notice. Without the Chalk extension, say so.
