@@ -1,0 +1,19 @@
+{
+ "schema": "hps-ios-ui-sets/1",
+ "purpose": "Which iOS UI cases run in the PR and main gate (#4432 stage 3). ios-ui-shards.py plan --set gate plans exactly these; --set nightly plans every other declared case, and the nightly workflow runs them. No case is deleted. A gate case that is no longer declared is refused.",
+ "source": "D2 core set (11-24): the 12 gate cases minus the system browser sign-in case, which moved to the nightly set.",
+ "separate_jobs": "The real Korean voice case runs in the gate's iOS UI real voice job (plan --dedicated). The approval push case runs in the approval push simulator job; in a UI shard it skips itself.",
+ "gate": [
+  "HPStudioUITests/StudioShellTests/testFirstInstallExplainsAccountStorageWithoutASeparateForm",
+  "HPStudioUITests/StudioJourneyTests/testFirstInstallSignInToFirstAnswerWithoutDesktop",
+  "HPStudioUITests/StudioJourneyTests/testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable",
+  "HPStudioUITests/StudioJourneyTests/testRealKoreanPlaybackCompletionReachesNextCaptureBoundary",
+  "HPStudioUITests/StudioJourneyTests/testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch",
+  "HPStudioUITests/StudioJourneyTests/testSystemApprovalPushOpensMatchingReadOnlyCard",
+  "HPStudioUITests/StudioJourneyTests/testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch",
+  "HPStudioUITests/StudioJourneyTests/testEightyMessageWindowFollowsNewTailWithoutInterruptingReading",
+  "HPStudioUITests/TeamEntryUITests/testTeamPushWarmAndColdOpenUseAuthorizedRequestAndPreserveDraft",
+  "HPStudioUITests/TeamEntryUITests/testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft",
+  "HPStudioUITests/TeamEntryUITests/testGitHubObservationsPreserveDraftAndSeparateStaleFailure"
+ ]
+}

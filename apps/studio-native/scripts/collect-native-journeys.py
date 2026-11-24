@@ -51,7 +51,19 @@ def evidence(path: Path):
     data = path.read_bytes()
     return {'path': str(path.resolve()), 'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}, data.decode('utf-8', errors='replace')
 
-def collect(source: str, build_log: Path, build_exit: int, simulator_log: Path, test_exit: int):
+def excluded_cases(plan: Path):
+    """(set, {'Class.test', ...}) that a gate or nightly shard plan leaves to the other UI set (#4432 stage 3)."""
+    document = json.loads(plan.read_text())
+    if document.get('schema') != 'hps-ios-ui-shard-plan/2':
+        raise ValueError('Unexpected shard plan schema')
+    excluded = document.get('excluded', [])
+    if not isinstance(excluded, list) or not all(isinstance(case, str) and case.count('/') == 2 for case in excluded):
+        raise ValueError('Malformed excluded cases in the shard plan')
+    return document.get('set', 'all'), {case.split('/', 1)[1].replace('/', '.') for case in excluded}
+
+def collect(source: str, build_log: Path, build_exit: int, simulator_log: Path, test_exit: int, plan=None):
+    """With a plan, a required journey the plan leaves to the other UI set is NOT_PLANNED, not NOT_RUN.
+    Only a case the plan names as excluded can be NOT_PLANNED; an unplanned case it does not name stays NOT_RUN."""
     if not re.fullmatch(r'[0-9a-f]{40}', source):
         raise ValueError('A full source SHA is required')
     if any(type(code) is not int or code < 0 or code > 255 for code in (build_exit, test_exit)):
@@ -63,19 +75,24 @@ def collect(source: str, build_log: Path, build_exit: int, simulator_log: Path, 
         match = CASE.fullmatch(line.strip())
         if match and match[2] in events and CLASSES[match[2]] == match[1]:
             events[match[2]].append('started' if match[3] == 'started.' else match[4])
+    ui_set, excluded = excluded_cases(plan) if plan is not None else ('all', set())
     cases = []
     for requirement, name in REQUIRED.items():
         seen = events[name]
         # Failed/skipped attempts are retained even if a later retry passes.
         status = ('FAIL' if 'failed' in seen else 'SKIPPED' if 'skipped' in seen else
-                  'PASS' if seen == ['started', 'passed'] else 'NOT_RUN' if not seen else 'INCOMPLETE')
+                  'PASS' if seen == ['started', 'passed'] else
+                  'NOT_PLANNED' if not seen and CLASSES[name] + '.' + name in excluded else
+                  'NOT_RUN' if not seen else 'INCOMPLETE')
         cases.append({'requirement': requirement, 'test': CLASSES[name] + '.' + name, 'status': status, 'events': seen})
     build_status = 'PASS' if build_evidence and build_exit == 0 and '** BUILD SUCCEEDED **' in build.splitlines() else 'FAIL' if build_exit else 'NOT_RUN'
-    journey_status = 'PASS' if simulator_evidence and test_exit == 0 and all(case['status'] == 'PASS' for case in cases) else 'FAIL' if test_exit or any(case['status'] == 'FAIL' for case in cases) else 'NOT_RUN'
+    planned = [case for case in cases if case['status'] != 'NOT_PLANNED']
+    journey_status = 'PASS' if simulator_evidence and test_exit == 0 and planned and all(case['status'] == 'PASS' for case in planned) else 'FAIL' if test_exit or any(case['status'] == 'FAIL' for case in cases) else 'NOT_RUN'
     return {'schema': 'hps-native-journey-evidence/1', 'source_sha': source,
             'build': {'status': build_status, 'exit_code': build_exit, 'evidence': build_evidence},
             'simulator_journeys': {'status': journey_status, 'exit_code': test_exit, 'evidence': simulator_evidence, 'cases': cases,
-                                   'external_transports': 'SYNTHETIC', 'app_state_and_persistence': 'REAL'},
+                                   'external_transports': 'SYNTHETIC', 'app_state_and_persistence': 'REAL',
+                                   'ui_set': ui_set, 'not_planned': [case['requirement'] for case in cases if case['status'] == 'NOT_PLANNED']},
             'physical_device': {'status': 'NOT_RUN', 'blocks_test_candidate': False},
             'live_authentication': 'NOT_RUN', 'live_asr': 'NOT_RUN', 'apple_upload': 'NOT_RUN_BY_THIS_CHECK',
             'os_speech_playback': {'status': next(case['status'] for case in cases if case['requirement'] == 'MFR-T03-playback'),
@@ -90,8 +107,9 @@ def main():
     parser.add_argument('--simulator-log', required=True, type=Path)
     parser.add_argument('--test-exit', required=True, type=int)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--plan', type=Path, default=None, help='the shard plan; its excluded cases are NOT_PLANNED')
     args = parser.parse_args()
-    result = collect(args.source_sha, args.build_log, args.build_exit, args.simulator_log, args.test_exit)
+    result = collect(args.source_sha, args.build_log, args.build_exit, args.simulator_log, args.test_exit, args.plan)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open('x') as target:
         target.write(json.dumps(result, indent=2) + '\n')
