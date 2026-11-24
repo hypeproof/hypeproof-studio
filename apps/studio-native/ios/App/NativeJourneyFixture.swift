@@ -15,12 +15,13 @@ import UserNotifications
     static var trace: String {
         let value = JourneyTransport.store.trace()
         guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty || !signInTiming.isEmpty
-                || !draftSend.isEmpty,
+                || !draftSend.isEmpty || !focusTiming.isEmpty,
               var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
         if !emptyStopBoundary.isEmpty { fields["empty_stop_boundary"] = emptyStopBoundary }
         if !retryStages.isEmpty { fields["retry_stages"] = retryStages }
         if !signInTiming.isEmpty { fields["sign_in_timing"] = signInTiming.fields }
         if !draftSend.isEmpty { fields["draft_send"] = draftSend.fields }
+        if !focusTiming.isEmpty { fields["focus"] = focusTiming.fields }
         if !requestedPlaybackVoice.isEmpty { fields["requested_playback_voice"] = requestedPlaybackVoice }
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
     }
@@ -43,6 +44,28 @@ import UserNotifications
     static func sendAction(length: Int, canSend: Bool) {
         guard enabled else { return }
         draftSend.sent(length: length, canSend: canSend, at: uptimeMs()); teamRuntimeIssue(draftSend.summary)
+    }
+    /// Composer focus and keyboard marks (#4432 F28). The trace gets "focus"; each focus loss logs one
+    /// "HPStudio focus" line through the runtime-issue channel, so a failing test keeps the sequence.
+    private static var focusTiming = FocusTiming()
+    private static var keyboardObserved = false
+    static func focusChanged(_ focused: Bool) {
+        guard enabled else { return }
+        observeKeyboard()
+        focusTiming.record(focused ? "focus" : "blur", at: uptimeMs())
+        if !focused { teamRuntimeIssue(focusTiming.summary) }
+    }
+    /// The keyboard notifications by name, so this file needs no UIKit import
+    /// (UIResponder.keyboardWillShowNotification and keyboardWillHideNotification).
+    private static func observeKeyboard() {
+        guard !keyboardObserved else { return }
+        keyboardObserved = true
+        for (name, kind) in [("UIKeyboardWillShowNotification", "kb.show"), ("UIKeyboardWillHideNotification", "kb.hide")] {
+            NotificationCenter.default.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { _ in
+                let now = Int(ProcessInfo.processInfo.systemUptime * 1000)
+                Task { @MainActor in focusTiming.record(kind, at: now) }
+            }
+        }
     }
     private static var retryStages: [String] = []
     static func recordRetry(_ stage: String) {
