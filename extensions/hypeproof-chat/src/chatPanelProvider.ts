@@ -5498,6 +5498,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // #4501 — subscription rehearsal turns the Service has not accepted yet (turn_id → upload body). Host memory only.
   private rehearsalUploadUnsent = new Map<string, Record<string, unknown>>();
   private rehearsalUploadHeldOnce = false;
+  private rehearsalIssuerNoticeShown = false;
   // #1298 — called when the auto-read whoami path gets a rejected result (401/403).
   // Extension sets this to delete the issuer token and show the student start page once.
   onIssuerAutoRejected?: () => void;
@@ -12779,6 +12780,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
     void (async () => vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand))().catch(() => undefined);
+    // #4501 — entering a subscription rehearsal seat without the instructor token: say so once (the report refuses too).
+    if (seatBand && mustStayLocal(profile?.rehearsal)) {
+      if (!this.rehearsalIssuerNoticeShown) {
+        const issuerSeat = await this.context.secrets.get(ISSUER_TOKEN_KEY).then(v => v, () => undefined);
+        if (!issuerSeat) { this.rehearsalIssuerNoticeShown = true; await this.post({ type: "rehearsalState", state: "error", message: REHEARSAL_ISSUER_MISSING }); }
+      }
+    } else this.rehearsalIssuerNoticeShown = false;
     await this.post({
       type: "config",
       config: {
