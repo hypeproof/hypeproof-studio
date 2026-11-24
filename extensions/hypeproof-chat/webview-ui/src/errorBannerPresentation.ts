@@ -37,6 +37,8 @@ export function errorBannerPresentation(message: string): ErrorBannerPresentatio
   const isTrialEnd = !isPass && TRIAL_END.test(message);
   // REQ-M45 — the app lacks the Agent SDK binary: an install step, not a lock or a fault.
   const isInstall = /설치 도구/.test(message);
+  // REQ-0015 — an ended personal trial is a calm notice: no retry invitation.
+  if (isTrialEnd) return { icon: "⏳", title: "체험이 끝났어요", tone: "notice" };
   return {
     icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isInstall ? "🧰" : !isRateLimited && isAuth ? "🔒" : !isRateLimited && isConn ? "🔌" : "⚠️",
     title: isPass

@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { errorBannerPresentation } from '../webview-ui/src/errorBannerPresentation.ts';
 
-const TRIAL_END = { icon: '⏳', title: '체험이 끝났어요' };
+const TRIAL_END = { icon: '⏳', title: '체험이 끝났어요', tone: 'notice' };
 const CONNECTION = { icon: '🔌', title: '연결이 끊겼어요' };
 
 // Positive: trial expiry / exhaustion copy (proxyClientHelpers.classifyProfileFailure,
@@ -54,5 +54,34 @@ assert.notDeepEqual(
   'ambiguous busy/exhausted copy is not claimed as trial end',
 );
 assert.deepEqual(errorBannerPresentation('알 수 없는 오류'), { icon: '⚠️', title: '문제가 생겼어요' });
+
+function test_tc_0014_trial_expired_sentence_is_trial_end() {
+  const r = errorBannerPresentation('개인 체험 시간이 끝났습니다. 이용권을 확인해 주세요.');
+  assert.equal(r.icon, '⏳');
+  assert.equal(r.title, '체험이 끝났어요');
+}
+function test_tc_0015_trial_exhausted_sentences_are_trial_end() {
+  for (const m of ['개인 체험 한도에 도달했습니다.', '개인 체험 요청을 모두 썼습니다.']) {
+    const r = errorBannerPresentation(m);
+    assert.equal(r.icon, '⏳', m);
+    assert.equal(r.title, '체험이 끝났어요', m);
+  }
+}
+function test_tc_0016_connection_failure_keeps_connection_frame() {
+  for (const m of ['네트워크 연결이 끊겼습니다. 시간 초과', 'stream interrupted']) {
+    const r = errorBannerPresentation(m);
+    assert.equal(r.icon, '🔌', m);
+    assert.equal(r.title, '연결이 끊겼어요', m);
+  }
+}
+function test_tc_0017_trial_end_is_notice_and_connection_has_no_tone() {
+  assert.equal(errorBannerPresentation('개인 체험 시간이 끝났습니다.').tone, 'notice');
+  assert.equal(errorBannerPresentation('네트워크 연결이 끊겼습니다. 시간 초과').tone, undefined);
+  assert.equal(errorBannerPresentation('stream interrupted').tone, undefined);
+}
+test_tc_0014_trial_expired_sentence_is_trial_end();
+test_tc_0015_trial_exhausted_sentences_are_trial_end();
+test_tc_0016_connection_failure_keeps_connection_frame();
+test_tc_0017_trial_end_is_notice_and_connection_has_no_tone();
 
 console.log('error-banner-presentation: ok');
