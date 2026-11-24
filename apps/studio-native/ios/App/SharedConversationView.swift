@@ -779,6 +779,9 @@ struct SharedConversationView: View {
                 }
                 journeyDiagnostic("nativeVoiceTimeline", label: "Voice transition trace", value: voice.timeline.export)
                 journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
+                // The conversation draws no sync progress since #4384; Settings and the sync retry
+                // button still read this state, so journeys assert it here (#4432).
+                journeyDiagnostic("nativeJourneySyncProgress", label: "Sync progress", value: model.showsSyncProgress ? "shown" : "hidden")
                 if NativeJourneyFixture.longHistory {
                     journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))
                 }

@@ -276,6 +276,20 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertNotNil(value, "Diagnostic \(id) must expose a string value.")
         return value
     }
+    /// The model's sync-progress state (`nativeJourneySyncProgress`). The conversation has drawn no
+    /// progress since #4384 removed `sharedSyncing`, so queries for that identifier always passed.
+    /// `settingsSyncing` and `retryConversationSync` both read this state.
+    @MainActor private func syncProgressHidden(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
+        let node = diagnostic("nativeJourneySyncProgress", in: app)
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { object, _ in
+            (object as? XCUIElement)?.value as? String == "hidden"
+        }, object: node)
+        return XCTWaiter.wait(for: [hidden], timeout: timeout) == .completed
+    }
+    /// The only progress that reads "대화 확인 중" is in Settings. With Settings closed, none may show.
+    @MainActor private func conversationProgressCount(_ app: XCUIApplication) -> Int {
+        app.activityIndicators.matching(NSPredicate(format: "label == %@", "대화 확인 중")).count
+    }
     @MainActor private func diagnostic(_ id: String, in app: XCUIApplication) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
         XCTAssertTrue(element.exists || element.waitForExistence(timeout: 5))
@@ -514,8 +528,7 @@ final class StudioJourneyTests: XCTestCase {
         let held = try waitForTraceCount("desktop_list_starts", atLeast: 1, in: app)
         XCTAssertEqual(held["held_desktop_lists"] as? Int, 1)
         XCTAssertEqual(held["desktop_list_cancellations"] as? Int, 0)
-        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5), "A held desktop list must not keep the personal conversation checking.")
+        XCTAssertTrue(syncProgressHidden(app, timeout: 5), "A held desktop list must not keep the personal conversation checking.")
         XCTAssertEqual(field(app).value as? String, words)
         let send = app.buttons["sharedSend"]; enabled(send)
         send.tap(); answer(app)
@@ -523,7 +536,7 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(after["submitted_while_desktop_list_held"] as? Int, 1, "The actual POST must start before the unrelated GET settles.")
         XCTAssertFalse(app.staticTexts["같은 계정의 대화에 저장됨"].exists)
         XCTAssertFalse(app.staticTexts["같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."].exists)
-        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch.exists)
+        XCTAssertEqual(diagnosticValue("nativeJourneySyncProgress", in: app), "hidden")
         XCTAssertEqual(after["submitted_texts"] as? [String], [words])
         XCTAssertEqual((after["submitted_ids"] as? [String])?.count, 1)
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)
@@ -549,8 +562,7 @@ final class StudioJourneyTests: XCTestCase {
         let error = app.staticTexts["sharedError"]
         XCTAssertTrue(error.waitForExistence(timeout: 5))
         XCTAssertFalse(error.label.contains("로그인 시간이 지났어요"))
-        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(syncProgressHidden(app, timeout: 5), "A history timeout must end the checking state.")
         XCTAssertFalse(app.buttons["linkDesktop"].exists)
         XCTAssertEqual(field(app).value as? String, words)
         XCTAssertTrue(field(app).isEnabled)
@@ -569,7 +581,7 @@ final class StudioJourneyTests: XCTestCase {
         retry.tap()
         _ = try waitForTraceCount("history_reads", atLeast: 2, in: app)
         XCTAssertTrue(error.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(syncProgressHidden(app, timeout: 5), "The explicit retry read must end the checking state.")
         XCTAssertEqual(field(app).value as? String, words)
         enabled(app.buttons["sharedSend"])
         XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], [])
@@ -593,8 +605,7 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["sharedError"].exists)
         XCTAssertFalse(app.buttons["linkDesktop"].exists)
         let result = try waitForTraceCount("history_reads", atLeast: 2, in: app)
-        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(syncProgressHidden(app, timeout: 5), "A cancelled history read must end the checking state.")
         enabled(app.buttons["sharedSend"])
         XCTAssertEqual(field(app).value as? String, words)
         XCTAssertFalse(app.staticTexts["sharedError"].exists)
@@ -925,19 +936,18 @@ final class StudioJourneyTests: XCTestCase {
         let refresh = app.buttons["새로 고침"]; enabled(refresh)
         XCTAssertTrue(refresh.isHittable); XCTAssertGreaterThanOrEqual(refresh.frame.height, 44)
         refresh.tap()
-        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
         _ = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
-        XCTAssertFalse(syncing.exists, "The held history read must not restore the removed conversation spinner.")
         // Refresh may overlap the sheet dismissal. A voice button behind an
         // open settings surface is not yet a usable touch target.
         XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
+        XCTAssertEqual(conversationProgressCount(app), 0, "The held history read must not restore the removed conversation spinner.")
         let voice = app.buttons["sharedVoice"]
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             voice.exists && voice.isEnabled && voice.isHittable
                 && !voice.frame.isEmpty && app.frame.contains(voice.frame)
         }, object: voice)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
-        XCTAssertFalse(syncing.exists, "History activity is observed through the fixture barrier, not removed UI.")
+        XCTAssertEqual(conversationProgressCount(app), 0, "History activity is observed through the fixture barrier, not removed UI.")
         let before = try waitForTraceCount("active_history_reads", atLeast: 1, in: app)
         XCTAssertEqual(before["history_sync_automatic"] as? Bool, false, "This journey must hold the explicit Settings refresh, not an earlier quiet poll.")
         XCTAssertEqual(before["active_history_reads"] as? Int, 1)
@@ -980,8 +990,8 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(held["speech_captures"] as? Int, 2)
         XCTAssertEqual(held["accepted_turns"] as? Int, 1)
         XCTAssertEqual(held["history_barrier_timeouts"] as? Int, 0)
-        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
-        XCTAssertFalse(syncing.exists, "A real periodic read must not insert progress into an already usable personal transcript.")
+        XCTAssertEqual(diagnosticValue("nativeJourneySyncProgress", in: app), "hidden", "A real periodic read must not insert progress into an already usable personal transcript.")
+        XCTAssertEqual(conversationProgressCount(app), 0)
         XCTAssertTrue(app.buttons["sharedVoiceStop"].exists, "The second capture remains active during that read.")
 
         // Deliver only the external recognizer event after observing the held
@@ -1090,8 +1100,16 @@ final class StudioJourneyTests: XCTestCase {
         try armOrdinaryRead(); releaseRead()
         _ = try waitForTraceCount("history_barrier_completions", atLeast: 1, in: app)
         XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], ids)
-        try armOrdinaryRead()
+        // #4456: a quiet periodic read keeps "대화 다시 확인" in place (only disabled), so
+        // "다시 보내기" does not move under the tap. Compare before and during the held read.
         let retry = app.buttons["sharedRetry"]
+        let syncRetry = app.buttons["retryConversationSync"]
+        XCTAssertTrue(retry.exists)
+        let retryFrame = retry.frame, syncRetryShown = syncRetry.exists
+        try armOrdinaryRead()
+        XCTAssertEqual(syncRetry.exists, syncRetryShown, "A quiet read must not add or remove the sync retry button.")
+        if syncRetryShown { XCTAssertFalse(syncRetry.isEnabled, "A running read disables the sync retry button.") }
+        XCTAssertEqual(retry.frame, retryFrame, "A quiet read must not move the retry button.")
         XCTAssertTrue(retry.isEnabled, "A background read must not swallow the user's explicit retry.")
         XCTAssertTrue(retry.isHittable)
         retry.tap() // Exactly one real tap; keep the original answer and receipt assertions.
