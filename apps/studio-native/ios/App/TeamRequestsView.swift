@@ -29,11 +29,6 @@ private func productLabel(_ id: String) -> String { ["studio": "Studio", "lab": 
 /// uptime, on the stall lines' clock. Release behaviour is unchanged.
 @MainActor func teamPickProduct(_ model: TeamRequestPresentation, _ value: String) {
     teamRenderCount("set.product." + value)
-#if DEBUG
-    // NEGATIVE CONTROL for #4432 F24 (F1): the pick is dropped, so labRequestDetail must fail at its new
-    // assertions. This commit is reverted by the next one and never merged.
-    if NativeJourneyFixture.enabled { teamRenderCount("set.product.droppedByControl"); return }
-#endif
     let outcome: String
     if let current = model.state.draft, let controller = model.controller {
         outcome = controller.edit(body: current.body, product: value, category: current.category).rawValue
