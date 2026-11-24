@@ -6,6 +6,7 @@ path. Planted defects (a missing shard, an unstarted case, a case in two shards,
 shard, an attachment collision) must each fail; a complete set must pass.
 """
 import contextlib
+from datetime import datetime, timezone
 import importlib.util
 import io
 import json
@@ -1084,6 +1085,69 @@ class PosterTrigger(unittest.TestCase):
         scan = script.index('terminate-scan --evidence ../evidence')
         self.assertLess(test, scan); self.assertLess(scan, script.index(line))
         self.assertLess(script.index(line), script.index("printf 'native verification: iPhone simulator journeys\\n'"), 'Shard mode only.')
+
+    def library(self, root):
+        """Known answer: store 2 files at 02:51 and 1 at 02:39, Caches/com.apple.EmojiPoster... 1 at 02:51,
+        an unrelated cache 1 at 02:51 (not counted), a link into the store (not followed)."""
+        library = root / self.DEVICE / 'data/Library'
+        store = library / observe.MTIME_STORE / '61/Extensions/com.apple.EmojiPoster.EmojiPosterExtension'
+        store.mkdir(parents=True)
+        cache = library / 'Caches/com.apple.EmojiPoster.EmojiPosterExtension'; cache.mkdir(parents=True)
+        other = library / 'Caches/com.apple.other'; other.mkdir(parents=True)
+        at = lambda hh, mm: datetime(2026, 11, 24, hh, mm, 30, tzinfo=timezone.utc).timestamp()
+        for path, stamp in [(store / 'a', at(2, 51)), (store / 'b', at(2, 51)), (store / 'c', at(2, 39)),
+                            (cache / 'd', at(2, 51)), (other / 'e', at(2, 51))]:
+            path.write_text('x'); os.utime(path, (stamp, stamp))
+        (cache / 'storeLink').symlink_to(library / observe.MTIME_STORE)
+        return library
+
+    def test_mtimes_are_counted_by_minute_for_the_store_and_poster_caches_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            found = observe.poster_mtimes(self.library(Path(directory)))
+        self.assertIsNone(found['stopped'])
+        self.assertEqual(found['minutes'], {'2026-11-24T02:39': [1, 0], '2026-11-24T02:51': [2, 1]})
+        self.assertIsNone(found['earlier'])
+
+    def test_the_mtime_walk_is_bounded_and_folds_older_minutes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            library = self.library(Path(directory))
+            with mock.patch.object(observe, 'MTIME_ROWS', 1):
+                found = observe.poster_mtimes(library)
+            self.assertEqual(found['minutes'], {'2026-11-24T02:51': [2, 1]})
+            self.assertEqual((found['first'], found['earlier']), ('2026-11-24T02:51', [1, 0]))
+            with mock.patch.object(observe, 'MTIME_WALK_ENTRIES', 2):
+                self.assertEqual(observe.poster_mtimes(library)['stopped'], 'entry limit 2')
+            ticks = iter([0, 0, 11])
+            self.assertEqual(observe.poster_mtimes(library, clock=lambda: next(ticks, 99))['stopped'], f'time limit {observe.MTIME_WALK_LIMIT}s')
+            with mock.patch.object(observe, 'MTIME_WALK_DEPTH', 2):
+                self.assertEqual(observe.poster_mtimes(library)['minutes'], {'2026-11-24T02:51': [0, 1]})
+
+    def test_only_the_end_record_has_the_mtime_table_and_no_step_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'Devices'
+            self.library(root)
+            evidence = Path(directory) / 'evidence'; evidence.mkdir()
+            with mock.patch('builtins.print') as printed:
+                observe.poster_probe(evidence, self.DEVICE, run=lambda a, l: '', root=root, when='start')
+                start = (evidence / observe.POSTER_FILE).read_text()
+                observe.poster_probe(evidence, self.DEVICE, run=lambda a, l: '', root=root, when='end')
+            text = (evidence / observe.POSTER_FILE).read_text()
+            self.assertFalse((evidence / 'simulator-steps.jsonl').exists())
+        self.assertNotIn('-- poster file mtimes', start)
+        self.assertNotIn('mtime walk', start)
+        end = text[len(start):]
+        section = end.split('-- poster file mtimes by UTC minute')[1].split('\n-- ')[0].splitlines()
+        self.assertEqual(section[1:], ['minute store caches', '2026-11-24T02:39 1 0', '2026-11-24T02:51 2 1'])
+        self.assertIn('mtime walk', end.split('-- costs')[1])
+        self.assertIn('; file mtimes in 2 minutes', printed.call_args[0][0])
+
+    def test_without_device_data_the_end_record_says_so(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            with mock.patch('builtins.print'):
+                observe.poster_probe(evidence, self.DEVICE, run=lambda a, l: '', root=evidence / 'none', when='end')
+            text = (evidence / observe.POSTER_FILE).read_text()
+        self.assertIn('0 entries, stopped: no device data directory)\nminute store caches\n<none>\n', text)
 
 
 class BoundaryVerdicts(unittest.TestCase):

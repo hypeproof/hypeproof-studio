@@ -513,6 +513,67 @@ def schedule_files(data, *, clock=time.monotonic):
     return {"matches": matches, "visited": visited, "stopped": stopped}
 
 
+# When the poster files were last written (#4432 F21 step 2). The start and end records of run 45309186160 showed
+# the store growing 1,385 -> 1,746 files during the shard, but not when. Every test starts by terminating and
+# launching the app, so the Home screen shows at each test start: writes bunched just after test starts point to a
+# Home-screen trigger, and writes at one device age regardless of test starts point to a timer. Files only.
+MTIME_STORE = "Application Support/PRBPosterExtensionDataStore"
+MTIME_CACHE = re.compile(r"Poster")   # directories directly under Library/Caches whose name contains this
+MTIME_WALK_LIMIT = 10        # seconds
+MTIME_WALK_ENTRIES = 20000   # directory entries visited at most
+MTIME_WALK_DEPTH = 8         # levels below each walked directory
+MTIME_ROWS = 120             # most recent minutes listed; earlier files are summed into one "earlier" row
+
+
+def poster_mtimes(library, *, clock=time.monotonic):
+    """Files under the poster store and under Library/Caches/*Poster*, counted by the UTC minute of their mtime.
+
+    Returns {"minutes": {"HH:MM": [store, caches]}, "earlier": [store, caches] or None, "first": "HH:MM" of the
+    earliest listed minute, "visited": entries, "stopped": None or why}. Symlinks are not followed or counted.
+    Only the last write of each file is seen: a file written twice counts once, a removed file not at all."""
+    roots = [(library / MTIME_STORE, 0)]
+    try:
+        roots += [(entry, 1) for entry in sorted((library / "Caches").iterdir(), key=lambda entry: entry.name)
+                  if MTIME_CACHE.search(entry.name) and entry.is_dir() and not entry.is_symlink()]
+    except OSError:
+        pass
+    started, visited, stopped, stamps = clock(), 0, None, {}
+    for root, column in roots:
+        stack = [(root, 0)]
+        while stack and stopped is None:
+            path, depth = stack.pop()
+            try:
+                entries = sorted(path.iterdir(), key=lambda entry: entry.name)
+            except OSError:
+                continue
+            for entry in entries:
+                visited += 1
+                if visited > MTIME_WALK_ENTRIES:
+                    stopped = f"entry limit {MTIME_WALK_ENTRIES}"
+                    break
+                if clock() - started > MTIME_WALK_LIMIT:
+                    stopped = f"time limit {MTIME_WALK_LIMIT}s"
+                    break
+                if entry.is_symlink():
+                    continue
+                if entry.is_dir():
+                    if depth + 1 < MTIME_WALK_DEPTH:
+                        stack.append((entry, depth + 1))
+                    continue
+                try:
+                    minute = datetime.fromtimestamp(entry.lstat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M")
+                except OSError:
+                    continue
+                stamps.setdefault(minute, [0, 0])[column] += 1
+        if stopped:
+            break
+    ordered = sorted(stamps)
+    listed, earlier = ordered[-MTIME_ROWS:], ordered[:-MTIME_ROWS]
+    folded = [sum(stamps[m][0] for m in earlier), sum(stamps[m][1] for m in earlier)] if earlier else None
+    return {"minutes": {m: stamps[m] for m in listed}, "earlier": folded, "first": listed[0] if listed else None,
+            "visited": visited, "stopped": stopped}
+
+
 def poster_probe(evidence, device, *, run=None, root=None, when="start"):
     """Write POSTER_FILE: PosterBoard's data paths, poster and wallpaper launchd jobs, and the wallpaper kind.
 
@@ -535,6 +596,12 @@ def poster_probe(evidence, device, *, run=None, root=None, when="start"):
     started = time.monotonic()
     schedule = schedule_files(data) if data.is_dir() else {"matches": [], "visited": 0, "stopped": "no device data directory"}
     costs.append(f"schedule walk {int((time.monotonic() - started) * 1000)} ms {'returned' if schedule['stopped'] is None else 'stopped'}")
+    mtimes = None
+    if when == "end":
+        started = time.monotonic()
+        mtimes = poster_mtimes(library) if library.is_dir() else {"minutes": {}, "earlier": None, "first": None,
+                                                                 "visited": 0, "stopped": "no device data directory"}
+        costs.append(f"mtime walk {int((time.monotonic() - started) * 1000)} ms {'returned' if mtimes['stopped'] is None else 'stopped'}")
     with (evidence / POSTER_FILE).open("a") as target:
         target.write(f"== poster probe {device} {wall} ({when})\n-- wallpaper kind (from file names): {kind}\n")
         target.write(f"-- PosterBoard / poster / wallpaper directories under data/Library ({files['visited']} entries"
@@ -549,9 +616,18 @@ def poster_probe(evidence, device, *, run=None, root=None, when="start"):
         target.write(f"-- schedule state names (posterboardupdate|dasd|BackgroundTask) under data/ ({schedule['visited']} entries"
                      f"{', stopped: ' + schedule['stopped'] if schedule['stopped'] else ''})\n"
                      + ("".join(f"{path} {size}\n" for path, size in schedule["matches"]) or "<none>\n"))
+        if mtimes is not None:
+            target.write(f"-- poster file mtimes by UTC minute (store = {MTIME_STORE}, caches = Caches/*Poster*; "
+                         f"{mtimes['visited']} entries{', stopped: ' + mtimes['stopped'] if mtimes['stopped'] else ''})\n"
+                         "minute store caches\n")
+            if mtimes["earlier"]:
+                target.write(f"before {mtimes['first']} {mtimes['earlier'][0]} {mtimes['earlier'][1]}\n")
+            target.write("".join(f"{minute} {store} {caches}\n" for minute, (store, caches) in mtimes["minutes"].items())
+                         or "<none>\n")
         target.write("-- costs\n" + "\n".join(costs) + "\n")
     print(f"poster probe ({when}): wallpaper {kind}; {len(files['providers'])} poster providers, {len(files['still'])} still files, "
-          f"{len(running)} running and {len(defined)} defined poster/wallpaper jobs; {len(schedule['matches'])} schedule state names", flush=True)
+          f"{len(running)} running and {len(defined)} defined poster/wallpaper jobs; {len(schedule['matches'])} schedule state names"
+          + (f"; file mtimes in {len(mtimes['minutes'])} minutes" if mtimes is not None else ""), flush=True)
     return kind
 
 
