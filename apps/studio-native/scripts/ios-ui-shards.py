@@ -7,6 +7,11 @@ case this parser misses still runs there instead of disappearing. A `--dedicated
 none of them: it gets its own row, index N+1, which its own job runs (#4432: the real Korean
 voice case runs after the simulator settles, apart from the other cases).
 
+With `--set gate` or `--set nightly` (ios-ui-sets.json), the plan holds only that set (#4432 stage 3):
+`gate` is the listed cases, `nightly` every other declared case. The other set's cases are recorded as
+`excluded`; the catch-all shard skips them too, and `merge` fails if one of them starts. A dedicated case
+outside the selected set is excluded with the rest of its set. `--set all` (the default) plans every case.
+
 With `--durations` (ios-ui-durations.json), the regular shards are balanced by measured time instead:
 the longest known case goes to the shard with the least time so far. Cases the table does not know are
 then placed by count, on the shard with the fewest cases (#4432 F21: by count, shard test time ranged
@@ -28,6 +33,8 @@ import sys
 SCHEMA_PLAN = 'hps-ios-ui-shard-plan/2'
 SCHEMA_MERGE = 'hps-ios-ui-shard-merge/1'
 SCHEMA_DURATIONS = 'hps-ios-ui-durations/1'
+SCHEMA_SETS = 'hps-ios-ui-sets/1'
+SETS = ('all', 'gate', 'nightly')
 TARGET = 'HPStudioUITests'
 CLASS = re.compile(r'^\s*(?:final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*XCTestCase\b')
 # Attributes and modifiers such as `@MainActor` may precede the declaration.
@@ -72,6 +79,35 @@ def load_durations(path: Path):
     return {str(case): float(seconds) for case, seconds in cases.items()}
 
 
+def load_sets(path: Path):
+    """The gate case list from an ios-ui-sets.json: unique `HPStudioUITests/<class>/<test>` strings."""
+    document = json.loads(path.read_text())
+    if document.get('schema') != SCHEMA_SETS:
+        raise ValueError('Unexpected UI sets schema')
+    gate = document.get('gate')
+    if (not isinstance(gate, list) or not gate or not all(isinstance(case, str) for case in gate)
+            or len(gate) != len(set(gate))):
+        raise ValueError('UI sets must list each gate case once')
+    return gate
+
+
+def select(classes, selection: str, gate=None):
+    """Cases outside the selected set, in declaration order. Every gate case must be declared."""
+    if selection not in SETS:
+        raise ValueError(f'Unknown UI set {selection}')
+    declared = [f'{TARGET}/{name}/{test}' for name in sorted(classes) for test in classes[name]]
+    if gate is None and selection != 'all':
+        raise ValueError(f'The {selection} set needs the UI sets file')
+    missing = [case for case in gate or () if case not in declared]
+    if missing:
+        raise ValueError(f'Gate case(s) not declared: {", ".join(missing)}')
+    if selection == 'all':
+        return []
+    if selection == 'gate':
+        return [case for case in declared if case not in gate]
+    return [case for case in declared if case in gate]
+
+
 def balance(cases, shards: int, durations):
     """Regular cases by measured time (longest first, onto the shard with the least time; ties by case name,
     then lowest shard), then unmeasured cases by count (fewest cases, then lowest shard)."""
@@ -88,7 +124,7 @@ def balance(cases, shards: int, durations):
     return assigned, seconds
 
 
-def plan(classes, shards: int, dedicated=(), durations=None):
+def plan(classes, shards: int, dedicated=(), durations=None, selection='all', gate=None):
     if not 2 <= shards <= 8:
         raise ValueError('Shard count must be between 2 and 8')
     dedicated = list(dict.fromkeys(dedicated))
@@ -96,6 +132,8 @@ def plan(classes, shards: int, dedicated=(), durations=None):
     missing = [case for case in dedicated if case not in declared]
     if missing:
         raise ValueError(f'Dedicated case(s) not declared: {", ".join(missing)}')
+    excluded = select(classes, selection, gate)
+    dedicated = [case for case in dedicated if case not in excluded]
     assigned = [[] for _ in range(shards)]
     seconds = None
     if durations is None:
@@ -103,13 +141,14 @@ def plan(classes, shards: int, dedicated=(), durations=None):
         # Round-robin inside each class keeps every shard a similar mix of short and long classes.
         # The start offset rotates so one shard does not collect every class remainder.
         for name in sorted(classes):
-            tests = [test for test in classes[name] if f'{TARGET}/{name}/{test}' not in dedicated]
+            tests = [test for test in classes[name]
+                     if f'{TARGET}/{name}/{test}' not in dedicated and f'{TARGET}/{name}/{test}' not in excluded]
             for position, test in enumerate(tests):
                 assigned[(offset + position) % shards].append(f'{TARGET}/{name}/{test}')
             offset = (offset + len(tests)) % shards
     else:
         regular = [f'{TARGET}/{name}/{test}' for name in sorted(classes) for test in classes[name]
-                   if f'{TARGET}/{name}/{test}' not in dedicated]
+                   if f'{TARGET}/{name}/{test}' not in dedicated and f'{TARGET}/{name}/{test}' not in excluded]
         assigned, seconds = balance(regular, shards, durations)
     if any(not cases for cases in assigned):
         raise ValueError('Every shard needs at least one case; lower the shard count')
@@ -118,8 +157,9 @@ def plan(classes, shards: int, dedicated=(), durations=None):
         if index < shards:
             arguments = [f'-only-testing:{case}' for case in cases]
         else:
-            # The catch-all shard also skips the dedicated cases; their own row runs them.
-            arguments = [f'-skip-testing:{case}' for other in assigned[:-1] + [dedicated] for case in other]
+            # The catch-all shard also skips the dedicated cases (their own row runs them) and the
+            # other set's cases (the other workflow runs them).
+            arguments = [f'-skip-testing:{case}' for other in assigned[:-1] + [dedicated, excluded] for case in other]
         row = {'index': index, 'cases': cases, 'dedicated': False, 'xcodebuild_arguments': arguments}
         if seconds is not None:
             row['estimated_seconds'] = round(seconds[index - 1], 1)
@@ -130,7 +170,7 @@ def plan(classes, shards: int, dedicated=(), durations=None):
                      'xcodebuild_arguments': [f'-only-testing:{case}' for case in dedicated]})
     document = {'schema': SCHEMA_PLAN, 'target': TARGET, 'shard_count': len(rows), 'catch_all': shards,
                 'case_count': sum(len(row['cases']) for row in rows), 'shards': rows,
-                'balance': 'count' if durations is None else 'durations'}
+                'balance': 'count' if durations is None else 'durations', 'set': selection, 'excluded': excluded}
     if durations is not None:
         document['stale_durations'] = sorted(case for case in durations if case not in declared)
     return document
@@ -149,6 +189,8 @@ def read_plan(path: Path):
     catch_all = document['catch_all']
     if [row['dedicated'] for row in shards] != [index > catch_all for index in range(1, len(shards) + 1)]:
         raise ValueError('Shard plan dedicated rows must follow the catch-all shard')
+    if document.get('set', 'all') not in SETS or set(document.get('excluded', [])) & set(every):
+        raise ValueError('Shard plan excludes a planned case or names an unknown set')
     return document
 
 
@@ -230,12 +272,16 @@ def merge(plan_doc, shard_root: Path, evidence: Path):
     owner = {case: row['index'] for row in plan_doc['shards'] for case in row['cases']}
     not_run = sorted(case for case in owner if case not in seen)
     misplaced = sorted(case for case in owner if case in seen and seen[case] != [owner[case]])
-    unplanned = sorted(case for case in seen if case not in owner)
+    excluded = set(plan_doc.get('excluded', []))
+    excluded_started = sorted(case for case in seen if case in excluded)
+    unplanned = sorted(case for case in seen if case not in owner and case not in excluded)
     unplanned_outside_last = [case for case in unplanned if seen[case] != [catch_all]]
     if not_run:
         problems.append(f'{len(not_run)} planned case(s) never started')
     if misplaced:
         problems.append(f'{len(misplaced)} case(s) started outside their own shard or in two shards')
+    if excluded_started:
+        problems.append(f'{len(excluded_started)} case(s) of the other UI set started; the {plan_doc.get("set")} set excludes them')
     if unplanned_outside_last:
         problems.append(f'{len(unplanned_outside_last)} unplanned case(s) started outside the catch-all shard {catch_all}')
     evidence.mkdir(parents=True, exist_ok=True)
@@ -252,7 +298,8 @@ def merge(plan_doc, shard_root: Path, evidence: Path):
                 'test_exit': test_exit, 'attachment_exit': attachment_exit,
                 'attachment_manifest_rows': manifest_rows, 'not_run': not_run, 'misplaced': misplaced,
                 'unplanned_in_last_shard': [case for case in unplanned if seen[case] == [catch_all]],
-                'unplanned_outside_last_shard': unplanned_outside_last, 'problems': problems}
+                'unplanned_outside_last_shard': unplanned_outside_last, 'set': plan_doc.get('set', 'all'),
+                'excluded_started': excluded_started, 'problems': problems}
     (evidence / 'ios-ui-shards.json').write_text(json.dumps(document, indent=2) + '\n')
     return document
 
@@ -266,6 +313,8 @@ def main(argv=None):
     planner.add_argument('--output', type=Path, required=True)
     planner.add_argument('--dedicated', action='append', default=[], help='a case that runs only in its own row')
     planner.add_argument('--durations', type=Path, default=None, help='ios-ui-durations.json: balance by measured time')
+    planner.add_argument('--set', choices=SETS, default='all', help='plan only the gate or the nightly cases')
+    planner.add_argument('--sets', type=Path, default=None, help='ios-ui-sets.json: the gate case list')
     arguments = commands.add_parser('arguments')
     arguments.add_argument('--plan', type=Path, required=True)
     arguments.add_argument('--index', type=int, required=True)
@@ -279,11 +328,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == 'plan':
         durations = load_durations(args.durations) if args.durations else None
-        document = plan(discover(args.ui_tests), args.shards, args.dedicated, durations)
+        gate = load_sets(args.sets) if args.sets else None
+        document = plan(discover(args.ui_tests), args.shards, args.dedicated, durations, args.set, gate)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(document, indent=2) + '\n')
         sizes = ', '.join(str(len(row['cases'])) for row in document['shards'])
-        print(f'UI shard plan: {document["case_count"]} cases in {document["shard_count"]} shards ({sizes}), by {document["balance"]}')
+        print(f'UI shard plan: {document["case_count"]} cases in {document["shard_count"]} shards ({sizes}), by {document["balance"]}; '
+              f'set {document["set"]}, {len(document["excluded"])} excluded')
         if durations is not None:
             estimates = ', '.join(f'{row["estimated_seconds"] / 60:.1f}' for row in document['shards'] if 'estimated_seconds' in row)
             print(f'UI shard estimated minutes: {estimates}; stale durations: {len(document["stale_durations"])}')

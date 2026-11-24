@@ -1,0 +1,139 @@
+name: Studio native mobile nightly
+# The iOS UI cases outside the PR and main gate (ios-ui-sets.json, #4432 stage 3). This is not a
+# required check. native / acceptance and the TestFlight gate read only studio-native-mobile.yml
+# runs, so this workflow can neither pass nor block them. A failed run is recorded on one open issue.
+on:
+  schedule:
+    # 03:17 KST, outside working hours.
+    - cron: '17 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studio-native-nightly
+  cancel-in-progress: false
+jobs:
+  ios-build:
+    name: iOS build (nightly set)
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Core tests, device build and one simulator build-for-testing
+        env:
+          # Must equal the ios-ui matrix below; the ios job fails when a planned shard is missing.
+          # The nightly set has no real-voice row: the gate's real-voice job runs that case.
+          IOS_UI_SHARDS: '5'
+          IOS_UI_SET: 'nightly'
+        run: bash apps/studio-native/scripts/ios-verify.sh build
+      - name: Pack the simulator test products
+        run: |
+          # tar keeps the signed bundles' symlinks and modes; an artifact zip does not.
+          mkdir -p "$RUNNER_TEMP/ios-transfer"
+          tar -C apps/studio-native/ios/DerivedData/Build -cf "$RUNNER_TEMP/ios-transfer/ios-test-products.tar" Products
+          cp apps/studio-native/evidence/ios-ui-shard-plan.json "$RUNNER_TEMP/ios-transfer/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-ios-test-products-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-transfer/
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/studio-native/evidence/
+            apps/studio-native/ios/DerivedData-device/Build/Products/Release-iphoneos/*.app
+          retention-days: 14
+  ios-ui:
+    name: iOS UI nightly shard ${{ matrix.shard }}
+    needs: ios-build
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 35
+    strategy:
+      # Every shard finishes and keeps its evidence even when another shard fails.
+      fail-fast: false
+      matrix:
+        # The nightly set is 57 cases, 54.1 min by ios-ui-durations.json: about 10.8 min per shard.
+        # With 10.6-15.6 min before the first test (#4432 F21), 4 shards would leave under 6 min.
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: studio-ios-test-products-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-transfer
+      - name: Unpack the build job's test products
+        run: |
+          mkdir -p apps/studio-native/ios/DerivedData/Build apps/studio-native/evidence
+          tar -C apps/studio-native/ios/DerivedData/Build -xf "$RUNNER_TEMP/ios-transfer/ios-test-products.tar"
+          cp "$RUNNER_TEMP/ios-transfer/ios-ui-shard-plan.json" apps/studio-native/evidence/
+      - name: Native simulator journeys for one shard
+        run: bash apps/studio-native/scripts/ios-verify.sh shard ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-ui-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native/evidence/
+          retention-days: 14
+  # The same merge as the gate's ios job: every nightly case must start in its own shard and pass.
+  ios:
+    name: iOS nightly set
+    needs: [ios-build, ios-ui]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: studio-ios-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: studio-ios-ui-shard-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-shard-artifacts
+      - name: Merge every nightly UI shard and record the native journeys
+        env:
+          NATIVE_SOURCE_HEAD: ${{ github.sha }}
+          IOS_BUILD_RESULT: ${{ needs.ios-build.result }}
+          IOS_UI_RESULT: ${{ needs.ios-ui.result }}
+          IOS_SHARD_ARTIFACTS: ${{ runner.temp }}/ios-shard-artifacts
+        run: bash apps/studio-native/scripts/ios-collect.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-nightly-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/studio-native/evidence/
+          retention-days: 14
+  report:
+    name: Record a nightly failure
+    needs: [ios-build, ios-ui, ios]
+    if: ${{ !cancelled() && needs.ios.result != 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Comment on the open nightly failure issue, or open it
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NIGHTLY_RESULTS: '{"ios-build":"${{ needs.ios-build.result }}","ios-ui":"${{ needs.ios-ui.result }}","ios":"${{ needs.ios.result }}"}'
+        run: python3 apps/studio-native/scripts/nightly-failure-issue.py --results "$NIGHTLY_RESULTS"
