@@ -3372,3 +3372,7 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-skill-card-try:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-skill-card-try:disabled { cursor: not-allowed; opacity: 0.6; }
 .hps-skill-card-try:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+
+/* #4464(a) — the rehearsal report's reason, above the input area; rehearsal seat only (ChatPanel). */
+.hps-rehearsal-reject { display: flex; align-items: center; gap: var(--hp-space-2); padding: var(--hp-space-1) var(--hp-space-2); border: 1px solid var(--hp-ring-focus-default); border-radius: var(--hp-radius-control, 6px); }
+.hps-rehearsal-reject > p { flex: 1 1 auto; margin: 0; min-width: 0; overflow-wrap: anywhere; }

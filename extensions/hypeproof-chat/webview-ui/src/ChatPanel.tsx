@@ -2443,6 +2443,8 @@ export function ChatPanel(props: Props) {
       <AddonScope api={addonApi}>
       <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
+      {/* #4464(a) — a rehearsal report that was not sent: the reason sits above the input, where the learner looks. Rehearsal seat only. */}
+      <RehearsalRejectLine seat={config?.rehearsalSeat === true} result={rehearsalResult} onClose={() => setRehearsalResult(null)} />
       {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice, get blockedReason() { return dictationBusy || dictationBusyRef.current ? CONVERSATION_BLOCKED_BY_DICTATION : null; } }} onActive={reportVoiceActive} />}
       {!props.instructor && <VoiceTip config={config} taskEmpty={messages.length === 0} />}
       {/* CGP-VOICE-R-018 — the optional start and end sounds of dictation and the conversation; draws nothing. */}
@@ -3346,6 +3348,17 @@ function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 
 
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
+}
+
+/** #4464(a) — a rehearsal report that was not sent, above the input area. Drawn only on the rehearsal seat and only in the error state. */
+export function RehearsalRejectLine({ seat, result, onClose }: { seat: boolean; result: { state: "sending" | "sent" | "error"; message?: string } | null; onClose: () => void }) {
+  if (!seat || result?.state !== "error") return null;
+  return (
+    <div className="hps-rehearsal-reject" role="alert" data-rehearsal-reject="">
+      <p>{result.message}</p>
+      <button type="button" className="hp-cta-quiet" aria-label="리허설 결과 알림 닫기" onClick={onClose}>닫기</button>
+    </div>
+  );
 }
 
 /** #4048 — the band in a rehearsal seat. Drawn only when the host sent the rehearsal signal; otherwise nothing. */
