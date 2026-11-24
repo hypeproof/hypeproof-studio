@@ -1,10 +1,14 @@
-// #4501 — a subscription rehearsal turn is uploaded to the Service with no conversation text (A′, 2026-11-24).
-// The body carries ids, the answered flag, the model, tool NAMES only and the help receipt. The server refuses text
-// and tool input on a text_omitted turn (hypeproof-service worker/src/routes/chalk-transcripts.ts, d07c8401).
-// The instructor token is read here and used only in the Authorization header; it never enters the body or a log.
-import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers.ts";
+// #4501 — a subscription rehearsal turn is uploaded to the Service with no conversation text (A′), and with the
+// learner rehearsal code of this window (D1 = B, 2026-11-25). The instructor credential is never read here: the seat
+// moves it to a return key, and this module does not touch that key. The server takes rehearsal id, course and lesson
+// from the code itself; the body carries none of them (service-change-b.md).
+// The rehearsal code is used only in the Authorization header; it never enters the body or a log.
 
 export const REHEARSAL_UPLOAD_LOG = "[rehearsal-upload]";
+// The same secret key the extension stores the workshop (learner) token under: extension.ts TOKEN_KEY, written by
+// bindStudentToken (extension.ts:151-153). rehearsal-turn-upload.test.mjs checks that both spellings match.
+export const REHEARSAL_CODE_KEY = "hypeproofChat.workshopToken";
+export const REHEARSAL_TURNS_PATH = "/classroom/rehearsal/turns";
 
 export interface RehearsalTurnFacts {
   turnId: string;
@@ -13,27 +17,20 @@ export interface RehearsalTurnFacts {
   toolNames: string[];
   answered: boolean;
   at: string;
-  courseId: string;
-  rehearsalId: string;
-  lessonSha256: string;
   stepId: string | null;
   helpReceipt: string | null;
 }
 
-/** The upload body. No user_text, assistant_text or tool input field exists here, by construction. */
+/** The upload body. No user_text, assistant_text, tool input, rehearsal id, course id or lesson hash, by construction. */
 export function rehearsalTurnBody(f: RehearsalTurnFacts): Record<string, unknown> {
   return {
     text_omitted: true,
     answered: f.answered,
     turn_id: f.turnId,
     mode: f.mode,
-    connection: "subscription",
     model: f.model,
     tools: f.toolNames.map((name) => ({ name })),
     at: f.at,
-    course_id: f.courseId,
-    rehearsal_id: f.rehearsalId,
-    lesson_sha256: f.lessonSha256,
     step_id: f.stepId,
     help_receipt: f.helpReceipt,
   };
@@ -54,34 +51,54 @@ export function helpReceiptFor(
   return `mode=${mode}; source=${source}; step=${step.id}; performance=unobserved`;
 }
 
-export type UploadOutcome = { status: number } | { status: "no_issuer" } | { status: "error" };
+/** `reason` is the Service reason code of a refused upload (403 not_rehearsal/server_path, 404, 409, 410, 429 turn_limit). */
+export type UploadOutcome = { status: number; reason?: string } | { status: "no_code" } | { status: "error" };
+
+async function reasonOf(res: Response): Promise<string | undefined> {
+  try {
+    const j = (await res.json()) as { reason?: unknown };
+    return typeof j.reason === "string" ? j.reason : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
- * Host-only upload. The issuer token is read from secrets here, sent in one header, and not returned.
+ * Host-only upload to POST {base}/classroom/rehearsal/turns (base = proxyUrl, ends in /v1).
+ * The rehearsal code is read from secrets here, sent in one header, and not returned.
  * Failures are reported as an outcome, never thrown, so the student turn is not blocked.
  */
 export async function uploadRehearsalTurn(args: {
   secrets: { get(key: string): PromiseLike<string | undefined> };
-  adminBase: string;
+  base: string;
   body: Record<string, unknown>;
   fetchImpl?: typeof fetch;
   log: (line: string) => void;
 }): Promise<UploadOutcome> {
   const turnId = String(args.body.turn_id ?? "");
-  let token: string | undefined;
-  try { token = await args.secrets.get(ISSUER_TOKEN_KEY); } catch { token = undefined; }
-  if (!token) return { status: "no_issuer" };
+  let code: string | undefined;
+  try { code = await args.secrets.get(REHEARSAL_CODE_KEY); } catch { code = undefined; }
+  if (!code) return { status: "no_code" };
   try {
     const doFetch = args.fetchImpl ?? fetch;
-    const res = await doFetch(args.adminBase + "/admin/chalk/transcripts", {
+    const res = await doFetch(args.base + REHEARSAL_TURNS_PATH, {
       method: "POST",
-      headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+      headers: { authorization: "Bearer " + code, "content-type": "application/json" },
       body: JSON.stringify(args.body),
     });
     args.log(`${REHEARSAL_UPLOAD_LOG} turn=${turnId} status=${res.status}`);
-    return { status: res.status };
+    if (res.status >= 200 && res.status < 300) return { status: res.status };
+    return { status: res.status, reason: await reasonOf(res) };
   } catch {
     args.log(`${REHEARSAL_UPLOAD_LOG} turn=${turnId} status=network`);
     return { status: "error" };
   }
+}
+
+/**
+ * Whether the rehearsal seat must say once that this window has no rehearsal code (entry notice).
+ * Decided only by the code: a same-window seat (instructor return key present) has the code too, so no notice there.
+ */
+export function rehearsalCodeNoticeNeeded(input: { seatBand: boolean; subscription: boolean; codeInWindow: boolean }): boolean {
+  return input.seatBand && input.subscription && !input.codeInWindow;
 }

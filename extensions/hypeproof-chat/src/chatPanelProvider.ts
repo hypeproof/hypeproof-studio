@@ -48,9 +48,8 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import { mustStayLocal } from './rehearsalRoute';
-import { rehearsalReportRejectionSentence, REHEARSAL_ISSUER_MISSING, rehearsalUploadPendingSentence } from './rehearsalReportReason';
-import { rehearsalTurnBody, helpReceiptFor, uploadRehearsalTurn } from './rehearsalTurnUpload';
-import { adminBaseFrom } from './serverBase';
+import { rehearsalReportRejectionSentence, REHEARSAL_CODE_MISSING, rehearsalUploadPendingSentence } from './rehearsalReportReason';
+import { rehearsalTurnBody, helpReceiptFor, uploadRehearsalTurn, rehearsalCodeNoticeNeeded, type UploadOutcome } from './rehearsalTurnUpload';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -5498,7 +5497,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // #4501 — subscription rehearsal turns the Service has not accepted yet (turn_id → upload body). Host memory only.
   private rehearsalUploadUnsent = new Map<string, Record<string, unknown>>();
   private rehearsalUploadHeldOnce = false;
-  private rehearsalIssuerNoticeShown = false;
+  private rehearsalCodeNoticeShown = false;
+  // The last refused upload (403/404/409/410/429) — the report shows its sentence instead of the pending count.
+  private rehearsalUploadRejected: { status: number; reason?: string } | undefined;
   // #1298 — called when the auto-read whoami path gets a rejected result (401/403).
   // Extension sets this to delete the issuer token and show the student start page once.
   onIssuerAutoRejected?: () => void;
@@ -12484,40 +12485,48 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   // #4501 — fire-and-forget after the turn result is drawn. A failure is counted for the report; the student is not blocked.
-  private uploadRehearsalTurnFor(f: { turnId: string; mode: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { sha256: string; content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
-    const rehearsal = f.profile.rehearsal as { course_id?: unknown; id?: unknown } | undefined;
-    const lesson = f.profile.lesson;
-    if (!rehearsal || !lesson) return Promise.resolve();
-    const step = lesson.content.steps.find(s => s.id === f.step);
+  private uploadRehearsalTurnFor(f: { turnId: string; mode: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
+    if (!f.profile.rehearsal) return Promise.resolve();
+    const step = f.profile.lesson?.content.steps.find(s => s.id === f.step);
     const body = rehearsalTurnBody({
       turnId: f.turnId, mode: f.mode, model: f.model, toolNames: f.toolNames, answered: f.answered, at: new Date().toISOString(),
-      courseId: String(rehearsal.course_id ?? ""), rehearsalId: String(rehearsal.id ?? ""), lessonSha256: lesson.sha256,
       stepId: f.step ?? null, helpReceipt: helpReceiptFor(step, f.helpMode),
     });
     const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
-    return uploadRehearsalTurn({ secrets: this.context.secrets, adminBase: adminBaseFrom(cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")), body, log: l => this.ensureLogChannel().appendLine(l) })
-      .then(o => {
-        const ok = typeof o.status === "number" && o.status >= 200 && o.status < 300;
-        if (ok) this.rehearsalUploadUnsent.delete(f.turnId); else this.rehearsalUploadUnsent.set(f.turnId, body);
-      }, () => { this.rehearsalUploadUnsent.set(f.turnId, body); });
+    return uploadRehearsalTurn({ secrets: this.context.secrets, base: cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1").replace(/\/$/, ""), body, log: l => this.ensureLogChannel().appendLine(l) })
+      .then(o => this.noteRehearsalUpload(f.turnId, body, o), () => this.noteRehearsalUpload(f.turnId, body, undefined));
+  }
+
+  // A 2xx clears the turn. A refusal keeps it unsent and remembers its reason for the report sentence.
+  private noteRehearsalUpload(turnId: string, body: Record<string, unknown>, o: UploadOutcome | undefined): void {
+    if (o && typeof o.status === "number" && o.status >= 200 && o.status < 300) {
+      this.rehearsalUploadUnsent.delete(turnId);
+      this.rehearsalUploadRejected = undefined;
+      return;
+    }
+    this.rehearsalUploadUnsent.set(turnId, body);
+    if (o && typeof o.status === "number" && [403, 404, 409, 410, 429].includes(o.status)) this.rehearsalUploadRejected = { status: o.status, reason: o.reason };
   }
 
   private async sendRehearsalReport(steps:import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
     const profile = this.cachedProfile, lesson = profile?.lesson, token = await this.context.secrets.get(TOKEN_KEY);
     if (!profile?.rehearsal || !lesson || !token) { await this.post({ type: "rehearsalState", state: "error", message: "리허설 코드로 연 수업이 아닙니다." }); return; }
-    // #4501 — a subscription rehearsal: the report waits for the turn uploads. Without the instructor token nothing is sent.
+    // #4501 — a subscription rehearsal: the report waits for the turn uploads. The rehearsal code (checked above) is the credential.
     if (mustStayLocal(profile.rehearsal)) {
       const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
-      const issuerUp = await this.context.secrets.get(ISSUER_TOKEN_KEY).then(v => v, () => undefined);
-      if (!issuerUp) { await this.post({ type: "rehearsalState", state: "error", message: REHEARSAL_ISSUER_MISSING }); return; }
+      const base = cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1").replace(/\/$/, "");
       for (const [id, body] of [...this.rehearsalUploadUnsent]) {
-        const o = await uploadRehearsalTurn({ secrets: this.context.secrets, adminBase: adminBaseFrom(cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")), body, log: l => this.ensureLogChannel().appendLine(l) });
-        if (typeof o.status === "number" && o.status >= 200 && o.status < 300) this.rehearsalUploadUnsent.delete(id);
+        const o = await uploadRehearsalTurn({ secrets: this.context.secrets, base, body, log: l => this.ensureLogChannel().appendLine(l) });
+        this.noteRehearsalUpload(id, body, o);
       }
-      // The first press shows what is still unsent; the second press sends the report anyway (the Service judges it).
+      // The first press shows what is still unsent (or why the Service refused it); the second press sends the report anyway (the Service judges it).
       if (this.rehearsalUploadUnsent.size && !this.rehearsalUploadHeldOnce) {
         this.rehearsalUploadHeldOnce = true;
-        await this.post({ type: "rehearsalState", state: "error", message: rehearsalUploadPendingSentence(this.rehearsalUploadUnsent.size) });
+        const rej = this.rehearsalUploadRejected;
+        const message = rej
+          ? rehearsalReportRejectionSentence({ status: rej.status, reason: rej.reason, subscription: true })
+          : rehearsalUploadPendingSentence(this.rehearsalUploadUnsent.size);
+        await this.post({ type: "rehearsalState", state: "error", message });
         return;
       }
       this.rehearsalUploadHeldOnce = false;
@@ -12780,13 +12789,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
     void (async () => vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand))().catch(() => undefined);
-    // #4501 — entering a subscription rehearsal seat without the instructor token: say so once (the report refuses too).
-    if (seatBand && mustStayLocal(profile?.rehearsal)) {
-      if (!this.rehearsalIssuerNoticeShown) {
-        const issuerSeat = await this.context.secrets.get(ISSUER_TOKEN_KEY).then(v => v, () => undefined);
-        if (!issuerSeat) { this.rehearsalIssuerNoticeShown = true; await this.post({ type: "rehearsalState", state: "error", message: REHEARSAL_ISSUER_MISSING }); }
-      }
-    } else this.rehearsalIssuerNoticeShown = false;
+    // #4501 — a subscription rehearsal seat in a window with no rehearsal code: say so once (uploads and the report need the code).
+    const codeInWindow = !!(await this.context.secrets.get(TOKEN_KEY).then(v => v, () => undefined));
+    if (rehearsalCodeNoticeNeeded({ seatBand, subscription: mustStayLocal(profile?.rehearsal), codeInWindow })) {
+      if (!this.rehearsalCodeNoticeShown) { this.rehearsalCodeNoticeShown = true; await this.post({ type: "rehearsalState", state: "error", message: REHEARSAL_CODE_MISSING }); }
+    } else this.rehearsalCodeNoticeShown = false;
     await this.post({
       type: "config",
       config: {
