@@ -1,0 +1,30 @@
+# One-off experiment for #4432 F21 (approved by chalk-po, 1-2 runs, about 90 runner-minutes each).
+# It lives only on the draft PR branch fix/f21-poster-experiment, which is closed without merge, so it never
+# reaches main and is not a required check. Re-run this job from the PR's checks for a second sample.
+name: iOS poster experiment (F21, not a check)
+on:
+  pull_request:
+    paths: ['.github/workflows/ios-poster-experiment.yml', 'apps/studio-native/scripts/ios-poster-experiment.py']
+permissions:
+  contents: read
+jobs:
+  poster-experiment:
+    name: poster experiment
+    if: github.head_ref == 'fix/f21-poster-experiment'
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Triggers, first burst, burst after reboot
+        run: python3 apps/studio-native/scripts/ios-poster-experiment.py --evidence "$RUNNER_TEMP/poster-experiment"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-poster-experiment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/poster-experiment/
+          if-no-files-found: ignore
+          retention-days: 14
