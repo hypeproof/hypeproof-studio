@@ -212,6 +212,19 @@ class NativeMergeGate(unittest.TestCase):
                 r.checkout = r.git('rev-parse', 'HEAD').strip()
                 result = r.scope(); self.assertEqual((result['decision'], result['reason']), ('FULL', 'special_file_outside_native_inputs'))
 
+    def test_main_push_paths_equal_the_pull_request_native_inputs(self):
+        # D3: main always runs the gate on a native input; the push filter and the classifier list one set.
+        import re
+        text = (ROOT / WORKFLOW).read_text()
+        push = text[text.index('  push:\n'):text.index('  pull_request:')]
+        block = push[push.index('paths: ['):]; block = block[:block.index(']') + 1]
+        paths = re.findall(r"'([^']+)'", block)
+        self.assertEqual(len(paths), len(set(paths)))
+        spec = importlib.util.spec_from_file_location('gate_policy', ROOT / SCRIPT)
+        gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+        expected = {p + '**' for p in gate.NATIVE_PREFIXES} | set(gate.NATIVE_FILES)
+        self.assertEqual(set(paths), expected)
+
     def test_approval_push_job_follows_the_same_scope(self):
         lines = (ROOT / WORKFLOW).read_text().splitlines()
         start = lines.index('  approval-push-simulator:')

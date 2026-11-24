@@ -25,7 +25,8 @@ traceability, and other workflows. A symlink, submodule or type change outside
 the native inputs keeps full native scope. A native deletion, or a native file
 moved out of the app, is a native change. Adding a native dependency on another
 path requires adding that path here and in the classifier. The approval push
-simulator job follows the same scope.
+simulator job follows the same scope. The main push `paths:` filter lists the
+same native inputs, and a test keeps the two lists equal.
 
 Both scope and aggregate execute the helper and existing native identity module
 from the immutable event base. The helper embeds its versioned conservative

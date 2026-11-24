@@ -2,7 +2,11 @@ name: Studio native mobile
 on:
   push:
     branches: ['main']
-    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
+    # The same native inputs as native-merge-gate.py's pull request scope (D3); a test keeps them equal.
+    paths: ['apps/studio-native/**', 'scripts/release/**', 'docs/operations/release-casebook/**',
+            '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml',
+            '.github/workflows/release-cut.yml', '.github/workflows/verify-unified-release.yml',
+            'config/release-auto.json', 'config/release-platforms.json']
   pull_request:
   workflow_dispatch:
 permissions:
