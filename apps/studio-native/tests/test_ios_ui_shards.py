@@ -736,26 +736,41 @@ class RenderAndGroups(unittest.TestCase):
             return outputs[args[0]]
         return observe.render_reading(run=run), calls
 
-    def test_render_reading_reads_the_named_pids_only_and_reports_rss_in_mb(self):
-        reading, calls = self.render({'pgrep': '1691 SimRenderServer\n1623 SimMetalHost\n', 'ps': ' 1623 104448\n 1691 1881088\n'})
-        self.assertEqual(calls, [(observe.RENDER_PGREP, 10), (['ps', '-o', 'pid=,rss=', '-p', '1623,1691'], 10)])
-        self.assertEqual(reading['processes'], [{'pid': 1623, 'name': 'SimMetalHost', 'rss_mb': 102.0},
-                                                {'pid': 1691, 'name': 'SimRenderServer', 'rss_mb': 1837.0}])
-        self.assertEqual([c['command'] for c in reading['costs']], ['pgrep render', 'ps render'])
+    # `top -l 1 -pid 167 -pid 90 -stats pid,mem` on macOS: the summary lines, a blank line, then the table.
+    RENDER_TOP = ('Processes: 612 total, 3 running, 609 sleeping, 3046 threads\nNetworks: packets: 1/1G in, 1/1G out.\n'
+                  'Disks: 1/1G read, 1/1G written.\n\nPID   MEM \n2342  1638M\n2346  115M+\n')
+
+    def test_render_reading_reads_the_named_pids_only_with_top_mem(self):
+        reading, calls = self.render({'pgrep': '2342 SimRenderServer\n2346 SimMetalHost\n', 'top': self.RENDER_TOP})
+        self.assertEqual(calls, [(observe.RENDER_PGREP, 10), (['top', '-l', '1', '-pid', '2342', '-pid', '2346', '-stats', 'pid,mem'], 10)])
+        self.assertEqual(reading['processes'], [{'pid': 2342, 'name': 'SimRenderServer', 'mem_mb': 1638.0},
+                                                {'pid': 2346, 'name': 'SimMetalHost', 'mem_mb': 115.0}])
+        self.assertEqual([c['command'] for c in reading['costs']], ['pgrep render', 'top render'])
         self.assertEqual(observe.RENDER_PGREP, ['pgrep', '-lx', 'SimRenderServer|SimMetalHost'])
+
+    def test_the_event_row_is_read_from_top_mem_not_ps_rss(self):
+        # Run 45275644733 shard 2 at 22:19-22:20: ps RSS said 9.5 MB for SimRenderServer :2342, top MEM 1638 MB.
+        # The reading must report 1638 and must not run ps at all.
+        reading, calls = self.render({'pgrep': '2342 SimRenderServer\n', 'ps': ' 2342 9728\n',
+                                      'top': 'PID   MEM\n2342  1638M\n'})
+        self.assertEqual(reading['processes'], [{'pid': 2342, 'name': 'SimRenderServer', 'mem_mb': 1638.0}])
+        self.assertNotIn('ps', [args[0] for args, _ in calls])
+        self.assertEqual(observe.mem_mb('9728K'), 9.5, 'The same RSS in top units would read 9.5 MB.')
 
     def test_a_render_command_that_does_not_return_leaves_no_rows_and_its_outcome(self):
         reading, calls = self.render({'pgrep': '<pgrep -lx SimRenderServer|SimMetalHost did not return within 10s>'})
         self.assertEqual((reading['processes'], len(calls)), ([], 1))
         self.assertEqual(reading['costs'][0]['outcome'], 'timeout')
-        reading, calls = self.render({'pgrep': '1691 SimRenderServer\n', 'ps': '<ps did not return within 10s>'})
+        reading, calls = self.render({'pgrep': '1691 SimRenderServer\n', 'top': '<top -l 1 did not return within 10s>'})
         self.assertEqual(reading['processes'], [])
         self.assertEqual([c['outcome'] for c in reading['costs']], ['returned', 'timeout'])
         reading, calls = self.render({'pgrep': ''})
         self.assertEqual((reading['processes'], len(calls)), ([], 1))
-        # A ps row for a pid pgrep did not name is not taken.
-        reading, _ = self.render({'pgrep': '1691 SimRenderServer\n', 'ps': ' 1691 2048\n 77 99999\n'})
-        self.assertEqual(reading['processes'], [{'pid': 1691, 'name': 'SimRenderServer', 'rss_mb': 2.0}])
+        # A top row for a pid pgrep did not name, a row before the table header and a MEM value top did not
+        # print as a size are not taken.
+        reading, _ = self.render({'pgrep': '1691 SimRenderServer\n1692 SimMetalHost\n',
+                                  'top': '1691 5M\nPID MEM\n1691 2048K\n77 9G\n1692 n/a\n'})
+        self.assertEqual(reading['processes'], [{'pid': 1691, 'name': 'SimRenderServer', 'mem_mb': 2.0}])
 
     LOG = ("Test Case '-[HPStudioUITests.TeamEntryUITests testFirst]' started.\n"
            "    t =     0.18s     Launch ai.hypeproof.studio.mobile\n"
@@ -785,8 +800,8 @@ class RenderAndGroups(unittest.TestCase):
         def bounded(args, limit=30):
             if args[0] == 'sysctl':
                 return '{ 1.0 1.0 1.0 }\n' if args[1] == '-n' else HOST_SYSCTL_OUTPUT
-            if args[:2] == ['ps', '-o']:
-                return ' 1691 1003520\n'
+            if args[0] == 'top' and '-pid' in args:
+                return 'PID  MEM\n1691  980M\n'
             return outputs[args[0]]
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe.push, 'bounded', side_effect=bounded) as called:
             evidence = Path(directory)
@@ -800,15 +815,15 @@ class RenderAndGroups(unittest.TestCase):
 
     def test_watch_rows_carry_the_render_rss_and_the_test_they_fall_in(self):
         row, commands = self.take('test', self.LOG + '    t =    68.17s Find the NavigationBar (Element at index 1)\n')
-        self.assertEqual(row['host']['render'], [{'pid': 1691, 'name': 'SimRenderServer', 'rss_mb': 980.0}])
+        self.assertEqual(row['host']['render'], [{'pid': 1691, 'name': 'SimRenderServer', 'mem_mb': 980.0}])
         self.assertIsInstance(row['host']['render_uptime_ms'], int)
         self.assertGreaterEqual(row['host']['render_uptime_ms'], row['uptime_ms'])
         self.assertEqual((row['test'], row['test_t']), ('testSecond', 68.17))
-        self.assertEqual(commands[-2:], ['pgrep', 'ps'], 'The render reading comes after every existing reading.')
+        self.assertEqual(commands[-2:], ['pgrep', 'top'], 'The render reading comes after every existing reading.')
         self.assertEqual(row['host']['groups']['simulator']['processes'], 5)
         row, _ = self.take('test')
         self.assertNotIn('test', row, 'Without --log the row names no test.')
-        self.assertEqual(row['host']['render'][0]['rss_mb'], 980.0)
+        self.assertEqual(row['host']['render'][0]['mem_mb'], 980.0)
 
     def test_boot_readings_take_no_render_reading(self):
         row, commands = self.take('boot', self.LOG)
@@ -820,6 +835,178 @@ class RenderAndGroups(unittest.TestCase):
         script = (NATIVE / 'scripts/ios-verify.sh').read_text()
         self.assertIn('ios-sim-observe.py watch --evidence ../evidence --device "$device" --interval 60 --log ../evidence/simulator-test.log &', script)
         self.assertEqual(observe.main.__code__.co_filename, observe.__file__)
+
+
+class PosterProbe(unittest.TestCase):
+    """ios-sim-observe.py posters (#4432 F21 2a): what the simulator's wallpaper is made of. Records only, from files
+    and the host process table: no simctl spawn and no simulator-steps.jsonl row (ShardShell keeps both exact)."""
+    DEVICE = SimObserve.DEVICE
+
+    def device(self, root, *, poster=True, still=False):
+        library = root / self.DEVICE / 'data/Library'
+        if poster:
+            base = library / 'Application Support/PosterBoard/Extensions'
+            for provider in ('com.apple.EmojiPoster.EmojiPosterExtension', 'com.apple.MercuryPoster'):
+                (base / provider / 'configurations').mkdir(parents=True)
+                (base / provider / 'configurations' / 'one.plist').write_text('x')
+        if still:
+            (library / 'SpringBoard').mkdir(parents=True)
+            (library / 'SpringBoard/LockBackground.cpbitmap').write_text('x')
+        library.mkdir(parents=True, exist_ok=True)
+        return library
+
+    def runtime(self, base):
+        runtime = base / 'iOS 27.2.simruntime/Contents/Resources/RuntimeRoot'
+        for folder, names in (('LaunchDaemons', ['com.apple.PosterBoard.plist', 'com.apple.backboardd.plist']),
+                              ('LaunchAgents', ['com.apple.wallpaper.agent.plist'])):
+            (runtime / 'System/Library' / folder).mkdir(parents=True)
+            for name in names:
+                (runtime / 'System/Library' / folder / name).write_text('x')
+        return runtime
+
+    def table(self, runtime):
+        return ('  PID  PPID STAT ELAPSED  %CPU %MEM COMMAND\n'
+                f' 2350     1 S    10:00  0.4  0.2 launchd_sim /Users/runner/Library/Developer/CoreSimulator/Devices/{self.DEVICE}/data/var/run/launchd_bootstrap.plist\n'
+                f' 2472  2350 S    09:00  0.1  0.5 {runtime}/System/Library/PrivateFrameworks/PosterBoardServices.framework/PosterBoard\n'
+                f' 2354  2350 S    09:00  3.0  1.0 {runtime}/System/Library/CoreServices/SpringBoard.app/SpringBoard\n'
+                f' 9000  8999 S    09:00  9.0  1.0 {runtime}/Applications/EmojiPoster.app/PlugIns/EmojiPosterExtension.appex/EmojiPosterExtension\n')
+
+    def probe(self, *, table=None, present=True, **device):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / 'Devices'
+            if present:
+                self.device(root, **device)
+            runtime = self.runtime(base)
+            output = self.table(runtime) if table is None else table
+            calls = []
+            def run(args, limit):
+                calls.append((args, limit))
+                return output
+            evidence = base / 'evidence'; evidence.mkdir()
+            kind = observe.poster_probe(evidence, self.DEVICE, run=run, root=root)
+            text = (evidence / observe.POSTER_FILE).read_text()
+            self.assertFalse((evidence / 'simulator-steps.jsonl').exists(), 'The probe adds no step row.')
+        return kind, text, calls
+
+    def test_a_poster_wallpaper_names_its_providers_directories_and_jobs(self):
+        kind, text, calls = self.probe()
+        self.assertEqual(kind, 'poster')
+        self.assertIn('com.apple.EmojiPoster.EmojiPosterExtension\ncom.apple.MercuryPoster\n', text)
+        self.assertIn('Application Support/PosterBoard files 2\n', text)
+        # Running: this device's PosterBoard only; SpringBoard does not match and the poster under another parent is not this device's.
+        running = text.split('-- running poster/wallpaper processes of this device (host ps)\n')[1].split('\n-- ')[0]
+        self.assertEqual(running, '2472 PosterBoard')
+        self.assertIn('System/Library/LaunchDaemons/com.apple.PosterBoard.plist\nSystem/Library/LaunchAgents/com.apple.wallpaper.agent.plist\n', text)
+        self.assertNotIn('backboardd', text)
+        self.assertEqual(calls, [(observe.PS, observe.push.DIAGNOSTIC_LIMIT)], 'Only the host process table is read; no simctl.')
+
+    def test_wallpaper_kind_from_file_names(self):
+        self.assertEqual(self.probe(poster=False, still=True)[0], 'still')
+        self.assertEqual(self.probe(poster=True, still=True)[0], 'both')
+        self.assertEqual(self.probe(poster=False, still=False)[0], 'unknown')
+        self.assertIn('-- still wallpaper files\nSpringBoard/LockBackground.cpbitmap\n', self.probe(poster=False, still=True)[1])
+
+    def test_missing_device_data_and_a_ps_timeout_are_recorded_not_raised(self):
+        kind, text, _ = self.probe(present=False, table='<ps -axro pid,ppid did not return within 30s>')
+        self.assertEqual(kind, 'unknown')
+        self.assertIn('stopped: no device data directory', text)
+        self.assertIn('<ps -axro pid,ppid did not return within 30s>', text)
+        self.assertIn('(runtime not found)\n<none>', text)
+
+    def test_the_walk_is_bounded_by_entries_and_time_and_does_not_follow_links(self):
+        with tempfile.TemporaryDirectory() as directory:
+            library = self.device(Path(directory) / 'Devices')
+            (library / 'loop').symlink_to(library)
+            (library / 'loopPoster').symlink_to(library / 'Application Support')
+            files = observe.poster_files(library)
+            self.assertIsNone(files['stopped'])
+            self.assertNotIn('loopPoster', files['dirs'], 'A symlinked directory is neither counted nor walked.')
+            with mock.patch.object(observe, 'POSTER_WALK_ENTRIES', 3):
+                self.assertEqual(observe.poster_files(library)['stopped'], 'entry limit 3')
+            ticks = iter([0, 0, 11, 11, 11])
+            self.assertEqual(observe.poster_files(library, clock=lambda: next(ticks, 99))['stopped'], f'time limit {observe.POSTER_WALK_LIMIT}s')
+            big = library / 'Wallpaper'; big.mkdir()
+            for index in range(5):
+                (big / f'f{index}').write_text('x')
+            with mock.patch.object(observe, 'POSTER_COUNT_LIMIT', 3):
+                self.assertEqual(observe.poster_files(library)['dirs']['Wallpaper'], '>=3')
+
+    def test_the_command_never_fails_the_shard_and_runs_only_in_shard_mode_after_warm_up(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe, 'poster_probe', side_effect=RuntimeError('boom')):
+            self.assertEqual(observe.main(['posters', '--evidence', directory, '--device', self.DEVICE]), 0)
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        line = 'python3 ../scripts/ios-sim-observe.py posters --evidence ../evidence --device "$device" || echo "::warning::poster probe not recorded"'
+        self.assertIn(line, script)
+        warm = script.index('timed warm-up xcrun simctl terminate "$device" com.apple.Preferences || true')
+        block = script[warm:script.index(line)]
+        self.assertIn('if [ "$mode" = shard ]; then', block)
+        self.assertLess(script.index(line), script.index('test_status=0'), 'The probe runs before the tests.')
+
+class ApprovalPushWatch(unittest.TestCase):
+    """verify-approval-push-simulator.py run (#4432): the shards' host watch beside the focused test, and one more
+    reading after a failure. Records only; the job's steps, limits and checkpoint are unchanged."""
+    DEVICE = SimObserve.DEVICE
+
+    def test_the_watch_is_the_shards_watch_on_this_device_and_test_log(self):
+        with mock.patch.object(push.subprocess, 'Popen') as popen:
+            watcher = push.start_watch(Path('/e'), self.DEVICE, Path('/e/xcodebuild.log'))
+        args, kwargs = popen.call_args
+        self.assertEqual(args[0], [sys.executable, str(push.OBSERVE_SCRIPT), 'watch', '--evidence', '/e', '--device', self.DEVICE,
+                                   '--interval', '60', '--log', '/e/xcodebuild.log'])
+        self.assertTrue(kwargs['start_new_session'])
+        self.assertIs(watcher, popen.return_value)
+        self.assertTrue(push.OBSERVE_SCRIPT.is_file())
+        with mock.patch.object(push.subprocess, 'Popen', side_effect=OSError('no python')):
+            self.assertIsNone(push.start_watch(Path('/e'), self.DEVICE, Path('/e/x.log')))
+
+    def test_stopping_a_missing_or_finished_watch_does_nothing(self):
+        with mock.patch.object(push, 'stop_group') as stop:
+            push.stop_watch(None)
+            finished = mock.Mock(); finished.poll.return_value = 0
+            push.stop_watch(finished)
+            stop.assert_not_called()
+            running = mock.Mock(); running.poll.return_value = None
+            push.stop_watch(running)
+            stop.assert_called_once_with(running)
+
+    def test_the_failure_reading_is_bounded_by_the_sum_of_its_command_limits(self):
+        with mock.patch.object(push, 'bounded', return_value='') as bounded:
+            push.one_reading(Path('/e'), self.DEVICE, Path('/e/xcodebuild.log'))
+        args, kwargs = bounded.call_args
+        self.assertEqual(args[0][1:], [str(push.OBSERVE_SCRIPT), 'once', '--evidence', '/e', '--device', self.DEVICE, '--log', '/e/xcodebuild.log'])
+        commands = (3 * push.DIAGNOSTIC_LIMIT + observe.HOST_SYSCTL_LIMIT + 2 * observe.HOST_TOP_LIMIT + observe.HOST_PS_LIMIT
+                    + 2 * observe.RENDER_LIMIT)
+        self.assertEqual(commands, 175)
+        self.assertEqual(kwargs['limit'], push.WATCH_READING_LIMIT)
+        self.assertGreaterEqual(push.WATCH_READING_LIMIT, commands)
+
+    def test_run_starts_the_watch_before_the_test_and_reads_once_after_the_notification_log(self):
+        source = (NATIVE / 'scripts/verify-approval-push-simulator.py').read_text()
+        body = source[source.index('def run(evidence):'):source.index('def cleanup(evidence):')]
+        self.assertLess(body.index('watcher = start_watch(evidence, device, log)'), body.index('process = subprocess.Popen(command'))
+        failure = body[body.index('except Exception:'):body.index('finally:')]
+        self.assertLess(failure.index('stop_watch(watcher)'), failure.index('simulator-notifications.log'))
+        self.assertLess(failure.index('simulator-notifications.log'), failure.index('one_reading(evidence, device, log)'))
+        self.assertLess(failure.index('one_reading(evidence, device, log)'), failure.index('raise'))
+        self.assertIn('stop_watch(watcher)', body[body.index('finally:'):])
+        self.assertIn('deadline = time.monotonic() + 540', body, 'The checkpoint limit is unchanged.')
+
+    def test_once_takes_one_test_reading_with_the_test_it_falls_in(self):
+        log = RenderAndGroups.LOG + '    t =    19.39s Wait for ai.hypeproof.studio.mobile to become Running Background\n'
+        outputs = {'ps': SimObserve().table(), 'vm_stat': 'Pages free:   4298.\n', 'top': HOST_TOP_OUTPUT, 'pgrep': ''}
+        def bounded(args, limit=30):
+            if args[0] == 'sysctl':
+                return '{ 1.0 1.0 1.0 }\n' if args[1] == '-n' else HOST_SYSCTL_OUTPUT
+            return outputs[args[0]]
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe.push, 'bounded', side_effect=bounded):
+            evidence = Path(directory)
+            (evidence / 'xcodebuild.log').write_text(log)
+            self.assertEqual(observe.main(['once', '--evidence', directory, '--device', self.DEVICE, '--log', str(evidence / 'xcodebuild.log')]), 0)
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]['step'], rows[0]['sample'], rows[0]['test'], rows[0]['test_t']), ('test', 0, 'testSecond', 19.39))
+        self.assertIn('render', rows[0]['host'])
 
 
 class BoundaryVerdicts(unittest.TestCase):

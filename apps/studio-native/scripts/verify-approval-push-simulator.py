@@ -493,6 +493,38 @@ def export_screenshots(evidence):
             shutil.copyfile(exported / matches[0], evidence / f"{name}.png")
 
 
+OBSERVE_SCRIPT = ROOT / "scripts/ios-sim-observe.py"
+WATCH_INTERVAL = 60
+
+
+def start_watch(evidence, device, log):
+    """The shards' host watch (ios-sim-observe.py watch) beside the focused test (#4432): one reading now and one
+    every WATCH_INTERVAL s into simulator-steps.jsonl, with the test name and step time from the test log. It
+    records only; None if it cannot start."""
+    try:
+        return subprocess.Popen([sys.executable, str(OBSERVE_SCRIPT), "watch", "--evidence", str(evidence), "--device", device,
+                                 "--interval", str(WATCH_INTERVAL), "--log", str(log)],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return None
+
+
+def stop_watch(watcher):
+    if watcher is not None and watcher.poll() is None:
+        stop_group(watcher)
+
+
+def one_reading(evidence, device, log):
+    """One more host reading after a failure, bounded like the others; never raises."""
+    bounded([sys.executable, str(OBSERVE_SCRIPT), "once", "--evidence", str(evidence), "--device", device, "--log", str(log)],
+            limit=WATCH_READING_LIMIT)
+
+
+# A reading runs bounded commands one at a time: ps, vm_stat and loadavg (30 s each), sysctl (10), two tops (20 each),
+# ps -c only if both tops time out (15), pgrep and top for the render processes (10 each). Their limits add up to 175 s.
+WATCH_READING_LIMIT = 180
+
+
 def run(evidence):
     state = load_state(evidence)
     if not state or "data" not in state:
@@ -504,6 +536,7 @@ def run(evidence):
         raise RuntimeError(f"Expected one .xctestrun from the build step, found {len(xctestruns)}")
     log = evidence / "xcodebuild.log"
     process = None
+    watcher = start_watch(evidence, device, log)
     command = [
         "xcodebuild", "-xctestrun", str(xctestruns[0]), "-destination", f"platform=iOS Simulator,id={device}",
         "-resultBundlePath", str(evidence / "ApprovalPush.xcresult"),
@@ -538,14 +571,18 @@ def run(evidence):
                 time.sleep(0.5)
             raise RuntimeError(f"XCUITest did not reach its background notification checkpoint (exit {process.poll()})")
     except Exception:
+        stop_watch(watcher)
         with (evidence / "simulator-notifications.log").open("w") as system_log:
             system_log.write(bounded(["xcrun", "simctl", "spawn", device, "log", "show", "--last", "3m", "--info", "--style", "compact",
                                       "--predicate", 'subsystem BEGINSWITH[c] "com.apple.usernotifications" OR eventMessage CONTAINS[c] "Approval push fixture"'],
                                      limit=20))
         if log.exists():
             print("\n".join(log.read_text(errors="replace").splitlines()[-115:]), flush=True)
+        # After the 3 min notification log, so this reading never shifts that window.
+        one_reading(evidence, device, log)
         raise
     finally:
+        stop_watch(watcher)
         if process is not None and process.poll() is None:
             process.terminate()
             try:
