@@ -473,7 +473,47 @@ def defined_jobs(runtime_root):
     return found
 
 
-def poster_probe(evidence, device, *, run=None, root=None):
+# Where SpringBoard's poster update task keeps its schedule (#4432 F21 step 1): names only, under the whole
+# device data directory, so a time-based task (state in the device data) can be told from a Home-screen trigger.
+SCHEDULE_NAME = re.compile(r"(posterboardupdate|dasd|BackgroundTask)", re.IGNORECASE)
+SCHEDULE_WALK_LIMIT = 10        # seconds
+SCHEDULE_WALK_ENTRIES = 60000   # directory entries visited at most
+SCHEDULE_WALK_DEPTH = 8         # levels below data/
+SCHEDULE_ROWS = 200             # matches recorded at most
+
+
+def schedule_files(data, *, clock=time.monotonic):
+    """Bounded walk of `data` for names matching SCHEDULE_NAME. Returns {"matches": [(relative path, size or
+    "dir <n> files")], "visited": entries, "stopped": None or why}. Symlinks are listed, never followed."""
+    started, visited, stopped, matches = clock(), 0, None, []
+    stack = [(data, 0)]
+    while stack and stopped is None:
+        path, depth = stack.pop()
+        try:
+            entries = sorted(path.iterdir(), key=lambda entry: entry.name)
+        except OSError:
+            continue
+        for entry in entries:
+            visited += 1
+            if visited > SCHEDULE_WALK_ENTRIES:
+                stopped = f"entry limit {SCHEDULE_WALK_ENTRIES}"
+                break
+            if clock() - started > SCHEDULE_WALK_LIMIT:
+                stopped = f"time limit {SCHEDULE_WALK_LIMIT}s"
+                break
+            is_dir = entry.is_dir() and not entry.is_symlink()
+            if SCHEDULE_NAME.search(entry.name) and len(matches) < SCHEDULE_ROWS:
+                try:
+                    size = f"dir {bounded_file_count(entry)} files" if is_dir else str(entry.lstat().st_size)
+                except OSError:
+                    size = "unreadable"
+                matches.append((str(entry.relative_to(data)), size))
+            if is_dir and depth + 1 < SCHEDULE_WALK_DEPTH:
+                stack.append((entry, depth + 1))
+    return {"matches": matches, "visited": visited, "stopped": stopped}
+
+
+def poster_probe(evidence, device, *, run=None, root=None, when="start"):
     """Write POSTER_FILE: PosterBoard's data paths, poster and wallpaper launchd jobs, and the wallpaper kind.
 
     It reads files and the host process table only: no simctl spawn, nothing inside the simulator, and no
@@ -482,7 +522,8 @@ def poster_probe(evidence, device, *, run=None, root=None):
     run = run or push.bounded
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
     costs = []
-    library = (root or devices_root()) / device / "data/Library"
+    data = (root or devices_root()) / device / "data"
+    library = data / "Library"
     started = time.monotonic()
     files = poster_files(library) if library.is_dir() else {"dirs": {}, "providers": [], "still": [], "visited": 0,
                                                            "stopped": "no device data directory"}
@@ -491,8 +532,11 @@ def poster_probe(evidence, device, *, run=None, root=None):
     running, runtime_root = ([], None) if table.startswith("<") else poster_jobs(table, device)
     defined = defined_jobs(runtime_root)
     kind = wallpaper_kind(files)
+    started = time.monotonic()
+    schedule = schedule_files(data) if data.is_dir() else {"matches": [], "visited": 0, "stopped": "no device data directory"}
+    costs.append(f"schedule walk {int((time.monotonic() - started) * 1000)} ms {'returned' if schedule['stopped'] is None else 'stopped'}")
     with (evidence / POSTER_FILE).open("a") as target:
-        target.write(f"== poster probe {device} {wall}\n-- wallpaper kind (from file names): {kind}\n")
+        target.write(f"== poster probe {device} {wall} ({when})\n-- wallpaper kind (from file names): {kind}\n")
         target.write(f"-- PosterBoard / poster / wallpaper directories under data/Library ({files['visited']} entries"
                      f"{', stopped: ' + files['stopped'] if files['stopped'] else ''})\n")
         target.write("".join(f"{path} files {count}\n" for path, count in files["dirs"].items()) or "<none>\n")
@@ -502,9 +546,12 @@ def poster_probe(evidence, device, *, run=None, root=None):
                      + (table.strip() if table.startswith("<") else "\n".join(running) or "<none>") + "\n")
         target.write(f"-- poster/wallpaper launchd job files in the runtime ({runtime_root or 'runtime not found'})\n"
                      + ("\n".join(defined) or "<none>") + "\n")
+        target.write(f"-- schedule state names (posterboardupdate|dasd|BackgroundTask) under data/ ({schedule['visited']} entries"
+                     f"{', stopped: ' + schedule['stopped'] if schedule['stopped'] else ''})\n"
+                     + ("".join(f"{path} {size}\n" for path, size in schedule["matches"]) or "<none>\n"))
         target.write("-- costs\n" + "\n".join(costs) + "\n")
-    print(f"poster probe: wallpaper {kind}; {len(files['providers'])} poster providers, {len(files['still'])} still files, "
-          f"{len(running)} running and {len(defined)} defined poster/wallpaper jobs", flush=True)
+    print(f"poster probe ({when}): wallpaper {kind}; {len(files['providers'])} poster providers, {len(files['still'])} still files, "
+          f"{len(running)} running and {len(defined)} defined poster/wallpaper jobs; {len(schedule['matches'])} schedule state names", flush=True)
     return kind
 
 
@@ -937,6 +984,8 @@ def main(argv=None):
         sub.add_argument("--device", required=True)
         if name == "sample":
             sub.add_argument("--index", type=int, required=True)
+        elif name == "posters":
+            sub.add_argument("--when", choices=("start", "end"), default="start")
         elif name in ("watch", "once"):
             if name == "watch":
                 sub.add_argument("--interval", type=float, default=60)
@@ -964,7 +1013,7 @@ def main(argv=None):
         safely(lambda: take(args.evidence, args.device, step="test", sample=0, full_table=False, log=args.log), "once")
         return 0
     if args.command == "posters":
-        safely(lambda: poster_probe(args.evidence, args.device), "posters")
+        safely(lambda: poster_probe(args.evidence, args.device, when=args.when), "posters")
         return 0
     if args.command.startswith("terminate-"):
         # A stopped watcher also stops the capture command it is waiting on.
