@@ -850,6 +850,26 @@ export function pendingCloseLabel(wroteOk: boolean): string {
 }
 
 /**
+ * Close the silent-gap notice line on the path the turn is on: the summary-mode WorkLine
+ * (close only) or the normal-mode tool log (postToolLog only). Nothing is called when the
+ * line was never shown. The caller resets its own `pendingShown`.
+ */
+export function closePendingLine(args: {
+  pendingShown: boolean;
+  wroteOk: boolean;
+  work?: { close: (label: string) => void } | null;
+  postToolLog: (entry: { icon: string; label: string; state: "done" }) => void;
+}): void {
+  if (!args.pendingShown) return;
+  const label = pendingCloseLabel(args.wroteOk);
+  if (args.work) {
+    args.work.close(label);
+    return;
+  }
+  args.postToolLog({ icon: "✍️", label, state: "done" });
+}
+
+/**
  * #751 F4 — turn the lesson panel's message into a step signal, or nothing.
  * Only a step of the CONFIRMED lesson this profile carries counts, and only the two statuses a learner can state
  * themselves. "submitted" is the learner's own statement (self-reported); nothing here infers completion.

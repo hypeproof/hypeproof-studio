@@ -408,7 +408,7 @@ import {
   classifyTurnError,
   sdkTurnEndFailure,
   lessonStepSignal,
-  pendingCloseLabel,
+  closePendingLine,
   WRITE_TOOL_NAMES,
   resolveInstructorTokenFromSecrets,
   looksLikeIssuerTokenUnverified,
@@ -10790,17 +10790,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const writeToolIds = new Set<string>();
       const clearPending = () => {
         if (!pendingShown) return;
-        pendingShown = false;
-        if (work) {
-          work.close(pendingCloseLabel(wroteOk));
-          return;
-        }
-        this.postToolLog(streamId, {
-          id: PENDING_ID,
-          icon: "✍️",
-          label: pendingCloseLabel(wroteOk),
-          state: "done",
+        closePendingLine({
+          pendingShown,
+          wroteOk,
+          work,
+          postToolLog: (entry) => this.postToolLog(streamId, { id: PENDING_ID, ...entry }),
         });
+        pendingShown = false;
       };
       // CR-10 — SDK tool ids of the delegated browser tools whose results carry an observation.
       this.crSdkResults.reset(turnBlobSink);
