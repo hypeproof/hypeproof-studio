@@ -179,6 +179,11 @@ if [ "$mode" = shard ]; then
   # PosterBoard's data paths, poster/wallpaper launchd jobs and the wallpaper kind from files and host ps only
   # (no simctl spawn); changes nothing, never fails.
   python3 ../scripts/ios-sim-observe.py posters --evidence ../evidence --device "$device" || echo "::warning::poster probe not recorded"
+  # Environment preparation, not a test wait (#4432 F21, approved by chalk-po): SpringBoard re-renders the
+  # posters once per boot, 3.6-7.4 min after boot on an idle device, with SimRenderServer at 2-2.9 GB
+  # (experiment run 45335574969). Let it finish before the first test. It ends when the burst is over or
+  # 9 min after boot, records poster-wait.txt and one warm-up row, and never fails the shard.
+  python3 ../scripts/ios-sim-observe.py poster-wait --evidence ../evidence --device "$device" || echo "::warning::poster wait not recorded"
 fi
 test_status=0
 # Simulator Keychain checks require an actual app identity. No distribution key is used.

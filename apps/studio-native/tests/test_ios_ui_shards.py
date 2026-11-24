@@ -360,7 +360,9 @@ class ShardShell(unittest.TestCase):
         self.assertEqual([(r['step'], r['command'], r['outcome']) for r in before_test],
                          [('boot', 'xcrun simctl boot', 'exit 0'), ('boot', 'xcrun simctl bootstatus', 'exit 0'),
                           ('boot', 'observe', 'no device'), ('boot', 'observe', 'no device'), ('boot', 'observe', 'no device'),
-                          ('warm-up', 'xcrun simctl launch', 'exit 0'), ('warm-up', 'xcrun simctl terminate', 'exit 0')])
+                          ('warm-up', 'xcrun simctl launch', 'exit 0'), ('warm-up', 'xcrun simctl terminate', 'exit 0'),
+                          # The poster burst wait (#4432 F21) adds one row; the stubbed device has no data directory.
+                          ('warm-up', 'poster-wait', 'no device data')])
         self.assertEqual([r['sample'] for r in before_test if r['command'] == 'observe'], [1, 2, 3])
         self.assertTrue(all(isinstance(r['seconds'], float) for r in before_test if r['command'] != 'observe'))
         self.assertTrue(all(r['utc'].endswith('+00:00') for r in before_test))
@@ -1149,6 +1151,101 @@ class PosterTrigger(unittest.TestCase):
             text = (evidence / observe.POSTER_FILE).read_text()
         self.assertIn('0 entries, stopped: no device data directory)\nminute store caches\n<none>\n', text)
 
+
+
+class PosterWait(unittest.TestCase):
+    """ios-sim-observe.py poster-wait (#4432 F21): before the tests, wait for the boot's poster burst to end,
+    at most POSTER_WAIT_LIMIT s after boot; never fails the shard."""
+    DEVICE = SimObserve.DEVICE
+    BOOT = datetime(2026, 11, 24, 5, 40, 23, tzinfo=timezone.utc).timestamp()
+
+    def setup_device(self, root, evidence, *, fresh=0, old=0, boot_row=True):
+        caches = root / self.DEVICE / 'data/Library/Caches'
+        poster = caches / 'com.apple.EmojiPoster.EmojiPosterExtension'; poster.mkdir(parents=True)
+        other = caches / 'com.apple.other'; other.mkdir()
+        for i in range(fresh):
+            f = poster / f'new{i}'; f.write_text('x'); os.utime(f, (self.BOOT + 200, self.BOOT + 200))
+        for i in range(old):
+            f = poster / f'old{i}'; f.write_text('x'); os.utime(f, (self.BOOT - 600, self.BOOT - 600))
+        for i in range(40):
+            f = other / f'o{i}'; f.write_text('x'); os.utime(f, (self.BOOT + 200, self.BOOT + 200))
+        (caches / 'com.apple.LinkPoster').symlink_to(poster)
+        if boot_row:
+            row = {'step': 'boot', 'command': 'xcrun simctl boot', 'outcome': 'exit 0', 'seconds': 3.0,
+                   'utc': datetime.fromtimestamp(self.BOOT + 3, timezone.utc).isoformat(timespec='seconds')}
+            (evidence / 'simulator-steps.jsonl').write_text(json.dumps(row) + '\n')
+
+    def run_wait(self, *, fresh=0, old=0, render_mb=(150.0,), start_age=200, boot_row=True, data=True):
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        root, evidence = Path(temp.name) / 'Devices', Path(temp.name) / 'evidence'; evidence.mkdir()
+        if data:
+            self.setup_device(root, evidence, fresh=fresh, old=old, boot_row=boot_row)
+        now = [self.BOOT + start_age]; sleeps = []; readings = iter(render_mb)
+        last = [render_mb[-1]]
+        def render():
+            value = next(readings, last[0])
+            return {'processes': [] if value is None else [{'pid': 1, 'name': 'SimRenderServer', 'mem_mb': value}], 'costs': []}
+        def sleep(seconds): sleeps.append(seconds); now[0] += seconds
+        with mock.patch('builtins.print') as printed:
+            outcome = observe.poster_wait(evidence, self.DEVICE, root=root, clock=lambda: now[0], wall=lambda: now[0],
+                                          sleep=sleep, render=render)
+        rows = [json.loads(l) for l in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        text = (evidence / observe.POSTER_WAIT_FILE).read_text()
+        warned = any('::warning::poster burst not seen before tests' in str(c) for c in printed.call_args_list)
+        return outcome, rows[-1], sleeps, text, warned
+
+    def test_ends_when_the_burst_has_run_and_render_memory_is_back(self):
+        outcome, row, sleeps, text, warned = self.run_wait(fresh=40, old=5, render_mb=(2505.0, 900.0, 300.0))
+        self.assertEqual(outcome, 'burst over')
+        self.assertEqual(sleeps, [10, 10])
+        self.assertEqual((row['step'], row['command'], row['outcome'], row['readings']), ('warm-up', 'poster-wait', 'burst over', 3))
+        # Only the poster cache's files written since boot: not the 5 older ones, the other cache or the link.
+        self.assertEqual(row['poster_cache_files'], 40)
+        self.assertEqual((row['simrenderserver_mb'], row['peak_mb'], row['seconds'], row['since_boot']), (300.0, 2505.0, 20.0, 220.0))
+        self.assertTrue(row['utc'].endswith('+00:00'))
+        self.assertFalse(warned)
+        self.assertIn('-- burst over: waited 20.0s, since boot 220.0s, 40 poster cache files', text)
+
+    def test_without_the_burst_it_stops_at_the_limit_after_boot_and_warns(self):
+        outcome, row, sleeps, text, warned = self.run_wait(fresh=29, render_mb=(150.0,), start_age=200)
+        self.assertEqual(outcome, 'limit')
+        self.assertTrue(warned)
+        # Readings at 200, 210, ..., 540 s after boot: the limit counts from the boot, not from the call.
+        self.assertEqual(row['readings'], 35); self.assertEqual(row['since_boot'], 540.0)
+        self.assertLessEqual(row['since_boot'], observe.POSTER_WAIT_LIMIT)
+        self.assertEqual(len(sleeps), 34)
+
+    def test_burst_files_with_render_still_high_or_unread_do_not_end_the_wait(self):
+        outcome, row, _, _, warned = self.run_wait(fresh=40, render_mb=(2505.0,), start_age=500)
+        self.assertEqual((outcome, row['readings']), ('limit', 5)); self.assertTrue(warned)
+        outcome, row, _, _, _ = self.run_wait(fresh=40, render_mb=(None,), start_age=500)
+        self.assertEqual(outcome, 'limit'); self.assertIsNone(row['simrenderserver_mb'])
+
+    def test_called_after_the_limit_it_reads_once_and_goes_on(self):
+        outcome, row, sleeps, _, warned = self.run_wait(fresh=0, start_age=600)
+        self.assertEqual((outcome, row['readings'], sleeps), ('limit', 1, [])); self.assertTrue(warned)
+
+    def test_no_device_data_or_no_boot_row_never_waits_or_fails(self):
+        outcome, row, sleeps, _, warned = self.run_wait(data=False)
+        self.assertEqual((outcome, row['readings'], sleeps, row['since_boot']), ('no device data', 0, [], None)); self.assertTrue(warned)
+        outcome, row, sleeps, _, _ = self.run_wait(fresh=40, render_mb=(300.0,), boot_row=False, start_age=300)
+        # Without the boot row the wait counts from this call: the files written 100 s earlier do not count.
+        self.assertEqual((outcome, row['since_boot'], row['poster_cache_files']), ('limit', None, 0))
+
+    def test_the_command_never_fails_the_shard(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(observe, 'poster_wait', side_effect=RuntimeError('boom')):
+            self.assertEqual(observe.main(['poster-wait', '--evidence', directory, '--device', self.DEVICE]), 0)
+
+    def test_the_shard_waits_after_the_poster_probe_and_before_the_test(self):
+        script = (NATIVE / 'scripts/ios-verify.sh').read_text()
+        line = 'python3 ../scripts/ios-sim-observe.py poster-wait --evidence ../evidence --device "$device" || echo "::warning::poster wait not recorded"'
+        self.assertEqual(script.count(line), 1)
+        probe = script.index('ios-sim-observe.py posters --evidence ../evidence --device "$device" ||')
+        test = script.index('test-without-building 2>&1 | tee ../evidence/simulator-test.log')
+        self.assertLess(probe, script.index(line)); self.assertLess(script.index(line), test)
+        shard_block = script[script.index('if [ "$mode" = shard ]; then\n  # Is the wallpaper a poster'):script.index('test_status=0')]
+        self.assertIn(line, shard_block, 'Shard mode only.')
+        self.assertEqual(observe.POSTER_WAIT_LIMIT, 540)
 
 class BoundaryVerdicts(unittest.TestCase):
     """ios-sim-observe.py boundary-verdict (#4432 F21): runner-ax, app, unknown, and host saturated."""

@@ -61,6 +61,7 @@ import argparse
 from datetime import datetime, timezone
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import resource
@@ -631,6 +632,96 @@ def poster_probe(evidence, device, *, run=None, root=None, when="start"):
     return kind
 
 
+# Wait for the boot's poster re-render before the tests (#4432 F21, approved by chalk-po). Experiment run
+# 45335574969 (#4492): on an idle device the burst comes once per boot, 3.6-7.4 min after boot, with
+# SimRenderServer at 2.0-2.9 GB for about a minute, and again after a reboot; no action started it at once.
+# In the UI shards the tests push it to 12-23 min, inside the tests. This is environment preparation before
+# the tests, not a test wait: it ends when the burst is over or at its limit, and never fails the shard.
+POSTER_WAIT_LIMIT = 540       # seconds from the `simctl boot` command
+POSTER_WAIT_INTERVAL = 10     # seconds between readings
+POSTER_WAIT_FILES = 30        # poster cache files written since boot that mean the burst has run
+POSTER_WAIT_SETTLED_MB = 500  # SimRenderServer top MEM below this after the burst: over
+POSTER_WAIT_FILE = "poster-wait.txt"
+
+
+def boot_started(evidence):
+    """Wall time (epoch s) when the shard's `xcrun simctl boot` began: that row's utc (its end) minus its
+    seconds. None when the row is missing."""
+    try:
+        rows = [json.loads(line) for line in (evidence / "simulator-steps.jsonl").read_text().splitlines()]
+    except (OSError, ValueError):
+        return None
+    for row in rows:
+        if row.get("step") == "boot" and row.get("command") == "xcrun simctl boot" and "utc" in row:
+            return datetime.fromisoformat(row["utc"]).timestamp() - float(row.get("seconds") or 0)
+    return None
+
+
+def poster_cache_writes(library, since):
+    """Files under Library/Caches/*Poster* (the MTIME_CACHE directories) with an mtime at or after `since`."""
+    count = 0
+    try:
+        roots = [entry for entry in sorted((library / "Caches").iterdir(), key=lambda entry: entry.name)
+                 if MTIME_CACHE.search(entry.name) and entry.is_dir() and not entry.is_symlink()]
+    except OSError:
+        return 0
+    for root in roots:
+        for folder, folders, names in os.walk(root):
+            folders[:] = [name for name in folders if not os.path.islink(os.path.join(folder, name))]
+            for name in names:
+                try:
+                    if os.lstat(os.path.join(folder, name)).st_mtime >= since:
+                        count += 1
+                except OSError:
+                    continue
+    return count
+
+
+def poster_wait(evidence, device, *, root=None, clock=time.monotonic, wall=time.time, sleep=time.sleep, render=None):
+    """Read every POSTER_WAIT_INTERVAL s until the burst has run (POSTER_WAIT_FILES poster cache files since boot)
+    and SimRenderServer is below POSTER_WAIT_SETTLED_MB, or until POSTER_WAIT_LIMIT s after boot. Writes each
+    reading to POSTER_WAIT_FILE and one `warm-up poster-wait` row. Returns the outcome; never raises a finding."""
+    render = render or render_reading
+    started, started_wall = clock(), wall()
+    booted = boot_started(evidence)
+    since = booted if booted is not None else started_wall
+    library = (root or devices_root()) / device / "data" / "Library"
+    readings, files, last_mb, peak_mb = 0, 0, None, None
+    lines = [f"== poster wait {device} boot {'unknown, using now' if booted is None else datetime.fromtimestamp(booted, timezone.utc).isoformat(timespec='seconds')}"]
+    if not library.is_dir():
+        outcome = "no device data"
+    else:
+        outcome = "limit"
+        while True:
+            files = poster_cache_writes(library, since)
+            rows = render()["processes"]
+            last_mb = max((row["mem_mb"] for row in rows if row["name"] == "SimRenderServer"), default=None)
+            if last_mb is not None:
+                peak_mb = last_mb if peak_mb is None else max(peak_mb, last_mb)
+            readings += 1
+            age = wall() - since
+            lines.append(f"{readings} since_boot {age:.0f}s poster_cache_files {files} simrenderserver_mb {last_mb}")
+            if files >= POSTER_WAIT_FILES and last_mb is not None and last_mb < POSTER_WAIT_SETTLED_MB:
+                outcome = "burst over"
+                break
+            if age + POSTER_WAIT_INTERVAL > POSTER_WAIT_LIMIT:
+                break
+            sleep(POSTER_WAIT_INTERVAL)
+    waited = round(clock() - started, 1)
+    since_boot = None if booted is None else round(wall() - booted, 1)
+    lines.append(f"-- {outcome}: waited {waited}s, since boot {since_boot}s, {files} poster cache files, SimRenderServer last {last_mb} peak {peak_mb} MB")
+    with (evidence / POSTER_WAIT_FILE).open("a") as target:
+        target.write("\n".join(lines) + "\n")
+    push.record(evidence, step="warm-up", command="poster-wait", outcome=outcome, seconds=float(waited),
+                utc=datetime.fromtimestamp(wall(), timezone.utc).isoformat(timespec="seconds"), since_boot=since_boot,
+                readings=readings, poster_cache_files=files, simrenderserver_mb=last_mb, peak_mb=peak_mb,
+                limit=POSTER_WAIT_LIMIT)
+    if outcome != "burst over":
+        print(f"::warning::poster burst not seen before tests ({outcome}, {waited}s)", flush=True)
+    print(f"poster wait: {outcome} after {waited}s ({files} poster cache files, SimRenderServer {last_mb} MB)", flush=True)
+    return outcome
+
+
 def current_test(log_path):
     """(test name, last step t in s) at the end of the test log; (None, None) before the first test or without a log."""
     try:
@@ -1054,7 +1145,7 @@ def main(argv=None):
     verdict = commands.add_parser("boundary-verdict")
     verdict.add_argument("--evidence", type=Path, required=True)
     verdict.add_argument("--log", type=Path, required=True)
-    for name in ("sample", "watch", "once", "settle", "terminate-watch", "terminate-scan", "stall-watch", "posters"):
+    for name in ("sample", "watch", "once", "settle", "terminate-watch", "terminate-scan", "stall-watch", "posters", "poster-wait"):
         sub = commands.add_parser(name)
         sub.add_argument("--evidence", type=Path, required=True)
         sub.add_argument("--device", required=True)
@@ -1090,6 +1181,9 @@ def main(argv=None):
         return 0
     if args.command == "posters":
         safely(lambda: poster_probe(args.evidence, args.device, when=args.when), "posters")
+        return 0
+    if args.command == "poster-wait":
+        safely(lambda: poster_wait(args.evidence, args.device), "poster wait")
         return 0
     if args.command.startswith("terminate-"):
         # A stopped watcher also stops the capture command it is waiting on.
