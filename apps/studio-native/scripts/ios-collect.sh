@@ -3,7 +3,7 @@
 # records exactly once, from every shard's log. Fails unless the build and every planned
 # shard succeeded and every planned case started in its own shard.
 # Inputs: IOS_BUILD_RESULT, IOS_UI_RESULT, IOS_VOICE_RESULT (job results; the real-voice job
-# uploads plan row 5 under the shard artifact name), IOS_SHARD_ARTIFACTS (one folder per
+# uploads the plan's dedicated row, the one after the shards, under the shard artifact name), IOS_SHARD_ARTIFACTS (one folder per
 # downloaded studio-ios-ui-shard-<i>-<run>-<attempt> artifact), and the build artifact already
 # unpacked into apps/studio-native.
 set -euo pipefail
