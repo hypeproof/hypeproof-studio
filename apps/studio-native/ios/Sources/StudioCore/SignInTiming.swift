@@ -95,3 +95,28 @@ public struct DraftSendTiming: Sendable, Equatable {
         return "HPStudio draft send: \(last); \(edits) draft edits, text since uptime \(firstTextUptimeMs.map(String.init) ?? "-") ms, last edit at \(lastEditUptimeMs.map(String.init) ?? "-") ms (\(lastLength) chars)"
     }
 }
+
+/// Composer focus and keyboard marks (#4432 F28). In run 45351306160 the first-use large-text composer gained
+/// focus about 13 s after its tap, lost it about 4 s later, and no keyboard appeared; nothing recorded who changed
+/// it. Only the last `capacity` marks are kept. Diagnostics only.
+public struct FocusTiming: Sendable, Equatable {
+    public struct Mark: Sendable, Equatable {
+        public let kind: String
+        public let uptimeMs: Int
+    }
+    public static let capacity = 8
+    public private(set) var marks: [Mark] = []
+    public init() {}
+    public var isEmpty: Bool { marks.isEmpty }
+    /// `kind` is a short word such as "focus", "blur", "kb.show" or "kb.hide".
+    public mutating func record(_ kind: String, at uptimeMs: Int) {
+        marks.append(Mark(kind: kind, uptimeMs: uptimeMs))
+        if marks.count > Self.capacity { marks.removeFirst(marks.count - Self.capacity) }
+    }
+    /// Short strings for the native journey trace, oldest first.
+    public var fields: [String] { marks.map { "\($0.kind)@\($0.uptimeMs)" } }
+    /// One line naming every kept mark, oldest first.
+    public var summary: String {
+        "HPStudio focus: " + (marks.isEmpty ? "no marks" : fields.joined(separator: " "))
+    }
+}

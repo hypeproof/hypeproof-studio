@@ -88,3 +88,23 @@ final class DraftSendTimingTests: XCTestCase {
         XCTAssertTrue(timing.summary.hasPrefix("HPStudio draft send: send at uptime 2600 ms, draft 40 chars, canSend false;"), "The line names the latest send.")
     }
 }
+
+final class FocusTimingTests: XCTestCase {
+    func testMarksAreKeptInOrderWithTheirUptime() {
+        var timing = FocusTiming()
+        XCTAssertTrue(timing.isEmpty)
+        XCTAssertEqual(timing.summary, "HPStudio focus: no marks")
+        timing.record("focus", at: 1_000); timing.record("kb.show", at: 1_120); timing.record("blur", at: 5_000)
+        XCTAssertFalse(timing.isEmpty)
+        XCTAssertEqual(timing.fields, ["focus@1000", "kb.show@1120", "blur@5000"])
+        XCTAssertEqual(timing.summary, "HPStudio focus: focus@1000 kb.show@1120 blur@5000")
+    }
+
+    func testOnlyTheLastMarksAreKept() {
+        var timing = FocusTiming()
+        for index in 0..<(FocusTiming.capacity + 3) { timing.record("m\(index)", at: index) }
+        XCTAssertEqual(timing.marks.count, FocusTiming.capacity)
+        XCTAssertEqual(timing.marks.first, FocusTiming.Mark(kind: "m3", uptimeMs: 3))
+        XCTAssertEqual(timing.marks.last, FocusTiming.Mark(kind: "m\(FocusTiming.capacity + 2)", uptimeMs: FocusTiming.capacity + 2))
+    }
+}

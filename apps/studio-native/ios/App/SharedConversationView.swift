@@ -643,6 +643,9 @@ struct SharedConversationView: View {
                     .font(.body).lineLimit(1...(textSize.isAccessibilitySize ? 2 : 5)).padding(.horizontal, 4).padding(.top, 4)
                     .focused($focused).disabled(voice.isCapturing || !model.canEditDraft).accessibilityIdentifier("sharedInput")
                     .accessibilityLabel("메시지")
+#if DEBUG
+                    .onChange(of: focused) { _, now in NativeJourneyFixture.focusChanged(now) }
+#endif
                 HStack(spacing: 4) {
                     if voice.isActive {
                         Label(voice.activityLabel, systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2").font(.callout)
