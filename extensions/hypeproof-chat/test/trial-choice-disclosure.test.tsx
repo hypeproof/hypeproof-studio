@@ -1,6 +1,6 @@
-// TC-0069 (REQ-0065) — the start page's "AI 체험하기" choice shows the code requirement and the
-// advertised allowance BEFORE the choice is clicked, and the button points at the note through
-// aria-describedby. Driven through the rendered StartPage and the host's startState message.
+// REQ-0065 render check — the start page's "AI 체험하기" note carries the code requirement and the
+// advertised allowance before the choice is clicked. jsdom has no layout, so this does not prove
+// the note is visible: TC-0069 is proven in a real browser by trial-choice-disclosure-browser.smoke.mjs.
 import React, { act } from 'react';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -61,6 +61,6 @@ async function main() {
   assert.ok(noteOf().includes(CODE_LINE) && noteOf().includes('체험 2일 · AI 요청 50번'), 'note is back after re-choosing');
 
   await act(async () => root.unmount()); dom.window.close();
-  console.log('PASS test_tc_0069_start_page_shows_code_line_and_allowance_before_choice');
+  console.log('PASS start page render: the trial note text and aria-describedby before the choice');
 }
 main().then(() => process.exit(0), e => { console.error(e); dom.window.close(); process.exit(1); });

@@ -94,6 +94,7 @@ export class StartPage {
   // build is still waited on, claimed and recovered here.
   // TUX-SP-12 — what the Service advertises about the trial before entry. `null`: not advertised (or unreadable).
   private trialOffer?: TrialOffer | null;
+  private trialOfferRead?: Promise<void>;
   private order?: PendingOrder;
   private purchaseStage?: PurchaseView["stage"];
   private purchaseMessage?: string;
@@ -558,9 +559,11 @@ export class StartPage {
     };
   }
   /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
-  private async loadTrialOffer(): Promise<void> {
-    if (this.trialOffer !== undefined) return;
-    this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl);
+  private loadTrialOffer(): Promise<void> {
+    if (this.trialOffer !== undefined) return Promise.resolve();
+    // A Service slower than the first-paint wait is still read once: later callers join this read.
+    return this.trialOfferRead ??= (async () => { this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl); })()
+      .finally(() => { this.trialOfferRead = undefined; });
   }
 
   // ── Free start (SPEC iteration 4 §2; TUX-SP-14/15/16) ────────────────────────────────────────
