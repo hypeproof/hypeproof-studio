@@ -14,11 +14,13 @@ import UserNotifications
     }
     static var trace: String {
         let value = JourneyTransport.store.trace()
-        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty || !signInTiming.isEmpty,
+        guard !emptyStopBoundary.isEmpty || !requestedPlaybackVoice.isEmpty || !retryStages.isEmpty || !signInTiming.isEmpty
+                || !draftSend.isEmpty,
               var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
         if !emptyStopBoundary.isEmpty { fields["empty_stop_boundary"] = emptyStopBoundary }
         if !retryStages.isEmpty { fields["retry_stages"] = retryStages }
         if !signInTiming.isEmpty { fields["sign_in_timing"] = signInTiming.fields }
+        if !draftSend.isEmpty { fields["draft_send"] = draftSend.fields }
         if !requestedPlaybackVoice.isEmpty { fields["requested_playback_voice"] = requestedPlaybackVoice }
         return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
     }
@@ -33,6 +35,14 @@ import UserNotifications
     static func signInFinished(_ outcome: String) {
         guard enabled, !signInTiming.isEmpty else { return }
         signInTiming.mark(outcome, at: uptimeMs()); teamRuntimeIssue(signInTiming.summary)
+    }
+    /// Draft applied and Send action marks (#4432 F25). The trace gets "draft_send"; each Send action logs one
+    /// "HPStudio draft send" line through the runtime-issue channel.
+    private static var draftSend = DraftSendTiming()
+    static func draftApplied(length: Int) { guard enabled else { return }; draftSend.edited(length: length, at: uptimeMs()) }
+    static func sendAction(length: Int, canSend: Bool) {
+        guard enabled else { return }
+        draftSend.sent(length: length, canSend: canSend, at: uptimeMs()); teamRuntimeIssue(draftSend.summary)
     }
     private static var retryStages: [String] = []
     static func recordRetry(_ stage: String) {

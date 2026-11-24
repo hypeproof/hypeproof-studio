@@ -662,7 +662,7 @@ struct SharedConversationView: View {
                             .disabled(model.signedIn ? !model.canSend || !model.draftText.isEmpty : model.busy || !model.accountStorageReady)
                         Spacer(minLength: 0)
                         if model.signedIn {
-                            Button { focused = false; voice.stop(); model.send() } label: {
+                            Button { journeySendAction(); focused = false; voice.stop(); model.send() } label: {
                                 Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 44, height: 44)
                                     .contentShape(Rectangle())
                                     .background(model.canSend && !model.draftText.isEmpty ? ConversationStyle.accent : ConversationStyle.surface, in: Circle())
@@ -800,6 +800,13 @@ struct SharedConversationView: View {
         NativeJourneyFixture.signInVoiceStopped()
 #endif
         focused = false; model.login()
+    }
+    /// #4432 F25: records that the Send action ran, with the draft it saw. A disabled Send runs no action,
+    /// so a tap on a disabled Send leaves no record. A no-op outside DEBUG.
+    private func journeySendAction() {
+#if DEBUG
+        NativeJourneyFixture.sendAction(length: model.draftText.count, canSend: model.canSend)
+#endif
     }
     private func insert(_ text: String) { voice.stop(); focused = true; guard model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {

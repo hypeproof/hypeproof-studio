@@ -1399,7 +1399,16 @@ final class StudioJourneyTests: XCTestCase {
         let input = field(app); input.tap(); input.typeText(words)
         app.buttons["sharedSend"].tap()
         let error = app.staticTexts["sharedError"]
-        XCTAssertTrue(error.waitForExistence(timeout: 10)); enabled(app.buttons["restoreFailedReflectionDraft"])
+        let shown = error.waitForExistence(timeout: 10)
+        if !shown {
+            // #4432 F25: keep the state of the first miss before XCTest stops the case. Read after the wait; the
+            // assertion below is unchanged. No second tap, longer wait or alternate oracle.
+            let traceElement = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+            let observation = traceElement.exists ? (traceElement.value as? String ?? "native journey trace value absent") : "native journey trace absent"
+            let trace = XCTAttachment(string: observation); trace.name = "admission-error-missing-synthetic-trace"; trace.lifetime = .keepAlways; add(trace)
+            let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = "admission-error-missing-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        }
+        XCTAssertTrue(shown); enabled(app.buttons["restoreFailedReflectionDraft"])
         XCTAssertTrue(error.label.contains("AI 이용 권한"))
         XCTAssertFalse(app.buttons["sharedRetry"].exists, "Service records admission denial as a failed turn, not an unacknowledged local send.")
         assertSingleRecordedQuestion(words, in: app)

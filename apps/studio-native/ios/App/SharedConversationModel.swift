@@ -793,6 +793,10 @@ private struct SharedCacheFile: Codable {
     }
     func editDraft(_ value: String) {
         guard canEditDraft else { return }
+#if DEBUG
+        // #4432 F25: the length the draft has after this edit, at the time it was applied.
+        defer { NativeJourneyFixture.draftApplied(length: draftText.count) }
+#endif
         if !signedIn {
             guestDraft.text = value
             do {
