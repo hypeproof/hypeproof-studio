@@ -51,3 +51,47 @@ public struct SignInTiming: Sendable, Equatable {
         return "HPStudio sign-in timing: tap at uptime \(tap) ms; voice.stop \(stop); audio.deactivate \(audioDeactivation); \(stages)"
     }
 }
+
+/// When the shared composer's draft text was applied and when its Send action ran (#4432 F25, diagnostics only).
+///
+/// Run 45282026216: the test typed, then tapped Send at the button's centre, but the recording showed an
+/// empty field and a disabled arrow until 1.7-3 s after the tap, and nothing was sent. A disabled SwiftUI
+/// button runs no action, so a tap that finds Send disabled leaves no `send` entry here. Times are uptime ms,
+/// the clock of the stall lines.
+public struct DraftSendTiming: Sendable, Equatable {
+    public struct Send: Sendable, Equatable {
+        public let uptimeMs: Int
+        public let draftLength: Int
+        public let canSend: Bool
+    }
+    public private(set) var edits = 0
+    public private(set) var firstTextUptimeMs: Int?
+    public private(set) var lastEditUptimeMs: Int?
+    public private(set) var lastLength = 0
+    public private(set) var sends: [Send] = []
+    public static let maxSends = 4
+    public init() {}
+    /// One applied draft edit; `length` is the draft's length after the edit.
+    public mutating func edited(length: Int, at uptimeMs: Int) {
+        edits += 1; lastEditUptimeMs = uptimeMs; lastLength = length
+        if length > 0, firstTextUptimeMs == nil { firstTextUptimeMs = uptimeMs }
+        if length == 0 { firstTextUptimeMs = nil }
+    }
+    /// The Send action ran (only an enabled button runs it). The oldest entry is dropped past `maxSends`.
+    public mutating func sent(length: Int, canSend: Bool, at uptimeMs: Int) {
+        sends.append(Send(uptimeMs: uptimeMs, draftLength: length, canSend: canSend))
+        if sends.count > Self.maxSends { sends.removeFirst(sends.count - Self.maxSends) }
+    }
+    public var isEmpty: Bool { edits == 0 && sends.isEmpty }
+    /// Trace JSON value: short strings only, so the trace stays short (#4457).
+    public var fields: [String: String] {
+        ["edits": String(edits), "first_text_ms": firstTextUptimeMs.map(String.init) ?? "-",
+         "last_edit_ms": lastEditUptimeMs.map(String.init) ?? "-", "last_length": String(lastLength),
+         "sends": sends.map { "\($0.uptimeMs):\($0.draftLength):\($0.canSend ? "y" : "n")" }.joined(separator: " ")]
+    }
+    /// One log line for a Send action, the same facts as `fields`.
+    public var summary: String {
+        let last = sends.last.map { "send at uptime \($0.uptimeMs) ms, draft \($0.draftLength) chars, canSend \($0.canSend)" } ?? "no send"
+        return "HPStudio draft send: \(last); \(edits) draft edits, text since uptime \(firstTextUptimeMs.map(String.init) ?? "-") ms, last edit at \(lastEditUptimeMs.map(String.init) ?? "-") ms (\(lastLength) chars)"
+    }
+}

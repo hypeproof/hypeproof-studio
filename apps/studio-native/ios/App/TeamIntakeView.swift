@@ -3,6 +3,25 @@ import CryptoKit
 
 /// Public presentation metadata only; secrets stay in the separate Intake Keychain.
 struct TeamIntakeSelection: Codable { var principalID: String? }
+/// Runs one intake summary save (#4432 F21 P-intake). In DEBUG it counts the save by duration ("save.intake.lt10",
+/// "save.intake.lt100", "save.intake.ge100"; "save.intake.failed" too when it throws) and logs one "HPStudio intake
+/// save" line for a save of 100 ms or more, on the stall lines' clock. Release: the save only, unchanged.
+@MainActor func teamIntakeSave(_ save: () throws -> Void) rethrows {
+#if DEBUG
+    let started = ProcessInfo.processInfo.systemUptime
+    defer {
+        let ms = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
+        teamRenderCount(ms < 10 ? "save.intake.lt10" : ms < 100 ? "save.intake.lt100" : "save.intake.ge100")
+        if ms >= 100, NativeJourneyFixture.enabled {
+            teamRuntimeIssue("HPStudio intake save: \(ms) ms ending at uptime \(Int(ProcessInfo.processInfo.systemUptime * 1000)) ms")
+        }
+    }
+    do { try save() } catch { teamRenderCount("save.intake.failed"); throw error }
+#else
+    try save()
+#endif
+}
+
 @MainActor final class TeamIntakePresentation: ObservableObject {
     @Published var state = IntakeProposalController.View()
     @Published var auth = IntakeDeviceAuth.View()
@@ -51,7 +70,7 @@ struct TeamIntakeSelection: Codable { var principalID: String? }
         catch IntakeFailure.tooEarly { message = "잠시 후 로그인 확인을 다시 눌러 주세요." }
         catch { message = "로그인을 확인하지 못했어요. Lab 로그인을 다시 시작해 주세요." }
     }
-    func edit(_ change: (inout IntakeProposal) -> Void) { controller?.cancelConfirmation(); change(&summary); do { try persistSummary(summary); storageReady = true } catch { storageReady = false; message = "작성 내용을 저장하지 못했어요. 내용을 내보낸 뒤 다시 시도해 주세요." } }
+    func edit(_ change: (inout IntakeProposal) -> Void) { controller?.cancelConfirmation(); change(&summary); do { try teamIntakeSave { try persistSummary(summary) }; storageReady = true } catch { storageReady = false; message = "작성 내용을 저장하지 못했어요. 내용을 내보낸 뒤 다시 시도해 주세요." } }
     func prepareAssociation() async -> Bool {
         guard let receipt = state.operation?.receipt, let number = receipt.publication?.issue_number, let github else { return false }
         let g = generation
@@ -93,7 +112,7 @@ struct TeamIntakeScreen: View, Equatable {
     nonisolated static func == (a: Self, b: Self) -> Bool { teamScreenEqual("intake", (a.step, a.identity), (b.step, b.identity)) }
     private var locked: Bool { model.state.busy || !model.storageReady || !model.state.storageReady }
     private func field(_ title: String, _ key: WritableKeyPath<IntakeProposal, String>, _ id: String) -> some View {
-        TextField(title, text: Binding(get: { model.summary[keyPath: key] }, set: { text in model.edit { $0[keyPath: key] = text } }), axis: .vertical)
+        TextField(title, text: Binding(get: { model.summary[keyPath: key] }, set: { text in teamRenderCount("set.intake." + id); model.edit { $0[keyPath: key] = text } }), axis: .vertical)
             .focused($focused, equals: id).accessibilityIdentifier(id)
     }
     private func summary(_ p: IntakeProposal) -> some View {

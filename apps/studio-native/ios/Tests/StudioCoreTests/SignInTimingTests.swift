@@ -50,3 +50,41 @@ final class SignInTimingTests: XCTestCase {
         XCTAssertEqual(timing.marks.count, SignInTiming.maxMarks)
     }
 }
+
+/// #4432 F25 diagnostics: when the composer's draft was applied, and whether the Send action ran at all.
+final class DraftSendTimingTests: XCTestCase {
+    func testEditsRecordWhenTextFirstAppearedAndTheLastEdit() {
+        var timing = DraftSendTiming()
+        XCTAssertTrue(timing.isEmpty)
+        timing.edited(length: 1, at: 1_000)
+        timing.edited(length: 2, at: 1_010)
+        timing.edited(length: 39, at: 1_200)
+        XCTAssertEqual(timing.edits, 3); XCTAssertEqual(timing.firstTextUptimeMs, 1_000)
+        XCTAssertEqual(timing.lastEditUptimeMs, 1_200); XCTAssertEqual(timing.lastLength, 39)
+        timing.edited(length: 0, at: 1_300)  // cleared: text starts again at the next non-empty edit
+        XCTAssertNil(timing.firstTextUptimeMs)
+        timing.edited(length: 5, at: 1_400)
+        XCTAssertEqual(timing.firstTextUptimeMs, 1_400)
+        XCTAssertFalse(timing.isEmpty)
+    }
+    func testSendsKeepTheirDraftLengthAndOnlyTheLastFour() {
+        var timing = DraftSendTiming()
+        timing.sent(length: 0, canSend: true, at: 500)
+        XCTAssertFalse(timing.isEmpty, "A send with no edit is still recorded.")
+        for index in 1...5 { timing.sent(length: index, canSend: index != 3, at: 1_000 + index) }
+        XCTAssertEqual(timing.sends.map(\.uptimeMs), [1_002, 1_003, 1_004, 1_005])
+        XCTAssertEqual(timing.sends.count, DraftSendTiming.maxSends)
+        XCTAssertEqual(timing.fields["sends"], "1002:2:y 1003:3:n 1004:4:y 1005:5:y")
+    }
+    func testFieldsAndSummaryCarryTheSameFacts() {
+        var timing = DraftSendTiming()
+        XCTAssertEqual(timing.fields, ["edits": "0", "first_text_ms": "-", "last_edit_ms": "-", "last_length": "0", "sends": ""])
+        XCTAssertEqual(timing.summary, "HPStudio draft send: no send; 0 draft edits, text since uptime - ms, last edit at - ms (0 chars)")
+        timing.edited(length: 39, at: 2_000)
+        timing.sent(length: 39, canSend: true, at: 2_500)
+        XCTAssertEqual(timing.fields, ["edits": "1", "first_text_ms": "2000", "last_edit_ms": "2000", "last_length": "39", "sends": "2500:39:y"])
+        XCTAssertEqual(timing.summary, "HPStudio draft send: send at uptime 2500 ms, draft 39 chars, canSend true; 1 draft edits, text since uptime 2000 ms, last edit at 2000 ms (39 chars)")
+        timing.sent(length: 40, canSend: false, at: 2_600)
+        XCTAssertTrue(timing.summary.hasPrefix("HPStudio draft send: send at uptime 2600 ms, draft 40 chars, canSend false;"), "The line names the latest send.")
+    }
+}
