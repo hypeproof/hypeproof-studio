@@ -411,7 +411,73 @@ final class TeamEntryUITests: XCTestCase {
     private func usableFrame(_ frame: CGRect) -> Bool { !frame.isNull && !frame.isEmpty && !frame.isInfinite }
     /// The visible scrolling area: the owning List when known, clipped by the
     /// window, the navigation bar, and the keyboard or the home indicator.
-    @MainActor private func revealViewport(_ app: XCUIApplication, _ container: XCUIElement?) -> CGRect {
+    /// Comparison mode (#4432 F21 (나)): the viewport is read twice, live
+    /// (the queries below, about 9 per attempt: 0.91 s on average in run
+    /// 45300085532) and from one app snapshot. The live reading decides, as
+    /// before. Each call logs both durations as an activity step; a differing
+    /// result adds an attachment (at most 5 per test). With no difference in a
+    /// full CI run, the live reading can go in a later change.
+    @MainActor private func revealViewport(_ app: XCUIApplication, _ container: XCUIElement?, _ containerID: String?) -> CGRect {
+        let liveStart = DispatchTime.now().uptimeNanoseconds
+        let live = liveRevealViewport(app, container)
+        let snapshotStart = DispatchTime.now().uptimeNanoseconds
+        let snapshot = Result { try snapshotRevealViewport(app, containerID: containerID) }
+        let end = DispatchTime.now().uptimeNanoseconds
+        let ms = { (from: UInt64, to: UInt64) in String(format: "%.0f", Double(to - from) / 1_000_000) }
+        var same = false
+        var detail = ""
+        switch snapshot {
+        case .success(let read): same = read.area == live; detail = read.inputs
+        case .failure(let error): detail = "snapshot failed: \(error)"
+        }
+        if container != nil && containerID == nil { same = false; detail += "; no container id passed" }
+        XCTContext.runActivity(named: "HPStudio reveal viewport: live \(ms(liveStart, snapshotStart)) ms snapshot \(ms(snapshotStart, end)) ms \(same ? "same" : "DIFF")") { _ in }
+        if !same && revealMismatches < 5 {
+            revealMismatches += 1
+            let record = XCTAttachment(string: "live=\(live)\n\((try? snapshot.get().area).map { "snapshot=\($0)" } ?? "snapshot=<none>")\ncontainerID=\(containerID ?? "<none>")\n\(detail)")
+            record.name = "reveal-viewport-mismatch-\(revealMismatches)"; record.lifetime = .keepAlways; add(record)
+        }
+        return live
+    }
+    private var revealMismatches = 0
+    /// The same inputs as liveRevealViewport, from one snapshot of the app:
+    /// the first window, the container List by identifier, every navigation
+    /// bar and the first keyboard, each with a usable frame, in tree order.
+    @MainActor private func snapshotRevealViewport(_ app: XCUIApplication, containerID: String?) throws -> (area: CGRect, inputs: String) {
+        let root = try app.snapshot()
+        var window: CGRect?, container: CGRect?, keyboardSeen = false, keyboard: CGRect?, bars: [CGRect] = []
+        func walk(_ node: any XCUIElementSnapshot) {
+            switch node.elementType {
+            case .window where window == nil: window = node.frame
+            case .collectionView where container == nil && containerID != nil && node.identifier == containerID: container = node.frame
+            case .navigationBar: if usableFrame(node.frame) { bars.append(node.frame) }
+            case .keyboard where !keyboardSeen: keyboardSeen = true; if usableFrame(node.frame) { keyboard = node.frame }
+            default: break
+            }
+            node.children.forEach(walk)
+        }
+        walk(root)
+        let frame = window ?? .zero
+        let area = viewportArea(window: frame, container: container.flatMap { usableFrame($0) ? $0 : nil }, bars: bars, keyboard: keyboard)
+        return (area, "window=\(frame) container=\(container.map { "\($0)" } ?? "<none>") bars=\(bars) keyboard=\(keyboard.map { "\($0)" } ?? "<none>")")
+    }
+    /// The rules of liveRevealViewport, applied to frames already read.
+    private func viewportArea(window: CGRect, container: CGRect?, bars: [CGRect], keyboard: CGRect?) -> CGRect {
+        var area = window
+        if let container { area = area.intersection(container) }
+        let onScreen = bars.filter { $0.minX >= window.minX - 1 && $0.maxX <= window.maxX + 1 }
+        if let barBottom = onScreen.map(\.maxY).max(), barBottom > area.minY, barBottom < area.maxY {
+            area.size.height = area.maxY - barBottom
+            area.origin.y = barBottom
+        }
+        if let keyboard {
+            if keyboard.minY < area.maxY { area.size.height = max(0, keyboard.minY - area.minY) }
+        } else if area.maxY > window.maxY - homeIndicatorInset {
+            area.size.height = max(0, window.maxY - homeIndicatorInset - area.minY)
+        }
+        return area
+    }
+    @MainActor private func liveRevealViewport(_ app: XCUIApplication, _ container: XCUIElement?) -> CGRect {
         let window = app.windows.firstMatch.frame
         var area = window
         if let container, container.exists, usableFrame(container.frame) { area = area.intersection(container.frame) }
@@ -472,11 +538,11 @@ final class TeamEntryUITests: XCTestCase {
     /// real hittability. XCTest fails a case outright when asked whether an
     /// offscreen element is hittable ("Activation point invalid"), so
     /// isHittable is read only once the frame is inside the viewport (#4432).
-    @MainActor private func listReveal(_ app: XCUIApplication, _ item: XCUIElement, in container: XCUIElement? = nil,
+    @MainActor private func listReveal(_ app: XCUIApplication, _ item: XCUIElement, in container: XCUIElement? = nil, containerID: String? = nil,
                                        toward preferred: RevealDirection = .towardEnd, file: StaticString = #filePath, line: UInt = #line) {
         var steps: [String] = []
         for attempt in 0..<10 {
-            let area = revealViewport(app, container)
+            let area = revealViewport(app, container, containerID)
             let frame: CGRect? = item.exists ? item.frame : nil
             var direction = preferred
             if let frame, usableFrame(frame) {
@@ -499,12 +565,12 @@ final class TeamEntryUITests: XCTestCase {
     }
     /// Brings a diagnostic row into the accessibility tree to read its value.
     /// It is never tapped, so hittability is not requested.
-    @MainActor private func readReveal(_ app: XCUIApplication, _ item: XCUIElement, in container: XCUIElement? = nil,
+    @MainActor private func readReveal(_ app: XCUIApplication, _ item: XCUIElement, in container: XCUIElement? = nil, containerID: String? = nil,
                                        toward direction: RevealDirection = .towardStart, file: StaticString = #filePath, line: UInt = #line) {
         var steps: [String] = []
         for attempt in 0..<8 {
             if item.exists { return }
-            let area = revealViewport(app, container)
+            let area = revealViewport(app, container, containerID)
             steps.append("\(attempt): not loaded in viewport \(area)")
             revealDrag(app, area, direction)
         }
@@ -550,7 +616,7 @@ final class TeamEntryUITests: XCTestCase {
     @MainActor private func detailReveal(_ app: XCUIApplication, _ item: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         let list = app.collectionViews["teamRequestDetailList"]
         XCTAssertTrue(list.waitForExistence(timeout: 10), file: file, line: line)
-        listReveal(app, item, in: list, file: file, line: line)
+        listReveal(app, item, in: list, containerID: "teamRequestDetailList", file: file, line: line)
     }
     @MainActor private func githubReveal(_ app: XCUIApplication, _ item: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         listReveal(app, item, file: file, line: line)
@@ -583,11 +649,11 @@ final class TeamEntryUITests: XCTestCase {
         }
         let form = app.collectionViews["teamIntakeForm"]
         XCTAssertTrue(form.waitForExistence(timeout: 5), file: file, line: line)
-        listReveal(app, item, in: form, file: file, line: line)
+        listReveal(app, item, in: form, containerID: "teamIntakeForm", file: file, line: line)
     }
     @MainActor private func intakeTrace(_ app: XCUIApplication) throws -> [String:Any] {
         let item = app.staticTexts["teamIntakeTrace"]
-        readReveal(app, item, in: app.collectionViews["teamIntakeForm"])
+        readReveal(app, item, in: app.collectionViews["teamIntakeForm"], containerID: "teamIntakeForm")
         return try XCTUnwrap(JSONSerialization.jsonObject(with: Data((item.value as? String ?? "{}").utf8)) as? [String:Any])
     }
     @MainActor func testIntakeExplicitPreviewUnknownRecoveryPreservesPublishedIssue() throws {
