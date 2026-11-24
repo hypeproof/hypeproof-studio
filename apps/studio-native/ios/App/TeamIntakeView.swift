@@ -118,13 +118,21 @@ struct TeamIntakeScreen: View, Equatable {
     private func summary(_ p: IntakeProposal) -> some View {
         Group { Text(p.title).font(.headline); Text(p.intent); Text(p.requested_change); ForEach(Array(p.acceptance.enumerated()), id: \.offset) { Text($0.element) }; ForEach(Array(p.references.enumerated()), id: \.offset) { Text($0.element) }; Text("공개 위치: \(p.target_repo)") }
     }
+#if DEBUG
+    /// A 1 pt clear static text, like `journeyDiagnostic` in SharedConversationView.
+    private var intakeTrace: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+            Text("Synthetic Intake trace").font(.caption2).foregroundStyle(.clear)
+                .frame(width: 1, height: 1).clipped().allowsHitTesting(false)
+                .accessibilityAddTraits(.isStaticText)
+                .accessibilityIdentifier("teamIntakeTrace").accessibilityValue(TeamIntakeFixture.trace)
+        }
+    }
+#endif
     var body: some View {
         let _ = teamRenderCount("body.intake")
         let _ = teamWhy(Self.self)
         List {
-#if DEBUG
-            if TeamIntakeFixture.enabled { TimelineView(.periodic(from: .now, by: 0.25)) { _ in Text("Synthetic Intake trace").accessibilityIdentifier("teamIntakeTrace").accessibilityValue(TeamIntakeFixture.trace) } }
-#endif
             Text("내부 대화는 자동으로 공개하지 않아요. 공개해도 되는 요약만 직접 작성해 주세요.").font(.caption)
             if !model.message.isEmpty { Text(model.message).accessibilityIdentifier("teamIntakeMessage") }
             if let p = model.principal, p.expiresAt > Date() {
@@ -176,7 +184,16 @@ struct TeamIntakeScreen: View, Equatable {
             }
             Button("새 로그인으로 기존 전송 복구") { Task { await model.controller?.recoverForCurrentSession() } }.disabled(locked || model.principal == nil)
             Button("연결 새로고침") { Task { await model.open() } }.disabled(model.state.busy).accessibilityIdentifier("teamIntakeRefresh")
-        }.accessibilityIdentifier("teamIntakeForm").navigationTitle("공개 요청 제안").task { await model.open() }
+        }.accessibilityIdentifier("teamIntakeForm")
+#if DEBUG
+        // The synthetic trace sits outside the List, so it is always in the
+        // accessibility tree. As the List's first row it was unloaded whenever
+        // Send or Associate was on screen, and each of the three trace reads
+        // dragged to the top and back: 8 of 10 drags, about 25 s of 136 s
+        // (run 45300085532, #4432 F21). Same id, same static text, same value.
+        .overlay(alignment: .topLeading) { if TeamIntakeFixture.enabled { intakeTrace } }
+#endif
+        .navigationTitle("공개 요청 제안").task { await model.open() }
         .onAppear { teamRenderCount("appear.intake") }
         .teamPublishCount(model.objectWillChange, "pub.intake").teamChangeCount(focused, "focus.intake")
         .onDisappear { if model.principal == nil { try? model.device?.cancel() } }
