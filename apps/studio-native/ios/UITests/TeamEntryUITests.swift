@@ -415,8 +415,8 @@ final class TeamEntryUITests: XCTestCase {
     /// live queries (about 9 per attempt) and this reading gave the same area in
     /// all 260 calls of PR run 45326775841, at 181 ms against 772 ms (median);
     /// one snapshot also cannot race the keyboard closing between an `exists`
-    /// and a `frame` read. A snapshot that throws gives no viewport for that
-    /// attempt (nil) and is attached once per test; nothing reads it another way.
+    /// and a `frame` read. A snapshot that throws returns nil and is attached
+    /// once per test; the reveal then fails at once. Nothing reads it another way.
     @MainActor private func revealViewport(_ app: XCUIApplication, _ containerID: String?) -> CGRect? {
         let root: any XCUIElementSnapshot
         do { root = try app.snapshot() } catch {
@@ -498,7 +498,7 @@ final class TeamEntryUITests: XCTestCase {
         for attempt in 0..<10 {
             guard let area = revealViewport(app, containerID) else {
                 steps.append("\(attempt): no viewport (app snapshot failed)")
-                continue
+                revealFailure(app, item, steps, file: file, line: line); return
             }
             let frame: CGRect? = item.exists ? item.frame : nil
             var direction = preferred
@@ -529,7 +529,7 @@ final class TeamEntryUITests: XCTestCase {
             if item.exists { return }
             guard let area = revealViewport(app, containerID) else {
                 steps.append("\(attempt): no viewport (app snapshot failed)")
-                continue
+                revealFailure(app, item, steps, file: file, line: line); return
             }
             steps.append("\(attempt): not loaded in viewport \(area)")
             revealDrag(app, area, direction)
