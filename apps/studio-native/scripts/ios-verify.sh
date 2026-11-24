@@ -42,7 +42,9 @@ if [ "$mode" = build ]; then
   printf 'native verification: iPhone simulator build-for-testing\n'
   xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build-for-testing 2>&1 | tee ../evidence/simulator-build.log
   # The real Korean voice case runs in its own job, after the simulator settles (#4432).
+  # Balanced by measured time (ios-ui-durations.json, #4432 F21); unmeasured cases are placed by count.
   python3 ../scripts/ios-ui-shards.py plan --ui-tests UITests --shards "${IOS_UI_SHARDS:-3}" --output ../evidence/ios-ui-shard-plan.json \
+    --durations ../scripts/ios-ui-durations.json \
     --dedicated HPStudioUITests/StudioJourneyTests/testRealKoreanPlaybackCompletionReachesNextCaptureBoundary
   exit 0
 fi
