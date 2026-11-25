@@ -1033,8 +1033,14 @@ final class TeamEntryUITests: XCTestCase {
         let titled = app.staticTexts["Lab의 요청"].exists
         let pick = XCTAttachment(string: "selectedLab=\(selectedLab)\nsectionTitle=\(titled)\ntrace=\(app.staticTexts["teamRequestTrace"].value as? String ?? "missing trace")\n\(app.debugDescription)")
         pick.name = "team-product-pick"; pick.lifetime = .keepAlways; add(pick)
+        let pickScreen = XCTAttachment(screenshot: app.screenshot()); pickScreen.name = "team-product-pick-screen"; pickScreen.lifetime = .keepAlways; add(pickScreen)
         XCTAssertTrue(selectedLab, "The request must be created for Lab, not the Studio default.")
         XCTAssertTrue(titled, "The request section must name Lab once Lab is picked.")
+        // The segmented style draws no Picker title; the row must still show "제품" (#4497 review).
+        let productTitle = app.staticTexts["teamRequestProductTitle"]
+        XCTAssertTrue(productTitle.exists && productTitle.label == "제품" && !productTitle.frame.isEmpty && app.frame.contains(productTitle.frame),
+                      "The product row must show its visible title.")
+        XCTAssertEqual(product.label, "제품", "VoiceOver must name the product control.")
         githubReveal(app, app.buttons["teamRequestSend"]); app.buttons["teamRequestSend"].tap(); app.alerts.buttons["보내기"].tap()
         XCTAssertTrue(app.staticTexts["teamRequestReceipt"].waitForExistence(timeout: 10))
         app.buttons["teamRequestClose"].tap(); app.buttons["teamRequestHomeEntry"].tap()

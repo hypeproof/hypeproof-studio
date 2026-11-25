@@ -508,15 +508,20 @@ struct TeamRequestsView: View {
                 if let draft = model.state.draft {
                     Section {
                         if let access = model.state.access {
-                            Picker("제품", selection: Binding(get: { model.state.draft?.product ?? "studio" }, set: { value in teamPickProduct(model, value) })) {
-                                ForEach(access.products, id: \.self) { Text(productLabel($0)).tag($0) }
+                            // The segmented style draws no Picker title, so the row shows its own "제품" title
+                            // and the control keeps the same name for VoiceOver.
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("제품").accessibilityIdentifier("teamRequestProductTitle")
+                                Picker("제품", selection: Binding(get: { model.state.draft?.product ?? "studio" }, set: { value in teamPickProduct(model, value) })) {
+                                    ForEach(access.products, id: \.self) { Text(productLabel($0)).tag($0) }
+                                }
+                                // Segments, not a menu (#4432 F24, F1 approved by JY 2026-11-24): a menu item tapped just
+                                // after the menu opened was ignored (run 45300085532) or had no hit point (run 45351306160).
+                                // At most 3 products (TeamRequestDraft.products), so the segments fit the row.
+                                .pickerStyle(.segmented).accessibilityLabel("제품").accessibilityIdentifier("teamRequestProduct")
+                                .disabled(draft.phase != .draft || model.state.busy || !model.state.storageReady)
+                                .onChange(of: draft.product) { _, new in teamRenderCount("draft.product." + new) }
                             }
-                            // Segments, not a menu (#4432 F24, F1 approved by JY 2026-11-24): a menu item tapped just
-                            // after the menu opened was ignored (run 45300085532) or had no hit point (run 45351306160).
-                            // At most 3 products (TeamRequestDraft.products), so the segments fit the row.
-                            .pickerStyle(.segmented).accessibilityIdentifier("teamRequestProduct")
-                            .disabled(draft.phase != .draft || model.state.busy || !model.state.storageReady)
-                            .onChange(of: draft.product) { _, new in teamRenderCount("draft.product." + new) }
                         }
                         Picker("종류", selection: Binding(get: { model.state.draft?.category ?? "bug" }, set: { value in guard let current = model.state.draft else { return }; model.controller?.edit(body: current.body, product: current.product, category: value) })) {
                             Text("불편·문제").tag("bug"); Text("개선 아이디어").tag("improvement"); Text("질문").tag("question")
