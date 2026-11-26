@@ -12,7 +12,6 @@ export const REHEARSAL_TURNS_PATH = "/classroom/rehearsal/turns";
 
 export interface RehearsalTurnFacts {
   turnId: string;
-  mode: string;
   model: string;
   toolNames: string[];
   answered: boolean;
@@ -21,15 +20,23 @@ export interface RehearsalTurnFacts {
   helpReceipt: string | null;
 }
 
+// Service limits (service PR #617, worker/src/routes/rehearsal-turns.ts): the server accepts mode "rehearsal" only.
+export const REHEARSAL_TURN_MODE = "rehearsal";
+export const MAX_TOOLS_PER_TURN = 50;
+export const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
+export const MODEL_PATTERN = /^[A-Za-z0-9._:/-]{1,120}$/;
+
 /** The upload body. No user_text, assistant_text, tool input, rehearsal id, course id or lesson hash, by construction. */
 export function rehearsalTurnBody(f: RehearsalTurnFacts): Record<string, unknown> {
+  const model = MODEL_PATTERN.test(f.model) ? f.model : "unknown";
+  const tools = f.toolNames.filter((name) => TOOL_NAME_PATTERN.test(name)).slice(0, MAX_TOOLS_PER_TURN);
   return {
     text_omitted: true,
     answered: f.answered,
     turn_id: f.turnId,
-    mode: f.mode,
-    model: f.model,
-    tools: f.toolNames.map((name) => ({ name })),
+    mode: REHEARSAL_TURN_MODE,
+    model,
+    tools: tools.map((name) => ({ name })),
     at: f.at,
     step_id: f.stepId,
     help_receipt: f.helpReceipt,

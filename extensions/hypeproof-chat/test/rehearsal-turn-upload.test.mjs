@@ -24,7 +24,7 @@ const PLANT_RETURN = "PLANT-RETURN-ISSUER-7735";
 const BASE = "https://api.example/v1";
 
 const facts = {
-  turnId: "turn-1", mode: "auto", model: "claude-sonnet-5-5", toolNames: ["read_file"], answered: true,
+  turnId: "turn-1", model: "claude-sonnet-5-5", toolNames: ["read_file"], answered: true,
   at: "2026-11-25T00:00:00.000Z", stepId: "step-1",
   helpReceipt: "mode=hint; source=lesson_default; step=step-1; performance=unobserved",
 };
@@ -43,6 +43,28 @@ t("body carries text_omitted and the fixed fields", () => {
   assert.equal(body.turn_id, "turn-1");
   assert.equal(body.step_id, "step-1");
   assert.deepEqual(body.tools, [{ name: "read_file" }]);
+});
+
+// Service rules (service PR #617): mode is always "rehearsal"; model, turn_id and tool names follow fixed patterns; at most 50 tools.
+t("body mode is always the rehearsal mode, whatever the chat mode was", () => {
+  assert.equal(body.mode, "rehearsal");
+  assert.equal(rehearsalTurnBody({ ...facts, turnId: "t-mode" }).mode, "rehearsal");
+});
+
+t("an empty or malformed model is sent as unknown; a valid one is kept", () => {
+  assert.equal(rehearsalTurnBody({ ...facts, model: "" }).model, "unknown");
+  assert.equal(rehearsalTurnBody({ ...facts, model: "bad model!" }).model, "unknown");
+  assert.equal(rehearsalTurnBody({ ...facts, model: "claude-sonnet-5-5" }).model, "claude-sonnet-5-5");
+});
+
+t("tools: at most 50 kept (the first 50), and a name outside the pattern is not sent", () => {
+  const many = Array.from({ length: 60 }, (_, i) => `tool_${i}`);
+  const capped = rehearsalTurnBody({ ...facts, toolNames: many }).tools;
+  assert.equal(capped.length, 50);
+  assert.deepEqual(capped[0], { name: "tool_0" });
+  assert.deepEqual(capped[49], { name: "tool_49" });
+  const odd = rehearsalTurnBody({ ...facts, toolNames: ["ok.name", "has space", "x".repeat(121)] }).tools;
+  assert.deepEqual(odd, [{ name: "ok.name" }]);
 });
 
 t("body has no text, tool-input, or rehearsal-identity keys (the server takes them from the code)", () => {

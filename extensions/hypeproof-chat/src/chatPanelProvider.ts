@@ -48,7 +48,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import { mustStayLocal } from './rehearsalRoute';
-import { rehearsalReportRejectionSentence, REHEARSAL_CODE_MISSING, rehearsalUploadPendingSentence } from './rehearsalReportReason';
+import { rehearsalReportRejectionSentence, REHEARSAL_CODE_MISSING, rehearsalUploadPendingSentence, rehearsalUploadDroppedSentence } from './rehearsalReportReason';
 import { rehearsalTurnBody, helpReceiptFor, uploadRehearsalTurn, rehearsalCodeNoticeNeeded, type UploadOutcome } from './rehearsalTurnUpload';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
@@ -5500,6 +5500,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private rehearsalCodeNoticeShown = false;
   // The last refused upload (403/404/409/410/429) — the report shows its sentence instead of the pending count.
   private rehearsalUploadRejected: { status: number; reason?: string } | undefined;
+  // Turns the Service rejected as malformed (400/413): dropped, never retried; the report says how many.
+  private rehearsalUploadDropped = 0;
   // #1298 — called when the auto-read whoami path gets a rejected result (401/403).
   // Extension sets this to delete the issuer token and show the student start page once.
   onIssuerAutoRejected?: () => void;
@@ -11227,7 +11229,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
-          if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, mode: String(mode), model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
+          if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
         }
       } else if (this._instructorMode.isInstructor === true) {
         throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
@@ -12485,11 +12487,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   // #4501 — fire-and-forget after the turn result is drawn. A failure is counted for the report; the student is not blocked.
-  private uploadRehearsalTurnFor(f: { turnId: string; mode: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
+  private uploadRehearsalTurnFor(f: { turnId: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
     if (!f.profile.rehearsal) return Promise.resolve();
     const step = f.profile.lesson?.content.steps.find(s => s.id === f.step);
     const body = rehearsalTurnBody({
-      turnId: f.turnId, mode: f.mode, model: f.model, toolNames: f.toolNames, answered: f.answered, at: new Date().toISOString(),
+      turnId: f.turnId, model: f.model, toolNames: f.toolNames, answered: f.answered, at: new Date().toISOString(),
       stepId: f.step ?? null, helpReceipt: helpReceiptFor(step, f.helpMode),
     });
     const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
@@ -12497,15 +12499,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       .then(o => this.noteRehearsalUpload(f.turnId, body, o), () => this.noteRehearsalUpload(f.turnId, body, undefined));
   }
 
-  // A 2xx clears the turn. A refusal keeps it unsent and remembers its reason for the report sentence.
+  // A 2xx clears the turn. 400 and 413 mean the body itself is wrong: the turn is dropped, not retried, and counted.
+  // 429 (turn_limit) repeats with the same body: not retried, its reason is kept for the report sentence.
+  // Other refusals and 5xx/network stay unsent and are retried once before the report.
   private noteRehearsalUpload(turnId: string, body: Record<string, unknown>, o: UploadOutcome | undefined): void {
-    if (o && typeof o.status === "number" && o.status >= 200 && o.status < 300) {
+    const status = o && typeof o.status === "number" ? o.status : undefined;
+    if (status !== undefined && status >= 200 && status < 300) {
       this.rehearsalUploadUnsent.delete(turnId);
       this.rehearsalUploadRejected = undefined;
       return;
     }
+    if (status === 400 || status === 413) {
+      this.rehearsalUploadUnsent.delete(turnId);
+      this.rehearsalUploadDropped += 1;
+      return;
+    }
+    if (status === 429) {
+      this.rehearsalUploadUnsent.delete(turnId);
+      this.rehearsalUploadRejected = { status, reason: o && "reason" in o ? o.reason : undefined };
+      return;
+    }
     this.rehearsalUploadUnsent.set(turnId, body);
-    if (o && typeof o.status === "number" && [403, 404, 409, 410, 429].includes(o.status)) this.rehearsalUploadRejected = { status: o.status, reason: o.reason };
+    if (status !== undefined && [403, 404, 409, 410].includes(status)) this.rehearsalUploadRejected = { status, reason: o && "reason" in o ? o.reason : undefined };
   }
 
   private async sendRehearsalReport(steps:import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
@@ -12530,6 +12545,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       this.rehearsalUploadHeldOnce = false;
+      // Dropped turns are said once here and the report still goes out.
+      if (this.rehearsalUploadDropped) await this.post({ type: "rehearsalState", state: "error", message: rehearsalUploadDroppedSentence(this.rehearsalUploadDropped) });
     }
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const pkg = this.context.extension.packageJSON as { version?: string; devDependencies?: Record<string, string> };

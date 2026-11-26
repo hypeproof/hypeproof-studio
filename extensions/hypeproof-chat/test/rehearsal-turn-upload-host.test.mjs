@@ -41,6 +41,11 @@ const fakeFetch = async (url, init = {}) => {
   if (u.includes('/classroom/rehearsal/turns')) {
     // Bodies that name a "fail-" turn are refused (500, kept unsent); "judged-" is refused with the Service reason 409.
     if (String(init.body).includes('"turn_id":"fail-')) return new Response('{}', { status: 500 });
+    // "bad-" turns: the Service refuses the body (400, dropped, never retried). "limit-": 429 turn_limit (never retried).
+    if (String(init.body).includes('"turn_id":"bad-')) return new Response(JSON.stringify({ error: 'x', reason: 'bad_request' }), { status: 400 });
+    if (String(init.body).includes('"turn_id":"limit-')) return new Response(JSON.stringify({ error: 'x', reason: 'turn_limit' }), { status: 429 });
+    // "net-" turns: the connection fails.
+    if (String(init.body).includes('"turn_id":"net-')) throw new Error('offline');
     // "retry-" turns: the first attempt fails, the second succeeds (same turn_id expected).
     if (String(init.body).includes('"turn_id":"retry-')) {
       const n = fetches.filter(f => f.url.includes('/classroom/rehearsal/turns') && String(f.init.body).includes('"turn_id":"retry-')).length;
@@ -104,7 +109,7 @@ test('same-window seat (return key, no issuer, code present): one upload and one
   fetches.length = 0;
   const { provider, posted, reads } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN, [SEAT_KEY]: '{"phase":"inside"}' });
   await provider.uploadRehearsalTurnFor({
-    turnId: 't-1', mode: 'auto', model: 'claude-sonnet-5-5', toolNames: ['read_file'], answered: true,
+    turnId: 't-1', model: 'claude-sonnet-5-5', toolNames: ['read_file'], answered: true,
     step: 's1', helpMode: undefined, profile: provider.cachedProfile,
   });
   await provider.sendRehearsalReport(steps, undefined, undefined);
@@ -131,7 +136,7 @@ test('same-window seat: the upload path sees the code and no issuer; no refusal 
   fetches.length = 0;
   const { provider, posted } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
   await provider.uploadRehearsalTurnFor({
-    turnId: 't-same', mode: 'auto', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+    turnId: 't-same', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
   });
   assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/turns')).length, 1, 'one upload');
   assert.equal(posted.filter(m => m.type === 'rehearsalState').length, 0, 'no rehearsal state is posted by a successful upload');
@@ -142,7 +147,7 @@ test('another device (code only): one upload and one report; the code only in th
   fetches.length = 0;
   const { provider, posted, reads } = makeProvider({ [CODE_KEY]: PLANT_CODE });
   await provider.uploadRehearsalTurnFor({
-    turnId: 't-2', mode: 'auto', model: 'm', toolNames: [], answered: false, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+    turnId: 't-2', model: 'm', toolNames: [], answered: false, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
   });
   await provider.sendRehearsalReport(steps, undefined, undefined);
   const upload = fetches.find(f => f.url.includes('/classroom/rehearsal/turns'));
@@ -158,7 +163,7 @@ test('no rehearsal code: no upload, no report request; the report asks for the c
   fetches.length = 0;
   const { provider, posted, reads } = makeProvider({ [RETURN_KEY]: PLANT_RETURN });
   await provider.uploadRehearsalTurnFor({
-    turnId: 't-3', mode: 'auto', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+    turnId: 't-3', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
   });
   assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/turns')).length, 0, 'no upload without a code');
   await provider.sendRehearsalReport(steps, undefined, undefined);
@@ -187,13 +192,69 @@ test('retry keeps the turn_id: the first upload fails, the report-press retry se
   fetches.length = 0;
   const { provider } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
   await provider.uploadRehearsalTurnFor({
-    turnId: 'retry-1', mode: 'auto', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+    turnId: 'retry-1', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
   });
   await provider.sendRehearsalReport(steps, undefined, undefined); // the report press retries the unsent turn once (201 now)
   const uploads = fetches.filter(f => f.url.includes('/classroom/rehearsal/turns') && String(f.init.body).includes('"turn_id":"retry-1"'));
   assert.equal(uploads.length, 2, 'one first attempt and one retry');
   assert.equal(uploads[0].init.body, uploads[1].init.body, 'the retry body is byte-identical to the first');
   assert.equal(JSON.parse(uploads[1].init.body).turn_id, 'retry-1');
+});
+
+const uploadsFor = (fetches, id) => fetches.filter(f => f.url.includes('/classroom/rehearsal/turns') && String(f.init.body).includes(`"turn_id":"${id}"`));
+
+// Retry rule 1: 400 (malformed body) is dropped at once: no retry before the report; the report is not blocked.
+test('400 turn: dropped, zero retries before the report, the dropped sentence shown, the report still sent', async () => {
+  fetches.length = 0;
+  const { provider, posted } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
+  await provider.uploadRehearsalTurnFor({
+    turnId: 'bad-1', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+  });
+  await provider.sendRehearsalReport(steps, undefined, undefined);
+  assert.equal(uploadsFor(fetches, 'bad-1').length, 1, 'the 400 turn is sent once and never again');
+  assert.equal(posted.filter(m => m.message && m.message.includes('결과에 들어가지 않습니다')).length, 1, 'the dropped sentence is shown once');
+  assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/report')).length, 1, 'the report is not blocked by the dropped turn');
+  assert.ok(posted.some(m => m.type === 'rehearsalState' && m.state === 'sent'));
+});
+
+// Retry rule 2: 429 (turn_limit) repeats with the same body, so it is not retried; its reason is kept.
+test('429 turn: zero retries; the report is not blocked', async () => {
+  fetches.length = 0;
+  const { provider, posted } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
+  await provider.uploadRehearsalTurnFor({
+    turnId: 'limit-1', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+  });
+  await provider.sendRehearsalReport(steps, undefined, undefined);
+  assert.equal(uploadsFor(fetches, 'limit-1').length, 1, 'the 429 turn is sent once and never again');
+  assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/report')).length, 1, 'the report is sent');
+  assert.ok(posted.some(m => m.type === 'rehearsalState' && m.state === 'sent'));
+});
+
+// Retry rule 3: 5xx (server trouble) and a network error are retried once before the report.
+test('5xx turn: one retry before the report (two requests), held once, the second press sends', async () => {
+  fetches.length = 0;
+  const { provider, posted } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
+  await provider.uploadRehearsalTurnFor({
+    turnId: 'fail-3', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+  });
+  await provider.sendRehearsalReport(steps, undefined, undefined);
+  assert.equal(uploadsFor(fetches, 'fail-3').length, 2, 'one first attempt and one retry before the report');
+  assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/report')).length, 0, 'the first press is held');
+  assert.equal(posted.filter(m => m.message && m.message.includes('올리지 못했습니다')).length, 1);
+  await provider.sendRehearsalReport(steps, undefined, undefined);
+  assert.equal(uploadsFor(fetches, 'fail-3').length, 3, 'the second press retries once more');
+  assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/report')).length, 1, 'the second press sends the report');
+});
+
+test('network error turn: one retry before the report (two requests), held once', async () => {
+  fetches.length = 0;
+  const { provider } = makeProvider({ [CODE_KEY]: PLANT_CODE, [RETURN_KEY]: PLANT_RETURN });
+  await provider.uploadRehearsalTurnFor({
+    turnId: 'net-1', model: 'm', toolNames: [], answered: true, step: 's1', helpMode: undefined, profile: provider.cachedProfile,
+  });
+  await provider.sendRehearsalReport(steps, undefined, undefined);
+  assert.equal(uploadsFor(fetches, 'net-1').length, 2, 'one first attempt and one retry before the report');
+  assert.equal(fetches.filter(f => f.url.includes('/classroom/rehearsal/report')).length, 0, 'the first press is held');
 });
 
 test('a refused upload (Service reason 409 already_judged): the first press shows the W2 sentence, not the count', async () => {

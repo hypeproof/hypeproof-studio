@@ -37,3 +37,7 @@ export const REHEARSAL_CODE_MISSING = "이 창에 리허설 코드가 없어 대
 export function rehearsalUploadPendingSentence(count: number): string {
   return `대화 ${count}개를 서버에 올리지 못했습니다. 연결을 확인한 뒤 다시 보내세요.`;
 }
+// The Service refused the body itself (400/413): the turn is dropped. Shown before the report; it never blocks the report.
+export function rehearsalUploadDroppedSentence(count: number): string {
+  return `보내지 못한 대화 ${count}개는 결과에 들어가지 않습니다. 이 기기의 시각이 맞는지 확인해 주세요.`;
+}
