@@ -301,7 +301,10 @@ public class QuestionJourneyTest {
         app.onActivity(a->voice.result("이웃의 이야기를 듣고 내가 할 수 있는 일을 생각했어요."));ready();drain();
         onView(withText("이웃의 이야기를 듣고 내가 할 수 있는 일을 생각했어요.")).check(matches(isDisplayed()));
         onView(withText("내 생각의 답변 1")).check(matches(isDisplayed()));compactControl("음성 멈추기");screen("android-design-messages");
-        onView(withContentDescription("음성 멈추기")).perform(click());drain();assertFalse(voice.controller.session.active());assertEquals(1,submitted.size());
+        // Run 45842954516: a slow frame turned the plain click() into the tooltip long press
+        // ("Overslept and turned a tap into a long press"), so the session stayed active.
+        UiSync.tap(onView(withContentDescription("음성 멈추기")),"voice-stop",a->!voice.controller.session.active());
+        drain();assertFalse(voice.controller.session.active());assertEquals(1,submitted.size());
         compactControl("말로 적기");compactControl("음성 대화");
     }
     @Test public void sameAccountDraftAndVoiceStopSurviveRecreationWithoutLiveNetwork()throws Exception{
