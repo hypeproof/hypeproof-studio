@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#F5F7F4" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="HP Studio" />
+    <meta
+      name="description"
+      content="짧은 생각에서 시작해, 질문하고 의도를 발전시키는 나의 Studio."
+    />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>HP Studio · 나의 생각에서 시작</title>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" aria-label="HP Studio 처음으로"
+        ><span class="mark">h.</span><b>Studio</b></a
+      ><button id="settingsOpen" class="icon" aria-label="설정과 설치 안내">
+        ☰
+      </button>
+    </header>
+    <main id="home">
+      <div class="intro">
+        <p class="eyebrow">나의 생각에서 시작</p>
+        <h1>아직 정리되지<br />않아도 괜찮아요.</h1>
+        <p class="lead">
+          바꾸고 싶은 일, 눈에 들어온 불편함.<br />지금 떠오른 것부터 이야기해
+          보세요.
+        </p>
+      </div>
+      <form id="newForm">
+        <label class="sr" for="newIdea">지금 떠오른 생각</label
+        ><textarea
+          id="newIdea"
+          maxlength="4000"
+          rows="4"
+          placeholder="예: 동네 공방의 좋은 수업들이 잘 알려지지 않는 게 아쉬워요."
+        ></textarea>
+        <div class="input-bottom">
+          <span>키보드의 마이크로 말해도 좋아요</span
+          ><button class="primary" type="submit">
+            생각 펼치기 <span aria-hidden="true">↗</span>
+          </button>
+        </div>
+      </form>
+      <p class="practice">관찰하고 · 다른 관점으로 보고 · 작게 실천하기</p>
+      <div class="suggestions">
+        <button data-example="요즘 일하면서 반복되는 불편함을 찾아보고 싶어요.">
+          주변의 문제 관찰하기</button
+        ><button
+          data-example="하고 싶은 일이 많은데 무엇부터 시작할지 모르겠어요."
+        >
+          막연한 생각 정리하기
+        </button>
+      </div>
+      <div class="section-title">
+        <h2>이어가는 생각</h2>
+        <span id="projectCount"></span>
+      </div>
+      <div id="projects"></div>
+      <p class="privacy">
+        내 기록은 이 브라우저에 저장돼요.<br />AI 연결 전에는 서버로 보내지
+        않아요.
+      </p>
+    </main>
+    <main id="workspace" hidden>
+      <div class="workspace-heading">
+        <button id="back" class="text-button">← 내 생각들</button
+        ><span id="saveState" role="status">이 기기에 저장</span>
+      </div>
+      <h1 id="projectTitle" class="project-title"></h1>
+      <div class="tabs" role="tablist" aria-label="프로젝트 보기">
+        <button
+          id="chatTab"
+          role="tab"
+          aria-selected="true"
+          aria-controls="chatPanel"
+        >
+          대화</button
+        ><button
+          id="intentTab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="intentPanel"
+        >
+          나의 의도
+        </button>
+      </div>
+      <section id="chatPanel" role="tabpanel" aria-labelledby="chatTab">
+        <div class="connection">
+          <span id="connectionStatus">혼자 생각 정리 중</span
+          ><button id="connect">무료 AI 연결</button>
+        </div>
+        <div id="messages" aria-live="polite" aria-relevant="additions"></div>
+        <p id="busy" hidden role="status">생각을 읽고 있어요…</p>
+        <div id="chatError" role="alert" hidden></div>
+        <div class="quick-actions">
+          <button id="example">일단 작은 예시를 보여 줘</button
+          ><button id="reflect">다른 관점에서 질문해 줘</button>
+        </div>
+        <form id="messageForm" class="composer">
+          <label class="sr" for="message">이어 말하기</label
+          ><textarea
+            id="message"
+            rows="2"
+            maxlength="4000"
+            placeholder="편하게 이어서 말해 주세요"
+          ></textarea>
+          <div class="input-bottom">
+            <button id="cancel" type="button" hidden>응답 중단</button
+            ><span id="composeHint">Enter는 줄바꿈 · 버튼을 눌러 보내기</span
+            ><button id="send" type="submit" class="primary">보내기 ↑</button>
+          </div>
+        </form>
+        <button id="retry" hidden>응답 다시 요청</button>
+      </section>
+      <section
+        id="intentPanel"
+        role="tabpanel"
+        aria-labelledby="intentTab"
+        hidden
+      >
+        <div class="intent-intro">
+          <span class="eyebrow">내가 선택하는 방향</span>
+          <h2>정말 원하는 변화는<br />무엇인가요?</h2>
+          <p>
+            AI가 제안한 말과 내가 선택한 의도는 달라요.<br />내 말로 고치고,
+            준비되면 남겨 주세요.
+          </p>
+        </div>
+        <form id="intentForm">
+          <label for="intentText">현재 나의 의도</label
+          ><textarea
+            id="intentText"
+            rows="6"
+            maxlength="4000"
+            placeholder="누구를 위해, 어떤 문제를, 어떻게 바꾸고 싶은지 적어 보세요."
+          ></textarea
+          ><button class="primary" type="submit">이 의도로 기록하기</button>
+        </form>
+        <div id="intentHistory"></div>
+        <aside class="next-step">
+          <h3>다음은, 작은 실험</h3>
+          <p>이 의도를 확인할 사람 한 명과 작은 행동 하나를 정해 보세요.</p>
+          <button id="experiment">AI와 첫 실험 정하기</button
+          ><small>Foundry 자동 제작·배포는 아직 연결하지 않았어요.</small>
+        </aside>
+        <button id="exportProject">이 생각 내보내기</button
+        ><button id="deleteProject" class="danger">이 생각 삭제</button>
+      </section>
+    </main>
+    <footer>HP Studio <span>Mobile MVP · 2026.1109.0</span></footer>
+    <div id="toast" role="status" hidden></div>
+    <dialog id="connectDialog">
+      <button class="close" data-close="connectDialog" aria-label="닫기">
+        ×</button
+      ><span class="eyebrow">무료 AI 연결</span>
+      <h2>질문을 함께<br />발전시켜 볼까요?</h2>
+      <p>
+        ‘연결하고 질문 받기’를 누르면 마지막으로 남긴 생각에 대해 바로 질문을
+        요청합니다. 이때와 이후 보내기를 누를 때, 이 프로젝트의 최근 대화와
+        확인한 의도가 HypeProof Service와 AI 제공자에게 전달돼요.
+      </p>
+      <p>
+        무료 사용량은 기존 Service 정책을 따릅니다. 한도에 도달해도 이 기기의
+        기록을 읽고 수정할 수 있어요.
+      </p>
+      <label class="check"
+        ><input id="age" type="checkbox" />만 14세 이상이며, AI 연결에
+        동의합니다.</label
+      ><button id="claim" class="primary">연결하고 질문 받기</button>
+      <p id="claimStatus" role="status"></p>
+      <p class="small">
+        연결 토큰은 현재 앱 메모리에만 보관합니다. 앱을 다시 열면 재연결이
+        필요할 수 있어요. 계정 로그인·기기 간 동기화는 후속 기능이에요.
+      </p>
+    </dialog>
+    <dialog id="settings">
+      <button class="close" data-close="settings" aria-label="닫기">×</button>
+      <h2>나의 Studio</h2>
+      <h3>아이폰에 추가하기</h3>
+      <p>
+        Safari의 공유 버튼 → ‘홈 화면에 추가’ → 추가.<br />홈 화면에서 앱처럼
+        다시 열 수 있어요.
+      </p>
+      <p class="small">
+        현재 테스트 배포는 웹 앱입니다. App Store / TestFlight 네이티브 앱은
+        아직 배포하지 않았어요.
+      </p>
+      <h3>Studio가 묻는 이유</h3>
+      <p>
+        동양철학의 배움·성찰·실천에 관한 연구에서 출발합니다. 관찰과 추측을
+        나누고, 타인의 관점을 살피고, 스스로 선택한 일을 작게 실천하도록
+        돕습니다. 사람의 가치나 성장을 점수로 매기지 않습니다.
+      </p>
+      <p class="small">
+        첫 MVP의 질문 설계 가설입니다. 철학 연구와 실제 사용자 검증을 통해 계속
+        발전시킵니다.
+      </p>
+      <h3>기록과 개인정보</h3>
+      <p>
+        이 기기·브라우저 안에만 저장됩니다. 브라우저 데이터를 지우거나 다른
+        기기로 이동하면 이어지지 않아요. Safari와 홈 화면 앱의 저장 공간도 다를
+        수 있으니 중요한 기록은 내보내 주세요.
+      </p>
+      <button id="exportAll">전체 기록 내보내기</button
+      ><button id="disconnect">AI 연결 끊기</button
+      ><button id="eraseAll" class="danger">이 기기의 모든 기록 삭제</button>
+      <p class="small">
+        기록 삭제는 이 기기에 저장된 내용만 삭제합니다. 이전에 AI에 보낸
+        데이터의 서버 삭제를 의미하지 않아요.
+      </p>
+    </dialog>
+    <script type="module" src="/app.mjs"></script>
+  </body>
+</html>

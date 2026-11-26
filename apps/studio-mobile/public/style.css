@@ -1,0 +1,479 @@
+:root {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  color: #233b35;
+  background: #f5f7f4;
+  line-height: 1.6;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+[hidden] {
+  display: none !important;
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  background: white;
+  color: #264b41;
+  border: 1px solid #d8e0d8;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+button:focus-visible,
+a:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 3px solid #d49744;
+  outline-offset: 3px;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+header,
+main,
+footer {
+  max-width: 680px;
+  margin: auto;
+  padding: 18px 24px;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 21px;
+  letter-spacing: -0.6px;
+}
+.mark {
+  background: #205a48;
+  border-radius: 10px;
+  color: white;
+  padding: 0 9px;
+  font-size: 29px;
+  font-family: Georgia, serif;
+}
+.icon {
+  font-size: 21px;
+  background: transparent;
+  border: 0;
+}
+.intro {
+  padding: 28px 0 20px;
+}
+.eyebrow {
+  color: #587969;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+h1 {
+  font-size: 39px;
+  line-height: 1.3;
+  letter-spacing: -1.6px;
+  margin: 15px 0 18px;
+  font-weight: 650;
+}
+.lead {
+  font-size: 16px;
+  color: #66766d;
+  line-height: 1.9;
+}
+h2 {
+  font-size: 24px;
+  letter-spacing: -0.7px;
+}
+h3 {
+  font-size: 16px;
+}
+p {
+  margin: 12px 0;
+}
+textarea {
+  width: 100%;
+  display: block;
+  border: 1px solid #cdd9d0;
+  border-radius: 16px;
+  padding: 17px;
+  color: #233b35;
+  background: #fff;
+  resize: vertical;
+  font-size: 16px;
+  line-height: 1.65;
+  min-height: 88px;
+}
+textarea::placeholder {
+  color: #859187;
+}
+#newForm {
+  background: white;
+  border: 1px solid #cdd9d0;
+  border-radius: 20px;
+  padding: 8px;
+}
+#newForm textarea {
+  border: 0;
+  resize: none;
+}
+.input-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+}
+.input-bottom > span {
+  font-size: 11px;
+  color: #718278;
+  max-width: 155px;
+}
+.primary {
+  background: #235d49;
+  color: white;
+  border-color: #235d49;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.suggestions,
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.suggestions button,
+.quick-actions button {
+  background: transparent;
+  font-size: 12px;
+  border-radius: 25px;
+  padding: 7px 12px;
+}
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 32px;
+}
+.section-title h2 {
+  font-size: 18px;
+}
+.section-title span {
+  color: #789081;
+  font-size: 13px;
+}
+.project-card {
+  width: 100%;
+  display: flex;
+  text-align: left;
+  justify-content: space-between;
+  gap: 20px;
+  border: 0;
+  border-top: 1px solid #dce4dd;
+  border-radius: 0;
+  background: transparent;
+  padding: 20px 0;
+}
+.project-card b {
+  font-size: 17px;
+  display: block;
+}
+.project-card small {
+  font-size: 12px;
+  color: #738679;
+  display: block;
+  margin-top: 6px;
+}
+.empty {
+  color: #7c8a80;
+  border: 1px dashed #cdd8ce;
+  border-radius: 16px;
+  padding: 25px;
+  font-size: 14px;
+}
+.privacy {
+  text-align: center;
+  font-size: 12px;
+  color: #788b7d;
+  margin-top: 34px;
+}
+footer {
+  font-size: 12px;
+  color: #829184;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 25px;
+}
+.workspace-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #708174;
+}
+.text-button {
+  padding: 5px 0;
+  background: none;
+  border: 0;
+}
+.project-title {
+  font-size: 24px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #d2ddd4;
+  margin-bottom: 18px;
+}
+.tabs button {
+  flex: 1;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  color: #86948a;
+  padding: 12px;
+}
+.tabs button[aria-selected="true"] {
+  border-bottom: 3px solid #225d49;
+  color: #225d49;
+  font-weight: 700;
+}
+.connection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #6d8073;
+  margin: 12px 0 24px;
+}
+.connection button {
+  padding: 6px 11px;
+  font-size: 12px;
+}
+.bubble {
+  max-width: 92%;
+  padding: 14px 17px;
+  border-radius: 18px;
+  margin: 13px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+.bubble.user {
+  background: #e3ede3;
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+.bubble.assistant {
+  background: white;
+  border: 1px solid #e0e7df;
+  border-bottom-left-radius: 4px;
+}
+.bubble small {
+  display: block;
+  font-size: 11px;
+  color: #648271;
+  margin-bottom: 7px;
+}
+.prompt {
+  font-size: 14px;
+  padding: 20px;
+  background: #ecf0e8;
+  border-radius: 15px;
+  color: #526950;
+}
+.composer {
+  margin-top: 20px;
+}
+#busy {
+  color: #6c8375;
+  font-size: 13px;
+}
+#chatError {
+  padding: 14px;
+  background: #fff0e7;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #8a442d;
+}
+.intent-intro p {
+  color: #718173;
+  font-size: 14px;
+}
+#intentForm label {
+  display: block;
+  font-size: 14px;
+  margin: 20px 0 9px;
+}
+#intentForm .primary {
+  width: 100%;
+  margin: 13px 0;
+}
+.revision {
+  border-left: 2px solid #9cb7a6;
+  margin: 22px 0;
+  padding-left: 15px;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.revision small {
+  color: #7c8e80;
+}
+.next-step {
+  background: #e9efe5;
+  padding: 20px;
+  border-radius: 16px;
+  margin: 24px 0;
+}
+.next-step p {
+  font-size: 14px;
+}
+.next-step small {
+  display: block;
+  margin-top: 13px;
+  color: #738273;
+}
+.danger {
+  color: #9a493a;
+  margin: 10px 0;
+}
+dialog {
+  width: calc(100% - 32px);
+  max-width: 470px;
+  border: 1px solid #d4dfd4;
+  border-radius: 24px;
+  padding: 28px;
+  color: #2c4538;
+  background: #fafcf9;
+  max-height: 85dvh;
+  overflow: auto;
+}
+dialog::backdrop {
+  background: #18362c75;
+  backdrop-filter: blur(3px);
+}
+dialog h2 {
+  line-height: 1.3;
+}
+dialog p {
+  font-size: 14px;
+  color: #607465;
+}
+.close {
+  float: right;
+  border: 0;
+  background: none;
+  font-size: 25px;
+  padding: 0 5px;
+}
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  margin: 22px 0;
+}
+.check input {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  accent-color: #235d49;
+}
+dialog .primary {
+  width: 100%;
+}
+dialog .small {
+  font-size: 12px;
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+#toast {
+  position: fixed;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 90%;
+  background: #234b3e;
+  color: white;
+  padding: 13px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  z-index: 20;
+  box-shadow: 0 8px 30px #1234;
+}
+#settings button:not(.close) {
+  display: block;
+  margin: 10px 0;
+  width: 100%;
+}
+@media (min-width: 700px) {
+  main {
+    padding-top: 30px;
+  }
+  .intro {
+    padding-top: 38px;
+  }
+  h1 {
+    font-size: 48px;
+  }
+  .project-title {
+    font-size: 29px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button {
+    transition: background 0.12s;
+  }
+}
+@media (max-width: 360px) {
+  header,
+  main,
+  footer {
+    padding-inline: 17px;
+  }
+  h1 {
+    font-size: 34px;
+  }
+  .input-bottom > span {
+    max-width: 105px;
+  }
+}
+
+.practice {
+  font-size: 12px;
+  color: #61796a;
+  margin: 18px 0 0;
+}
+.quick-actions button,
+.suggestions button {
+  min-height: 44px;
+}
+.connection button,
+.text-button {
+  min-height: 44px;
+}
