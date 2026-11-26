@@ -13,8 +13,8 @@ import {
   type BrowserMcpHost,
   type McpToolResult,
 } from "../browserMcp.ts";
-import type { BrowserToolsForLocal } from "../localRuntime/index.ts";
-import { INSTRUCTOR_TOOL_PROFILE } from "./instructorTurn.ts";
+import type { BrowserToolsForLocal } from "./index.ts";
+import { INSTRUCTOR_TOOL_PROFILE } from "../chalk/instructorTurn.ts";
 
 export const INSTRUCTOR_LOCAL_BROWSER_DEFS = [LIVE_PREVIEW_START_TOOL_DEF, BROWSER_OPEN_TOOL_DEF] as const;
 

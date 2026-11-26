@@ -4997,7 +4997,7 @@
           "path": "extensions/hypeproof-chat/src/serverBase.ts"
         },
         {
-          "path": "extensions/hypeproof-chat/src/chalk/instructorBrowserTools.ts"
+          "path": "extensions/hypeproof-chat/src/localRuntime/instructorBrowserTools.ts"
         }
       ]
     },

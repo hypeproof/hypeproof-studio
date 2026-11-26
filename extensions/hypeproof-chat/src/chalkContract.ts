@@ -97,7 +97,7 @@ export interface ContractOps {
 
 /** Approval kinds that Chalk shows as its own prompt, and only when the studio policy asks for one. */
 // Only writeFile. browser_open never reaches this gate: on both instructor paths it is a
-// browser tool with no approve call (see src/chalk/instructorBrowserTools.ts). Gating outside URLs is studio#3464.
+// browser tool with no approve call (see src/localRuntime/instructorBrowserTools.ts). Gating outside URLs is studio#3464.
 export const CHALK_PROMPT_KINDS = ["writeFile"] as const;
 
 export function needsChalkPrompt(kind: string, requireApprovalFor: readonly string[]): boolean {
