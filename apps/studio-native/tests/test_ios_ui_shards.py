@@ -34,6 +34,8 @@ push = importlib.util.module_from_spec(PUSH_SPEC); PUSH_SPEC.loader.exec_module(
 SHA = 'a' * 40
 # The one case the iOS real-voice job runs instead of a shard (#4432).
 VOICE = 'HPStudioUITests/StudioJourneyTests/testRealKoreanPlaybackCompletionReachesNextCaptureBoundary'
+# The Settings-only warm-up that leads every job (#4432); written out so a rename in the script fails here.
+WARM_UP = 'HPStudioUITests/ShardWarmUpUITests/testWarmUpSystemKeyboardAndAccessibility'
 
 
 def started(case, outcome='passed'):
@@ -64,12 +66,13 @@ class PlanContracts(unittest.TestCase):
             declared += re.findall(r'^\s*(?:@MainActor\s+)?func (test[A-Za-z0-9_]*)\(\)', source.read_text(), re.M)
         doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 3)
         every = [case.rsplit('/', 1)[1] for row in doc['shards'] for case in row['cases']]
-        self.assertEqual(sorted(every), sorted(declared))
+        # The warm-up is declared but never planned (WarmUpContracts).
+        self.assertEqual(sorted(every), sorted(d for d in declared if d != WARM_UP.rsplit('/', 1)[1]))
         self.assertEqual(len(every), len(set(every)))
         sizes = [len(row['cases']) for row in doc['shards']]
         self.assertLessEqual(max(sizes) - min(sizes), 1)
         first, second, last = doc['shards']
-        self.assertEqual(first['xcodebuild_arguments'], ['-only-testing:' + c for c in first['cases']])
+        self.assertEqual(first['xcodebuild_arguments'], ['-only-testing:' + WARM_UP] + ['-only-testing:' + c for c in first['cases']])
         # The last shard skips the others instead of naming its own, so an unparsed case still runs.
         self.assertEqual(last['xcodebuild_arguments'],
                          ['-skip-testing:' + c for c in first['cases'] + second['cases']])
@@ -85,6 +88,8 @@ class PlanContracts(unittest.TestCase):
                 if test:
                     declared.append(f'HPStudioUITests/{cls}/{test[1]}')
         self.assertIn(VOICE, declared)
+        self.assertIn(WARM_UP, declared)
+        declared.remove(WARM_UP)
         doc = shards.plan(shards.discover(NATIVE / 'ios/UITests'), 4, [VOICE])
         self.assertEqual((doc['shard_count'], doc['catch_all']), (5, 4))
         every = [case for row in doc['shards'] for case in row['cases']]
@@ -92,7 +97,7 @@ class PlanContracts(unittest.TestCase):
         self.assertEqual(len(every), len(set(every)))
         *regular, voice = doc['shards']
         self.assertEqual((voice['index'], voice['dedicated'], voice['cases']), (5, True, [VOICE]))
-        self.assertEqual(voice['xcodebuild_arguments'], ['-only-testing:' + VOICE])
+        self.assertEqual(voice['xcodebuild_arguments'], ['-only-testing:' + WARM_UP, '-only-testing:' + VOICE])
         self.assertEqual([row['dedicated'] for row in regular], [False] * 4)
         self.assertFalse(any(VOICE in row['cases'] for row in regular))
         sizes = [len(row['cases']) for row in regular]
@@ -195,7 +200,7 @@ class PlanByDurations(unittest.TestCase):
         every = [c for row in regular for c in row['cases']]
         self.assertEqual(len(every), len(set(every)))
         declared = {f'HPStudioUITests/{c}/{t}' for c, ts in shards.discover(NATIVE / 'ios/UITests').items() for t in ts}
-        self.assertEqual(set(every) | {VOICE}, declared)
+        self.assertEqual(set(every) | {VOICE}, declared - {WARM_UP})
         estimates = [row['estimated_seconds'] for row in regular]
         self.assertLessEqual(max(estimates) - min(estimates), max(durations.values()))
         self.assertEqual(doc['stale_durations'], [])
@@ -234,6 +239,98 @@ class WorkflowShardCount(unittest.TestCase):
         self.assertIn('ios-voice', re.search(r'^    needs: \[(.*)\]$', acceptance, re.M)[1].split(', '))
         self.assertIn('IOS_VOICE_RESULT: ${{ needs.ios-voice.result }}', acceptance)
         self.assertIn('[ "$IOS_VOICE_RESULT" != success ]', acceptance)
+
+
+def warm_up_problems(doc):
+    """Why the plan does not lead every job with the warm-up, or [] when it does (#4432)."""
+    problems = []
+    if doc.get('warm_up') != WARM_UP:
+        problems.append(f"plan warm_up is {doc.get('warm_up')!r}")
+    for row in doc['shards']:
+        arguments = row['xcodebuild_arguments']
+        named = [a for a in arguments if a.endswith('/' + WARM_UP.rsplit('/', 1)[1])]
+        if row['index'] == doc['catch_all'] and not row['dedicated']:
+            if named:
+                problems.append(f"catch-all row {row['index']} names the warm-up: {named}")
+        elif arguments[:1] != ['-only-testing:' + WARM_UP] or len(named) != 1:
+            problems.append(f"row {row['index']} does not start with the warm-up once")
+        if WARM_UP in row['cases']:
+            problems.append(f"row {row['index']} plans the warm-up as a case")
+    if WARM_UP in doc['excluded']:
+        problems.append('the warm-up is excluded as a set case')
+    return problems
+
+
+class WarmUpContracts(unittest.TestCase):
+    """The Settings-only warm-up leads every job and never counts as a case (#4432, chalk-po 2026-11-27)."""
+
+    def build_plan(self, selection, classes=None):
+        table = shards.load_durations(NATIVE / 'scripts/ios-ui-durations.json')
+        gate = shards.load_sets(NATIVE / 'scripts/ios-ui-sets.json')
+        return shards.plan(classes or shards.discover(NATIVE / 'ios/UITests'), 3, [VOICE], table, selection, gate)
+
+    def test_warm_up_leads_every_shard_and_the_dedicated_row_and_is_not_a_case(self):
+        gate = shards.load_sets(NATIVE / 'scripts/ios-ui-sets.json')
+        for selection in ('gate', 'nightly', 'all'):
+            with self.subTest(selection=selection):
+                doc = self.build_plan(selection)
+                self.assertEqual(warm_up_problems(doc), [])
+                planned = [c for row in doc['shards'] for c in row['cases']]
+                declared = [f'HPStudioUITests/{c}/{t}' for c, ts in shards.discover(NATIVE / 'ios/UITests').items() for t in ts]
+                expected = {'gate': len(gate), 'nightly': len(declared) - 1 - len(gate), 'all': len(declared) - 1}[selection]
+                self.assertEqual((doc['case_count'], len(planned)), (expected, expected))
+        # The gate plan the build writes: three shards and the voice row, each led by the warm-up except the
+        # catch-all, which runs it because nothing skips it.
+        doc = self.build_plan('gate')
+        self.assertEqual([row['dedicated'] for row in doc['shards']], [False, False, False, True])
+        self.assertEqual(doc['shards'][3]['xcodebuild_arguments'], ['-only-testing:' + WARM_UP, '-only-testing:' + VOICE])
+
+    def test_negative_controls_without_the_warm_up_or_with_it_moved_fail_the_check(self):
+        without = {c: ts for c, ts in shards.discover(NATIVE / 'ios/UITests').items() if c != 'ShardWarmUpUITests'}
+        doc = self.build_plan('gate', without)
+        self.assertIsNone(doc['warm_up'])
+        self.assertTrue(warm_up_problems(doc))
+        self.assertEqual(len(warm_up_problems(doc)), 1 + 3, warm_up_problems(doc))  # plan key + two shards + voice row
+        moved = self.build_plan('gate')
+        first = moved['shards'][0]['xcodebuild_arguments']
+        first.append(first.pop(0))
+        self.assertEqual(warm_up_problems(moved), ['row 1 does not start with the warm-up once'])
+        skipped = self.build_plan('gate')
+        skipped['shards'][2]['xcodebuild_arguments'].append('-skip-testing:' + WARM_UP)
+        self.assertEqual(len(warm_up_problems(skipped)), 1)
+
+    def test_a_warm_up_class_with_another_test_is_refused(self):
+        with self.assertRaisesRegex(ValueError, 'must declare exactly'):
+            shards.plan({'AlphaTests': ['testA', 'testB'], 'ShardWarmUpUITests': ['testWarmUpSystemKeyboardAndAccessibility', 'testOther']}, 2)
+
+    def test_merge_accepts_the_warm_up_in_every_shard_and_a_plan_without_it_does_not(self):
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        classes = {'AlphaTests': ['testA', 'testB', 'testC'], 'BetaTests': ['testD', 'testE', 'testF'],
+                   'ShardWarmUpUITests': ['testWarmUpSystemKeyboardAndAccessibility']}
+        doc = shards.plan(classes, 3, ['HPStudioUITests/BetaTests/testE'])
+        for row in doc['shards']:
+            write_shard(root / 'shards', row['index'], [WARM_UP] + row['cases'])
+        merged = shards.merge(doc, root / 'shards', root / 'evidence')
+        self.assertEqual(merged['verdict'], 'PASS', merged['problems'])
+        self.assertEqual((merged['started_cases'], merged['planned_cases'], merged['warm_up_started_in']), (6, 6, [1, 2, 3, 4]))
+        # Control: the same logs against a plan that does not know the warm-up fail as unplanned outside the last shard.
+        control = dict(doc); control['warm_up'] = None
+        shutil.rmtree(root / 'evidence')
+        merged = shards.merge(control, root / 'shards', root / 'evidence')
+        self.assertEqual(merged['verdict'], 'FAIL')
+        self.assertEqual(merged['unplanned_outside_last_shard'], [WARM_UP])
+
+    def test_the_warm_up_source_drives_settings_only_and_cannot_fail_or_skip(self):
+        source = (NATIVE / 'ios/UITests/ShardWarmUpUITests.swift').read_text()
+        code = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('//'))
+        self.assertIn('XCUIApplication(bundleIdentifier: "com.apple.Preferences")', code)
+        for forbidden in ('studioApp(', 'XCUIApplication()', 'XCTAssert', 'XCTFail', 'XCTSkip', 'XCTUnwrap', 'try ', 'throws', '.terminate('):
+            self.assertNotIn(forbidden, code, forbidden)
+        self.assertIn('static let limit: TimeInterval = 60', code)
+        self.assertIn('"settled": settled', code)
+        project = (NATIVE / 'ios/HPStudio.xcodeproj/project.pbxproj').read_text()
+        self.assertIn('path = ShardWarmUpUITests.swift;', project)
 
 
 class MergeContracts(unittest.TestCase):
