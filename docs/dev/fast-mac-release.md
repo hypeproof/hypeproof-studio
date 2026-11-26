@@ -232,3 +232,37 @@ without Windows acceptance. Add `win32-x64` to the config before cutting instead
   `install.sh` and `seed-sdk-binary.sh` to every release.
 - A Windows kit needs the installer plus `install.ps1` and `seed-sdk-binary.ps1` on the
   same release, so the Lab kit falls back to the newest release that has all three.
+
+## Pinned Chalk extension (C-4)
+
+The Chalk instructor extension is not in the app until its pin says so. The pin is
+`config/chalk-release.json`. It names the `hypeproof/hypeproof-chalk` release, the asset,
+its size and its sha256 (the release's own `SHA256SUMS`).
+
+- `ship` is `false` by default. With `false`, the build downloads nothing, needs no token,
+  and removes any Chalk folder a reused base or release zip carries. `scripts/fetch-chalk-release.mjs --print-ship`
+  prints the state from the manifest alone.
+- With `true`, `scripts/install-chalk-extension.sh` fetches the asset with
+  `HYPEPROOF_READ_TOKEN` (an authenticated `gh release download`), checks the size, the
+  sha256 and the `extension/package.json` version inside the vsix, keeps it in the ignored
+  `.private-chalk-cache/`, and copies its `extension/` folder to
+  `Resources/app/extensions/hypeproof-chalk`. Nothing unverified is installed.
+- The step runs after the base is saved to cache and after both build paths join
+  (`.github/workflows/build-mac.yml`, "Install the pinned Chalk extension"), so the cached base
+  never carries Chalk. The Mac base key (`scripts/mac-base-key.sh`) does not hash the pin or the scripts.
+  A pin change therefore costs no full build.
+- `verify-branding.sh` check 8c (`scripts/check-chalk-release-installed.sh`) fails when a
+  copy is present with `ship=false`, or when the installed tree differs from the verified vsix.
+- Windows is not wired in this change. The Windows build still has no Chalk.
+
+**Order for a Chalk release that ships:** the `chalk-vX.Y.Z` release exists in
+`hypeproof/hypeproof-chalk` → the pin PR (`ship: true`, the new sha256 and size) merges → the
+Studio rc tag is cut on a commit that contains the pin. The pin is read at the release's own
+commit, so a pin PR merged after the tag does not reach that rc.
+
+**Cost (estimate, not measured):** one download of the vsix per Mac build, about 0.34 MB
+(the release asset is 344,149 bytes). One authenticated API call. No model call. The step adds
+seconds to the repack path and nothing to the full path's build time. The CI minutes depend on
+whether the studio repository is public; this is an estimate to confirm.
+
+**Turn it off:** a PR that sets `ship` back to `false`. The next build removes the folder.
