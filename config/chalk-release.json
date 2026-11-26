@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "repository": "hypeproof/hypeproof-chalk",
+  "ship": false,
+  "release": {
+    "tag": "chalk-v0.1.0",
+    "version": "0.1.0",
+    "asset": "hypeproof-chalk-0.1.0.vsix",
+    "sha256": "8cfa22f4164ce114c2d27986abeace822499f61880d989fba989423581c58f85",
+    "size": 344149
+  }
+}
