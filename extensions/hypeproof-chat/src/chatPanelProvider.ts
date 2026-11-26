@@ -145,10 +145,10 @@ import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapability
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
 import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
-import { TOKEN_KEY, resolveWorkspaceRoot, leaveRehearsalAfterReport, leaveRehearsalWithoutReport } from "./extension";
+import { TOKEN_KEY, resolveWorkspaceRoot, leaveRehearsalAfterReport, leaveRehearsalFromBand, markRehearsalReportSent } from "./extension";
 import { rehearsalSeatActiveFor, rehearsalStucksAt, checklistForReport, rehearsalRouteFor } from "./rehearsalSeat";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
-import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY } from "./rehearsalSeat";
+import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, REHEARSAL_REPORT_SENT_KEY } from "./rehearsalSeat";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { helpLinesEnabled, moderationBlockOf, ModerationBlockError, safetyNoticeView } from "./safetyNotice.ts";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
@@ -10031,7 +10031,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
       // #4048 — the band's button asks first (the host confirms and leaves only on the chosen button).
       case "rehearsalSeatEnd": {
-        await leaveRehearsalWithoutReport();
+        await leaveRehearsalFromBand();
         return;
       }
 
@@ -12564,7 +12564,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const j = await r.json().catch(() => ({})) as { verdict?: string; reasons?: string[]; reason?: string; error?: string };
       if (!r.ok) { await this.post({ type: "rehearsalState", state: "error", message: rehearsalReportRejectionSentence({ status: r.status, reason: j.reason, subscription: mustStayLocal(profile.rehearsal) }) }); return; }
       await this.post({ type: "rehearsalState", state: "sent", verdict: j.verdict, reasons: j.reasons ?? [] });
-      // #4048 — only a report that was sent reaches the question whether to return.
+      // #4048 — only a report that was sent reaches the question whether to return. #4514 — the sent mark is stored first, so the band asks the same question later.
+      await markRehearsalReportSent();
       await leaveRehearsalAfterReport();
     } catch { await this.post({ type: "rehearsalState", state: "error", message: rehearsalReportRejectionSentence({ subscription: mustStayLocal(profile.rehearsal) }) }); }
   }
@@ -13229,7 +13230,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // personal account session, classroom-ops credentials, pending orders and any other SecretStorage value.
       const connections = activityConnections(this.context), activity = connections?.current;
       const held = await heldSecretValues([this.context.secrets, ...(connections ? [connections.heldSecrets()] : [])],
-        [TOKEN_KEY, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
+        [TOKEN_KEY, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, REHEARSAL_REPORT_SENT_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
       const secrets = [activity?.token, ...held, await resolveInstructorTokenFromSecrets(this.context.secrets)]
         .filter((value): value is string => typeof value === 'string' && !!value);
       const store = this.currentTaskStore();

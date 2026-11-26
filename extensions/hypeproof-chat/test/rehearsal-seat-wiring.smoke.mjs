@@ -27,15 +27,25 @@ await t('the palette context key follows the same signal', () => {
 });
 
 await t('the leave question after a report comes only after a sent report', () => {
-  assert.match(provider, /state: "sent", verdict: j\.verdict, reasons: j\.reasons \?\? \[\] \}\);\s*\/\/ #4048[^\n]*\n\s*await leaveRehearsalAfterReport\(\);/);
-  // Not in the error branches: the only call sits after the sent post.
+  // #4514 — the sent mark is written first, then the question; both only after the sent post.
+  assert.match(provider, /state: "sent", verdict: j\.verdict, reasons: j\.reasons \?\? \[\] \}\);\s*\/\/ #4048[^\n]*\n\s*await markRehearsalReportSent\(\);\s*await leaveRehearsalAfterReport\(\);/);
+  // Not in the error branches: the only call sites sit after the sent post.
   const calls = provider.match(/leaveRehearsalAfterReport\(\)/g) ?? [];
   assert.equal(calls.length, 1, 'exactly one call site');
+  const marks = provider.match(/markRehearsalReportSent\(\)/g) ?? [];
+  assert.equal(marks.length, 1, 'exactly one mark site');
 });
 
-await t('the band button routes to the host question (rehearsalSeatEnd → leaveRehearsalWithoutReport)', () => {
-  assert.match(provider, /case "rehearsalSeatEnd": \{\s*await leaveRehearsalWithoutReport\(\);/);
-  assert.match(ext, /registerCommand\("hypeproof-chat\.endRehearsalSeat", \(\) => leaveRehearsalWithoutReport\(\)\)/);
+await t('the band button and the palette item share one host function (leaveRehearsalFromBand)', () => {
+  assert.match(provider, /case "rehearsalSeatEnd": \{\s*await leaveRehearsalFromBand\(\);/);
+  assert.match(ext, /registerCommand\("hypeproof-chat\.endRehearsalSeat", \(\) => leaveRehearsalFromBand\(\)\)/);
+  assert.doesNotMatch(provider, /leaveRehearsalWithoutReport/, 'no path asks the without-report question directly');
+});
+
+await t('activate sets the seat host through the same setter the entry points read (rehearsalSeatHost.ts)', () => {
+  assert.match(ext, /setRehearsalSeatHost\(rehearsalSeatHostFor\(context, connections\)\);/);
+  assert.doesNotMatch(ext, /^let seatHost\b/m, 'no module-level seatHost variable remains');
+  assert.doesNotMatch(ext, /\bseatHost!/, 'no non-null read of the old variable remains');
 });
 
 await t('the palette item is hidden outside the seat by its when clause and listed as a command', () => {
