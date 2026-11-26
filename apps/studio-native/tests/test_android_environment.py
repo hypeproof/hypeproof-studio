@@ -130,5 +130,77 @@ elif args[:3]==['shell','am','instrument']:print('OK (1 test)')
         self.assertEqual(diagnostic["reason"], "foreign_anr")
 
 
+FIXTURE = Path(__file__).parent / "fixtures/android-compositing-loss-45814588860.txt"
+LOST = ("ai.hypeproof.studio.UiSync$DeviceFocusLost: device focus lost (device state, not a product result): {test}: "
+        "Espresso found no root with window focus [at failure, before teardown: WM mCurrentFocus=Window{{ac7efa7 u0 app.pkg/app.Main}}; "
+        "mFocusedApp=ActivityRecord{{dc57819 u0 app.pkg/app.Main t23}} | InputDispatcher FocusedWindows: <none> | "
+        "FocusRequests: displayId=0, name='ac7efa7 app.pkg/app.Main' result='{request}' | "
+        "app input windows: 7: name={name} app.pkg/app.Main, id=460, displayId=0, inputConfig={config}, alpha={alpha}]")
+
+
+def run(*tests):
+    """`am instrument -r` output; each test is (name, code, first stack line or None)."""
+    lines = []
+    for number, (name, code, stack) in enumerate(tests, 1):
+        head = ["INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.JourneyTest", f"INSTRUMENTATION_STATUS: current={number}",
+                f"INSTRUMENTATION_STATUS: test={name}"]
+        lines += head + ["INSTRUMENTATION_STATUS_CODE: 1"] + head
+        if stack is not None:
+            lines += ["INSTRUMENTATION_STATUS: stack=" + stack, "\tat ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:481)"]
+        lines.append(f"INSTRUMENTATION_STATUS_CODE: {code}")
+    return "\n".join(lines) + "\n"
+
+
+def lost(test, request="NOT_VISIBLE", name="ac7efa7", config="NOT_VISIBLE", alpha="0"):
+    return LOST.format(test=test, request=request, name=name, config=config, alpha=alpha)
+
+
+class CompositingLoss(unittest.TestCase):
+    """Reporting only: the classification never changes a test result or the exit code."""
+
+    def test_real_run_45814588860_excerpt_is_observed_from_test_7(self):
+        result = module.compositing_loss(FIXTURE.read_text())
+        self.assertEqual(result["state"], "observed")
+        self.assertEqual(result["onset"], {"test": "QuestionJourneyTest#guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend",
+                                           "window": "ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity"})
+        self.assertEqual(result["same_cause_tests"], ["QuestionJourneyTest#guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend",
+                                                      "QuestionJourneyTest#deniedLoginAndCorruptGuestFileRemainLocalAndIntact"])
+        self.assertEqual((result["failed_tests"], result["other_failed_tests"]), (2, []))
+
+    def test_passing_run_is_not_observed(self):
+        result = module.compositing_loss(run(("a", 0, None), ("b", 0, None)))
+        self.assertEqual((result["state"], result["failed_tests"], result["same_cause_tests"]), ("not_observed", 0, []))
+
+    def test_each_part_of_the_signature_is_required(self):
+        for stack in [lost("t", alpha="1"), lost("t", alpha="0.5"), lost("t", request="OK"),
+                      lost("t", config="NOT_FOCUSABLE"), lost("t", name="b701fe1"),
+                      lost("t").replace("device focus lost (device state, not a product result)", "assertion failed"),
+                      lost("t").split(" | app input windows:")[0] + "]",
+                      # The pre-#4448 message (run 44994131331) has only the focus after teardown.
+                      "ai.hypeproof.studio.UiSync$DeviceFocusLost: device focus lost (device state, not a product result): t: Espresso found no root "
+                      "with window focus [mCurrentFocus=Window{562be39 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity}]"]:
+            with self.subTest(stack=stack[-90:]):
+                result = module.compositing_loss(run(("t", -2, stack)))
+                self.assertEqual((result["state"], result["other_failed_tests"]), ("not_observed", ["JourneyTest#t"]))
+
+    def test_not_visible_among_other_flags_matches(self):
+        result = module.compositing_loss(run(("t", -2, lost("t", config="NOT_VISIBLE | NOT_FOCUSABLE"))))
+        self.assertEqual(result["same_cause_tests"], ["JourneyTest#t"])
+
+    def test_other_failures_stay_separate_before_and_after_onset(self):
+        result = module.compositing_loss(run(("early", -2, "java.lang.AssertionError: draft changed"),
+                                             ("onset", -2, lost("onset")), ("pass", 0, None),
+                                             ("later", -1, "java.lang.IllegalStateException: boom"),
+                                             ("same", -2, lost("same"))))
+        self.assertEqual(result["onset"]["test"], "JourneyTest#onset")
+        self.assertEqual(result["same_cause_tests"], ["JourneyTest#onset", "JourneyTest#same"])
+        self.assertEqual(result["other_failed_tests"], ["JourneyTest#early", "JourneyTest#later"])
+        self.assertEqual(result["failed_tests"], 4)
+
+    def test_ignored_and_assumption_results_are_not_failures(self):
+        result = module.compositing_loss(run(("ignored", -3, None), ("assumed", -4, lost("assumed"))))
+        self.assertEqual((result["failed_tests"], result["state"]), (0, "not_observed"))
+
+
 if __name__ == "__main__":
     unittest.main()
