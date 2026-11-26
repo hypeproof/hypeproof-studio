@@ -1057,6 +1057,9 @@ final class StudioJourneyTests: XCTestCase {
     @MainActor func testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch() throws {
         let app = launch("retry-once"); signIn(app)
         let input = field(app); input.tap(); input.typeText("Keep my unfinished question")
+        // Run 45828625133: under host load the app received only "K" of the typed words and
+        // sent it, so the later outbox check reported a product failure. Check the input first.
+        XCTAssertEqual(input.value as? String, "Keep my unfinished question", "typed words did not reach the field before Send")
         app.buttons["sharedSend"].tap()
         enabled(app.buttons["sharedRetry"])
         XCTAssertTrue(app.scrollViews["conversationTimeline"].staticTexts["Keep my unfinished question"].exists, "An unacknowledged local request must still show its words.")
