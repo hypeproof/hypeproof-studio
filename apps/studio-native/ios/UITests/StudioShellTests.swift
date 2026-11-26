@@ -218,8 +218,8 @@ final class StudioJourneyTests: XCTestCase {
         let input = waitForSnapshot(app, timeout: 7) { root in latest = root; return has(root, "sharedInput", [.textField, .textView]) }
         XCTAssertTrue(input, "The personal conversation must be usable without a desktop.")
         let opening = waitForSnapshot(app, timeout: 5) { root in latest = root; return has(root, "reflectionOpening", [.staticText]) }
-        if !input || !opening { waitFailureEvidence(app, "sign-in-wait-failure") }
-        XCTAssertTrue(opening, "reflectionOpening must appear after sign-in.")
+        let trace = !input || !opening ? waitFailureEvidence(app, "sign-in-wait-failure") : nil
+        XCTAssertTrue(opening, Self.openingFailure(trace: trace))
         XCTAssertFalse(latest.map { has($0, "accountCancel", [.button]) } ?? true, "Successful account adoption must finish the login state.")
     }
     /// Diagnostics only, after a wait has already failed: the screen and the
@@ -227,12 +227,30 @@ final class StudioJourneyTests: XCTestCase {
     /// values stop at about 512 characters and hid `paths` (whether POST
     /// /v1/auth/native/start was sent) in run 44866066162 (#4432). No wait,
     /// retry or assertion is added.
-    @MainActor private func waitFailureEvidence(_ app: XCUIApplication, _ name: String) {
+    /// Returns the trace text it attached.
+    @discardableResult @MainActor private func waitFailureEvidence(_ app: XCUIApplication, _ name: String) -> String {
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = name + "-screen"; screen.lifetime = .keepAlways; add(screen)
         let node = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
-        let trace = XCTAttachment(string: node.exists ? (node.value as? String ?? "trace value is not a string") : "trace element absent")
+        let text = node.exists ? (node.value as? String ?? "trace value is not a string") : "trace element absent"
+        let trace = XCTAttachment(string: text)
         trace.name = name + "-full-trace"; trace.lifetime = .keepAlways; add(trace)
+        return text
+    }
+    /// The failure message when reflectionOpening did not appear (#4432). Runs 45780219172 and
+    /// 45853481934: the app's own "signedIn" mark came 0.4 s and 4.6 s after the tap, but the
+    /// screen and accessibility tree exposed the opening only after the 5 s wait. The message
+    /// names which side failed. The wait, its 5 s and the failure itself do not change.
+    nonisolated static func openingFailure(trace: String?) -> String {
+        guard let data = trace?.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return "reflectionOpening did not appear after sign-in; sign-in state unknown: the trace was not readable (\(trace ?? "no trace"))."
+        }
+        let marks = (object["sign_in_timing"] as? [String: Any])?["marks"] as? String ?? ""
+        if let signedIn = marks.split(separator: " ").first(where: { $0.hasPrefix("signedIn+") }) {
+            return "app signed in at +\(signedIn.dropFirst("signedIn+".count)) ms; UI did not expose reflectionOpening within 5 s (marks: \(marks))."
+        }
+        return "app did not sign in; reflectionOpening did not appear (marks: \(marks.isEmpty ? "none" : marks))."
     }
     /// All nodes of one accessibility snapshot that satisfy `match`.
     @MainActor private func snapshotNodes(_ root: XCUIElementSnapshot, _ match: (XCUIElementSnapshot) -> Bool) -> [XCUIElementSnapshot] {
