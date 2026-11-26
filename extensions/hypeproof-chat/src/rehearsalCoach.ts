@@ -1,31 +1,37 @@
-// #19 (student run path) — the coach instructions of a subscription rehearsal. The turn's system prompt is the text the
-// Service sends for this step and help mode, in the order the Service gives (profile instructions first, then the lesson
-// text). The download uses the learner rehearsal code (Authorization header) and nothing else.
+// #19 (student run path) — the coach system prompt of a subscription rehearsal. The Service sends the whole lesson-seat
+// system prompt for this step and help mode in one field, `system` (#19b: the cohort cached prefix over the lesson prompt,
+// the same bytes as the server path's first block). The turn runs with it, and the client context the local runtime
+// already adds (email and remember guides, in runLocalCoach) follows it unchanged.
 //
-// Held in host memory for the seat only: never written to disk, never logged, never posted to the webview. A download is
-// kept per (rehearsal, step, help), so the same combination is fetched once while the seat runs.
+// Not byte-identical to the full server system: the coach tail (workspace, preview, name), the fast-model notes and the
+// store-run block are added locally (decision 2026-11-26).
+//
+// The download uses the learner rehearsal code (Authorization header) and nothing else. Held in host memory for the seat
+// only: never written to disk, never logged (the status line only), never posted to the webview. Kept per
+// (rehearsal, step, help), so the same combination is fetched once while the seat runs.
 // Pure except for `downloadRehearsalCoach`, which takes its fetch as an input (the host test passes a fake).
 
 export const REHEARSAL_COACH_PATH = "/classroom/rehearsal/coach";
-const DEFAULT_ORDER = ["profile_instructions", "text"] as const;
+
+/** The student sentence when the coach instructions cannot be used (download refused, failed, or a broken contract). */
+export const REHEARSAL_COACH_UNAVAILABLE = "이 리허설의 강사 지시를 받지 못해 답을 만들지 않았습니다. 강사에게 알려 주세요.";
+/** The student sentence when this window has no rehearsal code, so the instructions cannot be asked for. */
+export const REHEARSAL_COACH_CODE_MISSING = "이 창에 리허설 코드가 없어 답을 만들지 않았습니다. 리허설 코드로 다시 들어오세요.";
 
 export type CoachDownload =
-  | { ok: true; instructions: string }
+  | { ok: true; system: string }
   | { ok: false; status: number; reason?: string };
 
-/** The instructions text in the Service's order, or null when the body is not the coach contract. Refuses unknown keys. */
-export function instructionsInOrder(body: unknown, expectedRehearsalId: string): string | null {
+/**
+ * The `system` text of the subscription coach answer, or null when the body is not that contract. The answer must name this
+ * rehearsal and carry `system` as a string. Unknown keys are ignored. A server-path answer (`text`, no `system`) is refused.
+ */
+export function systemFromBody(body: unknown, expectedRehearsalId: string): string | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
-  if (b.rehearsal_id !== expectedRehearsalId || typeof b.text !== "string") return null;
-  const order: unknown[] = Array.isArray(b.order) ? b.order : [...DEFAULT_ORDER];
-  const parts: string[] = [];
-  for (const key of order) {
-    if (key === "text") parts.push(b.text);
-    else if (key === "profile_instructions" && typeof b.profile_instructions === "string") parts.push(b.profile_instructions);
-    else return null; // an unknown key, or a listed key without its text: the contract is broken, so the turn does not run
-  }
-  return parts.join("\n\n");
+  if (b.rehearsal_id !== expectedRehearsalId) return null;
+  if (typeof b.system !== "string" || b.system.length === 0) return null;
+  return b.system;
 }
 
 export interface CoachDownloadInput {
@@ -57,12 +63,12 @@ export async function downloadRehearsalCoach(input: CoachDownloadInput): Promise
     const j = (await response.json().catch(() => ({}))) as { reason?: unknown };
     return { ok: false, status: response.status, reason: typeof j.reason === "string" ? j.reason : undefined };
   }
-  const instructions = instructionsInOrder(await response.json().catch(() => null), input.rehearsalId);
-  if (instructions === null) return { ok: false, status: response.status, reason: "invalid_coach_body" };
-  return { ok: true, instructions };
+  const system = systemFromBody(await response.json().catch(() => null), input.rehearsalId);
+  if (system === null) return { ok: false, status: response.status, reason: "invalid_coach_body" };
+  return { ok: true, system };
 }
 
-/** The per-seat memory: one download per (rehearsal, step, help). Host memory only; cleared when the window closes. */
+/** The per-seat memory: one download per (rehearsal, step, help). Host memory only. */
 export class RehearsalCoachMemory {
   private readonly held = new Map<string, string>();
   private key(rehearsalId: string, step: string | undefined, help: string | undefined): string {
@@ -71,7 +77,7 @@ export class RehearsalCoachMemory {
   get(rehearsalId: string, step: string | undefined, help: string | undefined): string | undefined {
     return this.held.get(this.key(rehearsalId, step, help));
   }
-  set(rehearsalId: string, step: string | undefined, help: string | undefined, instructions: string): void {
-    this.held.set(this.key(rehearsalId, step, help), instructions);
+  set(rehearsalId: string, step: string | undefined, help: string | undefined, system: string): void {
+    this.held.set(this.key(rehearsalId, step, help), system);
   }
 }

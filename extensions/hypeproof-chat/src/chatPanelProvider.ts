@@ -50,7 +50,7 @@ import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRunti
 import { mustStayLocal } from './rehearsalRoute';
 import { rehearsalReportRejectionSentence, REHEARSAL_CODE_MISSING, rehearsalUploadPendingSentence, rehearsalUploadDroppedSentence } from './rehearsalReportReason';
 import { rehearsalTurnBody, helpReceiptFor, uploadRehearsalTurn, rehearsalCodeNoticeNeeded, type UploadOutcome } from './rehearsalTurnUpload';
-import { downloadRehearsalCoach, RehearsalCoachMemory } from './rehearsalCoach';
+import { downloadRehearsalCoach, RehearsalCoachMemory, REHEARSAL_COACH_UNAVAILABLE, REHEARSAL_COACH_CODE_MISSING } from './rehearsalCoach';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -12490,20 +12490,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   // #4501 — fire-and-forget after the turn result is drawn. A failure is counted for the report; the student is not blocked.
-  // #19 — the coach text for this turn (subscription rehearsal only). Not logged, not posted, not written to disk. A failed
-  // download throws its reason sentence before the turn starts, so the turn makes no model call and no upload.
+  // #19 — the coach system prompt for this turn (subscription rehearsal only). Not logged, not posted, not written to disk.
+  // A failed download throws its student sentence before the turn starts, so the turn makes no model call and no upload.
   private async rehearsalCoachPrompt(profile: { rehearsal?: { id: string } | undefined }, step?: string, help?: string): Promise<string> {
     const rehearsalId = profile.rehearsal?.id;
-    if (!rehearsalId) throw new Error(REHEARSAL_CODE_MISSING);
+    if (!rehearsalId) throw new Error(REHEARSAL_COACH_UNAVAILABLE);
     const held = this.rehearsalCoachHeld.get(rehearsalId, step, help);
     if (held !== undefined) return held;
     const code = await this.context.secrets.get(TOKEN_KEY);
-    if (!code) throw new Error(REHEARSAL_CODE_MISSING);
+    if (!code) throw new Error(REHEARSAL_COACH_CODE_MISSING);
     const base = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     const got = await downloadRehearsalCoach({ base, code, rehearsalId, step, help, log: l => this.ensureLogChannel().appendLine(l) });
-    if (!got.ok) throw new Error(rehearsalReportRejectionSentence({ status: got.status || undefined, reason: got.reason, subscription: true }));
-    this.rehearsalCoachHeld.set(rehearsalId, step, help, got.instructions);
-    return got.instructions;
+    if (!got.ok) throw new Error(REHEARSAL_COACH_UNAVAILABLE);
+    this.rehearsalCoachHeld.set(rehearsalId, step, help, got.system);
+    return got.system;
   }
 
   private uploadRehearsalTurnFor(f: { turnId: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
