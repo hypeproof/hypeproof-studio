@@ -53,9 +53,10 @@ import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import {
   RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
   enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation, storeIssuerUnlessHeld,
-  leaveWithoutReport, leaveAfterReport, storeDevSeed, seatFacts, seatLogLine, returnAfterUnsettled, type LeaveAsk,
+  leaveWithoutReport, leaveAfterReport, leaveFromBand, recordReportSent, storeDevSeed, seatFacts, seatLogLine, returnAfterUnsettled, type LeaveAsk,
   type SeatHost,
 } from "./rehearsalSeat";
+import { getRehearsalSeatHost, setRehearsalSeatHost } from "./rehearsalSeatHost";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
 import { localRuntimeConfig } from "./localRuntime";
 import {
@@ -102,30 +103,38 @@ function rehearsalSeatChannel(): vscode.OutputChannel {
   return seatChannel;
 }
 
-/** #4048 — the same-window rehearsal host for this window (set by activate after the activity wrap). */
-let seatHost: SeatHost | undefined;
-
-/** #4048 — the host functions chalk#17 calls: enter a rehearsal in this window, end it, or ask whether a return is held. */
+/** #4048 — the host functions chalk#17 calls: enter a rehearsal in this window, end it, or ask whether a return is held.
+ * The host is set by activate (rehearsalSeatHost.ts); the same getter serves the band, the palette and the report. */
 export async function enterRehearsalSeat(input: { token: string; expiresAt: number; rehearsalId: string; stucks?: unknown }): Promise<void> {
+  const seatHost = getRehearsalSeatHost();
   if (!seatHost) throw new Error("작업 창이 준비되지 않았어요. 다시 시도해 주세요.");
   await enterRehearsal(seatHost, input);
 }
 export async function endRehearsalSeat(): Promise<void> {
+  const seatHost = getRehearsalSeatHost();
   if (!seatHost) return;
   await endRehearsal(seatHost);
 }
 export async function hasRehearsalReturn(): Promise<boolean> {
+  const seatHost = getRehearsalSeatHost();
   return seatHost ? hasReturnIssuer(seatHost) : false;
 }
 
 /** #4048 — the approved leave questions. Each asks only inside the rehearsal seat (see leaveWithoutReport). */
 const askLeave: LeaveAsk = async (message, buttons) => vscode.window.showInformationMessage(message, ...buttons);
-/** The palette item and the band button: leave without a report, after the question. */
-export async function leaveRehearsalWithoutReport(): Promise<void> {
-  if (seatHost) await leaveWithoutReport(seatHost, askLeave).catch(() => undefined);
+/** #4514 — the palette item and the band button share one question: the after-report text only when this seat's report was sent. */
+export async function leaveRehearsalFromBand(): Promise<void> {
+  const seatHost = getRehearsalSeatHost();
+  if (seatHost) await leaveFromBand(seatHost, askLeave).catch(() => undefined);
+}
+/** #4514 — called only after the report route answered 200. A refused or failed report never reaches it. */
+export async function markRehearsalReportSent(): Promise<void> {
+  const seatHost = getRehearsalSeatHost();
+  if (seatHost) await recordReportSent(seatHost).catch(() => undefined);
 }
 /** After a successful report: ask whether to return. A failed report never calls this. */
 export async function leaveRehearsalAfterReport(): Promise<void> {
+  const seatHost = getRehearsalSeatHost();
   if (seatHost) await leaveAfterReport(seatHost, askLeave).catch(() => undefined);
 }
 
@@ -195,7 +204,8 @@ export async function activate(context: vscode.ExtensionContext) {
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   context = connections.wrap();
   // #4048 — a same-window rehearsal: enter, bind, or return, decided from the secrets before the resume marker runs.
-  seatHost = rehearsalSeatHostFor(context, connections);
+  setRehearsalSeatHost(rehearsalSeatHostFor(context, connections));
+  const seatHost = getRehearsalSeatHost() as SeatHost;
   // #4048 Dev 2차 — one facts-only line per activation, and the safety net for a window that ends without a learner connection.
   rehearsalSeatChannel().appendLine('[seat] activation reached the seat step');
   let seatOutcome: string;
@@ -566,7 +576,7 @@ export async function activate(context: vscode.ExtensionContext) {
   provider.classWindowSource = () => classroomOps.helpConnection();
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.
   provider.onIssuerAutoRejected = () => {
-    void forgetIssuer(seatHost!).then(() => startPage.show());
+    void forgetIssuer(getRehearsalSeatHost()!).then(() => startPage.show());
   };
   // #751 native help: the learner's help requests to the instructor of their live class connection (ADM-03/05, AT-47).
   // Drafts and requests live one file family per record under globalStorageUri (shared by every window; globalState is one
@@ -815,10 +825,10 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
 
     // #4048 — palette item; hidden outside a rehearsal seat by the when clause, and a no-op there too.
-    vscode.commands.registerCommand("hypeproof-chat.endRehearsalSeat", () => leaveRehearsalWithoutReport()),
+    vscode.commands.registerCommand("hypeproof-chat.endRehearsalSeat", () => leaveRehearsalFromBand()),
 
     vscode.commands.registerCommand("hypeproof-chat.forgetIssuerToken", async () => {
-      await forgetIssuer(seatHost!);
+      await forgetIssuer(getRehearsalSeatHost()!);
       await provider.refreshConfig();
       vscode.window.showInformationMessage("issuer 토큰이 지워졌어요. 다음 발급 시 다시 물어봅니다.");
     }),

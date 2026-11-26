@@ -19,6 +19,9 @@ import {
   rehearsalSeatActiveFor,
   leaveWithoutReport,
   leaveAfterReport,
+  leaveFromBand,
+  recordReportSent,
+  REHEARSAL_REPORT_SENT_KEY,
   LEAVE_WITHOUT_TEXT,
   LEAVE_AFTER_TEXT,
   REHEARSAL_BAND_TEXT,
@@ -245,6 +248,18 @@ await t("end: endRehearsal from the chalk button goes home with the credential",
   assert.equal(store.get(ISSUER_TOKEN_KEY), ISSUER);
 });
 
+await t("end: the report mark is removed when the seat returns home (#4514)", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  await recordReportSent(inRehearsal.host);
+  assert.equal(store.get(REHEARSAL_REPORT_SENT_KEY), REHEARSAL_ID, "the mark is set before the return");
+  assert.equal(await endRehearsal(inRehearsal.host), "reloading");
+  const home = makeWindow({ store, root: HOME });
+  assert.equal(await resumeOnActivation(home.host), "done");
+  assert.equal(store.get(REHEARSAL_REPORT_SENT_KEY), undefined, "the mark is gone with the seat");
+});
+
 await t("a return key without a seat record is restored at once and the key is deleted", async () => {
   const store = new Map([[REHEARSAL_RETURN_KEY, ISSUER]]);
   const win = makeWindow({ store, root: HOME });
@@ -347,6 +362,62 @@ await t("leave after report: outside the seat it asks nothing", async () => {
   let asks = 0;
   assert.equal(await leaveAfterReport(home.host, async () => { asks++; return "돌아가기"; }), "none");
   assert.equal(asks, 0);
+});
+
+// #4514 — the band button and the palette item share leaveFromBand. The after-report text only after a recorded 200.
+// Positive control first: the same detector must see the after-report text in the sent case, or the negatives mean nothing.
+const askRecorder = (answer = "취소") => { const asked = []; return { asked, ask: async (m, b) => { asked.push(m); return answer; } }; };
+
+await t("leave from band, positive control: after a recorded report the question is the after-report text", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  await recordReportSent(inRehearsal.host);
+  assert.equal(store.get(REHEARSAL_REPORT_SENT_KEY), REHEARSAL_ID, "the mark names this seat's rehearsal id");
+  const rec = askRecorder("계속하기");
+  assert.equal(await leaveFromBand(inRehearsal.host, rec.ask), "stayed");
+  assert.deepEqual(rec.asked, [LEAVE_AFTER], "the after-report sentence, once");
+});
+
+await t("leave from band (b): no report recorded → the without-report text, and nothing else", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  const rec = askRecorder("취소");
+  assert.equal(await leaveFromBand(inRehearsal.host, rec.ask), "stayed");
+  assert.deepEqual(rec.asked, [LEAVE_WITHOUT]);
+  assert.equal(rec.asked.includes(LEAVE_AFTER), false, "the after-report text is not asked");
+});
+
+await t("leave from band (c): a report that was never recorded (refused or failed) keeps the without-report text", async () => {
+  // A refused or failed report never calls recordReportSent; the store holds no mark for this seat.
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  assert.equal(store.get(REHEARSAL_REPORT_SENT_KEY), undefined);
+  const rec = askRecorder("취소");
+  await leaveFromBand(inRehearsal.host, rec.ask);
+  assert.deepEqual(rec.asked, [LEAVE_WITHOUT]);
+});
+
+await t("leave from band (d): a mark for another seat does not carry over to this seat", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  const inRehearsal = makeWindow({ store, root: folder });
+  store.set(REHEARSAL_REPORT_SENT_KEY, "rh-other-seat");
+  const rec = askRecorder("취소");
+  await leaveFromBand(inRehearsal.host, rec.ask);
+  assert.deepEqual(rec.asked, [LEAVE_WITHOUT], "the mark names a different seat");
+});
+
+await t("leave from band: outside the seat it asks nothing, even with a mark", async () => {
+  const { store, win } = fresh();
+  await enterAndBind(store, win);
+  store.set(REHEARSAL_REPORT_SENT_KEY, REHEARSAL_ID);
+  const home = makeWindow({ store, root: HOME });
+  const rec = askRecorder();
+  assert.equal(await leaveFromBand(home.host, rec.ask), "none");
+  assert.deepEqual(rec.asked, []);
 });
 
 await t("the approved leave and band sentences match exactly", () => {

@@ -6,6 +6,8 @@ import { REHEARSAL_CHECKLIST_NOTE_MAX } from "./rehearsalChecklistContract.ts";
 
 export const REHEARSAL_RETURN_KEY = "chalk.rehearsal.returnIssuer";
 export const REHEARSAL_SEAT_KEY = "chalk.rehearsal.seat";
+/** #4514 — the rehearsal id of the seat whose report the Service accepted (200). Compared with the current seat's id only. */
+export const REHEARSAL_REPORT_SENT_KEY = "chalk.rehearsal.reportSent";
 export const RESUME_QUESTION = "리허설 중에 앱이 닫혔습니다. 리허설을 이어갈까요, 끝내고 강사로 돌아갈까요?";
 export const RESUME_CONTINUE = "이어가기";
 export const RESUME_RETURN = "끝내고 돌아가기";
@@ -124,6 +126,7 @@ async function resumeReturn(h: SeatHost, seat: SeatRecord): Promise<"done" | "re
     clearedBy(h, "return");
     await h.secrets.delete(REHEARSAL_RETURN_KEY);
     await h.secrets.delete(REHEARSAL_SEAT_KEY);
+    await h.secrets.delete(REHEARSAL_REPORT_SENT_KEY);
     return "done";
   } catch {
     h.notify(RETURN_FAILED);
@@ -142,6 +145,7 @@ async function finishInterrupted(h: SeatHost, seat: SeatRecord | undefined): Pro
   clearedBy(h, "finish");
   await h.secrets.delete(REHEARSAL_RETURN_KEY);
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
+  await h.secrets.delete(REHEARSAL_REPORT_SENT_KEY);
   return "done";
 }
 
@@ -206,6 +210,7 @@ export async function forgetIssuer(h: SeatHost): Promise<void> {
   clearedBy(h, "forget");
   await h.secrets.delete(REHEARSAL_RETURN_KEY);
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
+  await h.secrets.delete(REHEARSAL_REPORT_SENT_KEY);
 }
 
 /** A Dev seed (issuer or student token) is stored only when no rehearsal return is held (#4052 Dev check). */
@@ -363,6 +368,19 @@ export async function leaveAfterReport(h: SeatHost, ask: LeaveAsk): Promise<"non
   const choice = await ask(LEAVE_AFTER_TEXT, LEAVE_AFTER_BUTTONS);
   if (choice !== "돌아가기") return "stayed";
   return endRehearsal(h) as Promise<"reloading" | "done" | "failed">;
+}
+
+/** #4514 — called only after the report route answered 200 for this window's seat. A refused or failed report writes nothing. */
+export async function recordReportSent(h: SeatHost): Promise<void> {
+  const seat = await readSeat(h);
+  if (seat?.rehearsalId) await h.secrets.store(REHEARSAL_REPORT_SENT_KEY, seat.rehearsalId);
+}
+
+/** #4514 — the band button and the palette item share this. The after-report question only when this seat's report was sent. */
+export async function leaveFromBand(h: SeatHost, ask: LeaveAsk): Promise<"none" | "stayed" | "reloading" | "done" | "failed"> {
+  const seat = await readSeat(h);
+  const sent = !!seat?.rehearsalId && (await h.secrets.get(REHEARSAL_REPORT_SENT_KEY)) === seat.rehearsalId;
+  return sent ? leaveAfterReport(h, ask) : leaveWithoutReport(h, ask);
 }
 
 /** Is a credential held for a return (the seat is running or was interrupted)? Used by the chalk side. */
