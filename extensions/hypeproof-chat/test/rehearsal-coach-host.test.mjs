@@ -183,6 +183,17 @@ test('the call site is limited to a subscription rehearsal turn (server path and
   assert.equal((src.match(/rehearsalCoachPrompt\(/g) ?? []).length, 2, 'one definition and one call');
 });
 
+test('static: the coach text is used in one place only, the runLocalCoach systemPrompt argument, never in a post, log, appendLine or file write', () => {
+  const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
+  const lines = src.split('\n').filter(l => /\bcoachPrompt\b/.test(l));
+  assert.equal(lines.length, 2, 'the declaration line and the runLocalCoach line, nothing else');
+  assert.equal(lines.filter(l => /systemPrompt:coachPrompt\b/.test(l)).length, 1, 'one systemPrompt argument');
+  for (const l of lines) assert.doesNotMatch(l, /\bpost\(|appendLine|writeFile|appendFile|\blog\b|console\./, 'no sink on the coach line');
+  // The coach-text method body reads its download and holds it; its only outward call is the status log inside the download.
+  const body = src.slice(src.indexOf('private async rehearsalCoachPrompt('), src.indexOf('private uploadRehearsalTurnFor('));
+  assert.doesNotMatch(body, /\bpost\(|writeFile|appendFile/, 'the method posts and writes nothing');
+});
+
 test('static: the coach module writes nothing to disk and logs nothing but the status', () => {
   const src = readFileSync(new URL('../src/rehearsalCoach.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /node:fs|writeFile|appendFile|createWriteStream|globalState|workspaceState/);
