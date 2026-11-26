@@ -166,11 +166,20 @@ import UserNotifications
         return try JourneyTransport.store.callback(url)
     }
     static func seedAccountDraftIfNeeded(at url: URL, accountID: String) throws {
-        guard enabled, JourneyConfiguration.scenario == "draft-collision", accountID == "journey-account",
-              !FileManager.default.fileExists(atPath: url.path) else { return }
+        guard enabled, accountID == "journey-account", !FileManager.default.fileExists(atPath: url.path) else { return }
         // Simulate an existing local account draft. Do not rewrite it on relaunch
         // or mint a credential; account lookup and file decoding remain real.
-        var cache = ConversationCache(); cache.draft = "Existing account draft"
+        // retry-once with --seed-retry-draft starts the failed-send journey from an
+        // unsent draft instead of keyboard input (#4432): run 45842954516 showed the
+        // first keyboard on a fresh simulator delivering typed characters after typeText
+        // returned. Other gate cases still type into the composer.
+        let draft: String
+        switch JourneyConfiguration.scenario {
+        case "draft-collision": draft = "Existing account draft"
+        case "retry-once" where ProcessInfo.processInfo.arguments.contains("--seed-retry-draft"): draft = "Keep my unfinished question"
+        default: return
+        }
+        var cache = ConversationCache(); cache.draft = draft
         let entry = try JSONSerialization.jsonObject(with: JSONEncoder().encode(cache))
         let snapshot: [String: Any] = ["accountID": accountID, "conversations": [],
                                        "entries": ["personal-reflection": entry]]

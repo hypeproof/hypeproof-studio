@@ -1055,12 +1055,15 @@ final class StudioJourneyTests: XCTestCase {
         try evidence("journey-background-draft", app: app)
     }
     @MainActor func testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch() throws {
-        let app = launch("retry-once"); signIn(app)
-        let input = field(app); input.tap(); input.typeText("Keep my unfinished question")
-        // Run 45828625133: under host load the app received only "K" of the typed words and
-        // sent it, so the later outbox check reported a product failure. Check the input first.
-        XCTAssertEqual(input.value as? String, "Keep my unfinished question", "typed words did not reach the field before Send")
-        app.buttons["sharedSend"].tap()
+        let app = launch("retry-once", arguments: ["--seed-retry-draft"]); signIn(app)
+        // Runs 45828625133 and 45842954516: the typed characters arrived late; Send cleared the
+        // field before they landed. This case tests the outbox, so the fixture seeds the unsent
+        // account draft instead of typing it. Other gate cases cover typing into the composer.
+        let input = field(app)
+        XCTAssertEqual(input.value as? String, "Keep my unfinished question", "the unsent draft did not reach the field before Send")
+        // Send is enabled only after the personal conversation arrives after sign-in
+        // (canSend needs it). Typing used to cover that time; state it now.
+        enabled(app.buttons["sharedSend"]); app.buttons["sharedSend"].tap()
         enabled(app.buttons["sharedRetry"])
         XCTAssertTrue(app.scrollViews["conversationTimeline"].staticTexts["Keep my unfinished question"].exists, "An unacknowledged local request must still show its words.")
         XCTAssertFalse(app.staticTexts["sharedReply"].exists)
