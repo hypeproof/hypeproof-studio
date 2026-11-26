@@ -48,7 +48,8 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import { mustStayLocal } from './rehearsalRoute';
-import { rehearsalReportRejectionSentence } from './rehearsalReportReason';
+import { rehearsalReportRejectionSentence, REHEARSAL_CODE_MISSING, rehearsalUploadPendingSentence, rehearsalUploadDroppedSentence } from './rehearsalReportReason';
+import { rehearsalTurnBody, helpReceiptFor, uploadRehearsalTurn, rehearsalCodeNoticeNeeded, type UploadOutcome } from './rehearsalTurnUpload';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -5493,6 +5494,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** #751 native help — set by extension.ts. The provider only relays; the host adapter re-checks the learner on every call. */
   helpSource: import("./classroomHelpHost").ClassroomHelpHost | null = null;
+  // #4501 — subscription rehearsal turns the Service has not accepted yet (turn_id → upload body). Host memory only.
+  private rehearsalUploadUnsent = new Map<string, Record<string, unknown>>();
+  private rehearsalUploadHeldOnce = false;
+  private rehearsalCodeNoticeShown = false;
+  // The last refused upload (403/404/409/410/429) — the report shows its sentence instead of the pending count.
+  private rehearsalUploadRejected: { status: number; reason?: string } | undefined;
+  // Turns the Service rejected as malformed (400/413): dropped, never retried; the report says how many.
+  private rehearsalUploadDropped = 0;
   // #1298 — called when the auto-read whoami path gets a rejected result (401/403).
   // Extension sets this to delete the issuer token and show the student start page once.
   onIssuerAutoRejected?: () => void;
@@ -11201,9 +11210,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          // #4501 — what the subscription turn upload needs: whether text came back, and the tool names (never inputs).
+          const rehearsalFacts = { answered: false, toolNames: [] as string[] };
+          const rehearsalDelta = (t: string) => { if (t.trim()) rehearsalFacts.answered = true; onDelta(t); };
+          const rehearsalActivity = (a: Parameters<typeof onActivity>[0]) => { if (a.kind === "tool_use" && typeof a.name === "string") rehearsalFacts.toolNames.push(a.name); onActivity(a); };
           const result=await runLocalCoach({config:local,profile,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
-            signal:ctrl.signal,onDelta,onRefusal,onActivity,
+            signal:ctrl.signal,onDelta:rehearsalDelta,onRefusal,onActivity:rehearsalActivity,
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
@@ -11213,6 +11226,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
+          if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
         }
       } else if (this._instructorMode.isInstructor === true) {
         throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
@@ -12469,9 +12483,68 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private async sendRehearsalReport(steps: import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
+  // #4501 — fire-and-forget after the turn result is drawn. A failure is counted for the report; the student is not blocked.
+  private uploadRehearsalTurnFor(f: { turnId: string; model: string; toolNames: string[]; answered: boolean; step?: string; helpMode?: string; profile: { rehearsal?: unknown; lesson?: { content: { steps: Array<{ id: string; help?: { default: string } }> } } | null } }): Promise<void> {
+    if (!f.profile.rehearsal) return Promise.resolve();
+    const step = f.profile.lesson?.content.steps.find(s => s.id === f.step);
+    const body = rehearsalTurnBody({
+      turnId: f.turnId, model: f.model, toolNames: f.toolNames, answered: f.answered, at: new Date().toISOString(),
+      stepId: f.step ?? null, helpReceipt: helpReceiptFor(step, f.helpMode),
+    });
+    const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
+    return uploadRehearsalTurn({ secrets: this.context.secrets, base: cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1").replace(/\/$/, ""), body, log: l => this.ensureLogChannel().appendLine(l) })
+      .then(o => this.noteRehearsalUpload(f.turnId, body, o), () => this.noteRehearsalUpload(f.turnId, body, undefined));
+  }
+
+  // A 2xx clears the turn. 400 and 413 mean the body itself is wrong: the turn is dropped, not retried, and counted.
+  // 429 (turn_limit) repeats with the same body: not retried, its reason is kept for the report sentence.
+  // Other refusals and 5xx/network stay unsent and are retried once before the report.
+  private noteRehearsalUpload(turnId: string, body: Record<string, unknown>, o: UploadOutcome | undefined): void {
+    const status = o && typeof o.status === "number" ? o.status : undefined;
+    if (status !== undefined && status >= 200 && status < 300) {
+      this.rehearsalUploadUnsent.delete(turnId);
+      this.rehearsalUploadRejected = undefined;
+      return;
+    }
+    if (status === 400 || status === 413) {
+      this.rehearsalUploadUnsent.delete(turnId);
+      this.rehearsalUploadDropped += 1;
+      return;
+    }
+    if (status === 429) {
+      this.rehearsalUploadUnsent.delete(turnId);
+      this.rehearsalUploadRejected = { status, reason: o && "reason" in o ? o.reason : undefined };
+      return;
+    }
+    this.rehearsalUploadUnsent.set(turnId, body);
+    if (status !== undefined && [403, 404, 409, 410].includes(status)) this.rehearsalUploadRejected = { status, reason: o && "reason" in o ? o.reason : undefined };
+  }
+
+  private async sendRehearsalReport(steps:import("./lessonFocus").RenderedStep[], mission?: unknown, checklist?: unknown): Promise<void> {
     const profile = this.cachedProfile, lesson = profile?.lesson, token = await this.context.secrets.get(TOKEN_KEY);
     if (!profile?.rehearsal || !lesson || !token) { await this.post({ type: "rehearsalState", state: "error", message: "리허설 코드로 연 수업이 아닙니다." }); return; }
+    // #4501 — a subscription rehearsal: the report waits for the turn uploads. The rehearsal code (checked above) is the credential.
+    if (mustStayLocal(profile.rehearsal)) {
+      const cfgUp = vscode.workspace.getConfiguration("hypeproofChat");
+      const base = cfgUp.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1").replace(/\/$/, "");
+      for (const [id, body] of [...this.rehearsalUploadUnsent]) {
+        const o = await uploadRehearsalTurn({ secrets: this.context.secrets, base, body, log: l => this.ensureLogChannel().appendLine(l) });
+        this.noteRehearsalUpload(id, body, o);
+      }
+      // The first press shows what is still unsent (or why the Service refused it); the second press sends the report anyway (the Service judges it).
+      if (this.rehearsalUploadUnsent.size && !this.rehearsalUploadHeldOnce) {
+        this.rehearsalUploadHeldOnce = true;
+        const rej = this.rehearsalUploadRejected;
+        const message = rej
+          ? rehearsalReportRejectionSentence({ status: rej.status, reason: rej.reason, subscription: true })
+          : rehearsalUploadPendingSentence(this.rehearsalUploadUnsent.size);
+        await this.post({ type: "rehearsalState", state: "error", message });
+        return;
+      }
+      this.rehearsalUploadHeldOnce = false;
+      // Dropped turns are said once here and the report still goes out.
+      if (this.rehearsalUploadDropped) await this.post({ type: "rehearsalState", state: "error", message: rehearsalUploadDroppedSentence(this.rehearsalUploadDropped) });
+    }
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const pkg = this.context.extension.packageJSON as { version?: string; devDependencies?: Record<string, string> };
     // #4102 — the checklist is kept only for the stucks of this seat, and only what the person marked (nothing marked: no field).
@@ -12730,6 +12803,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
     void (async () => vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand))().catch(() => undefined);
+    // #4501 — a subscription rehearsal seat in a window with no rehearsal code: say so once (uploads and the report need the code).
+    const codeInWindow = !!(await this.context.secrets.get(TOKEN_KEY).then(v => v, () => undefined));
+    if (rehearsalCodeNoticeNeeded({ seatBand, subscription: mustStayLocal(profile?.rehearsal), codeInWindow })) {
+      if (!this.rehearsalCodeNoticeShown) { this.rehearsalCodeNoticeShown = true; await this.post({ type: "rehearsalState", state: "error", message: REHEARSAL_CODE_MISSING }); }
+    } else this.rehearsalCodeNoticeShown = false;
     await this.post({
       type: "config",
       config: {

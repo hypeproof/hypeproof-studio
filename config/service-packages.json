@@ -23,9 +23,9 @@
       "sha256": "3bcc62170870a5ba881f3e7607740aaff2576920350ddb5097e6f71d7658c0d7"
     },
     {
-      "asset": "hypeproof-service-testkit-0.1.12.tgz",
-      "tag": "service-testkit-v0.1.12-private.1",
-      "sha256": "d7b6896f7c2d9986974ce77dc876693524bfa63bc5c78c94f673fae579104642"
+      "asset": "hypeproof-service-testkit-0.1.14.tgz",
+      "tag": "service-testkit-v0.1.14-private.1",
+      "sha256": "0f49b7ee5596adde3b0f1a3b73c7c46568b4fdc87d418e0ef4d08b60ab7ff139"
     },
     {
       "asset": "hypeproof-measurement-core-0.1.1.tgz",

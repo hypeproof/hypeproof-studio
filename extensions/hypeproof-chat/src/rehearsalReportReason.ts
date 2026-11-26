@@ -16,6 +16,7 @@ export const REHEARSAL_REPORT_LESSON_UNAVAILABLE = "이 수업 후보를 지금 
 export const REHEARSAL_REPORT_EXPIRED = "리허설 시간이 끝났습니다. 강사에게 새 리허설 코드를 받으세요.";
 export const REHEARSAL_REPORT_UNKNOWN = "이 리허설을 찾지 못했습니다. 강사에게 새 리허설 코드를 받으세요.";
 export const REHEARSAL_REPORT_NOT_SENT = "결과를 보내지 못했습니다.";
+export const REHEARSAL_TURN_LIMIT = "이 리허설에 올릴 수 있는 대화 기록 수를 넘었습니다. 강사에게 알려 주세요.";
 
 export function rehearsalReportRejectionSentence(input: RehearsalReportRejection): string {
   switch (input.reason) {
@@ -24,7 +25,19 @@ export function rehearsalReportRejectionSentence(input: RehearsalReportRejection
     case "lesson_unavailable": return REHEARSAL_REPORT_LESSON_UNAVAILABLE;
     case "rehearsal_expired": return REHEARSAL_REPORT_EXPIRED;
     case "rehearsal_unknown": return REHEARSAL_REPORT_UNKNOWN;
+    case "turn_limit": return REHEARSAL_TURN_LIMIT;
     default:
       return typeof input.status === "number" ? `${REHEARSAL_REPORT_NOT_SENT.slice(0, -1)} (상태 ${input.status}).` : REHEARSAL_REPORT_NOT_SENT;
   }
+}
+
+// #4501 — the subscription turn upload. Shown only on the rehearsal seat, above the sticky input.
+// This window has no rehearsal code (another device with no code entered). A same-window seat has the code: no sentence.
+export const REHEARSAL_CODE_MISSING = "이 창에 리허설 코드가 없어 대화 기록을 보낼 수 없습니다. 강사에게 새 리허설 코드를 받으세요.";
+export function rehearsalUploadPendingSentence(count: number): string {
+  return `대화 ${count}개를 서버에 올리지 못했습니다. 연결을 확인한 뒤 다시 보내세요.`;
+}
+// The Service refused the body itself (400/413): the turn is dropped. Shown before the report; it never blocks the report.
+export function rehearsalUploadDroppedSentence(count: number): string {
+  return `보내지 못한 대화 ${count}개는 결과에 들어가지 않습니다. 이 기기의 시각이 맞는지 확인해 주세요.`;
 }
