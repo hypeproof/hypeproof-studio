@@ -150,6 +150,9 @@ jobs:
       - name: Private Service package integrity and boundary controls
         if: ${{ !cancelled() }}
         run: npm run test:private-service-packages
+      - name: Pinned Chalk release controls (C-4)
+        if: ${{ !cancelled() }}
+        run: npm run test:chalk-release
       - name: Bootstrap pinned private Service packages
         if: ${{ !cancelled() }}
         env:

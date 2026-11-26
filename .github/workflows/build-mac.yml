@@ -363,6 +363,16 @@ jobs:
       # Developer ID signature — means the seal covers the stamped plist and sign-mac's
       # codesign --verify gate stays valid. (Stamping AFTER Re-sign would break
       # the seal that #311 fixed, re-triggering "손상되어 열 수 없습니다".)
+      # Pinned Chalk extension (C-4, config/chalk-release.json). After both paths
+      # join, so the cached base never carries Chalk and a reused base or release
+      # zip cannot keep an old copy. ship=false: no download, no token needed; the
+      # step only removes a leftover. Mac only for now (Windows is not in this change).
+      - name: Install the pinned Chalk extension (ship=false removes only)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: bash scripts/install-chalk-extension.sh "vscodium-base/VSCode-darwin-arm64/HypeProof Studio.app"
+
       - name: Stamp product version on Info.plist + product.json (#361)
         shell: bash
         # Both paths (scripts/repack-mac.sh already ran it; it is idempotent).

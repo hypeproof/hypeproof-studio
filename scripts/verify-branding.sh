@@ -249,6 +249,16 @@ else
   warn "No SDK-coach vendor expected (bundled extension has no @anthropic-ai/claude-agent-sdk dep; set REQUIRE_SDK_VENDOR=1 to force) — skipping"
 fi
 
+# 8c. Pinned Chalk extension (config/chalk-release.json, C-4). ship=false: the app
+# carries no Chalk. ship=true: the installed copy equals the verified vsix and the pinned version.
+echo
+echo "Checking the pinned Chalk extension..."
+if CHALK_OUT="$(bash "$(dirname "${BASH_SOURCE[0]}")/check-chalk-release-installed.sh" "$APP" 2>&1)"; then
+  ok "Pinned Chalk extension matches config/chalk-release.json"
+else
+  bad "Pinned Chalk extension check failed: ${CHALK_OUT}"
+fi
+
 # 9. builtInExtensions list should NOT contain us. hypeproof-chat ships by
 # being copied into Resources/app/extensions; listing it in product.json makes
 # VSCodium try a marketplace/GitHub download during build, which 404s.
