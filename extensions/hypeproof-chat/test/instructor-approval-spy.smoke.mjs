@@ -1,7 +1,7 @@
 // S-2b spy: an instructor turn never raises an approval kind that Chalk does not own.
 // Names come from the real sources, not from a hand-written list:
 //   - workspace tools: workspaceTools() with the real INSTRUCTOR_TOOL_PROFILE
-//   - browser tools: the shared builder src/chalk/instructorBrowserTools.ts, used by both the legacy
+//   - browser tools: the shared builder src/localRuntime/instructorBrowserTools.ts, used by both the legacy
 //     instructor turn and the Chalk contract turn (asserted at both call sites)
 // Mapping-level spy: the full instructor turn is not driven here.
 import assert from "node:assert/strict";
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { sdkToolToActionRequest, evaluateSdkToolUse } from "../src/sdkCoachHelpers.ts";
 import { BROWSER_OPEN_TOOL_DEF, LIVE_PREVIEW_START_TOOL_DEF, MCP_BROWSER_OPEN, MCP_LIVE_PREVIEW_START } from "../src/browserMcp.ts";
 import { workspaceTools } from "../src/localRuntime/tools.ts";
-import { INSTRUCTOR_LOCAL_BROWSER_DEFS, instructorLocalBrowserTools } from "../src/chalk/instructorBrowserTools.ts";
+import { INSTRUCTOR_LOCAL_BROWSER_DEFS, instructorLocalBrowserTools } from "../src/localRuntime/instructorBrowserTools.ts";
 import { mergeBrowserTools, mergeExtraTools } from "../src/localRuntime/index.ts";
 import { INSTRUCTOR_TOOL_PROFILE } from "../src/chalk/instructorTurn.ts";
 import { needsChalkPrompt } from "../src/chalkContract.ts";

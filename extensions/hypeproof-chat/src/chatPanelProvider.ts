@@ -252,7 +252,7 @@ import {
   toMcpToolResult,
   SiteCheckViewports,
 } from "./browserMcp";
-import { instructorLocalBrowserTools } from "./chalk/instructorBrowserTools";
+import { instructorLocalBrowserTools } from "./localRuntime/instructorBrowserTools";
 
 // #525 — a plain editor command registered in the core. The browser-only API cannot
 // bring a tab to the front (BrowserTab has no show()/reveal()), so this path is used
