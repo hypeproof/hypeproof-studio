@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { COACH_RUN_STATES, currentToolActivity, deriveCoachRunState, toolLineRunState } from "../src/coachRunState.ts";
 
 // The fixed set, word for word, and nothing else.
-assert.deepEqual(Object.values(COACH_RUN_STATES).map((s) => s.label), ["준비됨", "생각 중", "찾는 중", "만드는 중", "확인이 필요해요", "멈춤", "문제가 생겼어요"]);
-assert.equal(new Set(Object.values(COACH_RUN_STATES).map((s) => s.icon)).size, 7, "each state has its own icon");
+assert.deepEqual(Object.values(COACH_RUN_STATES).map((s) => s.label), ["준비됨", "생각 중", "찾는 중", "만드는 중", "확인이 필요해요", "멈춤", "문제가 생겼어요", "이용권 확인 필요"]);
+assert.equal(new Set(Object.values(COACH_RUN_STATES).map((s) => s.icon)).size, 8, "each state has its own icon");
 
 // Classifier: the host's tool-line icons.
 for (const icon of ["📖", "🔍", "🌐", "👀", "📸", "🔗", "🖥️"]) assert.equal(toolLineRunState({ icon, label: "x" }), "searching", icon);
@@ -49,3 +49,10 @@ assert.equal(d({ approvalPending: true }), "approval", "an approval without a tu
 assert.equal(d({ approvalPending: true, running: true, error: true, lastOutcome: "stopped" }), "approval", "approval wins over everything");
 assert.equal(d({ running: false, messages: [user, run("📖")] }), "ready", "a running line alone is not a running turn");
 console.log("PASS coach-run-state: fixed set, icon classifier with negative controls, current-turn scan, precedence");
+
+// #2442: typed access endings are not failures; active work still takes precedence.
+assert.equal(d({lastOutcome:"access",error:true,unavailable:true}),"access");
+assert.equal(d({lastOutcome:"access",preparing:true}),"thinking");
+assert.equal(d({lastOutcome:"access",running:true}),"creating");
+assert.equal(d({lastOutcome:"access",approvalPending:true}),"approval");
+assert.equal(d({lastOutcome:"error",error:true}),"error");
