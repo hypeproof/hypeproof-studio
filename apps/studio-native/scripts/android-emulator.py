@@ -9,6 +9,7 @@ from pathlib import Path
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -226,7 +227,12 @@ class Bootstrap:
     def verify(self):
         self.alive()
         self.receipt["verification_started"] = True
-        with (self.evidence / "verification.log").open("wb") as log:
+        with (self.evidence / "verification.log").open("wb") as log, \
+                (self.evidence / "logcat-stream.txt").open("wb") as stream:
+            # Keep every logcat line from before instrumentation to the end of the run.
+            # In runs 44994131331 and 45814588860 the on-device ring buffer had already
+            # dropped the lines around the moment the device stopped compositing.
+            logcat = self.stream_logcat(stream)
             process = subprocess.Popen(["bash", str(NATIVE / "scripts/android-verify.sh"), "device"], env=self.env,
                                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             try:
@@ -240,6 +246,44 @@ class Bootstrap:
                 return process.returncode
             finally:
                 stop_owned(process)
+                self.stop_logcat(logcat, stream)
+
+    def stream_logcat(self, stream):
+        argv = [str(self.sdk / "platform-tools/adb"), "-s", self.serial, "logcat", "-v", "threadtime",
+                "-b", "main", "-b", "system", "-b", "crash"]
+        self.receipt["commands"].append(argv)
+        process = subprocess.Popen(argv, env=self.env, stdin=subprocess.DEVNULL, stdout=stream,
+                                   stderr=subprocess.STDOUT, start_new_session=True)
+        self.receipt["logcat_stream"] = {"file": "logcat-stream.txt", "pid": process.pid}
+        return process
+
+    def stop_logcat(self, process, stream):
+        """Record whether the stream ran for the whole verification. Diagnostics only."""
+        record = self.receipt["logcat_stream"]
+        record["exited_before_end"] = process.poll() is not None
+        if record["exited_before_end"]:
+            record["exit_code"] = process.returncode
+        stop_owned(process)
+        stream.flush()
+        record["bytes"] = (self.evidence / "logcat-stream.txt").stat().st_size
+
+    def classify_failures(self):
+        """Group failures that share a lost-compositing snapshot in the receipt.
+
+        Reporting only: the exit code and state stay those of the failed verification.
+        """
+        log = NATIVE / "evidence/android/native-ui.log"
+        if not log.is_file():
+            return
+        result = ENVIRONMENT.compositing_loss(log.read_text(errors="replace"))
+        (self.evidence / "device-compositing.json").write_text(json.dumps(result, indent=2) + "\n")
+        self.receipt["device_compositing"] = {key: result[key] for key in ("state", "onset", "failed_tests")}
+        self.receipt["device_compositing"]["same_cause_tests"] = len(result["same_cause_tests"])
+        self.receipt["device_compositing"]["other_failed_tests"] = result["other_failed_tests"]
+        if result["onset"]:
+            print("Device compositing lost from " + result["onset"]["test"] + ": "
+                  + str(len(result["same_cause_tests"])) + " of " + str(result["failed_tests"])
+                  + " failed tests share it (device state). The run still fails.", file=sys.stderr)
 
     def capture_failure(self):
         if not self.owned_device or self.emulator.poll() is not None:
@@ -282,6 +326,11 @@ def main():
         bootstrap.start()
         code = bootstrap.verify()
         bootstrap.receipt["state"] = "passed" if code == 0 else "native_verification_failed"
+        if code:
+            try:
+                bootstrap.classify_failures()
+            except (OSError, ValueError) as error:  # never replace the verification result
+                bootstrap.receipt["classification_error"] = str(error)
     except (Stopped, OSError) as error:
         code = error.code if isinstance(error, Stopped) else 2
         bootstrap.receipt.update(state="failed", reason=error.reason if isinstance(error, Stopped) else str(error))

@@ -55,6 +55,13 @@ elif tool=='adb':
  elif args==['shell','device_config','set_sync_disabled_for_tests','persistent']:
   if mode!='sync_not_disabled':(s/'sync').write_text('persistent')
  elif args==['shell','device_config','get_sync_disabled_for_tests']:print((s/'sync').read_text() if (s/'sync').exists() else 'none')
+ elif args[:1]==['logcat'] and '-d' not in args:
+  (s/'logcat-pid').write_text(str(os.getpid()))
+  print('11-26 11:58:57.000 552 572 V WindowManager: stream line before tests',flush=True)
+  if mode=='logcat_exits':sys.exit(3)
+  while not (s/'verification').exists():time.sleep(.01)
+  print('11-26 11:59:02.000 552 572 V WindowManager: stream line during tests',flush=True)
+  while True:time.sleep(.02)
  elif args[:3]==['shell','pm','disable-user']:
   pkg=args[-1]
   if mode=='messaging_absent':print('Exception occurred while executing \'disable-user\':\njava.lang.IllegalArgumentException: Unknown package: '+pkg);sys.exit(255)
@@ -65,6 +72,10 @@ elif tool=='adb':
 VERIFY = r'''#!/bin/bash
 printf 'started %s\n' "$*" >> "$MOCK_STATE/verification"
 if [ "$MOCK_MODE" = verify_failure ]; then exit 23; fi
+if [ -f "$MOCK_STATE/native-ui.log" ]; then
+  mkdir -p "$(dirname "$0")/../evidence/android"; cp "$MOCK_STATE/native-ui.log" "$(dirname "$0")/../evidence/android/native-ui.log"
+fi
+if [ "$MOCK_MODE" = verify_ui_failure ]; then sleep .3; exit 1; fi
 if [ "$MOCK_MODE" = emulator_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = interrupt_test ] || [ "$MOCK_MODE" = test_timeout ]; then sleep 60; fi
 exit 0
@@ -288,6 +299,49 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         code, receipt, _ = self.finish(self.start("leader_already_exited"))
         self.assertEqual(code, 2); self.assertFalse(receipt["verification_started"])
         self.assert_descendant_stopped()
+
+    def test_logcat_streams_for_the_whole_verification_and_is_stopped(self):
+        code, receipt, calls = self.finish(self.start("unstable"))
+        self.assertEqual(code, 0)
+        stream = (self.native / "evidence/android/bootstrap/logcat-stream.txt").read_text()
+        self.assertIn("stream line before tests", stream)
+        self.assertIn("stream line during tests", stream)
+        record = receipt["logcat_stream"]
+        self.assertEqual((record["file"], record["exited_before_end"], record["bytes"]), ("logcat-stream.txt", False, len(stream.encode())))
+        self.assertIn(["adb", "-s", f"emulator-{self.port}", "logcat", "-v", "threadtime", "-b", "main", "-b", "system", "-b", "crash"], calls)
+        with self.assertRaises(ProcessLookupError): os.kill(int((self.state / "logcat-pid").read_text()), 0)
+
+    def test_early_logcat_exit_is_recorded_and_changes_no_result(self):
+        code, receipt, _ = self.finish(self.start("logcat_exits"))
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["state"], "passed")
+        self.assertEqual((receipt["logcat_stream"]["exited_before_end"], receipt["logcat_stream"]["exit_code"]), (True, 3))
+
+    def test_compositing_loss_groups_failures_but_the_run_still_fails(self):
+        shutil.copyfile(Path(__file__).parent / "fixtures/android-compositing-loss-45814588860.txt", self.state / "native-ui.log")
+        code, receipt, _ = self.finish(self.start("verify_ui_failure"))
+        self.assertEqual((code, receipt["state"]), (1, "native_verification_failed"))
+        summary = receipt["device_compositing"]
+        self.assertEqual((summary["state"], summary["failed_tests"], summary["same_cause_tests"], summary["other_failed_tests"]),
+                         ("observed", 2, 2, []))
+        self.assertEqual(summary["onset"]["test"], "QuestionJourneyTest#guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend")
+        detail = json.loads((self.native / "evidence/android/bootstrap/device-compositing.json").read_text())
+        self.assertEqual(len(detail["same_cause_tests"]), 2)
+
+    def test_other_ui_failure_is_not_grouped(self):
+        (self.state / "native-ui.log").write_text("INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.JourneyTest\n"
+                                                  "INSTRUMENTATION_STATUS: test=t\nINSTRUMENTATION_STATUS: stack=java.lang.AssertionError: draft\n"
+                                                  "INSTRUMENTATION_STATUS_CODE: -2\n")
+        code, receipt, _ = self.finish(self.start("verify_ui_failure"))
+        self.assertEqual(code, 1)
+        self.assertEqual((receipt["device_compositing"]["state"], receipt["device_compositing"]["other_failed_tests"]),
+                         ("not_observed", ["JourneyTest#t"]))
+        self.assertFalse((self.native / "evidence/android/bootstrap/device-compositing.json").read_text() == "")
+
+    def test_passing_run_writes_no_classification(self):
+        code, receipt, _ = self.finish(self.start("unstable"))
+        self.assertEqual(code, 0)
+        self.assertNotIn("device_compositing", receipt)
 
 
 if __name__ == "__main__":

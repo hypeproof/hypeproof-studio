@@ -1,0 +1,201 @@
+# Excerpt of `am instrument -r` output, GitHub Actions run 45814588860 (main a1b72bfb),
+# tests 6-9 of 44. Status lines are verbatim; each stack keeps its first three lines.
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stream=
+ai.hypeproof.studio.QuestionJourneyTest:
+INSTRUMENTATION_STATUS: test=malformedUTF8CacheStaysUntouchedAndExportsOriginalBytes
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=malformedUTF8CacheStaysUntouchedAndExportsOriginalBytes
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stack=ai.hypeproof.studio.UiSync$DeviceFocusLost: device focus lost (device state, not a product result): guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend: Espresso found no root with window focus [at failure, before teardown: WM mCurrentFocus=Window{ac7efa7 u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity}; mFocusedApp=ActivityRecord{dc57819 u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity t23} | InputDispatcher FocusedWindows: <none> | FocusRequests: displayId=0, name='ac7efa7 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity' result='NOT_VISIBLE' | app input windows: 7: name=ac7efa7 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity, id=460, displayId=0, inputConfig=NOT_VISIBLE, alpha=0]
+	at ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:481)
+	at org.junit.rules.TestWatcher$1.evaluate(TestWatcher.java:61)
+INSTRUMENTATION_STATUS: stream=
+Error in guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend(ai.hypeproof.studio.QuestionJourneyTest):
+ai.hypeproof.studio.UiSync$DeviceFocusLost: device focus lost (device state, not a product result): guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend: Espresso found no root with window focus [at failure, before teardown: WM mCurrentFocus=Window{ac7efa7 u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity}; mFocusedApp=ActivityRecord{dc57819 u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity t23} | InputDispatcher FocusedWindows: <none> | FocusRequests: displayId=0, name='ac7efa7 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity' result='NOT_VISIBLE' | app input windows: 7: name=ac7efa7 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity, id=460, displayId=0, inputConfig=NOT_VISIBLE, alpha=0]
+	at ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:481)
+	at org.junit.rules.TestWatcher$1.evaluate(TestWatcher.java:61)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at androidx.test.ext.junit.runners.AndroidJUnit4.run(AndroidJUnit4.java:162)
+	at org.junit.runners.Suite.runChild(Suite.java:128)
+	at org.junit.runners.Suite.runChild(Suite.java:27)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+	at androidx.test.internal.runner.TestExecutor.execute(TestExecutor.java:68)
+	at androidx.test.internal.runner.TestExecutor.execute(TestExecutor.java:59)
+	at androidx.test.runner.AndroidJUnitRunner.onStart(AndroidJUnitRunner.java:463)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2594)
+Caused by: androidx.test.espresso.base.RootViewPicker$RootViewWithoutFocusException: Waited for the root of the view hierarchy to have window focus and not request layout for 10 seconds. If you specified a non default root matcher, it may be picking a root that never takes focus. Root:
+Root{application-window-token=android.view.ViewRootImpl$W@d26701, window-token=android.view.ViewRootImpl$W@d26701, has-window-focus=false, layout-params-type=1, layout-params-string={(0,0)(fillxfill) sim={adjust=resize forwardNavigation} ty=BASE_APPLICATION wanim=0x1030309
+  fl=LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED DRAWS_SYSTEM_BAR_BACKGROUNDS
+  pfl=NO_MOVE_ANIMATION EDGE_TO_EDGE_ENFORCED FORCE_DRAW_STATUS_BAR_BACKGROUND FIT_INSETS_CONTROLLED
+  bhv=DEFAULT
+  fitSides=
+  frameRateBoostOnTouch=true
+  dvrrWindowFrameRateHint=true}, decor-view-string=DecorView{id=-1, visibility=VISIBLE, width=1080, height=2400, has-focus=false, has-focusable=true, has-window-focus=false, is-clickable=false, is-enabled=true, is-focused=false, is-focusable=false, is-layout-requested=false, is-selected=false, layout-params={(0,0)(fillxfill) sim={adjust=resize forwardNavigation} ty=BASE_APPLICATION wanim=0x1030309
+  fl=LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED DRAWS_SYSTEM_BAR_BACKGROUNDS
+  pfl=NO_MOVE_ANIMATION EDGE_TO_EDGE_ENFORCED FORCE_DRAW_STATUS_BAR_BACKGROUND FIT_INSETS_CONTROLLED
+  bhv=DEFAULT
+  fitSides=
+  frameRateBoostOnTouch=true
+  dvrrWindowFrameRateHint=true}, tag=null, root-is-layout-requested=false, has-input-connection=false, x=0.0, y=0.0, child-count=1}}
+	at dalvik.system.VMStack.getThreadStackTrace(Native Method)
+	at java.lang.Thread.getStackTrace(Thread.java:1841)
+	at androidx.test.espresso.base.EspressoExceptionHandler.handleSafely(EspressoExceptionHandler.java:34)
+	at androidx.test.espresso.base.EspressoExceptionHandler.handleSafely(EspressoExceptionHandler.java:26)
+	at androidx.test.espresso.base.DefaultFailureHandler$TypedFailureHandler.handle(DefaultFailureHandler.java:158)
+	at androidx.test.espresso.base.DefaultFailureHandler.handle(DefaultFailureHandler.java:120)
+	at ai.hypeproof.studio.UiSync.lambda$focusAware$7(UiSync.java:499)
+	at ai.hypeproof.studio.UiSync$$ExternalSyntheticLambda2.handle(D8$$SyntheticClass:0)
+	at androidx.test.espresso.ViewInteraction.waitForAndHandleInteractionResults(ViewInteraction.java:385)
+	at androidx.test.espresso.ViewInteraction.check(ViewInteraction.java:366)
+	at ai.hypeproof.studio.QuestionJourneyTest.guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend(QuestionJourneyTest.java:194)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at androidx.test.internal.runner.junit4.statement.RunBefores.evaluate(RunBefores.java:80)
+	at androidx.test.internal.runner.junit4.statement.RunAfters.evaluate(RunAfters.java:61)
+	at ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:471)
+	... 29 more
+
+INSTRUMENTATION_STATUS: test=guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=realKeystoreEncryptsRotatesAndRefusesTamperedCredentials
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=realKeystoreEncryptsRotatesAndRefusesTamperedCredentials
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=deniedLoginAndCorruptGuestFileRemainLocalAndIntact
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=ai.hypeproof.studio.QuestionJourneyTest
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=44
+INSTRUMENTATION_STATUS: stack=ai.hypeproof.studio.UiSync$DeviceFocusLost: device focus lost (device state, not a product result): deniedLoginAndCorruptGuestFileRemainLocalAndIntact: Espresso found no root with window focus [at failure, before teardown: WM mCurrentFocus=Window{de14ada u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity}; mFocusedApp=ActivityRecord{df7585e u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity t25} | InputDispatcher FocusedWindows: <none> | FocusRequests: displayId=0, name='de14ada ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity' result='NOT_VISIBLE' | app input windows: 7: name=de14ada ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity, id=502, displayId=0, inputConfig=NOT_VISIBLE, alpha=0]
+	at ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:481)
+	at org.junit.rules.TestWatcher$1.evaluate(TestWatcher.java:61)
+INSTRUMENTATION_STATUS: stream=
+Error in deniedLoginAndCorruptGuestFileRemainLocalAndIntact(ai.hypeproof.studio.QuestionJourneyTest):
+ai.hypeproof.studio.UiSync$DeviceFocusLost: device focus lost (device state, not a product result): deniedLoginAndCorruptGuestFileRemainLocalAndIntact: Espresso found no root with window focus [at failure, before teardown: WM mCurrentFocus=Window{de14ada u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity}; mFocusedApp=ActivityRecord{df7585e u0 ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity t25} | InputDispatcher FocusedWindows: <none> | FocusRequests: displayId=0, name='de14ada ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity' result='NOT_VISIBLE' | app input windows: 7: name=de14ada ai.hypeproof.studio.mobile.preview/ai.hypeproof.studio.QuestionActivity, id=502, displayId=0, inputConfig=NOT_VISIBLE, alpha=0]
+	at ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:481)
+	at org.junit.rules.TestWatcher$1.evaluate(TestWatcher.java:61)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at androidx.test.ext.junit.runners.AndroidJUnit4.run(AndroidJUnit4.java:162)
+	at org.junit.runners.Suite.runChild(Suite.java:128)
+	at org.junit.runners.Suite.runChild(Suite.java:27)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+	at androidx.test.internal.runner.TestExecutor.execute(TestExecutor.java:68)
+	at androidx.test.internal.runner.TestExecutor.execute(TestExecutor.java:59)
+	at androidx.test.runner.AndroidJUnitRunner.onStart(AndroidJUnitRunner.java:463)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2594)
+Caused by: androidx.test.espresso.base.RootViewPicker$RootViewWithoutFocusException: Waited for the root of the view hierarchy to have window focus and not request layout for 10 seconds. If you specified a non default root matcher, it may be picking a root that never takes focus. Root:
+Root{application-window-token=android.view.ViewRootImpl$W@bca266a, window-token=android.view.ViewRootImpl$W@bca266a, has-window-focus=false, layout-params-type=1, layout-params-string={(0,0)(fillxfill) sim={adjust=resize forwardNavigation} ty=BASE_APPLICATION wanim=0x1030309
+  fl=LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED DRAWS_SYSTEM_BAR_BACKGROUNDS
+  pfl=NO_MOVE_ANIMATION EDGE_TO_EDGE_ENFORCED FORCE_DRAW_STATUS_BAR_BACKGROUND FIT_INSETS_CONTROLLED
+  bhv=DEFAULT
+  fitSides=
+  frameRateBoostOnTouch=true
+  dvrrWindowFrameRateHint=true}, decor-view-string=DecorView{id=-1, visibility=VISIBLE, width=1080, height=2400, has-focus=false, has-focusable=true, has-window-focus=false, is-clickable=false, is-enabled=true, is-focused=false, is-focusable=false, is-layout-requested=false, is-selected=false, layout-params={(0,0)(fillxfill) sim={adjust=resize forwardNavigation} ty=BASE_APPLICATION wanim=0x1030309
+  fl=LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED DRAWS_SYSTEM_BAR_BACKGROUNDS
+  pfl=NO_MOVE_ANIMATION EDGE_TO_EDGE_ENFORCED FORCE_DRAW_STATUS_BAR_BACKGROUND FIT_INSETS_CONTROLLED
+  bhv=DEFAULT
+  fitSides=
+  frameRateBoostOnTouch=true
+  dvrrWindowFrameRateHint=true}, tag=null, root-is-layout-requested=false, has-input-connection=false, x=0.0, y=0.0, child-count=1}}
+	at dalvik.system.VMStack.getThreadStackTrace(Native Method)
+	at java.lang.Thread.getStackTrace(Thread.java:1841)
+	at androidx.test.espresso.base.EspressoExceptionHandler.handleSafely(EspressoExceptionHandler.java:34)
+	at androidx.test.espresso.base.EspressoExceptionHandler.handleSafely(EspressoExceptionHandler.java:26)
+	at androidx.test.espresso.base.DefaultFailureHandler$TypedFailureHandler.handle(DefaultFailureHandler.java:158)
+	at androidx.test.espresso.base.DefaultFailureHandler.handle(DefaultFailureHandler.java:120)
+	at ai.hypeproof.studio.UiSync.lambda$focusAware$7(UiSync.java:499)
+	at ai.hypeproof.studio.UiSync$$ExternalSyntheticLambda2.handle(D8$$SyntheticClass:0)
+	at androidx.test.espresso.ViewInteraction.waitForAndHandleInteractionResults(ViewInteraction.java:385)
+	at androidx.test.espresso.ViewInteraction.desugaredPerform(ViewInteraction.java:212)
+	at androidx.test.espresso.ViewInteraction.perform(ViewInteraction.java:140)
+	at ai.hypeproof.studio.QuestionJourneyTest.approveLogin(QuestionJourneyTest.java:216)
+	at ai.hypeproof.studio.QuestionJourneyTest.deniedLoginAndCorruptGuestFileRemainLocalAndIntact(QuestionJourneyTest.java:257)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at androidx.test.internal.runner.junit4.statement.RunBefores.evaluate(RunBefores.java:80)
+	at androidx.test.internal.runner.junit4.statement.RunAfters.evaluate(RunAfters.java:61)
+	at ai.hypeproof.studio.UiSync$1.evaluate(UiSync.java:471)
+	... 29 more
+
+INSTRUMENTATION_STATUS: test=deniedLoginAndCorruptGuestFileRemainLocalAndIntact
+INSTRUMENTATION_STATUS_CODE: -2

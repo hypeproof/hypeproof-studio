@@ -540,11 +540,28 @@ final class UiSync {
             shell("timeout 3 dumpsys window", window);
             shell("timeout 3 dumpsys input", input);
             shell("timeout 3 dumpsys activity activities", new File(dir, base + "-activity.txt"));
-            return describeFocus(Files.readAllLines(window.toPath(), StandardCharsets.UTF_8),
+            String focus = describeFocus(Files.readAllLines(window.toPath(), StandardCharsets.UTF_8),
                 Files.readAllLines(input.toPath(), StandardCharsets.UTF_8), context.getPackageName());
+            surfaceFlinger(new File(dir, base + "-surfaceflinger.txt"));
+            return focus;
         } catch (Exception | AssertionError problem) {
             Log.e(TAG, "Device focus evidence capture failed", problem);
             return "focus unknown: " + problem.getClass().getSimpleName();
+        }
+    }
+
+    /**
+     * SurfaceFlinger layer state (alpha, hidden flags and parent layers) next to the
+     * focus snapshot. In run 45814588860 input reported every task window, from any
+     * process, as NOT_VISIBLE with alpha 0 while the window manager showed them; this
+     * dump names the layer that hides them. Raw output, not parsed. A failure here
+     * never replaces the focus description, which classifies the failure.
+     */
+    private static void surfaceFlinger(File out) {
+        try {
+            shell("timeout 5 dumpsys SurfaceFlinger", out);
+        } catch (Exception problem) {
+            Log.e(TAG, "SurfaceFlinger evidence capture failed", problem);
         }
     }
 
