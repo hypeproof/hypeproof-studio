@@ -355,14 +355,6 @@ jobs:
           HPS_REPACK_BASE: ${{ steps.path.outputs.base }}
         run: bash scripts/repack-mac.sh --base "$HPS_REPACK_BASE"
 
-      # Stamp CFBundleShortVersionString on the built .app (#361). Must run
-      # BEFORE Re-sign: apply-product-overrides.sh no longer stamps
-      # vscode/package.json .version (that feeds the runtime vscode.version API
-      # and 0.1.x broke json-language-features), so the .app's Info.plist would
-      # otherwise carry the raw VS Code version. Stamping here — before the
-      # Developer ID signature — means the seal covers the stamped plist and sign-mac's
-      # codesign --verify gate stays valid. (Stamping AFTER Re-sign would break
-      # the seal that #311 fixed, re-triggering "손상되어 열 수 없습니다".)
       # Pinned Chalk extension (C-4, config/chalk-release.json). After both paths
       # join, so the cached base never carries Chalk and a reused base or release
       # zip cannot keep an old copy. ship=false: no download, no token needed; the
@@ -373,6 +365,14 @@ jobs:
           GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
         run: bash scripts/install-chalk-extension.sh "vscodium-base/VSCode-darwin-arm64/HypeProof Studio.app"
 
+      # Stamp CFBundleShortVersionString on the built .app (#361). Must run
+      # BEFORE Re-sign: apply-product-overrides.sh no longer stamps
+      # vscode/package.json .version (that feeds the runtime vscode.version API
+      # and 0.1.x broke json-language-features), so the .app's Info.plist would
+      # otherwise carry the raw VS Code version. Stamping here — before the
+      # Developer ID signature — means the seal covers the stamped plist and sign-mac's
+      # codesign --verify gate stays valid. (Stamping AFTER Re-sign would break
+      # the seal that #311 fixed, re-triggering "손상되어 열 수 없습니다".)
       - name: Stamp product version on Info.plist + product.json (#361)
         shell: bash
         # Both paths (scripts/repack-mac.sh already ran it; it is idempotent).
