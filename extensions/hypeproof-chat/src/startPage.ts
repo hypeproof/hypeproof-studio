@@ -5,6 +5,7 @@ import { ChatPanelProvider } from "./chatPanelProvider";
 import { ActivityConnectionError, FOLDER_TAKEN_MESSAGE, activityConnections, passTakesOver } from "./activityConnections";
 import { carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, newOffer, validOffer } from "./trialCarryoverHelpers";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
+import { mustStayLocal } from "./rehearsalRoute";
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
 import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
@@ -1217,7 +1218,8 @@ export class StartPage {
         if (connections) {
           const token = candidate?.token ?? await connections.token();
           if (!token) throw new Error('참여 코드를 다시 입력해 주세요.');
-          await verifyActivity({proxyUrl:candidate?.proxyUrl ?? vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token},profile.activity_id ?? '');
+          // #4513 — a subscription rehearsal never calls the server activity route (Service #450 answers 403 subscription_rehearsal).
+          if (!mustStayLocal(profile.rehearsal)) await verifyActivity({proxyUrl:candidate?.proxyUrl ?? vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token},profile.activity_id ?? '');
         }
         const commit = async (directory?: string) => {
           if (reflection) await this.assertReflectionEntry(reflection);
