@@ -62,7 +62,10 @@ def real_plan(selection, shard_total=None):
 
 
 def declared():
-    return {f'HPStudioUITests/{c}/{t}' for c, tests in shards.discover(NATIVE / 'ios/UITests').items() for t in tests}
+    """Declared product cases. The shard warm-up is declared but is never a case of any set (#4432)."""
+    every = {f'HPStudioUITests/{c}/{t}' for c, tests in shards.discover(NATIVE / 'ios/UITests').items() for t in tests}
+    assert shards.WARM_UP in every
+    return every - {shards.WARM_UP}
 
 
 def planned(doc):

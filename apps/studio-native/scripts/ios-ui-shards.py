@@ -17,6 +17,10 @@ the longest known case goes to the shard with the least time so far. Cases the t
 then placed by count, on the shard with the fewest cases (#4432 F21: by count, shard test time ranged
 from 13 to 19 min in run 45351306160 and one shard reached its 35 min job limit).
 
+The warm-up case (WARM_UP, #4432) is not a planned case. Every `-only-testing` row, including the dedicated
+rows, starts with it; the catch-all row never skips it. xcodebuild runs test classes in name order, so it
+runs first in every job. It never counts toward a set, a shard's cases or `merge`'s accounting.
+
 `merge` joins the shard logs and attachment exports into the single evidence layout the
 journey collectors and the release evidence reader already accept, and fails unless every
 shard ran, every shard exited 0, and every planned case started in exactly its own shard.
@@ -41,6 +45,9 @@ CLASS = re.compile(r'^\s*(?:final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*XCT
 TEST = re.compile(r'^\s*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s+)*'
                   r'(?:(?:override|public|internal|open|final|nonisolated)\s+)*'
                   r'func\s+(test[A-Za-z0-9_]*)\s*\(\s*\)')
+# Settings-only keyboard and accessibility warm-up before each job's first product case (#4432).
+WARM_UP_CLASS = 'ShardWarmUpUITests'
+WARM_UP = f'{TARGET}/{WARM_UP_CLASS}/testWarmUpSystemKeyboardAndAccessibility'
 CASE = re.compile(r"^Test Case '-\[(?:[A-Za-z0-9_]+\.)*([A-Za-z0-9_]+) (test[A-Za-z0-9_]+)\]' started\.$")
 
 
@@ -127,6 +134,13 @@ def balance(cases, shards: int, durations):
 def plan(classes, shards: int, dedicated=(), durations=None, selection='all', gate=None):
     if not 2 <= shards <= 8:
         raise ValueError('Shard count must be between 2 and 8')
+    warm_up = None
+    if WARM_UP_CLASS in classes:
+        if [f'{TARGET}/{WARM_UP_CLASS}/{test}' for test in classes[WARM_UP_CLASS]] != [WARM_UP]:
+            raise ValueError(f'{WARM_UP_CLASS} must declare exactly {WARM_UP}')
+        warm_up = WARM_UP
+        classes = {name: tests for name, tests in classes.items() if name != WARM_UP_CLASS}
+    first = [f'-only-testing:{warm_up}'] if warm_up else []
     dedicated = list(dict.fromkeys(dedicated))
     declared = {f'{TARGET}/{name}/{test}' for name, tests in classes.items() for test in tests}
     missing = [case for case in dedicated if case not in declared]
@@ -155,7 +169,7 @@ def plan(classes, shards: int, dedicated=(), durations=None, selection='all', ga
     rows = []
     for index, cases in enumerate(assigned, start=1):
         if index < shards:
-            arguments = [f'-only-testing:{case}' for case in cases]
+            arguments = first + [f'-only-testing:{case}' for case in cases]
         else:
             # The catch-all shard also skips the dedicated cases (their own row runs them) and the
             # other set's cases (the other workflow runs them).
@@ -167,10 +181,11 @@ def plan(classes, shards: int, dedicated=(), durations=None, selection='all', ga
         rows.append(row)
     if dedicated:
         rows.append({'index': shards + 1, 'cases': dedicated, 'dedicated': True,
-                     'xcodebuild_arguments': [f'-only-testing:{case}' for case in dedicated]})
+                     'xcodebuild_arguments': first + [f'-only-testing:{case}' for case in dedicated]})
     document = {'schema': SCHEMA_PLAN, 'target': TARGET, 'shard_count': len(rows), 'catch_all': shards,
                 'case_count': sum(len(row['cases']) for row in rows), 'shards': rows,
-                'balance': 'count' if durations is None else 'durations', 'set': selection, 'excluded': excluded}
+                'balance': 'count' if durations is None else 'durations', 'set': selection, 'excluded': excluded,
+                'warm_up': warm_up}
     if durations is not None:
         document['stale_durations'] = sorted(case for case in durations if case not in declared)
     return document
@@ -253,12 +268,16 @@ def merge(plan_doc, shard_root: Path, evidence: Path):
     catch_all = plan_doc['catch_all']
     combined, results, problems = [], {}, []
     seen: dict[str, list[int]] = {}
+    warm_up_started: list[int] = []
     for (index, directory), row in zip(shard_dirs, plan_doc['shards']):
         result = shard_exit(directory) if directory.is_dir() else None
         log = directory / 'simulator-test.log'
         text = log.read_text(errors='replace') if log.is_file() and not log.is_symlink() else ''
         combined.append(f'native verification: UI shard {index}/{count}\n{text}')
         for case in set(started_cases(text)):
+            if case == plan_doc.get('warm_up'):
+                warm_up_started.append(index)
+                continue
             seen.setdefault(case, []).append(index)
         if result is None:
             problems.append(f'shard {index} has no result; it did not finish')
@@ -299,7 +318,7 @@ def merge(plan_doc, shard_root: Path, evidence: Path):
                 'attachment_manifest_rows': manifest_rows, 'not_run': not_run, 'misplaced': misplaced,
                 'unplanned_in_last_shard': [case for case in unplanned if seen[case] == [catch_all]],
                 'unplanned_outside_last_shard': unplanned_outside_last, 'set': plan_doc.get('set', 'all'),
-                'excluded_started': excluded_started, 'problems': problems}
+                'excluded_started': excluded_started, 'warm_up_started_in': warm_up_started, 'problems': problems}
     (evidence / 'ios-ui-shards.json').write_text(json.dumps(document, indent=2) + '\n')
     return document
 
