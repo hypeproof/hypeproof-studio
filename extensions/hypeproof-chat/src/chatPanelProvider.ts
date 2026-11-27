@@ -12935,7 +12935,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postAnnotations();
     // CGP-CHAT-R-011 — a file from another work folder, or on a seat that lost the gate, is dropped; a pending one is re-shown.
     if (this.pendingFileAttachment) {
-      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, isInstructor)) this.clearFileAttachment();
+      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, instructorSeat)) this.clearFileAttachment();
       else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment.preview });
     }
     // #649 — when the webview remounts (panel hide → show, reload) the highlight

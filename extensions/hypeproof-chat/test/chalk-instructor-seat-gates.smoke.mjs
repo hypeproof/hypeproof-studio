@@ -185,6 +185,13 @@ await gate('G6', 'config folderRestricted for a stored read', async s => (await 
   s.global.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(undefined, personal.activity_id, FC.canonicalFolder(work), 'read'));
 } });
 
+await gate('G7', 'a pending file attachment survives postConfig', async s => {
+  // Added during implementation (pending-attachment cleanup, same gate as G1).
+  s.h.pendingFileAttachment = { root: work, preview: { name: 'a.txt' } };
+  await s.config();
+  return s.h.pendingFileAttachment !== null;
+});
+
 // H — handlers after postConfig built the seat.
 await gate('H1', 'edit of the latest prompt', async s => {
   s.h.editableHistory = () => [{ id: 'u1', role: 'user', content: 'x', createdAt: 1 }, { id: 'a1', role: 'assistant', content: 'y', createdAt: 2 }];

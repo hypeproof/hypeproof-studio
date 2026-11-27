@@ -149,7 +149,7 @@ t("host: a fresh send carries the file; retry never, and says so; remove, task s
   ok(/case "removeFileContext":[\s\S]{0,200}this\.clearFileAttachment\(\)/.test(host), "remove clears");
   ok(/const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskCreateTemporary' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/.test(host) && /const leftTask = leaving \|\| \(msg\.type === 'taskMove' && msg\.id === msg\.taskId\);/.test(host) && /if \(leftTask && this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "task switch (and archive / reopen, CGP-CHAT-R-025; moving the open task away, CGP-KNOW-R-009) drops it");
   ok(/this\.clearingHistory = true;\n(?:[^\n]*\n){0,2}\s*if \(this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "clear conversation drops it");
-  ok(/this\.pendingFileAttachment\.root !== this\.resolveCoachCwd\(\) \|\| !fileAttachAllowed\(toolProfile, isInstructor\)\) this\.clearFileAttachment\(\);/.test(host), "another folder or a lost grant drops it");
+  ok(/this\.pendingFileAttachment\.root !== this\.resolveCoachCwd\(\) \|\| !fileAttachAllowed\(toolProfile, instructorSeat\)\) this\.clearFileAttachment\(\);/.test(host), "another folder or a lost grant drops it");
   ok(/fileContext && fileAttachAllowed\(profile, ChatPanelProvider\.learnerClosed\(this\)\) \? `\$\{fileContext\}\\n\\n\$\{text\}` : text/.test(host), "send re-checks the gate");
   ok(/defaultUri: vscode\.Uri\.file\(root\), canSelectFiles: true, canSelectFolders: false, canSelectMany: false/.test(host), "picker starts in the work folder, one file");
   // CGP-KNOW-R-015 hands a path in place of the pick; both go through the same read (ask-about-file-host.smoke.mjs drives it).
