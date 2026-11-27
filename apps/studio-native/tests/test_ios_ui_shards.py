@@ -359,7 +359,12 @@ class WarmUpContracts(unittest.TestCase):
         self.assertLess(code.index('step("typing"'), code.index('step("app-launch"'))
         self.assertLess(code.index('step("app-launch"'), code.index('XCUIDevice.shared.press(.home)'))
         self.assertIn('row["seconds"] = rounded(Date().timeIntervalSince(began))', code)
-        self.assertIn('"; app launch \\(appSeconds) s"', code)
+        self.assertIn('"; app launch \\(appSeconds) s" + appFailure', code)
+        # An expected failure is counted: its reasons go to the step row and to the log line.
+        self.assertIn('options.issueMatcher = { issue in issues.reasons.append(issue.compactDescription); return true }', launch)
+        self.assertIn('if !issues.reasons.isEmpty { detail["expected_failure"] = issues.reasons }', launch)
+        self.assertIn('let appIssues = appRow?["expected_failure"] as? [String] ?? []', code)
+        self.assertIn('"; app launch expected-failure \\(appIssues.count): "', code)
 
 
 class MergeContracts(unittest.TestCase):

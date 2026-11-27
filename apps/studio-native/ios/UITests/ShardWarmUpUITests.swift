@@ -22,6 +22,9 @@ import XCTest
 /// on a measured state, not a fixed sleep, and the whole case is bounded by `limit`. If a step does not reach
 /// its state, the case stops, records `settled: false` in the "shard-warm-up" attachment and one log activity,
 /// and passes. It is not a gate or nightly case.
+/// Issues XCTest recorded during the warm-up's app launch, in order. Its matcher runs on the test's own thread.
+private final class WarmUpIssues: @unchecked Sendable { var reasons: [String] = [] }
+
 final class ShardWarmUpUITests: XCTestCase {
     static let limit: TimeInterval = 60
     static let text = "warm up keyboard"
@@ -93,14 +96,19 @@ final class ShardWarmUpUITests: XCTestCase {
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = Self.appScenario
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = "warmup" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
         var appLaunch: [String: Any] = ["scenario": Self.appScenario]
-        step("app-launch", &appLaunch) { _ in
+        step("app-launch", &appLaunch) { detail in
             // Environment preparation never fails: an issue XCTest records while launching (for example
             // "Failed to get launch progress") is recorded as an expected failure of this case, not of a product case.
+            // Each such issue is kept in the step row and the log line, so the measurement can count them.
+            let issues = WarmUpIssues()
             let options = XCTExpectedFailure.Options(); options.isStrict = false
-            return XCTExpectFailure("The warm-up launch is environment preparation (#4432 P4).", options: options) {
+            options.issueMatcher = { issue in issues.reasons.append(issue.compactDescription); return true }
+            let foreground = XCTExpectFailure("The warm-up launch is environment preparation (#4432 P4).", options: options) {
                 app.launch()
                 return app.wait(for: .runningForeground, timeout: left())
             }
+            if !issues.reasons.isEmpty { detail["expected_failure"] = issues.reasons }
+            return foreground
         }
         // Home instead of terminate: under load "Failed to terminate" is itself a test failure (#4432 F6).
         // The app under test comes to the front at its own launch, which terminates this instance.
@@ -112,9 +120,12 @@ final class ShardWarmUpUITests: XCTestCase {
         let data = (try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])) ?? Data("{}".utf8)
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
         attachment.name = "shard-warm-up"; attachment.lifetime = .keepAlways; add(attachment)
-        let appSeconds = steps.first { $0["step"] as? String == "app-launch" }?["seconds"].map { "\($0)" } ?? "not run"
+        let appRow = steps.first { $0["step"] as? String == "app-launch" }
+        let appSeconds = appRow?["seconds"].map { "\($0)" } ?? "not run"
+        let appIssues = appRow?["expected_failure"] as? [String] ?? []
+        let appFailure = appIssues.isEmpty ? "" : "; app launch expected-failure \(appIssues.count): " + appIssues.joined(separator: " | ")
         let line = (settled ? "HPStudio warm-up: settled in \(total) s"
-            : "HPStudio warm-up: not settled after \(total) s at \(stoppedAt ?? "?")") + "; app launch \(appSeconds) s"
+            : "HPStudio warm-up: not settled after \(total) s at \(stoppedAt ?? "?")") + "; app launch \(appSeconds) s" + appFailure
         XCTContext.runActivity(named: line) { _ in }
     }
 }
