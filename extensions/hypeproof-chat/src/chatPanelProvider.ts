@@ -672,7 +672,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** Refuses an edit of anything but the latest prompt group, and any edit from instructor mode. */
   private requireEditTarget(editOf: unknown): void {
-    if (this._instructorMode.isInstructor || !validEditTarget(visibleAttempts(this.editableHistory()).items, editOf)) {
+    if (ChatPanelProvider.learnerClosed(this) || !validEditTarget(visibleAttempts(this.editableHistory()).items, editOf)) {
       throw new TurnToolModeError('마지막으로 보낸 메시지만 고칠 수 있어요. 고친 내용은 입력창에 남겨 두었어요.');
     }
   }
@@ -724,7 +724,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
     const task=store?.getView().activeTaskId;
     // #4179: a reflection binding can also live on an account-owned seat served as `trial`.
-    if(!store||!task||!activity||(activity.kind!=='personal'&&!mayBeAccountSeatRecord(activity))||this._instructorMode?.isInstructor)return;
+    if(!store||!task||!activity||(activity.kind!=='personal'&&!mayBeAccountSeatRecord(activity))||ChatPanelProvider.learnerClosed(this))return;
     // Ordinary tasks do not need reflection capability checks or an asynchronous preflight.
     return this.context.globalState.get<ReflectionBinding>(REFLECTION_BINDING_KEY+':'+JSON.stringify([activity.id,store.scope,task]));
   }
@@ -2256,7 +2256,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.postPlanFirst();
   }
   private async handlePlanFirst(msg: Extract<WebviewMessage, { type: "planFirstSet" | "planFirstApprove" | "planFirstRedo" | "planFirstDecline" | "planFirstRequest" }>): Promise<void> {
-    if (this._instructorMode.isInstructor === true) return;
+    if (ChatPanelProvider.learnerClosed(this)) return;
     const task = this.planTaskKey();
     // DEC-10 — with the class switch off nothing here may turn the mode on or run an approval: a stale chip press or a
     // plan left waiting when the profile changed resolves to "mode off, no plan" and nothing is sent.
@@ -3296,7 +3296,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const messageId = (msg as { messageId?: unknown } | null)?.messageId;
     const store = this.currentTaskStore?.();
     const taskId = store?.getView().activeTaskId;
-    if (typeof messageId !== "string" || !store || !taskId || this._instructorMode.isInstructor || this.cachedProfile?.lesson) return undefined;
+    if (typeof messageId !== "string" || !store || !taskId || ChatPanelProvider.learnerClosed(this) || this.cachedProfile?.lesson) return undefined;
     const plan = this.learningWikiPlan();
     const name = brainName(plan);
     if (!this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson"); return { lines: [lessonFeatureOff(name, this.getSeatAudience())] }; }
@@ -3334,7 +3334,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     );
     if (pick !== "정리하기") return { lines: [`정리하지 않았어요. ${josa(name, "은", "는")} 그대로예요.`] };
     // Re-checked after the modal: the seat or the folder may have changed, or another run filed meanwhile.
-    if (this._instructorMode.isInstructor || this.cachedProfile?.lesson || !this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson"); return { lines: [lessonFeatureOff(name, this.getSeatAudience())] }; }
+    if (ChatPanelProvider.learnerClosed(this) || this.cachedProfile?.lesson || !this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson"); return { lines: [lessonFeatureOff(name, this.getSeatAudience())] }; }
     const lateRefusal = this.answerToWikiRefusalCopy(this.folderWriteRefusalFor(dir));
     if (lateRefusal) return { lines: [lateRefusal] };
     if (JSON.stringify(loadState(dir)) !== JSON.stringify(existing)) return { lines: [`그사이 ${josa(name, "이", "가")} 바뀌었어요. 다시 해 주세요.`] };
@@ -4363,7 +4363,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error });
       return false;
     };
-    if (!fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) {
+    if (!fileAttachAllowed(profile, ChatPanelProvider.learnerClosed(this))) {
       if (!voice) await this.postDenialNotice("lesson");
       return refuse(denialCopy({ source: "lesson", feature: "작업 폴더 파일 붙이기" }, "neutral"));
     }
@@ -4403,7 +4403,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async restoreRemovedFile(undoId: unknown): Promise<void> {
     const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
     const file = this.pendingFileAttachment ? null : this.removedFile.take(undoId, this.turnRequestScope());
-    const restored = !!file && file.root === this.resolveCoachCwd() && fileAttachAllowed(profile, this._instructorMode.isInstructor === true) && !folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
+    const restored = !!file && file.root === this.resolveCoachCwd() && fileAttachAllowed(profile, ChatPanelProvider.learnerClosed(this)) && !folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
     if (restored) {
       this.pendingFileAttachment = file;
       void this.post({ type: "fileAttachment", attachment: file.preview });
@@ -4522,7 +4522,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private fileMentionSearches = new Map<vscode.Webview | undefined, { requestId: string; root: string; scope: string; generation: number; files: string[]; source?: vscode.Webview }>();
   private mentionAllowed(): boolean {
     const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
-    return fileMentionsAllowed(profile, this._instructorMode.isInstructor === true) && !folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
+    return fileMentionsAllowed(profile, ChatPanelProvider.learnerClosed(this)) && !folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
   }
   private mentionCurrent(search: { requestId: string; root: string; scope: string; generation: number; source?: vscode.Webview }): boolean {
     return this.fileMentionSearches.get(search.source) === search && this.mentionAllowed() && this.resolveCoachCwd() === search.root && this.turnRequestScope() === search.scope && this.profileGeneration === search.generation;
@@ -4587,7 +4587,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Same gate as a work-folder file (sdk_tools.read after pass narrowing, never the instructor surface). */
   private materialsAllowed(): boolean {
     const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
-    return fileAttachAllowed(profile, this._instructorMode?.isInstructor === true);
+    return fileAttachAllowed(profile, ChatPanelProvider.learnerClosed(this));
   }
   private watchMaterials(root: string): void {
     if (this.materialsWatch?.root === root) return;
@@ -5309,12 +5309,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Explicit personal text continuation; never alters the Service runtime or tool grants. */
   private async openPersonalClaude(draft: unknown): Promise<void> {
-    if (this.personalContinuationOpening || this.taskChanging || this.connectionChanging || this.activeStreams.size || !this.currentTaskStore?.()?.getView().activeTaskId || this.cachedProfile?.lesson || !endCardAdvertised(this.cachedProfile) || this.cachedProfile?.minor_cohort === true || this._instructorMode.isInstructor || !this.endCardOfferToken || typeof draft !== 'string' || draft.length > 24000) return;
+    if (this.personalContinuationOpening || this.taskChanging || this.connectionChanging || this.activeStreams.size || !this.currentTaskStore?.()?.getView().activeTaskId || this.cachedProfile?.lesson || !endCardAdvertised(this.cachedProfile) || this.cachedProfile?.minor_cohort === true || ChatPanelProvider.learnerClosed(this) || !this.endCardOfferToken || typeof draft !== 'string' || draft.length > 24000) return;
     this.personalContinuationOpening = true;
     const token = this.endCardOfferToken;
     const scope = () => JSON.stringify([this.profileGeneration, activityConnections(this.context)?.scope, this.currentTaskStore?.()?.getView().activeTaskId, this.resolveCoachCwd()]);
     const bound = scope();
-    const current = () => scope() === bound && this.endCardOfferToken === token && endCardAdvertised(this.cachedProfile) && !this.cachedProfile?.lesson && !this.activeStreams.size && this.cachedProfile?.minor_cohort !== true && !this._instructorMode.isInstructor && !this.taskChanging && !this.connectionChanging;
+    const current = () => scope() === bound && this.endCardOfferToken === token && endCardAdvertised(this.cachedProfile) && !this.cachedProfile?.lesson && !this.activeStreams.size && this.cachedProfile?.minor_cohort !== true && !ChatPanelProvider.learnerClosed(this) && !this.taskChanging && !this.connectionChanging;
     try {
       if (await this.context.secrets.get(TOKEN_KEY) !== token || !current()) return;
       const history = this.getHistory().filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content }));
@@ -5957,6 +5957,26 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this._instructorMode.isInstructor;
   }
 
+  /**
+   * The last instructor decision for this seat, whatever the instructor runtime (the decision is the whoami verdict
+   * InstructorModeManager keeps per issuer token). postConfig sets it before the chalk-extension branch resets
+   * `_instructorMode`: that reset stops Studio from running instructor turns and leaves `isInstructor` null.
+   * invalidateProfile clears it until the next postConfig decides again.
+   */
+  private instructorSeat = false;
+  /** postConfig runs overlap (whoami waits up to 5 s); only the latest run, or a later clear, decides the seat. */
+  private instructorSeatGen = 0;
+
+  /**
+   * Learner-only surfaces and learner record writes stay closed for an instructor seat. With the legacy runtime this
+   * equals `isInstructor === true` after postConfig; with chalk-extension `isInstructor` is null and the seat decides.
+   */
+  learnerSurfaceClosed(): boolean { return ChatPanelProvider.learnerClosed(this); }
+  /** Static, so a harness that calls a prototype method on a plain object (no instance fields) reads the same gate. */
+  private static learnerClosed(p: ChatPanelProvider): boolean {
+    return p._instructorMode?.isInstructor === true || p.instructorSeat === true;
+  }
+
   get lastWhoamiStatus() {
     return this._instructorMode.lastWhoamiStatus;
   }
@@ -6099,6 +6119,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.refreshCrBytesContext();
     // The profile is gone, and with it the publish button (token gate).
     this.refreshSitePublishContext();
+    // The instructor seat goes with the profile until the next postConfig decides again; a run started
+    // before this point cannot write its older decision (instructorSeatGen).
+    this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
+    this.instructorSeat = false;
     // #1298 — re-check instructor status + brief after token change.
     this._instructorMode.reset();
     // REQ-N11 — sign-out or another seat drops the saved link safety.
@@ -8427,14 +8451,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     void this.post({ type: "turnReviewState", view });
     // CGP-ART-D-002 — the preview's bar mirrors the same review; the instructor surface has none (as in chat).
-    this.preview?.setReviewBar?.(this._instructorMode?.isInstructor ? null : previewReviewBar(view));
+    this.preview?.setReviewBar?.(ChatPanelProvider.learnerClosed(this) ? null : previewReviewBar(view));
   }
 
   /** CGP-ART-D-002 — a press on the preview's review bar runs the chat review's own keep, revert or show. */
   async handlePreviewReviewAction(a: PreviewReviewAction): Promise<void> {
     const review = this.turnReview;
     // A dropped press re-sends the current review, so the preview never keeps a bar it disabled.
-    if (!review || review.view.turnId !== a.turnId || review.taskKey !== this.turnRestoreTaskKey() || this._instructorMode?.isInstructor) { this.postTurnReview(); return; }
+    if (!review || review.view.turnId !== a.turnId || review.taskKey !== this.turnRestoreTaskKey() || ChatPanelProvider.learnerClosed(this)) { this.postTurnReview(); return; }
     if (a.action === "show") {
       await vscode.commands.executeCommand("hypeproof-chat.focus");
       const v = review.view;
@@ -8541,7 +8565,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async beginTurnRestore(streamId: string): Promise<TurnRestoreHandle | null> {
     const pageCardScope = this.pageCardScope();
     if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
-    if (this._instructorMode?.isInstructor === true) {
+    if (ChatPanelProvider.learnerClosed(this)) {
       // The instructor surface draws no bar and records no turn; what its coach changes must not
       // read as confirmed if the seat leaves instructor mode in this session (REQ-STUDIO-ARTIFACT-PROVENANCE).
       const cwd = this.resolveCoachCwd();
@@ -8774,7 +8798,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!selected.length) return;
     const generation = this.profileGeneration;
     const current = () => {
-      if (this.turnReview !== review || generation !== this.profileGeneration || review.taskKey !== this.turnRestoreTaskKey() || this.connectionChanging || this.hasActiveStream() || this.taskChanging || this.verifySession?.running || this._instructorMode?.isInstructor) return false;
+      if (this.turnReview !== review || generation !== this.profileGeneration || review.taskKey !== this.turnRestoreTaskKey() || this.connectionChanging || this.hasActiveStream() || this.taskChanging || this.verifySession?.running || ChatPanelProvider.learnerClosed(this)) return false;
       try { if (fs.realpathSync(this.resolveCoachCwd() ?? "") !== review.root) return false; } catch { return false; }
       return !vscode.workspace.textDocuments.some(d => d.uri.scheme === "file" && d.isDirty && selected.some(p => { try { return fs.realpathSync(d.uri.fsPath) === fs.realpathSync(path.join(review.root, p)); } catch { return path.resolve(d.uri.fsPath) === path.join(review.root, p); } }));
     };
@@ -9367,7 +9391,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "accuracyEducationRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postAccuracyEducation(msg.requestId); return;
       case "accuracyEducationDismiss": {
         const scope = this.turnRequestScope(), owner = await this.accuracyOwner();
-        if (scope !== this.turnRequestScope() || this._instructorMode.isInstructor) return;
+        if (scope !== this.turnRequestScope() || ChatPanelProvider.learnerClosed(this)) return;
         try { await dismissAccuracy(this.accuracyStore(), owner, scope, msg.messageId); } catch { /* best effort; the card stays until a dismissal can be stored */ }
         await this.postAccuracyEducation();
         return;
@@ -9689,7 +9713,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const nicknameKey = this.learnerNicknameKey(), nicknameScope = activityConnections(this.context)?.scope;
         const seat = await this.ensureProfile();
         if (activityConnections(this.context)?.scope !== nicknameScope || this.learnerNicknameKey() !== nicknameKey) return;
-        if (!nicknameSeat(seat, this._instructorMode.isInstructor === true)) return;
+        if (!nicknameSeat(seat, ChatPanelProvider.learnerClosed(this))) return;
         const screened = screenNickname(msg.nickname);
         if (!screened.ok) return;
         await this.context.globalState.update(nicknameKey, screened.value || undefined);
@@ -10356,7 +10380,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const { name: effectiveCoachName, personality: effectiveCoachPersonality } =
       resolveCoach(coach, profile);
     // CGP-KNOW-R-032 — the nickname is bound to this turn's activity, taken with its profile.
-    const nicknameStored = nicknameSeat(profile, this._instructorMode.isInstructor === true) ? this.context.globalState?.get(this.learnerNicknameKey()) : undefined;
+    const nicknameStored = nicknameSeat(profile, ChatPanelProvider.learnerClosed(this)) ? this.context.globalState?.get(this.learnerNicknameKey()) : undefined;
 
     // #278 — consume any queued browser-page context for THIS turn only. The
     // user message stored in history keeps their clean text; only the model
@@ -10381,7 +10405,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // It is taken only here, where the model turn starts: a send turned away earlier leaves the chip
     // (host-owned; the webview never clears it on its own) and the file pending.
     const fileContext = carryFile ? this.takeFileAttachment() : null;
-    const withFile = fileContext && fileAttachAllowed(profile, this._instructorMode.isInstructor === true) ? `${fileContext}\n\n${text}` : text;
+    const withFile = fileContext && fileAttachAllowed(profile, ChatPanelProvider.learnerClosed(this)) ? `${fileContext}\n\n${text}` : text;
     if (withFile !== text) (this.fileTurnIds ??= new Set()).add(userId);
     // A retry of a turn that carried a file does not resend it; say so instead of implying it did.
     if (!carryFile && retrySourceId !== undefined && this.fileTurnIds?.has(retrySourceId)) {
@@ -10389,7 +10413,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-KNOW-R-003 — the 자료 items the learner selected for this message, read in the preflight; nothing
     // else from the list. The gate is checked again on this turn's narrowed profile. A retry takes none.
-    const materialContext = carryFile ? await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) : null;
+    const materialContext = carryFile ? await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, ChatPanelProvider.learnerClosed(this))) : null;
     const withMaterials = materialContext ? `${materialContext}\n\n${withFile}` : withFile;
     if (materialContext) (this.materialTurnIds ??= new Set()).add(userId);
     if (!carryFile && retrySourceId !== undefined && this.materialTurnIds?.has(retrySourceId)) void this.postMaterials({ notice: MATERIALS_COPY.retryNotice });
@@ -12440,7 +12464,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Re-check at execution time: queued writes may outlive an activity or instructor switch.
     if (msg && typeof msg === "object" &&
         (!("activityId" in msg) || msg.activityId !== activity ||
-          ("status" in msg && this._instructorMode?.isInstructor))) {
+          ("status" in msg && ChatPanelProvider.learnerClosed(this)))) {
       await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.other_lesson, ...echo });
       return;
     }
@@ -12707,6 +12731,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private get runFailures(): RunFailureTracker { return this.runFailuresTracker ??= new RunFailureTracker(); }
 
   private async postConfig(): Promise<void> {
+    const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
     this.currentClassNoticeId = undefined;
     // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
     void this.downloadWatcher?.reapply();
@@ -12755,6 +12780,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._instructorMode.reset();
       isInstructor = false;
     }
+    // Set from the decision before any further await and before the chalk branch clears isInstructor:
+    // learner-only surfaces below and in the handlers stay closed for this seat. A newer run or a clear wins.
+    const instructorSeat = isInstructor;
+    if (seatGen === this.instructorSeatGen) this.instructorSeat = instructorSeat;
     // #3597 — the release app's instructor CLI gate (re-checked only when its inputs change).
     await refreshReleaseGate(this as unknown as ReleaseGateHost, isInstructor, panelMode);
     // #3563 — decide the Chalk tab flag before the chalk branch clears isInstructor below.
@@ -12805,14 +12834,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: isInstructor, local: !!local });
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
-    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
-    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, isInstructor));
+    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, instructorSeat)))().catch(() => undefined);
+    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, instructorSeat));
     const classWindow = currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
-      !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
+      !!profile && !instructorSeat && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
     const classNoticeId = classWindowNoticeId(classWindow, decodeTokenPayloadUnverified(token), proxyUrl);
     const visibleClassWindow = classWindow && classNoticeId && this.context.globalState?.get(classWindowReceiptKey(classNoticeId)) !== true
       ? { ...classWindow, noticeId: classNoticeId } : null;
-    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
+    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || instructorSeat);
     // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
@@ -12836,12 +12865,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: {
         ...chalkInstructorTab,
         classWindow: visibleClassWindow,
-        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: isInstructor }).tag === "read",
+        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: instructorSeat }).tag === "read",
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
-        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
-        ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
-        ...(fileMentionsAllowed(toolProfile, isInstructor) ? { fileMentions: true } : {}),
-        ...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),
+        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: instructorSeat }),
+        ...(fileAttachAllowed(toolProfile, instructorSeat) ? { fileAttach: true } : {}),
+        ...(fileMentionsAllowed(toolProfile, instructorSeat) ? { fileMentions: true } : {}),
+        ...(fileAttachAllowed(toolProfile, instructorSeat) ? { materials: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
