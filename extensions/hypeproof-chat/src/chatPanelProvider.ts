@@ -12693,8 +12693,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await refreshReleaseGate(this as unknown as ReleaseGateHost, isInstructor, panelMode);
     // #3563 — decide the Chalk tab flag before the Chalk contract takes over isInstructor below.
     const chalkInstructorTab = chalkInstructorTabField(isInstructor);
-    // C-5: learner-only surfaces keep the legacy default's rule (an instructor gets none of them), also after the Chalk contract clears isInstructor below.
-    const instructorSeat = isInstructor;
     // C-5: the Chalk contract is the one instructor runtime. Studio keeps no legacy instructor turn.
     this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
     this._instructorMode.reset();
@@ -12732,19 +12730,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-M47 and CGP-SHELL-R-024 evaluate a served profile the same way: this access choice, this runtime setting, this fallback.
     const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown, requiredApprovals: presetRequiredKinds(cfg.get<string[]>("requireApprovalFor", []), servedApprovalPreset(this.cachedProfile)?.id) };
     // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
-    const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: instructorSeat, local: !!local });
+    const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
     // CGP-SHELL-R-024 / D-023 (ADM-11) — a classroom seat is told what the instructor changed, once, before its next turn.
-    const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: instructorSeat, local: !!local });
+    const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: isInstructor, local: !!local });
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
-    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, instructorSeat)))().catch(() => undefined);
-    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, instructorSeat));
+    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
+    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, isInstructor));
     const classWindow = currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
-      !!profile && !instructorSeat && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
+      !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
     const classNoticeId = classWindowNoticeId(classWindow, decodeTokenPayloadUnverified(token), proxyUrl);
     const visibleClassWindow = classWindow && classNoticeId && this.context.globalState?.get(classWindowReceiptKey(classNoticeId)) !== true
       ? { ...classWindow, noticeId: classNoticeId } : null;
-    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || instructorSeat);
+    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
     // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
@@ -12768,16 +12766,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: {
         ...chalkInstructorTab,
         classWindow: visibleClassWindow,
-        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: instructorSeat }).tag === "read",
+        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: isInstructor }).tag === "read",
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
-        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: instructorSeat }),
-        ...(fileAttachAllowed(toolProfile, instructorSeat) ? { fileAttach: true } : {}),
-        ...(fileMentionsAllowed(toolProfile, instructorSeat) ? { fileMentions: true } : {}),
-        ...(fileAttachAllowed(toolProfile, instructorSeat) ? { materials: true } : {}),
+        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
+        ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
+        ...(fileMentionsAllowed(toolProfile, isInstructor) ? { fileMentions: true } : {}),
+        ...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
-        ...(profile && !local && !instructorSeat ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
-        ...(capabilityChange && !instructorSeat ? { capabilityChange } : {}),
-        ...(lessonSettingsChanges.length && !instructorSeat ? { lessonSettingsChanges } : {}),
+        ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
+        ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
+        ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
         ...(seatBand ? { rehearsalSeat: true, rehearsalPanel: await this.rehearsalPanelFor(profile, local?.model) } : {}),
         proxyUrl,
         model:local?.model??model,
@@ -12787,7 +12785,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(childGuardianNotice(profile) ? { guardianNotice: childGuardianNotice(profile) } : {}),
         ...(taskView ? { taskWorkspace: taskView } : {}),
         // CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (fail closed: adult personal seats only).
-        ...(!instructorSeat ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
+        ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
         ...(taskView && taskMove ? { taskMove } : {}),
         ...(activity && carryover ? { carryover } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{}),...(mayBeAccountSeatRecord(activity)?{accountSeat:true}:{})},
@@ -12797,7 +12795,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         activityUnavailable: this.opsHold ? {cause:this.opsHold === 'paused' ? 'paused' : 'forbidden',audience:'classroom'} : this.lastProfileFailure ? activityFailure(this.lastProfileFailure, activity ? seatAudience(activity) : profileAudience(profile)) ?? (this.lastProfileFailure.reason === 'network' ? {cause:'outage',audience:activity ? seatAudience(activity) : profileAudience(profile)} : undefined) : undefined,
         access:this.accessState,
         localSubscription:!!local,
-        cohortSettings: !local && !instructorSeat && profile &&
+        cohortSettings: !local && !isInstructor && profile &&
           (profile.activity_kind === 'classroom' || !!profile.lesson)
           ? { model: selection?.choices.length === 1, effort: effort?.allowed.length === 1 }
           : undefined,
@@ -12811,18 +12809,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-VOICE-R-026 — only when push-to-talk was chosen: the default config is unchanged.
         ...(voiceConversationMode ? { voiceConversationMode } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
-        ...(nicknameSeat(profile, instructorSeat) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
+        ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
-        ...(!instructorSeat && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
+        ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
         // CGP-KNOW-R-028 — the open task's two memory switches (absent: no store, a temporary task, an instructor).
-        ...(!instructorSeat && this.taskMemoryView?.() ? { taskMemory: this.taskMemoryView()! } : {}),
+        ...(!isInstructor && this.taskMemoryView?.() ? { taskMemory: this.taskMemoryView()! } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
         update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
         ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
         // CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it (default off).
-        ...(!local && !instructorSeat && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
+        ...(!local && !isInstructor && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -12838,7 +12836,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postAnnotations();
     // CGP-CHAT-R-011 — a file from another work folder, or on a seat that lost the gate, is dropped; a pending one is re-shown.
     if (this.pendingFileAttachment) {
-      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, instructorSeat)) this.clearFileAttachment();
+      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, isInstructor)) this.clearFileAttachment();
       else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment.preview });
     }
     // #649 — when the webview remounts (panel hide → show, reload) the highlight
