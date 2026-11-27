@@ -1,6 +1,6 @@
 // Studio-side merge and routing checks for instructor turns. These run without any Chalk code:
 // the extra tool set is injected, so the tool names below are only stand-ins.
-// T-G16–T-G20 bodies were moved here verbatim from chalk-generator.test.mjs when that file was retired (C-5).
+// T-G16–T-G20 were moved here from chalk-generator.test.mjs when that file was retired (C-5): assertion lines unchanged; layout adapted.
 // The chalk/tools.ts routing unit T-L10 is retired with callChalkTool (legacy-only); delegation stays covered by T-L10 below.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -18,7 +18,7 @@ const stubExtraDefs = [
 ];
 const mockWorkTools = { definitions: [{ name: "Read", description: "", inputSchema: {} }], call: async () => "read-result" };
 
-console.log("=== browser tools in the instructor turn (T-G16–T-G20; bodies verbatim from chalk-generator.test.mjs, C-5) ===");
+console.log("=== browser tools in the instructor turn (T-G16–T-G20; moved from chalk-generator.test.mjs, C-5) ===");
 
 // ─── T-G16: 강사 모드 mergeBrowserTools → browser 도구 2개 포함, 연속 두 턴 ──
 await check('T-G16 instructor mode: live_preview_start + browser_open in merged defs (two consecutive turns)', () => {

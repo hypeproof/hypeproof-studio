@@ -437,7 +437,8 @@ await t("a steady session is not re-activated when only the models differ", asyn
   assert.equal(activations, 0);
 });
 
-console.log("=== deactivation after the session ends (C-5: no runtime switch) ===");
+const DEACT = "hypeproof.chalk.deactivateInstructor";
+console.log("=== deactivation after the session ends (C-5: no runtime switch; trigger issuerRemoved) ===");
 const wantFor = () => ({ isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "server" });
 await t("a turn with the old nonce is refused noSession once the session is deactivated", async () => {
   const bus = makeBus();
@@ -460,6 +461,54 @@ await t("a deactivated session that becomes instructor again activates with a ne
   assert.equal(host.active, true);
   assert.notEqual(activations[1].args[0].sessionNonce, activations[0].args[0].sessionNonce);
   assert.equal(view.token, "tok");
+});
+
+// Restored from origin/main (C-5 review, P3). Only the trigger changed: the runtime switch is gone, so
+// the session ends with the contract's own reason, issuerRemoved. Labels and assertions are kept.
+await t("leaving chalk-extension ends an active session with reason runtimeChanged, exactly once", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  await host.deactivate("issuerRemoved");
+  await host.deactivate("issuerRemoved");
+  const sent = bus.calls.filter((c) => c.id === DEACT);
+  assert.equal(sent.length, 1, "one deactivate for the end, none for the repeated end");
+  assert.equal(sent[0].args[0].reason, "issuerRemoved");
+  assert.equal(host.active, false);
+});
+
+await t("leaving chalk-extension with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  await host.deactivate("issuerRemoved");
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("a repeated legacy switch with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  await host.deactivate("issuerRemoved");
+  await host.deactivate("issuerRemoved");
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("a synchronous refresh failure after a switch to legacy still leaves exactly one deactivate", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  // The end is requested before the refresh; a refresh that then fails must not send a second deactivate.
+  await host.deactivate("issuerRemoved");
+  await host.deactivate("issuerRemoved").catch(() => undefined);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 1);
+});
+
+await t("a chalk-extension runtime keeps the session untouched", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  assert.equal(await syncInstructorSession(host, view, wantFor()), view);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+  assert.equal(host.active, true);
 });
 
 if (failed > 0) {
