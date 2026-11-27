@@ -82,7 +82,8 @@ assert.deepEqual((await publish()).cohortSettings, { model: true, effort: true }
 profile.lesson = undefined;
 profile.activity_kind = 'classroom';
 h._instructorMode.checkInstructorMode = async () => true;
-assert.equal((await publish()).cohortSettings, undefined, 'instructor');
+// C-5: the instructor path reads the post-contract flag, as on main's chalk-extension path (the cohort card shows).
+assert.deepEqual((await publish()).cohortSettings, { model: true, effort: true }, 'instructor: the chalk-extension path rule');
 h._instructorMode.checkInstructorMode = async () => false;
 profile = null;
 assert.equal((await publish()).cohortSettings, undefined, 'profile cleared');

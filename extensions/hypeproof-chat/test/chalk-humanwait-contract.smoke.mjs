@@ -243,11 +243,10 @@ await t("H9 등록 목록에 humanWait 한 줄이 있다", async () => {
   assert.ok(src.includes('"hypeproof.runtime.humanWait"'));
 });
 
-await t("H10 계약 턴이 humanWait 를 runLocalCoach 에 넘긴다, 옛 createHumanWait 연결(legacy)은 그대로다", async () => {
+await t("H10 계약 턴이 humanWait 를 runLocalCoach 에 넘긴다", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
   assert.ok(src.includes("humanWait: input.humanWait,"), "contract turn passes its wait counter");
-  assert.ok(src.includes("const humanWait = createHumanWait();"), "legacy block is untouched");
 });
 
 await t("H11 로컬 턴의 정지 문구는 코치 이름을 쓴다 (SDK 와 같은 stallNotice(coachName))", async () => {

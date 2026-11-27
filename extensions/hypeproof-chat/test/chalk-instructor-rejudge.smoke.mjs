@@ -2,7 +2,7 @@
 // A stub bus stands in for the Chalk extension and a stub fetch for the Service.
 import assert from "node:assert/strict";
 import { InstructorModeManager } from "../src/instructorMode.ts";
-import { ChalkContractHost, resolveInstructorRuntime, syncInstructorSession } from "../src/chalkContract.ts";
+import { ChalkContractHost, syncInstructorSession } from "../src/chalkContract.ts";
 
 let failed = 0;
 async function t(name, fn) {
@@ -165,11 +165,9 @@ await t("a changed token still ends the old session first, as before", async () 
   });
 });
 
-console.log("=== default runtime ===");
+console.log("=== steady address ===");
 
-await t("(e) the default runtime is legacy and a steady address is judged once", async () => {
-  assert.equal(resolveInstructorRuntime(undefined), "legacy");
-  assert.equal(resolveInstructorRuntime("legacy"), "legacy");
+await t("(e) a steady address is judged once", async () => {
   const mgr = new InstructorModeManager();
   await withFetch(200, async (calls) => {
     await mgr.checkInstructorMode("tok", A);

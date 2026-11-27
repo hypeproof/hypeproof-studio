@@ -5,7 +5,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { workspaceTools } from "../src/localRuntime/tools.ts";
-import { INSTRUCTOR_TOOL_PROFILE } from "../src/chalk/instructorTurn.ts";
+import { INSTRUCTOR_TOOL_PROFILE } from "../src/localRuntime/instructorProfile.ts";
 import { DENIAL_SOURCE_LABEL } from "../src/denialSource.ts";
 import { denialNotice, taggedDenialSource } from "../src/denialNotice.ts";
 

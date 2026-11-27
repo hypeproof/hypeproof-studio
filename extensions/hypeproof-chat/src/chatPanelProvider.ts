@@ -59,7 +59,7 @@ import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { cliLoginOk, locateCli } from './localRuntime/cliLocate';
 import { instructorLocalRuntime, releaseGateNotice, releaseInstructorRuntime, shouldRecheckRelease, type ReleaseGateReason } from './localRuntime/releaseInstructorRuntime';
 import { decideBrowserOpen } from './browserOpenDecision';
-import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, needsChalkPrompt, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, notifyOptinOffered } from "./trialEndCard";
@@ -68,8 +68,7 @@ import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitte
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
 import { InstructorModeManager } from './instructorMode';
 import { decideMode, profileFailureToStatus } from './modeDecision';
-import { chalkToolsEnabled } from './chalk/tools';
-import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
+import { INSTRUCTOR_TOOL_PROFILE } from './localRuntime/instructorProfile';
 import { ActivityConnectionError, activityConnections, canonicalRoot } from './activityConnections';
 import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwitch";
 
@@ -8869,17 +8868,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       .catch(() => undefined);
   }
 
-  // #3578: sends runtimeChanged once when a session is active; nothing when none is.
-  endChalkSessionForRuntime(): Promise<void> {
-    const host = this.chalkContract;
-    if (!host) return Promise.resolve();
-    // Returns the chain so an awaiting caller (applyInstructorRuntimeSetting) sees the end finish first.
-    this.contractSync = this.contractSync
-      .then(async () => { this.contractView = await endSessionForRuntime(host, this.contractView, 'legacy'); })
-      .catch(() => undefined);
-    return this.contractSync;
-  }
-
   chalkRunner(): LocalRunner {
     const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
     const local = (): LocalRuntimeConfig | null => {
@@ -11155,85 +11143,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
       if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
-        if (this._instructorMode.isInstructor === true) {
-          // Instructor path — bypasses student token, ensureProfile, lesson gates, spool
-          // (chalk-po condition 1). Uses INSTRUCTOR_TOOL_PROFILE (read + write + browser).
-          const cwd=this.resolveCoachCwd();
-          if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
-          // #1297 (E4-2): chalkToolsEnabled is a first-pass filter (button display).
-          // #1295 (E2-6): cwd and requestConfirmation added for file I/O and overwrite confirm.
-          // #3582: the wait for the person does not spend the turn budget, and a dialog answered after
-          // the turn has ended is denied, so the overwrite cannot run late.
-          const humanWait = createHumanWait();
-          // #3582 review: the turn can end for other reasons (runner error, CLI exit, budget), which does not
-          // abort ctrl. This signal ends with the turn itself, so a dialog left open is denied when the turn ends.
-          const turnEnded = new AbortController();
-          const chalkCtx = (await chalkToolsEnabled(this.context.secrets))
-            ? {
-                serverUrl: proxyUrl,
-                secrets: this.context.secrets,
-                cwd,
-                currentModel: local.model,
-                requestConfirmation: async (message: string): Promise<boolean> => {
-                  return humanWait.track(() => confirmUnlessTurnEnds(
-                    Promise.resolve(vscode.window.showWarningMessage(message, { modal: true }, "계속", "취소")),
-                    AbortSignal.any([ctrl.signal, turnEnded.signal]),
-                    "계속",
-                  ));
-                },
-              }
-            : undefined;
-          // Browser tools for the local runtime: the same builder the Chalk contract turn uses.
-          const browserTools = this.instructorBrowserTools(text, cwd);
-          let result: Awaited<ReturnType<typeof runInstructorTurn>>;
-          try {
-          result=await runInstructorTurn({
-            local,cwd,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
-            brief:this._instructorMode.brief,
-            chalkCtx,
-            browserTools,
-            humanWait,
-            signal:ctrl.signal,onDelta,onRefusal,onActivity,
-            requestApproval:async action=>{
-              if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
-              let prompted=false;
-              let denialSource: import("./denialSource").DenialSource | undefined;
-              const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
-              await this.captureTurnWrite(streamId,action,approved);
-              return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
-            }});
-          } finally {
-            turnEnded.abort();
-          }
-          sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
-        } else {
-          if (!profile) throw new Error(profileNotReadyNotice(this.coachDisplayName()));
-          if (effectiveImages?.length) throw new Error('로컬 개발 연결의 이미지 입력은 아직 지원하지 않습니다. 텍스트로 요청하세요.');
-          const cwd=this.resolveCoachCwd();
-          if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
-          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          // #4501 — what the subscription turn upload needs: whether text came back, and the tool names (never inputs).
-          const rehearsalFacts = { answered: false, toolNames: [] as string[] };
-          const rehearsalDelta = (t: string) => { if (t.trim()) rehearsalFacts.answered = true; onDelta(t); };
-          const rehearsalActivity = (a: Parameters<typeof onActivity>[0]) => { if (a.kind === "tool_use" && typeof a.name === "string") rehearsalFacts.toolNames.push(a.name); onActivity(a); };
-          // #19 — a subscription rehearsal turn runs with the Service's coach text for this step and help mode (memory only).
-          // Any other turn keeps the dev prompt (systemPrompt undefined).
-          const coachPrompt = mustStayLocal(profile.rehearsal) ? await this.rehearsalCoachPrompt(profile, turnFocus.step, turnFocus.helpMode) : undefined;
-          const result=await runLocalCoach({config:local,profile,systemPrompt:coachPrompt,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
-            signal:ctrl.signal,onDelta:rehearsalDelta,onRefusal,onActivity:rehearsalActivity,
-            requestApproval:async action=>{
-              if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
-              let prompted=false;
-              let denialSource: import("./denialSource").DenialSource | undefined;
-              const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
-              await this.captureTurnWrite(streamId,action,approved);
-              return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
-            }});
-          sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
-          if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
-        }
+        if (!profile) throw new Error(profileNotReadyNotice(this.coachDisplayName()));
+        if (effectiveImages?.length) throw new Error('로컬 개발 연결의 이미지 입력은 아직 지원하지 않습니다. 텍스트로 요청하세요.');
+        const cwd=this.resolveCoachCwd();
+        if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
+        const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+        // #4501 — what the subscription turn upload needs: whether text came back, and the tool names (never inputs).
+        const rehearsalFacts = { answered: false, toolNames: [] as string[] };
+        const rehearsalDelta = (t: string) => { if (t.trim()) rehearsalFacts.answered = true; onDelta(t); };
+        const rehearsalActivity = (a: Parameters<typeof onActivity>[0]) => { if (a.kind === "tool_use" && typeof a.name === "string") rehearsalFacts.toolNames.push(a.name); onActivity(a); };
+        // #19 — a subscription rehearsal turn runs with the Service's coach text for this step and help mode (memory only).
+        // Any other turn keeps the dev prompt (systemPrompt undefined).
+        const coachPrompt = mustStayLocal(profile.rehearsal) ? await this.rehearsalCoachPrompt(profile, turnFocus.step, turnFocus.helpMode) : undefined;
+        const result=await runLocalCoach({config:local,profile,systemPrompt:coachPrompt,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
+          signal:ctrl.signal,onDelta:rehearsalDelta,onRefusal,onActivity:rehearsalActivity,
+          requestApproval:async action=>{
+            if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
+            let prompted=false;
+            let denialSource: import("./denialSource").DenialSource | undefined;
+            const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
+            await this.captureTurnWrite(streamId,action,approved);
+            return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
+          }});
+        sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
+        if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
       } else if (this._instructorMode.isInstructor === true) {
         throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
       } else if (runtime === "agent-sdk") {
@@ -12757,16 +12691,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // #3597 — the release app's instructor CLI gate (re-checked only when its inputs change).
     await refreshReleaseGate(this as unknown as ReleaseGateHost, isInstructor, panelMode);
-    // #3563 — decide the Chalk tab flag before the chalk branch clears isInstructor below.
-    const chalkInstructorTab = chalkInstructorTabField(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime'), isInstructor);
-    if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
-      this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
-      this._instructorMode.reset();
-      isInstructor = false;
-    } else {
-      // #3578: the runtime left chalk-extension, so an active Chalk session must end now.
-      if (this.chalkContract) void this.endChalkSessionForRuntime();
-    }
+    // #3563 — decide the Chalk tab flag before the Chalk contract takes over isInstructor below.
+    const chalkInstructorTab = chalkInstructorTabField(isInstructor);
+    // C-5: the Chalk contract is the one instructor runtime. Studio keeps no legacy instructor turn.
+    this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
+    this._instructorMode.reset();
+    isInstructor = false;
     // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
     if (this.lastAllowInstructor !== undefined && this.lastAllowInstructor !== isInstructor) this.endTaskCommandAllows();
     this.lastAllowInstructor = isInstructor;

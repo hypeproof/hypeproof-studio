@@ -9,7 +9,6 @@ export const CONTRACT_VERSION = 1;
 export const CHALK_EXTENSION_ID = "hypeproof.hypeproof-chalk";
 export const NO_LOCAL_RUNTIME_MESSAGE = "강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.";
 
-export type InstructorRuntime = "legacy" | "chalk-extension";
 export type ConnectionKind = "server" | "subscription-claude" | "subscription-codex";
 
 /**
@@ -111,10 +110,6 @@ export function reportSourceLabel(context: unknown): string | undefined {
   if (!context || typeof context !== "object") return undefined;
   const source = (context as { source?: unknown }).source;
   return typeof source === "string" && SOURCE_LABEL.test(source) ? source : undefined;
-}
-
-export function resolveInstructorRuntime(value: unknown): InstructorRuntime {
-  return value === "chalk-extension" ? "chalk-extension" : "legacy";
 }
 
 export function connectionFor(provider: string | undefined, hasLocal: boolean): ConnectionKind {
@@ -436,25 +431,6 @@ export interface ContractWant {
   url: string;
   connection: ConnectionKind;
   models?: ContractModels;
-}
-
-// #3578: the setting listener's handler. Leaving chalk-extension ends an active Chalk session FIRST,
-// before any refresh, so a refresh that throws or returns early cannot keep the session alive.
-// The refresh error is returned to the caller; the end has already been requested by then.
-export async function applyInstructorRuntimeSetting(
-  runtimeValue: unknown,
-  deps: { endSession: () => void | Promise<void>; refresh: () => unknown },
-): Promise<void> {
-  if (resolveInstructorRuntime(runtimeValue) !== "chalk-extension") await deps.endSession();
-  await deps.refresh();
-}
-
-// #3578: leaving the chalk-extension runtime ends an active Chalk session. With no active session
-// nothing is sent, so a repeated refresh on the legacy runtime sends at most one deactivate.
-export async function endSessionForRuntime(host: ChalkContractHost, current: ContractView, runtime: InstructorRuntime): Promise<ContractView> {
-  if (runtime === "chalk-extension") return current;
-  if (host.active) await host.deactivate("runtimeChanged").catch(() => undefined);
-  return {};
 }
 
 // Keeps the Chalk session in step with the instructor verdict (#2556). A new server address

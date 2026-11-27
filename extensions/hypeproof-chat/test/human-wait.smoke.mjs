@@ -8,7 +8,7 @@ import path from "node:path";
 import { localTurnBudget } from "../src/localRuntime/emailTools.ts";
 import { answerUnlessTurnEnds, confirmUnlessTurnEnds, createHumanWait } from "../src/localRuntime/humanWait.ts";
 import { workspaceTools } from "../src/localRuntime/tools.ts";
-import { INSTRUCTOR_TOOL_PROFILE } from "../src/chalk/instructorTurn.ts";
+import { INSTRUCTOR_TOOL_PROFILE } from "../src/localRuntime/instructorProfile.ts";
 
 let failed = 0;
 async function work(dir) { const { writeFile } = await import("node:fs/promises"); await writeFile(path.join(dir, "course.html"), "new course"); }

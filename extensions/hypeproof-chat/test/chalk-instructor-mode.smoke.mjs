@@ -109,7 +109,7 @@ t("first-turn error → revertModelOnTurnError restores prevChoice", async () =>
 console.log("\n=== chalkCtx gate — whoami 401 must block tools even when token looks like issuer ===");
 
 t("whoami 401 → isInstructor false, so chalkCtx would be undefined", async () => {
-  // chatPanelProvider: chalkCtx = (chalkToolsEnabled && isInstructor === true) ? ... : undefined
+  // (C-5: the legacy chalkCtx path is removed.)
   // This test verifies InstructorModeManager.checkInstructorMode returns false on 401,
   // which ensures the && isInstructor === true gate in chatPanelProvider blocks chalkCtx.
   const mgr = new InstructorModeManager();
@@ -232,29 +232,11 @@ t("resolveInstructorTokenFromSecrets: only TOKEN_KEY present → undefined (stud
   assert.strictEqual(result, undefined, "student slot must not reach instructor auth path");
 });
 
-// --- runInstructorTurn policy ---
-console.log("=== runInstructorTurn — INSTRUCTOR_TOOL_PROFILE policy ===");
-
-t("runInstructorTurn: missing brief → throws '강사 지시문'", async () => {
-  const { runInstructorTurn } = await import("../src/chalk/instructorTurn.ts");
-  const local = { provider: "anthropic", model: "claude-opus-4-5", label: "Claude Opus" };
-  let threw = false;
-  try {
-    await runInstructorTurn({
-      local, cwd: "/tmp", history: [], userText: "안녕",
-      brief: undefined, chalkCtx: undefined,
-      signal: AbortSignal.abort(),
-      onDelta: () => {}, onActivity: undefined,
-      requestApproval: async () => false,
-    });
-  } catch (e) {
-    threw = e.message.includes("강사 지시문");
-  }
-  assert.ok(threw, "must throw with '강사 지시문' when brief is absent");
-});
+// --- INSTRUCTOR_TOOL_PROFILE policy (the Chalk contract turn uses it; C-5 moved it to localRuntime) ---
+console.log("=== INSTRUCTOR_TOOL_PROFILE policy ===");
 
 t("INSTRUCTOR_TOOL_PROFILE: sdk_tools.read and write are true, browser true, shell false", async () => {
-  const { INSTRUCTOR_TOOL_PROFILE } = await import("../src/chalk/instructorTurn.ts");
+  const { INSTRUCTOR_TOOL_PROFILE } = await import("../src/localRuntime/instructorProfile.ts");
   assert.ok(INSTRUCTOR_TOOL_PROFILE, "INSTRUCTOR_TOOL_PROFILE must be exported");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.read, true, "read must be true");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.write, true, "write must be true");
@@ -333,29 +315,8 @@ t("handleAutoReadResult: ok → ok_noop", async () => {
   assert.strictEqual(mgr.handleAutoReadResult(), "ok_noop");
 });
 
-// --- chalk_* tools included when chalkCtx present ---
-console.log("=== mergeChalkTools — chalk_* in instructor turn ===");
-
-t("mergeChalkTools: chalkCtx present → chalk_* tool names in definitions", async () => {
-  const { mergeExtraTools } = await import("../src/localRuntime/index.ts");
-  const { chalkExtraTools } = await import("../src/chalk/tools.ts");
-  const emptyWorkTools = { definitions: [], call: async () => "" };
-  const fakeCtx = { serverUrl: "https://x", secrets: {} };
-  const merged = mergeExtraTools(emptyWorkTools, chalkExtraTools(fakeCtx));
-  const names = merged.definitions.map((d) => d.name);
-  assert.ok(names.some((n) => n.startsWith("chalk_")),
-    `chalk_* tool must appear when chalkCtx present; got: [${names.join(", ")}]`);
-});
-
-t("mergeChalkTools: no chalkCtx → no chalk_* in definitions", async () => {
-  const { mergeExtraTools } = await import("../src/localRuntime/index.ts");
-  const { chalkExtraTools } = await import("../src/chalk/tools.ts");
-  const emptyWorkTools = { definitions: [], call: async () => "" };
-  const merged = mergeExtraTools(emptyWorkTools, chalkExtraTools(undefined));
-  const names = merged.definitions.map((d) => d.name);
-  assert.ok(!names.some((n) => n.startsWith("chalk_")),
-    "no chalk_* must appear without chalkCtx");
-});
+// (C-5) mergeChalkTools chalk_* cases and the execGetKnowledge URL case moved out with chalk/tools.ts.
+// Their chalk-repo pairs: chalk test/chalk-instructor-tools.smoke.mjs (N-T-L8, N-T-L9), chalk test/chalk-instructor-mode.smoke.mjs (execGetKnowledge).
 
 // --- adminBaseFrom: URL stripping ---
 // Verifies the canonical base URL function that routes all three callers
@@ -381,30 +342,6 @@ t("assembled knowledge URL has no /v1/admin segment", () => {
   const url = adminBaseFrom("http://127.0.0.1:8787/v1") + "/admin/chalk/knowledge/1/docs";
   assert.ok(!url.includes("/v1/admin"), `URL must not contain /v1/admin — got: ${url}`);
   assert.strictEqual(url, "http://127.0.0.1:8787/admin/chalk/knowledge/1/docs");
-});
-
-// Verify that execGetKnowledge with serverUrl ending in /v1 produces the
-// correct URL in a real fetch call (no /v1/admin prefix in the request).
-t("execGetKnowledge with serverUrl=/v1 fetches /admin/chalk/knowledge/versions", async () => {
-  const { execGetKnowledge } = await import("../src/chalk/tools.ts");
-  let capturedUrl = null;
-  const origFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    capturedUrl = url;
-    return { ok: true, text: async () => "[]" };
-  };
-  const fakeSecrets = { get: async () => "test-token" };
-  try {
-    await execGetKnowledge(
-      { serverUrl: "http://127.0.0.1:8787/v1", secrets: fakeSecrets },
-      {},
-    );
-  } finally {
-    globalThis.fetch = origFetch;
-  }
-  assert.ok(capturedUrl !== null, "fetch must have been called");
-  assert.ok(!capturedUrl.includes("/v1/admin"), `URL must not contain /v1/admin — got: ${capturedUrl}`);
-  assert.ok(capturedUrl.startsWith("http://127.0.0.1:8787/admin/"), `URL must start with /admin/ — got: ${capturedUrl}`);
 });
 
 // ── decideMode ──────────────────────────────────────────────────────────────

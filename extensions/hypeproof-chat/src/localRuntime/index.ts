@@ -70,7 +70,7 @@ export interface ExtraTools {
 
 /**
  * 워크스페이스 도구에 추가 도구 묶음을 붙인다. 추가 도구는 호출자가 넘긴다
- * (강사 모드의 Chalk 도구는 chalk/tools.ts 의 chalkExtraTools). 순수 함수 — 테스트 가능.
+ * (강사 모드의 Chalk 도구는 Chalk 계약 경로가 넘긴다). 순수 함수 — 테스트 가능.
  * definitions 배열에 추가 도구가 붙으면 Claude(toolServer)·Codex(dynamicTools) 모두
  * 같은 목록을 받는다.
  */

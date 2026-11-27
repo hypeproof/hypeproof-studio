@@ -60,7 +60,8 @@ assert.equal((await publish()).classWindow?.id, 'class-c', 'control: the same se
 const studentToken = token;
 token = Buffer.from(JSON.stringify({ u: 'learner', c: 'cohort', p: 'lesson', exp: 1 })).toString('base64url') + '.signature';
 h._instructorMode = { checkInstructorMode: async () => true, reset() {} };
-assert.equal((await publish()).classWindow, null, 'an instructor never gets the learner line');
+// C-5: the instructor path reads the post-contract flag, as on main's chalk-extension path (the class window shows).
+assert.equal((await publish()).classWindow?.id, 'class-c', 'instructor: the chalk-extension path rule');
 h._instructorMode = { checkInstructorMode: async () => false, reset() {} };
 token = studentToken;
 const devKeys = ['HPS_DEV_RUNTIME', 'HPS_DEV_PROVIDER', 'HPS_DEV_EXECUTABLE', 'HPS_DEV_MODEL'], savedEnv = Object.fromEntries(devKeys.map(k => [k, process.env[k]])), savedName = vscode.env.appName;

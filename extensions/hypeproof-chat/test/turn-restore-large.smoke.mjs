@@ -192,8 +192,8 @@ await t("host wiring: large folders take a tracked point; every approved write i
   const begin = src.slice(src.indexOf("  private async beginTurnRestore("), src.indexOf("  private async beginTrackedTurnRestore("));
   ok(/if \(!\(await folderFitsRestoreLimits\(root\)\)\) return await this\.beginTrackedTurnRestore\(/.test(begin), "fit check before the whole-folder point");
   ok(/if \(!point\.complete\) \{[\s\S]*?return await this\.beginTrackedTurnRestore\(/.test(begin), "an incomplete walk falls back to a tracked point");
-  // Each coach runtime's approval callback (instructor, local, agent-sdk) captures after the answer.
-  eq((src.match(/await this\.captureTurnWrite\(streamId, ?action, ?approved\);/g) ?? []).length, 3, "captures in approval callbacks");
+  // Each coach runtime's approval callback (local, agent-sdk; C-5 removed the legacy instructor one) captures after the answer.
+  eq((src.match(/await this\.captureTurnWrite\(streamId, ?action, ?approved\);/g) ?? []).length, 2, "captures in approval callbacks");
   ok(/a\.kind === 'approval' && a\.allowed && \(a\.name === 'Bash' \|\| a\.name === 'PowerShell'\)\) this\.turnWriteTrackers\?\.get\(streamId\)\?\.noteShell\(\)/.test(src), "shell steps noted");
   // Every tool's approval runs through captureTurnWrite: a non-write tool must leave before any restore state
   // is read, and nothing in it may throw (a throw there broke WebSearch approvals on main at #3456).

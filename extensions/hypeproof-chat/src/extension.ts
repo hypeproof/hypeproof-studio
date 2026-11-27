@@ -14,7 +14,6 @@ import { refuseOnChildSeat } from './childProfileHost';
 import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections, canonicalRoot } from './activityConnections';
-import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
 import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
@@ -45,7 +44,7 @@ import {
   LEGACY_HISTORY_KEY,
 } from "./chatPanelHelpers";
 import { PreviewProvider } from "./previewProvider";
-import { ChalkContractHost, applyInstructorRuntimeSetting } from "./chalkContract";
+import { ChalkContractHost } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
 import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
@@ -600,14 +599,6 @@ export async function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration("hypeproofChat.coachRuntime")) void provider.refreshConfig();
     // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
     if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
-    // #3578: the instructor runtime switch takes effect without a reload. The Chalk session ends first, so a
-    // failing or slow refresh (profile, whoami) cannot keep it alive; this path does not depend on the chat view.
-    if (event.affectsConfiguration("hypeproofChat.instructorRuntime")) {
-      void applyInstructorRuntimeSetting(vscode.workspace.getConfiguration("hypeproofChat").get("instructorRuntime"), {
-        endSession: () => provider.endChalkSessionForRuntime(),
-        refresh: () => provider.refreshConfig(),
-      }).catch(() => undefined);
-    }
   }));
   void classroomOps.resume();
   context.subscriptions.push(
@@ -861,85 +852,6 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       vscode.window.showInformationMessage("강사 토큰이 저장됐습니다.");
     }),
-
-    // #1297 (E4-2): 버튼과 AI가 같은 Chalk 도구 함수를 부른다(SUB-07).
-    // 여기서 등록되는 명령은 명령 팔레트에서 수동으로 부를 수 있고,
-    // AI 도구 호출도 chalk/tools.ts의 같은 execCheckPlan을 거친다.
-    vscode.commands.registerCommand("hypeproof-chat.chalk.checkPlan", async () => {
-      const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz");
-      const enabled = await chalkToolsEnabled(context.secrets);
-      if (!enabled) {
-        vscode.window.showWarningMessage("Chalk 초안 검사는 강사 모드에서만 사용할 수 있습니다. issuer 토큰을 먼저 등록하세요.");
-        return;
-      }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: kids-workshop-s1" });
-      if (!cohort) return;
-      const course = await vscode.window.showInputBox({ prompt: "강의 ID", placeHolder: "예: lesson-01" });
-      if (!course) return;
-      try {
-        const result = await callChalkTool(
-          { serverUrl: proxyUrl, secrets: context.secrets },
-          "chalk_check_plan",
-          { cohort, course },
-        );
-        const panel = vscode.window.createOutputChannel("Chalk 초안 검사", "json");
-        panel.appendLine(result);
-        panel.show(true);
-      } catch (err) {
-        vscode.window.showErrorMessage(`검사 실패: ${(err as Error).message}`);
-      }
-    }),
-
-    // #1295 (E2-6): Chalk 생성 흐름 버튼 명령. 버튼과 AI 도구가 같은 execXxx를 부른다(SUB-07).
-    vscode.commands.registerCommand("hypeproof-chat.chalk.openCourse", async () => {
-      const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz");
-      const enabled = await chalkToolsEnabled(context.secrets);
-      if (!enabled) { vscode.window.showWarningMessage("강사 모드에서만 사용할 수 있습니다."); return; }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: kids-workshop-s1" });
-      if (!cohort) return;
-      const course = await vscode.window.showInputBox({ prompt: "강의 ID", placeHolder: "예: lesson-01" });
-      if (!course) return;
-      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      try {
-        const result = await callChalkTool(
-          {
-            serverUrl: proxyUrl, secrets: context.secrets, cwd,
-            requestConfirmation: async (msg) => (await vscode.window.showWarningMessage(msg, { modal: true }, "계속", "취소")) === "계속",
-          },
-          "chalk_open_course", { cohort, course },
-        );
-        const parsed = JSON.parse(result) as { local_file?: string };
-        if (parsed.local_file) {
-          const doc = await vscode.workspace.openTextDocument(parsed.local_file);
-          await vscode.window.showTextDocument(doc);
-        }
-      } catch (err) { vscode.window.showErrorMessage(`열기 실패: ${(err as Error).message}`); }
-    }),
-    vscode.commands.registerCommand("hypeproof-chat.chalk.savePlan", async () => {
-      const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz");
-      const enabled = await chalkToolsEnabled(context.secrets);
-      if (!enabled) { vscode.window.showWarningMessage("강사 모드에서만 사용할 수 있습니다."); return; }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID" });
-      if (!cohort) return;
-      const course = await vscode.window.showInputBox({ prompt: "강의 ID" });
-      if (!course) return;
-      const knowledgeVersion = await vscode.window.showInputBox({ prompt: "지식 버전 (숫자)" });
-      if (!knowledgeVersion) return;
-      const expectedRevision = await vscode.window.showInputBox({ prompt: "현재 revision 번호" });
-      if (!expectedRevision) return;
-      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      try {
-        const result = await callChalkTool(
-          { serverUrl: proxyUrl, secrets: context.secrets, cwd },
-          "chalk_save_plan",
-          { cohort, course, knowledge_version: Number(knowledgeVersion), expected_revision: Number(expectedRevision), request_id: crypto.randomUUID() },
-        );
-        const panel = vscode.window.createOutputChannel("Chalk 저장 결과", "json");
-        panel.appendLine(result);
-        panel.show(true);
-      } catch (err) { vscode.window.showErrorMessage(`저장 실패: ${(err as Error).message}`); }
-    }),
-
 
     // #72: auto-update commands. The banner in the chat panel calls
     // installUpdate via the openInstallUpdate webview message → provider →

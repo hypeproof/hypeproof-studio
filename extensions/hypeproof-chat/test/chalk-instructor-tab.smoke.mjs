@@ -12,49 +12,38 @@ function t(name, fn) {
 const root = new URL("..", import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, root), "utf8");
 
-t("chalk-extension + instructor → the flag is true", () => {
-  assert.deepEqual(chalkInstructorTabField("chalk-extension", true), { chalkInstructorTab: true });
+t("instructor → the flag is true", () => {
+  assert.deepEqual(chalkInstructorTabField(true), { chalkInstructorTab: true });
 });
-t("chalk-extension + student → no flag", () => {
-  assert.deepEqual(chalkInstructorTabField("chalk-extension", false), {});
-});
-t("legacy + instructor → no flag", () => {
-  assert.deepEqual(chalkInstructorTabField("legacy", true), {});
-});
-t("unset runtime + instructor → no flag (default is legacy)", () => {
-  assert.deepEqual(chalkInstructorTabField(undefined, true), {});
+t("student → no flag", () => {
+  assert.deepEqual(chalkInstructorTabField(false), {});
 });
 t("the command id is the Chalk instructor panel", () => {
   assert.equal(CHALK_INSTRUCTOR_TAB_COMMAND, "hypeproof.chalk.openInstructorPanel");
 });
-t("byte-identical config when the flag is absent (legacy and student)", () => {
+t("byte-identical config when the flag is absent (student)", () => {
   const base = { classWindow: null, turnTools: { a: 1 }, isInstructor: false };
-  for (const [runtime, instructor] of [["legacy", true], ["chalk-extension", false], [undefined, false]]) {
-    const withSpread = { ...chalkInstructorTabField(runtime, instructor), ...base };
-    assert.equal(JSON.stringify(withSpread), JSON.stringify(base), `runtime=${runtime} instructor=${instructor}`);
-  }
+  const withSpread = { ...chalkInstructorTabField(false), ...base };
+  assert.equal(JSON.stringify(withSpread), JSON.stringify(base));
 });
 t("the flag is the only added key when it is true", () => {
   const base = { classWindow: null };
-  assert.equal(JSON.stringify({ ...chalkInstructorTabField("chalk-extension", true), ...base }), JSON.stringify({ chalkInstructorTab: true, classWindow: null }));
+  assert.equal(JSON.stringify({ ...chalkInstructorTabField(true), ...base }), JSON.stringify({ chalkInstructorTab: true, classWindow: null }));
 });
 
 const pkg = JSON.parse(read("package.json"));
 const palette = pkg.contributes.menus.commandPalette;
-const when = "config.hypeproofChat.instructorRuntime != 'chalk-extension'";
-t("the three Studio Chalk commands are hidden in the chalk-extension runtime", () => {
+t("the three Studio Chalk commands are gone (C-5: the Chalk extension owns the instructor screen)", () => {
   for (const command of ["hypeproof-chat.chalk.checkPlan", "hypeproof-chat.chalk.openCourse", "hypeproof-chat.chalk.savePlan"]) {
-    const entry = palette.find((e) => e.command === command);
-    assert.ok(entry, `${command} has a palette entry`);
-    assert.equal(entry.when, when, command);
+    assert.equal(palette.find((e) => e.command === command), undefined, command);
   }
 });
 t("setInstructorToken keeps its token entry (no when clause)", () => {
   const entry = palette.find((e) => e.command === "hypeproof-chat.chalk.setInstructorToken");
   assert.ok(!entry || entry.when === undefined, "setInstructorToken is not hidden");
 });
-t("the instructorRuntime default is legacy", () => {
-  assert.equal(pkg.contributes.configuration.properties["hypeproofChat.instructorRuntime"].default, "legacy");
+t("the instructorRuntime setting is removed (C-5: one runtime)", () => {
+  assert.equal(pkg.contributes.configuration.properties["hypeproofChat.instructorRuntime"], undefined);
 });
 
 t("protocol: ChatConfig has the optional flag and the webview message exists", () => {

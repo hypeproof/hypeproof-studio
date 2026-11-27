@@ -203,7 +203,7 @@ await t("wiring: every runtime reports through the recorder, and both history pa
   assert.ok(begin > 0 && begin < send.indexOf("const captureInterrupted"), "recorder opens before the stop capture can run");
   const on = send.slice(send.indexOf("const onActivity = (a"), send.indexOf("const onActivity = (a") + 900);
   for (const k of ["kind: 'use'", "kind: 'deny'", "kind: 'result'"]) assert.ok(on.includes(`this.noteTaskActivity(streamId, { ${k}`), `onActivity reports ${k}`);
-  for (const runtime of ["runInstructorTurn({", "runLocalCoach({", "runSdkCoach({"]) assert.match(send.slice(send.indexOf(runtime), send.indexOf(runtime) + 4000), /onActivity/, `${runtime} gets onActivity`);
+  for (const runtime of ["runLocalCoach({", "runSdkCoach({"]) assert.match(send.slice(send.indexOf(runtime), send.indexOf(runtime) + 4000), /onActivity/, `${runtime} gets onActivity`);
   assert.ok(loop.includes("this.noteTaskActivity(p.streamId, { kind: 'use'") && loop.includes("this.noteTaskActivity(p.streamId, { kind: 'result'"), "the proxy browser loop reports its calls");
   assert.match(src, /private finishTurnItems\([\s\S]{0,300}?return this\.taskActivity\.attach\(streamId, this\.finishTurnTimeline\(/, "finished and interrupted turns both pass through attach");
   assert.ok(send.includes("this.taskActivity.end(streamId);"), "the turn's recorder is dropped in finally");
