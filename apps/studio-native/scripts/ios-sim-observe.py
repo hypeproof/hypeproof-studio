@@ -25,6 +25,12 @@ SpringBoard and testmanagerd log, each with its own limit. `terminate-scan` is t
 once, after the test, for a line the watcher was stopped before reaching. Output goes to
 <evidence>/terminate-diagnostics.txt plus one row per capture. Both are diagnostics only:
 they change no test, wait, limit or result (#4432 F6).
+The same two commands also record a launch or relaunch that stops making progress (`scan_hang`): while the
+log's last step is a launch step and the log has not grown for HANG_QUIET_SECONDS, and once a test ran out of
+its time allowance or failed to get launch progress. Each capture takes the app's launchctl rows, the host's
+HPStudio process rows (names only) and the device's `simctl list` state; only the failed-test capture also
+takes the 3-minute log. Output goes to <evidence>/hang-diagnostics.txt plus one row each, at most HANG_CAPTURES
+per kind per shard. Diagnostics only, with their own limits.
 
 `stall-watch` runs beside the test like `terminate-watch`. For each new main-thread stall that the
 app reports while it is still going on ("HPStudio main stall (ongoing): ... since uptime <start>"),
@@ -162,6 +168,18 @@ LOG_SHOW_LIMIT = 60
 LOG_SHOW_WINDOW = "3m"
 LOG_SHOW_PREDICATE = 'process IN {"runningboardd", "SpringBoard", "testmanagerd"}'
 TERMINATE_FILE = "terminate-diagnostics.txt"
+# A launch or relaunch that stops making progress (#4432, run 46002155151 shard 2: the relaunch after
+# "Terminate <bundle>:<pid>" never returned, the 3 min allowance ran out and the test ended with "Failed to
+# get launch progress", which neither terminate pattern matches, so nothing was recorded).
+HANG_STEP = re.compile(r"^\s+t =\s+([0-9]+(?:\.[0-9]+)?)s\s+(.*?)\s*$", re.MULTILINE)
+HANG_LAUNCH_STEP = re.compile(r"^(?:(?:Launch|Activate) [A-Za-z0-9.-]+|Setting up automation session)$")
+HANG_AFTER = re.compile(r"-\[[\w.]+ (\w+)\](?:' exceeded execution time allowance| : Failed to get launch progress)")
+HANG_QUIET_SECONDS = 30
+HANG_CAPTURES = 3
+HANG_PS = ["ps", "-axco", "pid,ppid,state,etime,comm"]
+HANG_PS_NAMES = ("HPStudio", "HPStudioUITests-Runner")
+SIMCTL_LIST_LIMIT = 30
+HANG_FILE = "hang-diagnostics.txt"
 STALL_ONGOING = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms")
 STALL_PID = re.compile(r"HPStudio main stall \(ongoing\): \d+ ms since uptime (\d+) ms; pid ([0-9]{1,10});")
 STALL_CAPTURES = 3
@@ -878,6 +896,100 @@ def scan_terminate(evidence, device, log_path, *, run=None):
     return taken
 
 
+def hang_events(log_text, quiet_seconds):
+    """Hang triggers in order, each (kind, test, key, last step).
+
+    `launch-quiet`: the log's last step is a launch step and the log has not grown for HANG_QUIET_SECONDS
+    (`quiet_seconds`), so the launch is still stuck while it is recorded. Its key is the test and the step's t,
+    so a slow first launch and a stuck relaunch in one test are two events. `after`: the test ran out of its
+    time allowance or failed to get launch progress; one per test."""
+    events = []
+    started = list(TEST_STARTED.finditer(log_text))
+    steps = list(HANG_STEP.finditer(log_text))
+    for match in HANG_AFTER.finditer(log_text):
+        before = [step.group(2) for step in steps if step.start() < match.start()]
+        event = ("after", match.group(1), match.group(1) + "@after", before[-1] if before else "")
+        if event[2] not in [e[2] for e in events]:
+            events.append(event)
+    if steps and quiet_seconds >= HANG_QUIET_SECONDS:
+        last = steps[-1]
+        if HANG_LAUNCH_STEP.match(last.group(2)):
+            owners = [m.group(1) for m in started if m.start() < last.start()]
+            test = owners[-1] if owners else "unknown"
+            key = f"{test}@{last.group(1)}"
+            if not any(e[1] == test and e[0] == "after" for e in events):
+                events.append(("launch-quiet", test, key, last.group(2)))
+    return events
+
+
+def captured_hangs(evidence):
+    path = evidence / HANG_FILE
+    if not path.exists():
+        return []
+    return re.findall(r"^== hang \d+ ([\w-]+) (\S+) ", path.read_text(), re.MULTILINE)
+
+
+def capture_hang(evidence, device, kind, test, key, step, index, *, run=None):
+    """While a launch is stuck: launchctl rows, app process rows and the device state. After the test ran out
+    of time: the same plus the last 3 minutes of runningboardd, SpringBoard and testmanagerd log. Each
+    command has its own limit; one that does not return is recorded as such and the next one runs."""
+    run = run or run_bounded
+    wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    costs = []
+    launchctl = measured(run, ["xcrun", "simctl", "spawn", device, "launchctl", "list"], LAUNCHCTL_LIMIT, costs, name="simctl launchctl")
+    if launchctl.startswith("<"):
+        app_rows, launchctl_outcome = launchctl.strip(), "timeout"
+    else:
+        rows = [line for line in launchctl.splitlines() if "hypeproof" in line.lower()]
+        app_rows = "\n".join(rows) if rows else "<no hypeproof entry>"
+        launchctl_outcome = "listed" if rows else "absent"
+    table = measured(run, HANG_PS, PS_LIMIT, costs, name="ps app")
+    if table.startswith("<"):
+        processes, ps_outcome = table.strip(), "timeout"
+    else:
+        found = [line for line in table.splitlines() if line.split() and line.split()[-1] in HANG_PS_NAMES]
+        processes = "\n".join(found) if found else "<no HPStudio process>"
+        ps_outcome = "listed" if found else "absent"
+    listing = measured(run, ["xcrun", "simctl", "list", "devices", device], SIMCTL_LIST_LIMIT, costs, name="simctl list")
+    device_rows = [line.strip() for line in listing.splitlines() if device in line]
+    state = "timeout" if listing.startswith("<") else (device_rows[0] if device_rows else "absent")
+    fields = dict(step="hang", command="diagnose", sample=index, utc=wall, kind=kind, test=test, last_step=step,
+                  launchctl=launchctl_outcome, processes=ps_outcome, device_state=state)
+    log = None
+    if kind == "after":
+        # Only once the test has failed: the heaviest read never runs while a launch may still recover.
+        log = measured(run, ["xcrun", "simctl", "spawn", device, "log", "show", "--last", LOG_SHOW_WINDOW, "--style", "compact",
+                             "--info", "--predicate", LOG_SHOW_PREDICATE], LOG_SHOW_LIMIT, costs, name="simctl log show")
+        fields.update(log="timeout" if log.startswith("<") else "shown", log_lines=len(log.splitlines()))
+    push.record(evidence, costs=costs, **fields)
+    with (evidence / HANG_FILE).open("a") as target:
+        target.write(f"== hang {index} {kind} {key} {wall}\n-- last step: {step}\n")
+        target.write(f"-- launchctl list (hypeproof rows, limit {LAUNCHCTL_LIMIT}s)\n{app_rows}\n")
+        target.write(f"-- host processes {' / '.join(HANG_PS_NAMES)} (names only, limit {PS_LIMIT}s)\n{processes}\n")
+        target.write(f"-- simctl list devices (limit {SIMCTL_LIST_LIMIT}s)\n{chr(10).join(device_rows) or listing.strip()}\n")
+        if log is not None:
+            target.write(f"-- log show --last {LOG_SHOW_WINDOW} {LOG_SHOW_PREDICATE} (limit {LOG_SHOW_LIMIT}s)\n{log.rstrip()}\n")
+
+
+def scan_hang(evidence, device, log_path, *, run=None, now=None):
+    """Capture each hang event not yet captured, up to HANG_CAPTURES per kind. Returns how many it took."""
+    try:
+        path = Path(log_path)
+        text = path.read_text(errors="replace")
+        quiet = (time.time() if now is None else now) - path.stat().st_mtime
+    except OSError:
+        return 0
+    done = captured_hangs(evidence)
+    taken = 0
+    for kind, test, key, step in hang_events(text, quiet):
+        if (kind, key) in done or sum(1 for k, _ in done if k == kind) >= HANG_CAPTURES:
+            continue
+        capture_hang(evidence, device, kind, test, key, step, len(done) + 1, run=run)
+        done.append((kind, key))
+        taken += 1
+    return taken
+
+
 def stall_starts(log_text):
     """Start uptime of each distinct ongoing stall in order; its 20 s and 40 s lines are not new ones."""
     seen = []
@@ -1191,6 +1303,7 @@ def main(argv=None):
             signal.signal(signum, stop_running)
         while True:
             safely(lambda: scan_terminate(args.evidence, args.device, args.log), "terminate")
+            safely(lambda: scan_hang(args.evidence, args.device, args.log), "hang")
             if args.command == "terminate-scan":
                 return 0
             time.sleep(args.interval)
