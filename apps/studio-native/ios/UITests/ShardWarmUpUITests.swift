@@ -9,9 +9,14 @@ import XCTest
 /// 45780219172 and 45853481934, the app signed in, but the sign-in opening was exposed only after its 5 s
 /// wait. In the same shards, the tap-to-type gap was 4.9-12 s for the first case and 1.1-1.8 s for later cases.
 ///
-/// What: Settings only. This case warms the system keyboard and the accessibility path, and records how long
-/// each step took. It never launches the app under test, so the first product case still sees a fresh
-/// install (ios-verify.sh "never the app under test").
+/// What: Settings first. This case warms the system keyboard and the accessibility path, and records how long
+/// each step took. Then it launches the app under test once and leaves it in the background (P4, approved by
+/// chalk-po 2026-11-27): the first product case's first launch took a median 13.2 s on main against 8.1 s for
+/// later cases, up to 87 s. The app runs the `first-answer` journey fixture in its own `warmup…` namespace and
+/// nothing is tapped, so no account, draft, conversation or permission state reaches a product case: those
+/// are keyed by each launch's own namespace. The first product case's launch terminates this instance, as every
+/// later case's launch terminates the one before it. The app launch time is recorded, not judged: this case
+/// does not measure the product's first-run performance.
 ///
 /// Rules: this is environment preparation, like poster-wait. It never fails and never skips. Each step ends
 /// on a measured state, not a fixed sleep, and the whole case is bounded by `limit`. If a step does not reach
@@ -23,6 +28,9 @@ final class ShardWarmUpUITests: XCTestCase {
     /// Two accessibility snapshots in a row, each under this, count as a settled accessibility path.
     /// At the failed sign-in in run 45780219172, one snapshot took 2.9 s.
     static let settledSnapshot: TimeInterval = 0.5
+    /// A scenario on the fixture's list (NativeJourneyFixture `JourneyConfiguration`). Any other value turns the
+    /// fixture off, and the app would start against the real server and the real Keychain.
+    static let appScenario = "first-answer"
 
     @MainActor func testWarmUpSystemKeyboardAndAccessibility() {
         let start = Date()
@@ -79,8 +87,23 @@ final class ShardWarmUpUITests: XCTestCase {
             if result != .completed { detail["value"] = search.value as? String ?? "not a string" }
             return result == .completed
         }
+        // The app under test, once, in its own namespace (P4). Launch only: nothing is tapped.
+        let app = studioApp()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = Self.appScenario
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = "warmup" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        var appLaunch: [String: Any] = ["scenario": Self.appScenario]
+        step("app-launch", &appLaunch) { _ in
+            // Environment preparation never fails: an issue XCTest records while launching (for example
+            // "Failed to get launch progress") is recorded as an expected failure of this case, not of a product case.
+            let options = XCTExpectedFailure.Options(); options.isStrict = false
+            return XCTExpectFailure("The warm-up launch is environment preparation (#4432 P4).", options: options) {
+                app.launch()
+                return app.wait(for: .runningForeground, timeout: left())
+            }
+        }
         // Home instead of terminate: under load "Failed to terminate" is itself a test failure (#4432 F6).
-        // The app under test comes to the front at its own launch.
+        // The app under test comes to the front at its own launch, which terminates this instance.
         XCUIDevice.shared.press(.home)
         let total = rounded(Date().timeIntervalSince(start))
         let settled = stoppedAt == nil
@@ -89,8 +112,9 @@ final class ShardWarmUpUITests: XCTestCase {
         let data = (try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])) ?? Data("{}".utf8)
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
         attachment.name = "shard-warm-up"; attachment.lifetime = .keepAlways; add(attachment)
-        let line = settled ? "HPStudio warm-up: settled in \(total) s"
-            : "HPStudio warm-up: not settled after \(total) s at \(stoppedAt ?? "?")"
+        let appSeconds = steps.first { $0["step"] as? String == "app-launch" }?["seconds"].map { "\($0)" } ?? "not run"
+        let line = (settled ? "HPStudio warm-up: settled in \(total) s"
+            : "HPStudio warm-up: not settled after \(total) s at \(stoppedAt ?? "?")") + "; app launch \(appSeconds) s"
         XCTContext.runActivity(named: line) { _ in }
     }
 }

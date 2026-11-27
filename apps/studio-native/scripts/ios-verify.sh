@@ -172,8 +172,9 @@ if [ "$dedicated" = yes ]; then
   printf 'native verification: simulator settle and speech probe\n'
   python3 ../scripts/ios-sim-observe.py settle --evidence ../evidence --device "$device" || echo "::warning::simulator settle not recorded"
 fi
-# Warm the booted simulator with a system app, never the app under test: the first UI case
-# must still see a fresh install. A cold first launch has stalled the first case before.
+# Warm the booted simulator with a system app. The app under test is launched once later, by the
+# UI warm-up case (ShardWarmUpUITests, P4), in its own fixture namespace, so every UI case still
+# sees no account, draft or conversation state. A cold first launch has stalled the first case before.
 printf 'native verification: simulator warm-up\n'
 timed warm-up xcrun simctl launch "$device" com.apple.Preferences > /dev/null
 timed warm-up xcrun simctl terminate "$device" com.apple.Preferences || true
