@@ -4971,7 +4971,9 @@
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/test/chalk-tools.test.mjs"
+          "path": "test/chalk-tools.test.mjs",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
         }
       ]
     },
@@ -5048,7 +5050,12 @@
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
+          "path": "test/chalk-generator.test.mjs",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-tool-merge.smoke.mjs"
         }
       ]
     },
@@ -5115,7 +5122,9 @@
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
+          "path": "test/chalk-generator.test.mjs",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
         }
       ]
     },
@@ -5167,7 +5176,9 @@
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"
+          "path": "test/chalk-judge.test.mjs",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
         }
       ]
     },
