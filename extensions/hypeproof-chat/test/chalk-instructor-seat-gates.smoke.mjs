@@ -311,6 +311,27 @@ await gate('H16', 'restore the files of a reviewed turn', async s => {
 });
 
 /**
+ * A send up to the model call: the attached file is taken, then the 자료 read stops the send before any model turn.
+ * Records what the three seat reads inside handleSend decided.
+ */
+const sendProfile = { ...personal, ux: { coach: {} } };
+async function sendUntilModel(s) {
+  const seen = { nicknameReads: 0, materialsAllowed: undefined, error: undefined };
+  s.h.takeFileAttachment = () => '[작업 파일 a.txt]\nhello';
+  s.h.takeMaterials = async (_prepared, allowed) => { seen.materialsAllowed = allowed; throw new Error('stopped before the model'); };
+  s.h.learnerNicknameKey = () => { seen.nicknameReads++; return 'nick'; };
+  s.h.fileTurnIds = new Set();
+  // Preview and page features the send also touches; not seat gates.
+  s.h.restoreStyleTweakPreview = () => {}; s.h.elementQueue = { take: () => null, queued: null };
+  await s.h.handleSend('안녕', [], undefined, undefined, undefined, undefined, undefined, undefined, undefined, true).catch(e => { seen.error = e; });
+  if (seen.materialsAllowed === undefined) throw new Error(`the send did not reach the 자료 read: ${seen.error?.stack ?? seen.error}`);
+  return { ...seen, fileCarried: s.h.fileTurnIds.size > 0 };
+}
+await gate('H11a', 'a send reads the learner nickname', async s => (await sendUntilModel(s)).nicknameReads > 0, { profile: sendProfile });
+await gate('H11b', 'a send carries the attached file', async s => (await sendUntilModel(s)).fileCarried, { profile: sendProfile });
+await gate('H11c', 'a send carries the selected 자료', async s => (await sendUntilModel(s)).materialsAllowed === true, { profile: sendProfile });
+
+/**
  * A re-check after a wait: the window starts as a learner seat, becomes seat `which` while the handler waits (the real
  * postConfig decides again), and the handler continues. The re-check must refuse on chalk and legacy only.
  */
@@ -343,23 +364,6 @@ await recheck('H18b', 'personal Claude continuation re-check', async (s, become)
   if (armed) throw new Error('the token read was not reached');
   return reached;
 });
-
-// Static: these reads sit inside handleSend, after its preflight, where reaching them needs a full model turn
-// (runtime, stream and history). Each line must read the seat gate.
-{
-  const src = fs.readFileSync(path.join(ext, 'src/chatPanelProvider.ts'), 'utf8').split('\n');
-  const STATIC = [
-    ['H11a', 'handleSend nicknameStored', 'const nicknameStored = nicknameSeat(profile, '],
-    ['H11b', 'handleSend withFile', 'const withFile = fileContext && fileAttachAllowed(profile, '],
-    ['H11c', 'handleSend materialContext', 'await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, '],
-  ];
-  for (const [id, name, anchor] of STATIC) {
-    const lines = src.filter(l => l.includes(anchor));
-    if (lines.length !== 1) { failures.push(`${id} ${name}: anchor matched ${lines.length} lines`); continue; }
-    if (!lines[0].includes('ChatPanelProvider.learnerClosed(this)')) failures.push(`${id} ${name}: the line does not read the seat gate (ChatPanelProvider.learnerClosed)`);
-    console.log(`${failures.some(f => f.startsWith(id + ' ')) ? '✗' : '✓'} ${id} ${name} (static)`);
-  }
-}
 
 // invalidateProfile (startPage delete/save/restore, extension forget): the decision is gone until the next postConfig.
 {
