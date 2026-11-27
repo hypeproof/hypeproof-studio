@@ -355,6 +355,16 @@ jobs:
           HPS_REPACK_BASE: ${{ steps.path.outputs.base }}
         run: bash scripts/repack-mac.sh --base "$HPS_REPACK_BASE"
 
+      # Pinned Chalk extension (C-4, config/chalk-release.json). After both paths
+      # join, so the cached base never carries Chalk and a reused base or release
+      # zip cannot keep an old copy. ship=false: no download, no token needed; the
+      # step only removes a leftover. Mac only for now (Windows is not in this change).
+      - name: Install the pinned Chalk extension (ship=false removes only)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: bash scripts/install-chalk-extension.sh "vscodium-base/VSCode-darwin-arm64/HypeProof Studio.app"
+
       # Stamp CFBundleShortVersionString on the built .app (#361). Must run
       # BEFORE Re-sign: apply-product-overrides.sh no longer stamps
       # vscode/package.json .version (that feeds the runtime vscode.version API

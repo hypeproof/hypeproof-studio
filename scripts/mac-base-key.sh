@@ -4,7 +4,8 @@
 # The base app is vscodium-base/VSCode-darwin-arm64/HypeProof Studio.app as the
 # 1–2 h full build leaves it, BEFORE the per-release steps (shell brand, version
 # stamp, signing). Everything in it except Resources/app/extensions/hypeproof-chat
-# is decided by the inputs below. When two revisions have the same key, a release
+# and the pinned Chalk folder (extensions/hypeproof-chalk, installed after the base by
+# scripts/install-chalk-extension.sh, C-4) is decided by the inputs below. When two revisions have the same key, a release
 # can reuse the other revision's base app and rebuild only the extension
 # (scripts/repack-mac.sh) instead of running the full VS Code build.
 #

@@ -54,7 +54,7 @@ Only a release approver's review on the current head counts:
 tarball it lists is on the release. Then it posts "출시됨 vX" for the whole team (`hps-release-published/1`).
 A failed check opens a `release-blocker` issue and posts to #alerts.
 - [ ] Make sure that the PRs for this release are merged into `main`. Later merges go to
-      the next release.
+      the next release. A Chalk pin PR (`config/chalk-release.json` with `"ship": true`) must be merged before the rc tag is cut, because the build reads the pin at the release commit.
 - [ ] Select the release manager for this week. The release manager is a member with
       write access.
 
