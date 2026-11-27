@@ -232,29 +232,11 @@ t("resolveInstructorTokenFromSecrets: only TOKEN_KEY present → undefined (stud
   assert.strictEqual(result, undefined, "student slot must not reach instructor auth path");
 });
 
-// --- runInstructorTurn policy ---
-console.log("=== runInstructorTurn — INSTRUCTOR_TOOL_PROFILE policy ===");
-
-t("runInstructorTurn: missing brief → throws '강사 지시문'", async () => {
-  const { runInstructorTurn } = await import("../src/chalk/instructorTurn.ts");
-  const local = { provider: "anthropic", model: "claude-opus-4-5", label: "Claude Opus" };
-  let threw = false;
-  try {
-    await runInstructorTurn({
-      local, cwd: "/tmp", history: [], userText: "안녕",
-      brief: undefined, chalkCtx: undefined,
-      signal: AbortSignal.abort(),
-      onDelta: () => {}, onActivity: undefined,
-      requestApproval: async () => false,
-    });
-  } catch (e) {
-    threw = e.message.includes("강사 지시문");
-  }
-  assert.ok(threw, "must throw with '강사 지시문' when brief is absent");
-});
+// --- INSTRUCTOR_TOOL_PROFILE policy (the Chalk contract turn uses it; C-5 moved it to localRuntime) ---
+console.log("=== INSTRUCTOR_TOOL_PROFILE policy ===");
 
 t("INSTRUCTOR_TOOL_PROFILE: sdk_tools.read and write are true, browser true, shell false", async () => {
-  const { INSTRUCTOR_TOOL_PROFILE } = await import("../src/chalk/instructorTurn.ts");
+  const { INSTRUCTOR_TOOL_PROFILE } = await import("../src/localRuntime/instructorProfile.ts");
   assert.ok(INSTRUCTOR_TOOL_PROFILE, "INSTRUCTOR_TOOL_PROFILE must be exported");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.read, true, "read must be true");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.write, true, "write must be true");

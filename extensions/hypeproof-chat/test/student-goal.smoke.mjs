@@ -350,6 +350,8 @@ function makeHost(context, profile, provider = proto) {
     lastProfileFailure: null,
     refreshCrDirectorContext: async () => {},
     _instructorMode: { reset() {}, handleAutoReadResult() { return null; } },
+    // C-5: postConfig always syncs the Chalk contract (no runtime setting); with no contract host this is a no-op.
+    syncChalkContract: proto.syncChalkContract,
     getCoach: () => ({ name: "코치", personality: "", configured: true }),
     // postConfig asks whether the one-click publish button may show (src/publish/).
     sitePublisher: () => ({ available: () => false }),

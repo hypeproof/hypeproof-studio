@@ -43,7 +43,8 @@ check('RR-3 the early decision sits before the turn lock and the learning-wiki c
   const wiki = at('const brainCall = mode');
   const resolved = at('const resolvedProfile = temporaryTurn');
   const access = at('await this.loadAccess();');
-  const localBranch = src.indexOf('      if (local) {\n        if (this._instructorMode.isInstructor === true) {', earlyAt);
+  // C-5: the legacy instructor branch inside 'if (local)' is removed; the local branch starts with its learner body.
+  const localBranch = src.indexOf('      if (local) {\n', earlyAt);
   const serverBranch = src.indexOf('} else if (runtime === "agent-sdk") {', earlyAt);
   if (!(earlyAt < lock)) throw new Error('early decision is not before the turn lock');
   if (!(earlyAt < wiki)) throw new Error('early decision is not before the learning-wiki call');

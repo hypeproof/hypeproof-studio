@@ -505,7 +505,8 @@ await t("#2641: a full list refuses a drop or a pick before anything is copied i
 });
 await t("wiring: the config flag follows the file-attach gate", async () => {
   const src = fs.readFileSync(path.join(extension, "src/chatPanelProvider.ts"), "utf8");
-  assert.ok(src.includes("...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),"));
+  // C-5: the gate reads the pre-clear seat flag (instructorSeat), the same rule as before the single runtime.
+  assert.ok(src.includes("...(fileAttachAllowed(toolProfile, instructorSeat) ? { materials: true } : {}),"));
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

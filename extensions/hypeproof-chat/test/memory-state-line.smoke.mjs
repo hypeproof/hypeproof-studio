@@ -65,7 +65,7 @@ try {
 
   await t('config: the posted chat config carries the line exactly where the getter does', async () => {
     const source = fs.readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
-    assert.match(source, /\.\.\.\(!isInstructor && this\.memoryStateView \? \{ memoryState: this\.memoryStateView \} : \{\}\)/, 'the config reads the getter (secondary: source)');
+    assert.match(source, /\.\.\.\(!instructorSeat && this\.memoryStateView \? \{ memoryState: this\.memoryStateView \} : \{\}\)/, 'the config reads the getter (secondary: source)');
     // No setting anywhere turns memory off.
     const contributes = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).contributes ?? {};
     const settings = [contributes.configuration ?? []].flat().flatMap(c => Object.keys(c.properties ?? {}));

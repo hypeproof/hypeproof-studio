@@ -102,7 +102,7 @@ assert.equal((await publish()).lessonCapabilityEntry, undefined, 'unknown profil
 // Instructor and local runtime must never create or acknowledge entry receipts.
 profile = { activity_id: 'a'.repeat(64), activity_kind: 'classroom', lesson: { course_id:'course', version:'v1', sha256:'hash1', content:{steps:[]} } };
 token = undefined;
-h._instructorMode = { checkInstructorMode: async()=>true, handleAutoReadResult:()=>undefined, fetchInstructorBrief:async()=>undefined };
+h._instructorMode = { checkInstructorMode: async()=>true, handleAutoReadResult:()=>undefined, fetchInstructorBrief:async()=>undefined, reset(){} };
 assert.equal((await publish()).lessonCapabilityEntry, undefined, 'instructor omitted');
 token = 'seat-a';
 h.cachedProfile = profile;

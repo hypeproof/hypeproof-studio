@@ -182,9 +182,9 @@ await t("a turn that ends while the browser dialog is open denies the late answe
 await t("both instructor paths build browser tools with the one helper, which applies the gate", () => {
   const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
   assert.equal((src.match(/withBrowserOpenApproval\(/g) ?? []).length, 1, "the gate is applied once, in the shared helper");
-  assert.equal((src.match(/this\.instructorBrowserTools\(/g) ?? []).length, 2, "legacy turn and Chalk contract turn both use the helper");
+  // C-5: the legacy instructor turn is removed, so the Chalk contract turn is the only caller.
+  assert.equal((src.match(/this\.instructorBrowserTools\(/g) ?? []).length, 1, "the Chalk contract turn uses the helper");
   assert.match(src, /browserTools: this\.instructorBrowserTools\(last\.content, cwd\)/);
-  assert.match(src, /const browserTools = this\.instructorBrowserTools\(text, cwd\)/);
   assert.match(src, /return decideBrowserOpen\(\{/, "the provider's open decision is the shared function");
 });
 

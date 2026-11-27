@@ -53,7 +53,8 @@ await t("e: the stored timeout card decodes back to the timeout source (one labe
 
 await t("f: the host records a timeout as policy with the timeout source, not a learner refusal", async () => {
   const host = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  assert.equal((host.match(/actor:denialSource==='timeout'\?'policy'/g) || []).length, 2);
+  // C-5: the legacy instructor turn's requestApproval (one of the two) is removed; the learner local path keeps its own.
+  assert.equal((host.match(/actor:denialSource==='timeout'\?'policy'/g) || []).length, 1);
   assert.match(host, /actor: denialSource === 'timeout' \? 'policy' as const/);
   assert.match(host, /a\.denialSource==='timeout'\?'승인 창을 시간 안에 고르지 않아 실행하지 않았습니다\.'/);
 });

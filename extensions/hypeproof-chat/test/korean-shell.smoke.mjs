@@ -191,7 +191,18 @@ try {
         out[k]=strip(v,[...trail,k]);}return out;}
       return node;
     };
-    const baseManifest=JSON.parse(execFileSync('git',['show',`${base}:extensions/hypeproof-chat/package.json`],{cwd:root}).toString());
+    const mainManifest=JSON.parse(execFileSync('git',['show',`${base}:extensions/hypeproof-chat/package.json`],{cwd:root}).toString());
+    // C-5 (decided by chalk-po 2026-11-27): the Studio legacy instructor runtime is removed. These three palette commands,
+    // their menu entries, and the runtime setting leave the manifest on purpose. Only these exact entries are dropped from
+    // the main side of the comparison; anything else main has must still match.
+    const DECIDED_REMOVALS={commands:['hypeproof-chat.chalk.checkPlan','hypeproof-chat.chalk.openCourse','hypeproof-chat.chalk.savePlan'],setting:'hypeproofChat.instructorRuntime',paletteWhen:"config.hypeproofChat.instructorRuntime != 'chalk-extension'"};
+    const baseManifest=structuredClone(mainManifest);
+    for(const id of DECIDED_REMOVALS.commands)assert.ok(mainManifest.contributes.commands.some(c=>c.command===id),`${id}: on main`);
+    assert.ok(mainManifest.contributes.configuration.properties[DECIDED_REMOVALS.setting],'the removed setting is on main');
+    baseManifest.contributes.commands=baseManifest.contributes.commands.filter(c=>!DECIDED_REMOVALS.commands.includes(c.command));
+    delete baseManifest.contributes.configuration.properties[DECIDED_REMOVALS.setting];
+    for(const [menu,list] of Object.entries(baseManifest.contributes.menus??{}))if(Array.isArray(list))
+      baseManifest.contributes.menus[menu]=list.filter(x=>!(DECIDED_REMOVALS.commands.includes(x.command)&&(menu==='commandPalette'||x.when===DECIDED_REMOVALS.paletteWhen)));
     // A setting this branch adds is not a relabel of one on main; every setting main already has must still match.
     const baseKeys=new Set(Object.keys(baseManifest.contributes?.configuration?.properties??{}));
     // A workbench presentation default this branch adds (e.g. #2787 secondary side bar) is not a relabel either,
@@ -207,16 +218,12 @@ try {
     // explorer/context, any menu) must carry such a gate as its `when`.
     const baseCommands=new Set((baseManifest.contributes?.commands??[]).map(x=>x.command));
     const baseMenuKeys=new Set(Object.keys(baseManifest.contributes?.menus??{}));
-    const CHALK_PALETTE_GATE=new Set(['hypeproof-chat.chalk.checkPlan','hypeproof-chat.chalk.openCourse','hypeproof-chat.chalk.savePlan']);
-    const CHALK_PALETTE_GATE_WHEN="config.hypeproofChat.instructorRuntime != 'chalk-extension'";
     const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties,d=c.contributes?.configurationDefaults;
       if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];
       if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&(k.startsWith('workbench.')||k==='update.showReleaseNotes'))delete d[k];
       if(Array.isArray(c.contributes?.commands))c.contributes.commands=c.contributes.commands.filter(x=>baseCommands.has(x.command));
       for(const [k,list] of Object.entries(c.contributes?.menus??{}))if(Array.isArray(list)){
-        // #3563 — the three Studio Chalk commands are hidden while the Chalk runtime is selected. Only these exact
-        // palette entries are outside the copy-only rule; any other new menu entry still fails the comparison.
-        c.contributes.menus[k]=list.filter(x=>(!x.command||baseCommands.has(x.command))&&!(k==='commandPalette'&&CHALK_PALETTE_GATE.has(x.command)&&x.when===CHALK_PALETTE_GATE_WHEN));
+        c.contributes.menus[k]=list.filter(x=>(!x.command||baseCommands.has(x.command)));
         if(!c.contributes.menus[k].length&&!baseMenuKeys.has(k))delete c.contributes.menus[k];}
       return c;};
     const featureClause=w=>typeof w==='string'&&/^!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+)(\s*&&\s*!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+))*$/.test(w.trim());

@@ -154,10 +154,10 @@ const readOnlyPass = { id: "pass-1", label: "이용권", mode: "included", sourc
   assert.match(line, /profile,/, "the served profile (not the access- or folder-narrowed one)");
   assert.doesNotMatch(line, /toolProfile|folderConsentProfile/, "never the narrowed profile");
   assert.match(line, /inputs: seatInputs/, "evaluated under the card's own inputs");
-  assert.match(line, /instructor: isInstructor/);
+  assert.match(line, /instructor: instructorSeat/);
   assert.match(line, /local: !!local/);
   assert.equal(src.split("(this.capChanges ??= new CapabilityChangeTracker()).observe(").length - 1, 1, "one observation site");
-  assert.match(src, /capabilityChange && !isInstructor \? \{ capabilityChange \} : \{\}/, "config carries the card");
+  assert.match(src, /capabilityChange && !instructorSeat \? \{ capabilityChange \} : \{\}/, "config carries the card");
   // F1 — the REQ-M47 card is drawn from the same evaluation and the same inputs.
   assert.match(src, /\{ aiCapabilities: seatAiCapabilities\(profile, seatInputs\) \}/, "REQ-M47 card uses seatAiCapabilities");
   assert.doesNotMatch(src, /aiCapabilities\(toolProfile/, "no second evaluation of the card");

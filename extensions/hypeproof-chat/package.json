@@ -132,18 +132,6 @@
         "title": "리허설 끝내고 강사로 돌아가기"
       },
       {
-        "command": "hypeproof-chat.chalk.checkPlan",
-        "title": "Chalk: 초안 검사 (강사용)"
-      },
-      {
-        "command": "hypeproof-chat.chalk.openCourse",
-        "title": "Chalk: 강의 초안 열기 (강사용)"
-      },
-      {
-        "command": "hypeproof-chat.chalk.savePlan",
-        "title": "Chalk: 계획서 저장 (강사용)"
-      },
-      {
         "command": "hypeproof-chat.previewActiveFile",
         "title": "HypeProof: HTML 미리보기 (옆 패널)",
         "icon": "$(open-preview)"
@@ -442,9 +430,6 @@
       ],
       "commandPalette": [
         { "command": "hypeproof-chat.endRehearsalSeat", "when": "hypeproofChat.rehearsalSeat" },
-        { "command": "hypeproof-chat.chalk.checkPlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
-        { "command": "hypeproof-chat.chalk.openCourse", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
-        { "command": "hypeproof-chat.chalk.savePlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
         {
           "command": "hypeproof-chat.skillStore",
           "when": "false"
@@ -638,20 +623,6 @@
           "default": "hypeproof-default",
           "description": "요청할 모델 이름입니다. 실제 모델은 수업 정책에 따라 서비스가 정합니다."
         },
-        "hypeproofChat.instructorRuntime": {
-          "type": "string",
-          "enum": [
-            "legacy",
-            "chalk-extension"
-          ],
-          "enumItemLabels": [
-            "Studio 안 (기본)",
-            "Chalk 확장"
-          ],
-          "default": "legacy",
-          "scope": "machine",
-          "description": "강사 화면을 어디서 띄울지 정합니다. 'legacy'(기본값): 지금처럼 Studio 안에서 강사 모드를 씁니다. 'chalk-extension': Chalk 확장(hypeproof.hypeproof-chalk)이 강사 화면을 맡습니다. 이 확장이 없으면 강사 화면이 보이지 않습니다. 기기마다 적용됩니다."
-        },
         "hypeproofChat.coachRuntime": {
           "type": "string",
           "enum": [
@@ -791,6 +762,9 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
+    "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
+    "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
+    "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",
     "test:companion-workspace": "node --experimental-strip-types --test test/companion-workspace.test.mjs test/companion-workspace-host.test.mjs",
     "test": "npm run test:companion-workspace && node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:page-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs && npm run test:apps-script && npm run test:plan-first && npm run test:quest-intake && npm run test:lesson-settings-change && npm run test:rehearsal-route && npm run test:rehearsal-report-reason && npm run test:rehearsal-turn-upload && npm run test:rehearsal-turn-upload-host",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
@@ -800,9 +774,6 @@
     "watch:webview": "cd webview-ui && npm run dev",
     "package": "vsce package --no-dependencies",
     "test:classroom-ops:review": "node --experimental-strip-types --test test/learning-block-report-gate-host.test.mjs test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs test/classroom-question-card.test.mjs test/classroom-question-answer.test.mjs test/artifact-comment.test.mjs test/classroom-artifact-comment-host.test.mjs test/version-stats.test.mjs test/classroom-join-code.test.mjs",
-    "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
-    "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
-    "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",
     "test:seat-vocabulary-render": "node scripts/run-tsx-tests.mjs seat-vocabulary-render",
     "test:response-announcer": "node scripts/run-tsx-tests.mjs response-announcer",
     "test:class-update-hold": "node scripts/run-tsx-tests.mjs class-update-hold",

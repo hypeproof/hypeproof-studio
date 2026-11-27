@@ -22,7 +22,7 @@ const exes={
 };
 const exe=exes.both;
 async function load(){
-const bundle=await build({stdin:{contents:"export {ChatPanelProvider} from './src/chatPanelProvider';export {runSdkCoach} from './src/sdkCoach';export {runLocalCoach} from './src/localRuntime/index';export {runInstructorTurn} from './src/chalk/instructorTurn';",resolveDir:root},bundle:true,platform:'node',format:'cjs',external:['vscode','@anthropic-ai/claude-agent-sdk','zod'],write:false,logLevel:'silent'});
+const bundle=await build({stdin:{contents:"export {ChatPanelProvider} from './src/chatPanelProvider';export {runSdkCoach} from './src/sdkCoach';export {runLocalCoach} from './src/localRuntime/index';",resolveDir:root},bundle:true,platform:'node',format:'cjs',external:['vscode','@anthropic-ai/claude-agent-sdk','zod'],write:false,logLevel:'silent'});
 const module={exports:{}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>(id==='os'||id==='node:os')?{...req(id),homedir:()=>scratch}:id==='vscode'?{workspace:{getConfiguration:()=>({get:(_k,f)=>f})},window:{},Uri:{file:p=>({fsPath:p})}}:req(id),process:{...process,env:{...process.env,APPDATA:scratch}},console,Buffer,URL,Error,crypto:globalThis.crypto,AbortController,AbortSignal,DOMException,TextEncoder,TextDecoder,setTimeout,clearTimeout,setInterval,clearInterval,fetch:async()=>new Response('data: '+JSON.stringify({choices:[{delta:{},finish_reason:'refusal'}]})+'\n\ndata: [DONE]\n\n')});
 return module.exports;
@@ -35,7 +35,6 @@ if(kind==='local')await api.runLocalCoach({...base,config,profile:{sdk_tools:{}}
 if(kind==='local-result-only')await api.runLocalCoach({...base,config:{...config,executable:exes['result-only']},profile:{sdk_tools:{}}});
 if(kind==='local-system-only')await api.runLocalCoach({...base,config:{...config,executable:exes['system-only']},profile:{sdk_tools:{}}});
 if(kind==='local-none')await api.runLocalCoach({...base,config:{...config,executable:exes.none},profile:{sdk_tools:{}}});
-if(kind==='instructor')await api.runInstructorTurn({...base,local:config,brief:'Synthetic instructor',chalkCtx:undefined});
 assert.equal(calls,kind==='local-none'?0:1,kind+' refusal callback');}
-const api=await load();for(const kind of ['sdk','browser','local','local-result-only','local-system-only','local-none','instructor']){await check(api,kind);console.log('GREEN',kind);}
+const api=await load();for(const kind of ['sdk','browser','local','local-result-only','local-system-only','local-none']){await check(api,kind);console.log('GREEN',kind);}
 console.log('PASS explicit refusal routes');

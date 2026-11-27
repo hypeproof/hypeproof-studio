@@ -1,6 +1,5 @@
 // The instructor's browser tools for the local runner (live_preview_start + browser_open).
-// Both instructor paths use this one function: the legacy instructor turn
-// (chatPanelProvider runInstructorTurn) and the Chalk contract turn (runContractTurn).
+// The Chalk contract turn (runContractTurn) is the one instructor path (C-5 removed the legacy turn).
 // Keep it the only place that builds these tools, so the two paths cannot drift.
 //
 // Approval: none is requested here. browser_open runs as soon as the model calls it, on both
@@ -14,7 +13,7 @@ import {
   type McpToolResult,
 } from "../browserMcp.ts";
 import type { BrowserToolsForLocal } from "./index.ts";
-import { INSTRUCTOR_TOOL_PROFILE } from "../chalk/instructorTurn.ts";
+import { INSTRUCTOR_TOOL_PROFILE } from "./instructorProfile.ts";
 
 export const INSTRUCTOR_LOCAL_BROWSER_DEFS = [LIVE_PREVIEW_START_TOOL_DEF, BROWSER_OPEN_TOOL_DEF] as const;
 

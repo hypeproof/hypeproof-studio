@@ -59,7 +59,7 @@ import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { cliLoginOk, locateCli } from './localRuntime/cliLocate';
 import { instructorLocalRuntime, releaseGateNotice, releaseInstructorRuntime, shouldRecheckRelease, type ReleaseGateReason } from './localRuntime/releaseInstructorRuntime';
 import { decideBrowserOpen } from './browserOpenDecision';
-import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, needsChalkPrompt, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, notifyOptinOffered } from "./trialEndCard";
@@ -68,8 +68,7 @@ import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitte
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
 import { InstructorModeManager } from './instructorMode';
 import { decideMode, profileFailureToStatus } from './modeDecision';
-import { chalkToolsEnabled } from './chalk/tools';
-import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
+import { INSTRUCTOR_TOOL_PROFILE } from './localRuntime/instructorProfile';
 import { ActivityConnectionError, activityConnections, canonicalRoot } from './activityConnections';
 import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwitch";
 
@@ -8869,17 +8868,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       .catch(() => undefined);
   }
 
-  // #3578: sends runtimeChanged once when a session is active; nothing when none is.
-  endChalkSessionForRuntime(): Promise<void> {
-    const host = this.chalkContract;
-    if (!host) return Promise.resolve();
-    // Returns the chain so an awaiting caller (applyInstructorRuntimeSetting) sees the end finish first.
-    this.contractSync = this.contractSync
-      .then(async () => { this.contractView = await endSessionForRuntime(host, this.contractView, 'legacy'); })
-      .catch(() => undefined);
-    return this.contractSync;
-  }
-
   chalkRunner(): LocalRunner {
     const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
     const local = (): LocalRuntimeConfig | null => {
@@ -11155,85 +11143,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
       if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
-        if (this._instructorMode.isInstructor === true) {
-          // Instructor path — bypasses student token, ensureProfile, lesson gates, spool
-          // (chalk-po condition 1). Uses INSTRUCTOR_TOOL_PROFILE (read + write + browser).
-          const cwd=this.resolveCoachCwd();
-          if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
-          // #1297 (E4-2): chalkToolsEnabled is a first-pass filter (button display).
-          // #1295 (E2-6): cwd and requestConfirmation added for file I/O and overwrite confirm.
-          // #3582: the wait for the person does not spend the turn budget, and a dialog answered after
-          // the turn has ended is denied, so the overwrite cannot run late.
-          const humanWait = createHumanWait();
-          // #3582 review: the turn can end for other reasons (runner error, CLI exit, budget), which does not
-          // abort ctrl. This signal ends with the turn itself, so a dialog left open is denied when the turn ends.
-          const turnEnded = new AbortController();
-          const chalkCtx = (await chalkToolsEnabled(this.context.secrets))
-            ? {
-                serverUrl: proxyUrl,
-                secrets: this.context.secrets,
-                cwd,
-                currentModel: local.model,
-                requestConfirmation: async (message: string): Promise<boolean> => {
-                  return humanWait.track(() => confirmUnlessTurnEnds(
-                    Promise.resolve(vscode.window.showWarningMessage(message, { modal: true }, "계속", "취소")),
-                    AbortSignal.any([ctrl.signal, turnEnded.signal]),
-                    "계속",
-                  ));
-                },
-              }
-            : undefined;
-          // Browser tools for the local runtime: the same builder the Chalk contract turn uses.
-          const browserTools = this.instructorBrowserTools(text, cwd);
-          let result: Awaited<ReturnType<typeof runInstructorTurn>>;
-          try {
-          result=await runInstructorTurn({
-            local,cwd,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
-            brief:this._instructorMode.brief,
-            chalkCtx,
-            browserTools,
-            humanWait,
-            signal:ctrl.signal,onDelta,onRefusal,onActivity,
-            requestApproval:async action=>{
-              if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
-              let prompted=false;
-              let denialSource: import("./denialSource").DenialSource | undefined;
-              const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
-              await this.captureTurnWrite(streamId,action,approved);
-              return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
-            }});
-          } finally {
-            turnEnded.abort();
-          }
-          sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
-        } else {
-          if (!profile) throw new Error(profileNotReadyNotice(this.coachDisplayName()));
-          if (effectiveImages?.length) throw new Error('로컬 개발 연결의 이미지 입력은 아직 지원하지 않습니다. 텍스트로 요청하세요.');
-          const cwd=this.resolveCoachCwd();
-          if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
-          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          // #4501 — what the subscription turn upload needs: whether text came back, and the tool names (never inputs).
-          const rehearsalFacts = { answered: false, toolNames: [] as string[] };
-          const rehearsalDelta = (t: string) => { if (t.trim()) rehearsalFacts.answered = true; onDelta(t); };
-          const rehearsalActivity = (a: Parameters<typeof onActivity>[0]) => { if (a.kind === "tool_use" && typeof a.name === "string") rehearsalFacts.toolNames.push(a.name); onActivity(a); };
-          // #19 — a subscription rehearsal turn runs with the Service's coach text for this step and help mode (memory only).
-          // Any other turn keeps the dev prompt (systemPrompt undefined).
-          const coachPrompt = mustStayLocal(profile.rehearsal) ? await this.rehearsalCoachPrompt(profile, turnFocus.step, turnFocus.helpMode) : undefined;
-          const result=await runLocalCoach({config:local,profile,systemPrompt:coachPrompt,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
-            signal:ctrl.signal,onDelta:rehearsalDelta,onRefusal,onActivity:rehearsalActivity,
-            requestApproval:async action=>{
-              if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
-              let prompted=false;
-              let denialSource: import("./denialSource").DenialSource | undefined;
-              const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
-              await this.captureTurnWrite(streamId,action,approved);
-              return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
-            }});
-          sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
-          if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
-        }
+        if (!profile) throw new Error(profileNotReadyNotice(this.coachDisplayName()));
+        if (effectiveImages?.length) throw new Error('로컬 개발 연결의 이미지 입력은 아직 지원하지 않습니다. 텍스트로 요청하세요.');
+        const cwd=this.resolveCoachCwd();
+        if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
+        const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+        // #4501 — what the subscription turn upload needs: whether text came back, and the tool names (never inputs).
+        const rehearsalFacts = { answered: false, toolNames: [] as string[] };
+        const rehearsalDelta = (t: string) => { if (t.trim()) rehearsalFacts.answered = true; onDelta(t); };
+        const rehearsalActivity = (a: Parameters<typeof onActivity>[0]) => { if (a.kind === "tool_use" && typeof a.name === "string") rehearsalFacts.toolNames.push(a.name); onActivity(a); };
+        // #19 — a subscription rehearsal turn runs with the Service's coach text for this step and help mode (memory only).
+        // Any other turn keeps the dev prompt (systemPrompt undefined).
+        const coachPrompt = mustStayLocal(profile.rehearsal) ? await this.rehearsalCoachPrompt(profile, turnFocus.step, turnFocus.helpMode) : undefined;
+        const result=await runLocalCoach({config:local,profile,systemPrompt:coachPrompt,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
+          signal:ctrl.signal,onDelta:rehearsalDelta,onRefusal,onActivity:rehearsalActivity,
+          requestApproval:async action=>{
+            if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
+            let prompted=false;
+            let denialSource: import("./denialSource").DenialSource | undefined;
+            const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
+            await this.captureTurnWrite(streamId,action,approved);
+            return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
+          }});
+        sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
+        if (mustStayLocal(profile.rehearsal)) void this.uploadRehearsalTurnFor({ turnId: streamId, model: result.model || local.model, toolNames: rehearsalFacts.toolNames, answered: rehearsalFacts.answered, step: turnFocus.step, helpMode: turnFocus.helpMode, profile });
       } else if (this._instructorMode.isInstructor === true) {
         throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
       } else if (runtime === "agent-sdk") {
@@ -12757,16 +12691,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // #3597 — the release app's instructor CLI gate (re-checked only when its inputs change).
     await refreshReleaseGate(this as unknown as ReleaseGateHost, isInstructor, panelMode);
-    // #3563 — decide the Chalk tab flag before the chalk branch clears isInstructor below.
-    const chalkInstructorTab = chalkInstructorTabField(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime'), isInstructor);
-    if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
-      this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
-      this._instructorMode.reset();
-      isInstructor = false;
-    } else {
-      // #3578: the runtime left chalk-extension, so an active Chalk session must end now.
-      if (this.chalkContract) void this.endChalkSessionForRuntime();
-    }
+    // #3563 — decide the Chalk tab flag before the Chalk contract takes over isInstructor below.
+    const chalkInstructorTab = chalkInstructorTabField(isInstructor);
+    // C-5: learner-only surfaces keep the legacy default's rule (an instructor gets none of them), also after the Chalk contract clears isInstructor below.
+    const instructorSeat = isInstructor;
+    // C-5: the Chalk contract is the one instructor runtime. Studio keeps no legacy instructor turn.
+    this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
+    this._instructorMode.reset();
+    isInstructor = false;
     // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
     if (this.lastAllowInstructor !== undefined && this.lastAllowInstructor !== isInstructor) this.endTaskCommandAllows();
     this.lastAllowInstructor = isInstructor;
@@ -12800,19 +12732,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-M47 and CGP-SHELL-R-024 evaluate a served profile the same way: this access choice, this runtime setting, this fallback.
     const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown, requiredApprovals: presetRequiredKinds(cfg.get<string[]>("requireApprovalFor", []), servedApprovalPreset(this.cachedProfile)?.id) };
     // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
-    const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
+    const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: instructorSeat, local: !!local });
     // CGP-SHELL-R-024 / D-023 (ADM-11) — a classroom seat is told what the instructor changed, once, before its next turn.
-    const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: isInstructor, local: !!local });
+    const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: instructorSeat, local: !!local });
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
-    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
-    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, isInstructor));
+    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, instructorSeat)))().catch(() => undefined);
+    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, instructorSeat));
     const classWindow = currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
-      !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
+      !!profile && !instructorSeat && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
     const classNoticeId = classWindowNoticeId(classWindow, decodeTokenPayloadUnverified(token), proxyUrl);
     const visibleClassWindow = classWindow && classNoticeId && this.context.globalState?.get(classWindowReceiptKey(classNoticeId)) !== true
       ? { ...classWindow, noticeId: classNoticeId } : null;
-    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
+    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || instructorSeat);
     // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
@@ -12836,16 +12768,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: {
         ...chalkInstructorTab,
         classWindow: visibleClassWindow,
-        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: isInstructor }).tag === "read",
+        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: instructorSeat }).tag === "read",
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
-        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
-        ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
-        ...(fileMentionsAllowed(toolProfile, isInstructor) ? { fileMentions: true } : {}),
-        ...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),
+        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: instructorSeat }),
+        ...(fileAttachAllowed(toolProfile, instructorSeat) ? { fileAttach: true } : {}),
+        ...(fileMentionsAllowed(toolProfile, instructorSeat) ? { fileMentions: true } : {}),
+        ...(fileAttachAllowed(toolProfile, instructorSeat) ? { materials: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
-        ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
-        ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
-        ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
+        ...(profile && !local && !instructorSeat ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
+        ...(capabilityChange && !instructorSeat ? { capabilityChange } : {}),
+        ...(lessonSettingsChanges.length && !instructorSeat ? { lessonSettingsChanges } : {}),
         ...(seatBand ? { rehearsalSeat: true, rehearsalPanel: await this.rehearsalPanelFor(profile, local?.model) } : {}),
         proxyUrl,
         model:local?.model??model,
@@ -12855,7 +12787,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(childGuardianNotice(profile) ? { guardianNotice: childGuardianNotice(profile) } : {}),
         ...(taskView ? { taskWorkspace: taskView } : {}),
         // CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (fail closed: adult personal seats only).
-        ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
+        ...(!instructorSeat ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
         ...(taskView && taskMove ? { taskMove } : {}),
         ...(activity && carryover ? { carryover } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{}),...(mayBeAccountSeatRecord(activity)?{accountSeat:true}:{})},
@@ -12865,7 +12797,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         activityUnavailable: this.opsHold ? {cause:this.opsHold === 'paused' ? 'paused' : 'forbidden',audience:'classroom'} : this.lastProfileFailure ? activityFailure(this.lastProfileFailure, activity ? seatAudience(activity) : profileAudience(profile)) ?? (this.lastProfileFailure.reason === 'network' ? {cause:'outage',audience:activity ? seatAudience(activity) : profileAudience(profile)} : undefined) : undefined,
         access:this.accessState,
         localSubscription:!!local,
-        cohortSettings: !local && !isInstructor && profile &&
+        cohortSettings: !local && !instructorSeat && profile &&
           (profile.activity_kind === 'classroom' || !!profile.lesson)
           ? { model: selection?.choices.length === 1, effort: effort?.allowed.length === 1 }
           : undefined,
@@ -12879,18 +12811,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-VOICE-R-026 — only when push-to-talk was chosen: the default config is unchanged.
         ...(voiceConversationMode ? { voiceConversationMode } : {}),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
-        ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
+        ...(nicknameSeat(profile, instructorSeat) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
-        ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
+        ...(!instructorSeat && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
         // CGP-KNOW-R-028 — the open task's two memory switches (absent: no store, a temporary task, an instructor).
-        ...(!isInstructor && this.taskMemoryView?.() ? { taskMemory: this.taskMemoryView()! } : {}),
+        ...(!instructorSeat && this.taskMemoryView?.() ? { taskMemory: this.taskMemoryView()! } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
         update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
         ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
         // CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it (default off).
-        ...(!local && !isInstructor && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
+        ...(!local && !instructorSeat && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -12906,7 +12838,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postAnnotations();
     // CGP-CHAT-R-011 — a file from another work folder, or on a seat that lost the gate, is dropped; a pending one is re-shown.
     if (this.pendingFileAttachment) {
-      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, isInstructor)) this.clearFileAttachment();
+      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, instructorSeat)) this.clearFileAttachment();
       else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment.preview });
     }
     // #649 — when the webview remounts (panel hide → show, reload) the highlight

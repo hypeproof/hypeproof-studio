@@ -14,7 +14,7 @@ import { BROWSER_OPEN_TOOL_DEF, LIVE_PREVIEW_START_TOOL_DEF, MCP_BROWSER_OPEN, M
 import { workspaceTools } from "../src/localRuntime/tools.ts";
 import { INSTRUCTOR_LOCAL_BROWSER_DEFS, instructorLocalBrowserTools } from "../src/localRuntime/instructorBrowserTools.ts";
 import { mergeBrowserTools, mergeExtraTools } from "../src/localRuntime/index.ts";
-import { INSTRUCTOR_TOOL_PROFILE } from "../src/chalk/instructorTurn.ts";
+import { INSTRUCTOR_TOOL_PROFILE } from "../src/localRuntime/instructorProfile.ts";
 import { needsChalkPrompt } from "../src/chalkContract.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,10 +52,7 @@ check("S-2b spy: the instructor profile exposes only read, write and browser wor
 
 check("S-2b spy: both instructor paths build browser tools with the one shared function", () => {
   const src = fs.readFileSync(path.join(root, "src/chatPanelProvider.ts"), "utf8");
-  // Legacy instructor turn: the browserTools handed to runInstructorTurn.
-  // #3464: both paths use the provider helper, which wraps instructorLocalBrowserTools with the open gate.
-  assert.match(src, /const browserTools = this\.instructorBrowserTools\(text, cwd\);/,
-    "legacy instructor turn no longer builds browser tools with the shared function");
+  // #3464: the provider helper wraps instructorLocalBrowserTools with the open gate (C-5: the legacy turn is gone).
   assert.match(src, /private instructorBrowserTools\([^)]*\)[^{]*\{[\s\S]*?instructorLocalBrowserTools\(\(\) => host\)/,
     "the shared helper no longer builds browser tools with the instructor builder");
   // Chalk contract turn: the browserTools handed to runLocalCoach in runContractTurn.
@@ -176,9 +173,8 @@ n++;
 console.log("  ok   S-2b spy: the shared builder exposes the two browser tools and runs them with no approval step");
 
 // ── Tool name set: contract composition equals legacy composition ─────────
-// Legacy and contract turns compose the same way: workspace tools, then the Chalk extra
-// tools, then the browser tools. Only the source of the Chalk list differs (Studio's
-// chalkExtraTools on legacy, the contract's a.tools on the contract path).
+// The contract turn composes workspace tools, then the Chalk extra tools, then the browser tools.
+// (C-5: Studio's legacy chalkExtraTools is removed; the Chalk list comes from the contract's a.tools.)
 {
   const nameSet = (approved) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hps-spy-names-"));
