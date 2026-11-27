@@ -36,6 +36,9 @@ const bundle = await build({
     "export { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY } from './src/rehearsalSeat';",
     "export { ACTIVITY_TOKEN_KEY as TOKEN_KEY } from './src/activityConnections';",
     "export { GOAL_REFUSAL_SENTENCES } from './src/studentGoal';",
+    "export { ActivityConnections } from './src/activityConnections';",
+    "export { REFLECTION_BINDING_KEY } from './src/personalReflection';",
+    "export { takeRestorePoint } from './src/turnRestore';",
   ].join('\n'), resolveDir: ext, loader: 'ts' },
   bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'error',
 });
@@ -46,10 +49,15 @@ const toUri = p => ({ fsPath: p, path: p, scheme: 'file' });
 const inert = { get: (t, k) => (k in t ? t[k] : typeof k === 'symbol' ? undefined : new Proxy(function () {}, inert)), apply: () => new Proxy(function () {}, inert), construct: () => new Proxy({}, inert) };
 let runtime = 'chalk-extension';
 const commands = [];
+/** Modals are recorded; `ui.onModal` runs while one is open (a seat can change meanwhile), then `ui.answer` is chosen. */
+const ui = { modal: [], answer: undefined, onModal: undefined };
+const modal = async (message, _opts, ...items) => { ui.modal.push({ message, items }); await ui.onModal?.(); return ui.answer; };
+const ws = { folder: work };
 const vscode = new Proxy({
   env: { appName: 'HypeProof Studio' },
-  window: { showWarningMessage: async () => { throw new Error('native modal must not open'); }, showInformationMessage: async () => undefined },
-  workspace: { getConfiguration: () => ({ get: (k, fallback) => (k === 'instructorRuntime' ? runtime : fallback) }), workspaceFolders: [{ uri: toUri(work), name: 'w' }], textDocuments: [] },
+  window: { showWarningMessage: modal, showInformationMessage: modal, withProgress: async (_o, task) => task({ report() {} }), createOutputChannel: () => ({ appendLine() {} }) },
+  ProgressLocation: { Window: 10, Notification: 15 },
+  workspace: { getConfiguration: () => ({ get: (k, fallback) => (k === 'instructorRuntime' ? runtime : fallback) }), get workspaceFolders() { return [{ uri: toUri(ws.folder), name: 'w' }]; }, textDocuments: [] },
   Uri: { joinPath: () => toUri('/ext'), file: toUri },
   ViewColumn: { One: 1 },
   commands: { executeCommand: async (...a) => { commands.push(a); return undefined; }, registerCommand: () => ({ dispose() {} }) },
@@ -59,7 +67,7 @@ const unref = fn => (...a) => { const t = fn(...a); t?.unref?.(); return t; };
 const mod = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, setTimeout: unref(setTimeout), clearTimeout, setInterval: unref(setInterval), clearInterval, setImmediate, AbortSignal, AbortController, URL, TextEncoder, TextDecoder, crypto: globalThis.crypto, structuredClone });
 const FC = await import('../src/folderConsent.ts');
-const { ChatPanelProvider, StartPage, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, TOKEN_KEY, GOAL_REFUSAL_SENTENCES } = mod.exports;
+const { ChatPanelProvider, StartPage, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, TOKEN_KEY, GOAL_REFUSAL_SENTENCES, ActivityConnections, REFLECTION_BINDING_KEY, takeRestorePoint } = mod.exports;
 assert.ok(ChatPanelProvider && StartPage && ISSUER_TOKEN_KEY && REHEARSAL_RETURN_KEY && TOKEN_KEY, 'bundle exports');
 
 const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -68,6 +76,10 @@ const learnerToken = exp => `${b64({ ...identity, exp })}.sig`;
 const LIVE = learnerToken(Math.floor(Date.now() / 1000) + 3600);
 const EXPIRED = learnerToken(Math.floor(Date.now() / 1000) - 60);
 const personal = { profile_id: 'p', activity_id: 'a'.repeat(64), activity_kind: 'personal', minor_cohort: false, sdk_tools: { read: true, write: true, shell: true }, tools: {}, learning_wiki: { enabled: true } };
+const u = (id, content) => ({ id, role: 'user', content, createdAt: 1000 });
+const a = (id, content) => ({ id, role: 'assistant', content, createdAt: 1000 });
+const HISTORY = [u('u1', '우리 앱 첫 화면을 바꿀까?'), a('a1', '버튼을 위로 올리면 처음 온 사람이 더 빨리 찾을 것 같아요')];
+const WIKI_PROPOSAL = { hypotheses: [{ id: 'nH1', text: '처음 온 사람이 버튼을 10초 안에 찾는다', cite: ['t1'] }] };
 const classroom = { ...personal, activity_id: 'c'.repeat(64), activity_kind: 'classroom', lesson: { course_id: 'course', version: 'v1', sha256: 'f'.repeat(64) } };
 const classConnection = { student: identity, run: { starts_at: Date.now() - 1000, ends_at: Date.now() + 3600000 }, class_run_id: 'run-1' };
 
@@ -91,6 +103,8 @@ function instructorMode(verdict) {
 /** A provider with the real prototype; secrets and the cached profile describe the seat. */
 function seat({ secrets, profile, verdict = true, run = 'chalk-extension' }) {
   const store = new Map(Object.entries(secrets));
+  /** `hook(key)` sees every secret read; it may change the seat before the read returns. */
+  let hook;
   const global = new Map();
   const posts = [], denials = [], reviewBars = [], askAbout = [], unobserved = [];
   const context = {
@@ -98,10 +112,10 @@ function seat({ secrets, profile, verdict = true, run = 'chalk-extension' }) {
     globalState: { get: k => global.get(k), update: async (k, v) => { global.set(k, v); }, keys: () => [...global.keys()] },
     workspaceState: { get: (_k, f) => f, update: async () => {} },
     globalStorageUri: toUri(tmp), storageUri: toUri(tmp),
-    secrets: { get: async k => store.get(k), store: async (k, v) => { store.set(k, v); }, delete: async k => { store.delete(k); }, onDidChange: () => ({ dispose() {} }) },
+    secrets: { get: async k => { const v = store.get(k); if (hook) { const over = await hook(k, v); if (over !== undefined) return over; } return v; }, store: async (k, v) => { store.set(k, v); }, delete: async k => { store.delete(k); }, onDidChange: () => ({ dispose() {} }) },
   };
   const h = Object.create(ChatPanelProvider.prototype);
-  const taskStore = { scope: 's', getView: () => ({ activeTaskId: 't1' }), isTemporary: () => false, getDraft: () => ({}) };
+  const taskStore = { scope: 's', getView: () => ({ activeTaskId: 't1' }), isTemporary: () => false, getDraft: () => ({}), getHistory: () => HISTORY };
   Object.assign(h, {
     context, cachedProfile: profile, lastProfileFailure: null, profileGeneration: 0,
     loadAccess: async () => {}, refreshCrDirectorContext: async () => {},
@@ -122,18 +136,28 @@ function seat({ secrets, profile, verdict = true, run = 'chalk-extension' }) {
     assert.ok(c, 'postConfig posted a config');
     return c;
   };
-  return { h, store, global, posts, denials, reviewBars, askAbout, unobserved, config };
+  const setHook = fn => { hook = fn; };
+  return { h, store, global, posts, denials, reviewBars, askAbout, unobserved, config, setHook };
 }
 
 const rehearsalRecord = JSON.stringify({ phase: 'inside', rehearsalId: 'rehearsal-1', expiresAt: Date.now() + 3600000, homeFolder: home, rehearsalFolder: work, stucks: [] });
-const SEATS = {
-  chalk: () => seat({ secrets: { [ISSUER_TOKEN_KEY]: 'issuer', [TOKEN_KEY]: EXPIRED }, profile: personal }),
-  legacy: () => seat({ secrets: { [ISSUER_TOKEN_KEY]: 'issuer', [TOKEN_KEY]: EXPIRED }, profile: personal, run: 'legacy' }),
-  learner: () => seat({ secrets: { [TOKEN_KEY]: LIVE }, profile: personal, verdict: false }),
-  rehearsal: () => seat({ secrets: { [REHEARSAL_RETURN_KEY]: 'issuer', [REHEARSAL_SEAT_KEY]: rehearsalRecord, [TOKEN_KEY]: LIVE }, profile: personal }),
-  rehearsalExpired: () => seat({ secrets: { [REHEARSAL_RETURN_KEY]: 'issuer', [REHEARSAL_SEAT_KEY]: rehearsalRecord, [TOKEN_KEY]: EXPIRED }, profile: personal }),
-  both: () => seat({ secrets: { [ISSUER_TOKEN_KEY]: 'issuer', [TOKEN_KEY]: LIVE }, profile: personal }),
+// The instructor check says yes to any issuer token; a seat without one can only be told no.
+const SPEC = {
+  chalk: { secrets: { [ISSUER_TOKEN_KEY]: 'issuer', [TOKEN_KEY]: EXPIRED } },
+  legacy: { secrets: { [ISSUER_TOKEN_KEY]: 'issuer', [TOKEN_KEY]: EXPIRED }, run: 'legacy' },
+  learner: { secrets: { [TOKEN_KEY]: LIVE } },
+  rehearsal: { secrets: { [REHEARSAL_RETURN_KEY]: 'issuer', [REHEARSAL_SEAT_KEY]: rehearsalRecord, [TOKEN_KEY]: LIVE } },
+  rehearsalExpired: { secrets: { [REHEARSAL_RETURN_KEY]: 'issuer', [REHEARSAL_SEAT_KEY]: rehearsalRecord, [TOKEN_KEY]: EXPIRED } },
+  both: { secrets: { [ISSUER_TOKEN_KEY]: 'issuer', [TOKEN_KEY]: LIVE } },
 };
+const SEATS = Object.fromEntries(Object.entries(SPEC).map(([k, v]) => [k, () => Object.assign(seat({ ...v, profile: personal }), { run: v.run ?? 'chalk-extension' })]));
+/** The window becomes seat `which` (its secrets and runtime) and the real postConfig decides again. */
+async function switchSeat(s, which) {
+  s.store.clear();
+  for (const [k, v] of Object.entries(SPEC[which].secrets)) s.store.set(k, v);
+  runtime = SPEC[which].run ?? 'chalk-extension';
+  await s.h.postConfig();
+}
 const CLOSED = ['chalk', 'legacy'], OPEN = ['learner', 'rehearsal', 'rehearsalExpired', 'both'];
 let passed = 0;
 const failures = [];
@@ -264,18 +288,70 @@ await gate('H19', 'start page personal reflection entry', async s => {
   return !refused;
 });
 
-// Static: these reads sit inside handleSend, the learning-wiki modal re-check, a restore closure and a continuation
-// closure, where a behaviour test would have to drive a model turn or a modal. Each line must read the seat gate.
+await gate('H2', 'personal reflection binding', async s => {
+  // A real activity binding: the personal activity is committed for this folder, the task has a reflection binding.
+  const connections = new ActivityConnections(s.h.context, () => 'https://api.hypeproof-ai.xyz/v1', () => work, async () => personal);
+  const scoped = connections.wrap();
+  await connections.commit(LIVE, personal, work);
+  s.global.set(REFLECTION_BINDING_KEY + ':' + JSON.stringify([connections.current.id, 's', 't1']), { session: 'r1', activity: connections.current.id, workspace: work, task: 't1' });
+  s.h.context = scoped;
+  return s.h.isPersonalReflection();
+});
+await gate('H16', 'restore the files of a reviewed turn', async s => {
+  // The restore's own seat check: a real restore point, a changed file, then the revert request.
+  const folder = fs.mkdtempSync(path.join(tmp, 'revert-')), store = fs.mkdtempSync(path.join(tmp, 'revert-store-'));
+  fs.writeFileSync(path.join(folder, 'a.txt'), 'before');
+  const { point } = await takeRestorePoint({ store, root: folder, id: 'p1', turnId: 't1', kind: 'turn' });
+  fs.writeFileSync(path.join(folder, 'a.txt'), 'after');
+  s.h.resolveCoachCwd = () => folder; s.h.turnRestoreTaskKey = () => 'k'; s.h.hasActiveStream = () => false; s.h.pendingSends = 0;
+  s.h.turnReview = { taskKey: 'k', root: folder, store, point, view: { turnId: 't1', state: 'open', added: [], changed: ['a.txt'], deleted: [], notCovered: [] } };
+  ui.modal = []; ui.answer = undefined;
+  await s.h.handleTurnReviewMessage({ type: 'turnRevert', turnId: 't1' });
+  return ui.modal.some(m => /되돌릴까요/.test(m.message));
+});
+
+/**
+ * A re-check after a wait: the window starts as a learner seat, becomes seat `which` while the handler waits (the real
+ * postConfig decides again), and the handler continues. The re-check must refuse on chalk and legacy only.
+ */
+async function recheck(id, name, run) {
+  for (const which of [...CLOSED, ...OPEN]) {
+    const s = SEATS.learner();
+    let open;
+    try { await s.config(); open = await run(s, () => switchSeat(s, which)); } catch (e) { failures.push(`${id} ${which}: threw ${e?.stack ?? e}`); continue; }
+    const want = OPEN.includes(which);
+    if (open !== want) failures.push(`${id} ${name}: learner → ${which} during the wait is ${open ? 'open' : 'closed'}, expected ${want ? 'open' : 'closed'}`);
+  }
+  console.log(`${failures.some(f => f.startsWith(id + ' ')) ? '✗' : '✓'} ${id} ${name} (seat changes during the wait)`);
+}
+await recheck('H6b', 'learning wiki re-check after its confirmation', async (s, become) => {
+  ws.folder = fs.mkdtempSync(path.join(tmp, 'wiki-')); s.h.servedWorkspaceRoot = ws.folder;
+  s.h.getSeatAudience = () => 'adult'; s.h.postPageNotice = () => {};
+  s.h.completeSkill = async () => ({ ok: true, text: JSON.stringify(WIKI_PROPOSAL) });
+  ui.modal = []; ui.answer = '정리하기'; ui.onModal = become;
+  try { await s.h.runAnswerToWiki({ messageId: 'a1' }); } finally { ui.onModal = undefined; ui.answer = undefined; ws.folder = work; }
+  if (!ui.modal.length) throw new Error('the confirmation was not reached');
+  return !s.denials.includes('lesson');
+});
+await recheck('H18b', 'personal Claude continuation re-check', async (s, become) => {
+  s.h.cachedProfile = { ...personal, activity_kind: 'trial', profile_id: 'studio-open-trial' }; s.h.endCardOfferToken = LIVE;
+  s.h.activeStreams = new Map(); let reached = false; s.h.getHistory = () => { reached = true; throw new Error('continued'); };
+  // The continuation reads the learner token after its first check; the seat changes during that read.
+  let armed = true;
+  s.setHook(async k => { if (k !== TOKEN_KEY || !armed) return undefined; armed = false; await become(); s.h.cachedProfile = { ...personal, activity_kind: 'trial', profile_id: 'studio-open-trial' }; return LIVE; });
+  await s.h.openPersonalClaude('draft').catch(() => undefined);
+  if (armed) throw new Error('the token read was not reached');
+  return reached;
+});
+
+// Static: these reads sit inside handleSend, after its preflight, where reaching them needs a full model turn
+// (runtime, stream and history). Each line must read the seat gate.
 {
   const src = fs.readFileSync(path.join(ext, 'src/chatPanelProvider.ts'), 'utf8').split('\n');
   const STATIC = [
-    ['H2', 'reflectionBinding', "(activity.kind!=='personal'&&!mayBeAccountSeatRecord(activity))||"],
-    ['H6b', 'learning wiki re-check after the modal', 'this.cachedProfile?.lesson || !this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson");'],
     ['H11a', 'handleSend nicknameStored', 'const nicknameStored = nicknameSeat(profile, '],
     ['H11b', 'handleSend withFile', 'const withFile = fileContext && fileAttachAllowed(profile, '],
     ['H11c', 'handleSend materialContext', 'await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, '],
-    ['H16', 'turn review restore current()', 'this.taskChanging || this.verifySession?.running || '],
-    ['H18b', 'personal Claude current()', 'const current = () => scope() === bound && this.endCardOfferToken === token'],
   ];
   for (const [id, name, anchor] of STATIC) {
     const lines = src.filter(l => l.includes(anchor));
@@ -294,6 +370,20 @@ await gate('H19', 'start page personal reflection entry', async s => {
   const after = s.h.mentionAllowed();
   if (before !== false || after !== true) failures.push(`INV invalidateProfile: mentions before ${before}, after ${after}; expected closed, then open until the next postConfig`);
   console.log(`${before === false && after === true ? '✓' : '✗'} INV invalidateProfile clears the seat together with the instructor decision`);
+}
+
+// invalidateProfile while a postConfig waits for whoami: the older run, finishing last, does not bring the seat back.
+{
+  const s = SEATS.chalk(); runtime = 'chalk-extension';
+  await s.config();
+  let release; s.h._instructorMode.pending = new Promise(r => { release = r; });
+  const older = s.h.postConfig();
+  await new Promise(r => setTimeout(r, 20));
+  s.h.invalidateProfile(); s.h.cachedProfile = personal; s.h._instructorMode.pending = null;
+  release(true); await older;
+  const open = s.h.mentionAllowed();
+  if (open !== true) failures.push(`INVRACE invalidateProfile during a waiting postConfig: mentions ${open}; expected open until the next postConfig`);
+  console.log(`${open === true ? '✓' : '✗'} INVRACE invalidateProfile during a waiting postConfig: the older run does not bring the seat back`);
 }
 
 // Overlapping postConfig runs: an older instructor run that finishes last does not close a newer learner seat.
