@@ -4951,7 +4951,9 @@
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
+          "path": "src/chalk/tools.ts",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
         },
         {
           "path": "extensions/hypeproof-chat/src/localRuntime/index.ts"
@@ -5035,7 +5037,9 @@
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
+          "path": "src/chalk/tools.ts",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
         }
       ]
     },
@@ -5094,7 +5098,9 @@
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
+          "path": "src/chalk/tools.ts",
+          "repository": "hypeproof/hypeproof-chalk",
+          "commit": "d8cecfe002213be835b016098c141e62fe2d566f"
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
