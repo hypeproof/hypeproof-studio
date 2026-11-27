@@ -26,11 +26,12 @@ once, after the test, for a line the watcher was stopped before reaching. Output
 <evidence>/terminate-diagnostics.txt plus one row per capture. Both are diagnostics only:
 they change no test, wait, limit or result (#4432 F6).
 The same two commands also record a launch or relaunch that stops making progress (`scan_hang`): while the
-log's last step is a launch step and the log has not grown for HANG_QUIET_SECONDS, and once a test ran out of
-its time allowance or failed to get launch progress. Each capture takes the app's launchctl rows, the host's
-HPStudio process rows (names only) and the device's `simctl list` state; only the failed-test capture also
-takes the 3-minute log. Output goes to <evidence>/hang-diagnostics.txt plus one row each, at most HANG_CAPTURES
-per kind per shard. Diagnostics only, with their own limits.
+log's last step is a launch step and the log has not grown for HANG_QUIET_SECONDS, and once a test ran out
+of its time allowance or failed to get launch progress. While a launch is stuck (it may still succeed) a
+capture takes only one host `ps` of the HPStudio and runner process names and calls no simctl, so it adds
+no load to the simulator. Once the test has failed it also takes the app's launchctl rows, the device's
+`simctl list` state and the 3-minute log. Output goes to <evidence>/hang-diagnostics.txt plus one row each,
+at most HANG_CAPTURES per kind per shard. Diagnostics only, with their own limits.
 
 `stall-watch` runs beside the test like `terminate-watch`. For each new main-thread stall that the
 app reports while it is still going on ("HPStudio main stall (ongoing): ... since uptime <start>"),
@@ -930,19 +931,14 @@ def captured_hangs(evidence):
 
 
 def capture_hang(evidence, device, kind, test, key, step, index, *, run=None):
-    """While a launch is stuck: launchctl rows, app process rows and the device state. After the test ran out
-    of time: the same plus the last 3 minutes of runningboardd, SpringBoard and testmanagerd log. Each
-    command has its own limit; one that does not return is recorded as such and the next one runs."""
+    """`launch-quiet` (the launch may still succeed): one host `ps` of the app and runner process names, and no
+    simctl call, so the capture adds no load to the simulator on a saturated host. `after` (the test has failed):
+    the same `ps`, then the app's launchctl rows, the device's `simctl list` state and the last 3 minutes of
+    runningboardd, SpringBoard and testmanagerd log. Each command has its own limit; one that does not return
+    is recorded as such and the next one runs."""
     run = run or run_bounded
     wall = datetime.now(timezone.utc).isoformat(timespec="seconds")
     costs = []
-    launchctl = measured(run, ["xcrun", "simctl", "spawn", device, "launchctl", "list"], LAUNCHCTL_LIMIT, costs, name="simctl launchctl")
-    if launchctl.startswith("<"):
-        app_rows, launchctl_outcome = launchctl.strip(), "timeout"
-    else:
-        rows = [line for line in launchctl.splitlines() if "hypeproof" in line.lower()]
-        app_rows = "\n".join(rows) if rows else "<no hypeproof entry>"
-        launchctl_outcome = "listed" if rows else "absent"
     table = measured(run, HANG_PS, PS_LIMIT, costs, name="ps app")
     if table.startswith("<"):
         processes, ps_outcome = table.strip(), "timeout"
@@ -950,25 +946,30 @@ def capture_hang(evidence, device, kind, test, key, step, index, *, run=None):
         found = [line for line in table.splitlines() if line.split() and line.split()[-1] in HANG_PS_NAMES]
         processes = "\n".join(found) if found else "<no HPStudio process>"
         ps_outcome = "listed" if found else "absent"
-    listing = measured(run, ["xcrun", "simctl", "list", "devices", device], SIMCTL_LIST_LIMIT, costs, name="simctl list")
-    device_rows = [line.strip() for line in listing.splitlines() if device in line]
-    state = "timeout" if listing.startswith("<") else (device_rows[0] if device_rows else "absent")
     fields = dict(step="hang", command="diagnose", sample=index, utc=wall, kind=kind, test=test, last_step=step,
-                  launchctl=launchctl_outcome, processes=ps_outcome, device_state=state)
-    log = None
+                  processes=ps_outcome)
+    sections = [f"-- host processes {' / '.join(HANG_PS_NAMES)} (names only, limit {PS_LIMIT}s)\n{processes}\n"]
     if kind == "after":
-        # Only once the test has failed: the heaviest read never runs while a launch may still recover.
+        launchctl = measured(run, ["xcrun", "simctl", "spawn", device, "launchctl", "list"], LAUNCHCTL_LIMIT, costs, name="simctl launchctl")
+        if launchctl.startswith("<"):
+            app_rows, launchctl_outcome = launchctl.strip(), "timeout"
+        else:
+            rows = [line for line in launchctl.splitlines() if "hypeproof" in line.lower()]
+            app_rows = "\n".join(rows) if rows else "<no hypeproof entry>"
+            launchctl_outcome = "listed" if rows else "absent"
+        listing = measured(run, ["xcrun", "simctl", "list", "devices", device], SIMCTL_LIST_LIMIT, costs, name="simctl list")
+        device_rows = [line.strip() for line in listing.splitlines() if device in line]
+        state = "timeout" if listing.startswith("<") else (device_rows[0] if device_rows else "absent")
         log = measured(run, ["xcrun", "simctl", "spawn", device, "log", "show", "--last", LOG_SHOW_WINDOW, "--style", "compact",
                              "--info", "--predicate", LOG_SHOW_PREDICATE], LOG_SHOW_LIMIT, costs, name="simctl log show")
-        fields.update(log="timeout" if log.startswith("<") else "shown", log_lines=len(log.splitlines()))
+        fields.update(launchctl=launchctl_outcome, device_state=state,
+                      log="timeout" if log.startswith("<") else "shown", log_lines=len(log.splitlines()))
+        sections += [f"-- launchctl list (hypeproof rows, limit {LAUNCHCTL_LIMIT}s)\n{app_rows}\n",
+                     f"-- simctl list devices (limit {SIMCTL_LIST_LIMIT}s)\n{chr(10).join(device_rows) or listing.strip()}\n",
+                     f"-- log show --last {LOG_SHOW_WINDOW} {LOG_SHOW_PREDICATE} (limit {LOG_SHOW_LIMIT}s)\n{log.rstrip()}\n"]
     push.record(evidence, costs=costs, **fields)
     with (evidence / HANG_FILE).open("a") as target:
-        target.write(f"== hang {index} {kind} {key} {wall}\n-- last step: {step}\n")
-        target.write(f"-- launchctl list (hypeproof rows, limit {LAUNCHCTL_LIMIT}s)\n{app_rows}\n")
-        target.write(f"-- host processes {' / '.join(HANG_PS_NAMES)} (names only, limit {PS_LIMIT}s)\n{processes}\n")
-        target.write(f"-- simctl list devices (limit {SIMCTL_LIST_LIMIT}s)\n{chr(10).join(device_rows) or listing.strip()}\n")
-        if log is not None:
-            target.write(f"-- log show --last {LOG_SHOW_WINDOW} {LOG_SHOW_PREDICATE} (limit {LOG_SHOW_LIMIT}s)\n{log.rstrip()}\n")
+        target.write(f"== hang {index} {kind} {key} {wall}\n-- last step: {step}\n" + "".join(sections))
 
 
 def scan_hang(evidence, device, log_path, *, run=None, now=None):

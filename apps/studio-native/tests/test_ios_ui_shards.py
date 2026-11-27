@@ -1821,38 +1821,44 @@ class HangDiagnostics(unittest.TestCase):
         # Either line alone is enough.
         self.assertEqual([e[2] for e in observe.hang_events(self.AFTER.splitlines()[1] + '\n', 0)], ['testB@after'])
 
-    def test_a_stuck_launch_is_captured_once_without_the_log_and_the_failure_adds_the_log(self):
+    def test_a_stuck_launch_takes_only_ps_and_the_failure_adds_the_simctl_reads(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
             taken, calls = self.scan(evidence, self.STUCK, 45)
             self.assertEqual(taken, 1)
-            self.assertEqual([(a[:2] if a[0] == 'ps' else a[1:3] if a[2] == 'list' else a[4:6], limit) for a, limit in calls],
-                             [(['launchctl', 'list'], 30), (['ps', '-axco'], 10), (['simctl', 'list'], 30)])
-            self.assertEqual(calls[2][0], ['xcrun', 'simctl', 'list', 'devices', self.DEVICE])
-            # Process names only (-c, comm), never arguments.
-            self.assertEqual(calls[1][0], ['ps', '-axco', 'pid,ppid,state,etime,comm'])
+            # While the launch may still succeed: one ps of process names (-c, comm), never arguments, and no simctl.
+            self.assertEqual(calls, [(['ps', '-axco', 'pid,ppid,state,etime,comm'], 10)])
+            self.assertFalse([args for args, _ in calls if 'simctl' in args or args[0] == 'xcrun'])
             self.assertEqual(self.scan(evidence, self.STUCK, 90), (0, []))
             taken, calls = self.scan(evidence, self.STUCK + self.AFTER, 0)
             self.assertEqual(taken, 1)
-            self.assertEqual((calls[-1][0][4:7], calls[-1][1]), (['log', 'show', '--last'], 60))
+            self.assertEqual([(args, limit) for args, limit in calls[:3]],
+                             [(['ps', '-axco', 'pid,ppid,state,etime,comm'], 10),
+                              (['xcrun', 'simctl', 'spawn', self.DEVICE, 'launchctl', 'list'], 30),
+                              (['xcrun', 'simctl', 'list', 'devices', self.DEVICE], 30)])
+            self.assertEqual((calls[3][0][4:7], calls[3][1], len(calls)), (['log', 'show', '--last'], 60, 4))
             self.assertEqual(self.scan(evidence, self.STUCK + self.AFTER, 0), (0, []))
             text = (evidence / 'hang-diagnostics.txt').read_text()
             rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
-        self.assertIn('== hang 1 launch-quiet testB@131.17 ', text)
-        self.assertIn('== hang 2 after testB@after ', text)
-        self.assertIn('-- last step: Launch ai.hypeproof.studio.mobile', text)
-        self.assertIn('UIKitApplication:ai.hypeproof.studio.mobile[9f][rb-legacy]', text)
-        self.assertNotIn('com.apple.other', text)
-        self.assertIn('13677     1 Z    02:01 HPStudio', text)
-        self.assertNotIn('launchd_sim', text)
-        self.assertIn('(Booted)', text)
-        self.assertIn('launch request timed out', text)
-        self.assertEqual([{k: r.get(k) for k in ('step', 'command', 'sample', 'kind', 'test', 'launchctl', 'processes', 'log')} for r in rows],
+        quiet, after = text.split('== hang 2 ')
+        self.assertIn('== hang 1 launch-quiet testB@131.17 ', quiet)
+        self.assertIn('-- last step: Launch ai.hypeproof.studio.mobile', quiet)
+        self.assertIn('13677     1 Z    02:01 HPStudio', quiet)
+        self.assertNotIn('launchd_sim', quiet)
+        self.assertNotIn('launchctl', quiet); self.assertNotIn('simctl', quiet); self.assertNotIn('log show', quiet)
+        self.assertTrue(after.startswith('after testB@after '))
+        self.assertIn('UIKitApplication:ai.hypeproof.studio.mobile[9f][rb-legacy]', after)
+        self.assertNotIn('com.apple.other', after)
+        self.assertIn('(Booted)', after)
+        self.assertIn('launch request timed out', after)
+        keys = ('step', 'command', 'sample', 'kind', 'test', 'processes', 'launchctl', 'log')
+        self.assertEqual([{k: r.get(k) for k in keys} for r in rows],
                          [{'step': 'hang', 'command': 'diagnose', 'sample': 1, 'kind': 'launch-quiet', 'test': 'testB',
-                           'launchctl': 'listed', 'processes': 'listed', 'log': None},
+                           'processes': 'listed', 'launchctl': None, 'log': None},
                           {'step': 'hang', 'command': 'diagnose', 'sample': 2, 'kind': 'after', 'test': 'testB',
-                           'launchctl': 'listed', 'processes': 'listed', 'log': 'shown'}])
-        self.assertIn(self.DEVICE, rows[0]['device_state'])
+                           'processes': 'listed', 'launchctl': 'listed', 'log': 'shown'}])
+        self.assertNotIn('device_state', rows[0])
+        self.assertIn(self.DEVICE, rows[1]['device_state'])
 
     def test_a_command_that_does_not_return_is_recorded_not_raised(self):
         with tempfile.TemporaryDirectory() as directory:
