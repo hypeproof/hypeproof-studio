@@ -291,6 +291,8 @@ check('N2-env', 'no instructor credential in the runner environment (N2)', !envT
   check('N2-all', 'the instructor credential is in no request, header, output, argv or env of the learner turn (N2, F3-iii)', !everything.includes(ISSUER_SENTINEL), 'sentinel found in a learner-turn output');
 }
 // F3 (ii): the issuer key is read once during the learner turn (the turn-end postConfig) and returns nothing.
+// The count is exact on purpose. If a normal read is added to the turn, this check turns red; that is the signal to
+// confirm the new read never uses the instructor credential, then update the count. The assertion is not loosened.
 check('N1-turn', 'the learner turn reads the issuer key only at turn end, and it returns nothing (F3-ii)', rehearsalRow.issuerValues.length === 1 && rehearsalRow.issuerValues.every(v => v === undefined), `reads=${rehearsalRow.issuerValues.length} values=${JSON.stringify(rehearsalRow.issuerValues)}`);
 // F1 — the learner turn's tools: no instructor tool builder call, and the CLI is given only the studio tool server.
 check('T-browser', 'the learner turn never calls the instructor tool builder (F1)', rehearsalRow.browserToolCalls === 0, `calls=${rehearsalRow.browserToolCalls}`);
