@@ -321,16 +321,50 @@ class WarmUpContracts(unittest.TestCase):
         self.assertEqual(merged['verdict'], 'FAIL')
         self.assertEqual(merged['unplanned_outside_last_shard'], [WARM_UP])
 
-    def test_the_warm_up_source_drives_settings_only_and_cannot_fail_or_skip(self):
+    def test_the_warm_up_source_drives_settings_then_one_app_launch_and_cannot_fail_or_skip(self):
         source = (NATIVE / 'ios/UITests/ShardWarmUpUITests.swift').read_text()
         code = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('//'))
         self.assertIn('XCUIApplication(bundleIdentifier: "com.apple.Preferences")', code)
-        for forbidden in ('studioApp(', 'XCUIApplication()', 'XCTAssert', 'XCTFail', 'XCTSkip', 'XCTUnwrap', 'try ', 'throws', '.terminate('):
+        for forbidden in ('XCUIApplication()', 'XCTAssert', 'XCTFail', 'XCTSkip', 'XCTUnwrap', 'try ', 'throws', '.terminate('):
             self.assertNotIn(forbidden, code, forbidden)
         self.assertIn('static let limit: TimeInterval = 60', code)
         self.assertIn('"settled": settled', code)
         project = (NATIVE / 'ios/HPStudio.xcodeproj/project.pbxproj').read_text()
         self.assertIn('path = ShardWarmUpUITests.swift;', project)
+
+    def test_the_warm_up_app_launch_is_isolated_bounded_recorded_and_untouched(self):
+        source = (NATIVE / 'ios/UITests/ShardWarmUpUITests.swift').read_text()
+        code = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('//'))
+        launch = code[code.index('let app = studioApp()'):code.index('XCUIDevice.shared.press(.home)')]
+        # The fixture is on: the scenario is on the fixture's own list, so no real server or Keychain is used.
+        scenario = re.search(r'static let appScenario = "([\w-]+)"', code).group(1)
+        fixture = (NATIVE / 'ios/App/NativeJourneyFixture.swift').read_text()
+        listed = fixture[fixture.index('private enum JourneyConfiguration'):fixture.index('private final class JourneyTransport')]
+        self.assertIn(f'"{scenario}"', listed.split('].contains(scenario)')[0])
+        self.assertIn('app.launchArguments = ["--native-journey"]', launch)
+        self.assertIn('app.launchEnvironment["HP_NATIVE_JOURNEY"] = Self.appScenario', launch)
+        # Its own namespace, which passes the fixture's namespace check (letters, digits, "-", at most 64).
+        self.assertIn('app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = "warmup" + UUID().uuidString.replacingOccurrences(of: "-", with: "")', launch)
+        self.assertLessEqual(len('warmup') + 32, 64)
+        # Launch and wait for the foreground only: no tap, no typing, no query of the app's UI, no terminate.
+        for forbidden in ('.tap(', 'typeText', 'app.buttons', 'app.staticTexts', 'app.textFields', 'app.otherElements', '.terminate('):
+            self.assertNotIn(forbidden, launch, forbidden)
+        self.assertIn('step("app-launch", &appLaunch)', launch)
+        self.assertIn('return app.wait(for: .runningForeground, timeout: left())', launch)
+        # Never a failure: a launch issue is a non-strict expected failure of this case.
+        self.assertIn('options.isStrict = false', launch)
+        self.assertIn('XCTExpectFailure(', launch)
+        self.assertEqual(code.count('XCTExpectFailure('), 1)
+        # After Settings, before Home; its time is in the attachment's steps and in the log line.
+        self.assertLess(code.index('step("typing"'), code.index('step("app-launch"'))
+        self.assertLess(code.index('step("app-launch"'), code.index('XCUIDevice.shared.press(.home)'))
+        self.assertIn('row["seconds"] = rounded(Date().timeIntervalSince(began))', code)
+        self.assertIn('"; app launch \\(appSeconds) s" + appFailure', code)
+        # An expected failure is counted: its reasons go to the step row and to the log line.
+        self.assertIn('options.issueMatcher = { issue in issues.reasons.append(issue.compactDescription); return true }', launch)
+        self.assertIn('if !issues.reasons.isEmpty { detail["expected_failure"] = issues.reasons }', launch)
+        self.assertIn('let appIssues = appRow?["expected_failure"] as? [String] ?? []', code)
+        self.assertIn('"; app launch expected-failure \\(appIssues.count): "', code)
 
 
 class MergeContracts(unittest.TestCase):
