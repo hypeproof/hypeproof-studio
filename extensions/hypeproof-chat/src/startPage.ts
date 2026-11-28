@@ -240,7 +240,7 @@ export class StartPage {
   async openPersonalReflectionEntry(): Promise<void> {
     if (this.reflectionEntry || this.reflectionEntering || this.busy) return;
     const current = activityConnections(this.context)?.current;
-    if (current?.kind === 'classroom' || current?.lesson || this.chat.isInstructor) {
+    if (current?.kind === 'classroom' || current?.lesson || this.chat.learnerSurfaceClosed()) {
       await this.show(); this.error = '수업은 그대로 유지했어요. 개인 활동을 선택한 뒤 나의 질문을 시작해 주세요.'; await this.refresh(); return;
     }
     if (this.chat.hasActiveStream()) {

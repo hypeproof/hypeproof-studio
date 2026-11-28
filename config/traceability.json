@@ -4642,6 +4642,54 @@
       ]
     },
     {
+      "id": "REQ-STUDIO-CHALK-INSTRUCTOR-SEAT",
+      "stage": "requirement",
+      "label": "Chalk-extension runtime: the instructor seat keeps learner-only surfaces and learner record writes closed",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-SUB"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Chalk authoring surface"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-INSTRUCTOR-SEAT",
+      "stage": "implementation",
+      "label": "instructorSeat kept by postConfig and read by the learner-only gates",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-CHALK-INSTRUCTOR-SEAT",
+        "ST-DES-CHALK-INSTRUCTOR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-INSTRUCTOR-SEAT",
+      "stage": "test",
+      "label": "Six real postConfig seats, 31 behaviour checks of the learner-only gates",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-CHALK-INSTRUCTOR-SEAT",
+        "ST-IMP-CHALK-INSTRUCTOR-SEAT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-instructor-seat-gates.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CHALK-MVP",
       "stage": "test",
       "owner": "JinyongShin",

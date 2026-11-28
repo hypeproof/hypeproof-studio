@@ -250,7 +250,7 @@ await t("explorer context menu: files only, one work folder, behind the gate con
   eq(fa.ASK_ABOUT_FILE_CONTEXT_KEY, "hypeproof-chat.askAboutFileEnabled", "context key constant");
   ok(/registerCommand\(ASK_ABOUT_FILE_COMMAND, async \(uri\?: vscode\.Uri\)[\s\S]{0,400}provider\.askAboutFile\(target\.fsPath\)/.test(ext), "command calls provider.askAboutFile with the explorer file");
   const provider = src("src/chatPanelProvider.ts");
-  ok(/setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed\(toolProfile, isInstructor\)\)/.test(provider), "context key follows the file-attach gate");
+  ok(/setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed\(toolProfile, instructorSeat\)\)/.test(provider), "context key follows the file-attach gate");
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });
