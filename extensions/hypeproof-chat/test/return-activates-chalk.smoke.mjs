@@ -139,7 +139,7 @@ const SEATS = {
   }
 }
 
-// R1–R3, R5, R6: a returned window activates once, with the credential restored first, no arguments carrying it, no webview post.
+// R1–R3, R5, R6: a returned window activates once, with the credential restored first, in its issuerToken field only, no webview post.
 {
   // No chat view ever opened: the window has no earlier activation (postConfig never ran).
   const s = SEATS.returned();
@@ -159,9 +159,11 @@ const SEATS = {
   check('R2', 'the credential reaches activateInstructor only as its issuerToken field, nowhere else (R2)', payload.some(a => a && a.issuerToken === ISSUER_SENTINEL) && !elsewhere.includes(ISSUER_SENTINEL), `payload=${JSON.stringify(payload).slice(0, 120)}`);
   check('R3', 'the credential is restored before the activation (R3)', issuerAtActivation === ISSUER_SENTINEL && s.reads.slice(before).includes(ISSUER_TOKEN_KEY), `issuer at activation=${issuerAtActivation ? 'present' : 'absent'}`);
   check('R6', 'the instructor-seat refresh posts nothing to the webview (R6)', s.posts.length === 0, `posts=${JSON.stringify(s.posts.map(m => m.type))}`);
-  // R5: the same window's trigger runs again: still one activation.
+  // R5 — confirms that the chalk host absorbs a repeated activation (chalkContract.ts:462-470 dedupes it). It does not
+  // detect a duplicate caused by this change: a regression that decides twice is absorbed by the host and passes here.
+  // A duplicate from this change is caught by R1's exact count of one activation on the first run.
   if (typeof activateAfterReturn === 'function') await activateAfterReturn(s.h, 'done').catch(() => undefined);
-  check('R5', 'a second trigger in the same window does not activate again (R5)', activations() === 1, `activations=${activations()}`);
+  check('R5', 'confirms the host absorbs a repeated activation (R5; host dedupe, not a test of this change)', activations() === 1, `activations=${activations()}`);
   void realExec;
 }
 

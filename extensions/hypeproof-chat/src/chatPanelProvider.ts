@@ -12734,8 +12734,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * #4548 — the instructor seat decision and the Chalk activation. postConfig calls it on the chat view path, and the
    * reopen path calls it once after a completed rehearsal return (refreshAfterReturn). It posts nothing to the webview.
    */
-  private async refreshInstructorSeat(input: { token: string | null | undefined; profile: ResolvedProfile | null; seatGen: number; proxyUrl: string }): Promise<{ panelMode: ReturnType<typeof decideMode>; issuerToken: string | undefined; isInstructor: boolean; instructorSeat: boolean; chalkInstructorTab: ReturnType<typeof chalkInstructorTabField> }> {
-    const { seatGen, proxyUrl } = input;
+  private async refreshInstructorSeat(input: { token: string | null | undefined; issuerToken: string | undefined; profile: ResolvedProfile | null; seatGen: number; proxyUrl: string }): Promise<{ panelMode: ReturnType<typeof decideMode>; issuerToken: string | undefined; isInstructor: boolean; instructorSeat: boolean; chalkInstructorTab: ReturnType<typeof chalkInstructorTabField> }> {
+    const { seatGen, proxyUrl, issuerToken } = input;
     const token = input.token;
     const profile = input.profile;
     // #1298 A-01 — student slot takes priority. If the student token is active
@@ -12751,7 +12751,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     );
     const panelMode = decideMode({ studentToken: token ?? undefined, studentProfileStatus });
     // Instructor auth always uses the issuer token slot, never the student token.
-    const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
     let isInstructor: boolean;
     if (panelMode === "instructor") {
       isInstructor = await this._instructorMode.checkInstructorMode(issuerToken, proxyUrl);
@@ -12788,7 +12787,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
     const token = await this.context.secrets.get(TOKEN_KEY);
     const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
-    await this.refreshInstructorSeat({ token, profile: this.cachedProfile ?? null, seatGen, proxyUrl });
+    const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
+    await this.refreshInstructorSeat({ token, issuerToken, profile: this.cachedProfile ?? null, seatGen, proxyUrl });
   }
 
   private async postConfig(): Promise<void> {
@@ -12816,9 +12816,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (scope!==activityConnections(this.context)?.scope) return;
     const local=(localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime));
     const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    // Instructor auth always uses the issuer token slot, never the student token. Read before the director call, as before the extraction.
+    const issuerTokenRead = await resolveInstructorTokenFromSecrets(this.context.secrets);
     // cr-review — the director's Weekly Review command follows the switch as the Service answers this token.
     void this.refreshCrDirectorContext();
-    const decision = await this.refreshInstructorSeat({ token, profile, seatGen, proxyUrl });
+    const decision = await this.refreshInstructorSeat({ token, issuerToken: issuerTokenRead, profile, seatGen, proxyUrl });
     const { panelMode, issuerToken, chalkInstructorTab, instructorSeat } = decision;
     let isInstructor = decision.isInstructor;
     // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
