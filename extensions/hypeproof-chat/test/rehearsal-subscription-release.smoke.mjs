@@ -33,11 +33,13 @@ const home = path.join(tmp, 'home'); fs.mkdirSync(home);
 const binDir = path.join(tmp, 'bin'); fs.mkdirSync(binDir);
 const runLog = path.join(tmp, 'run.log');
 const envLog = path.join(tmp, 'env.log');
-// Fake CLI: `auth status` succeeds; a turn records one run line and the child env, then answers with a success result.
+const argLog = path.join(tmp, 'argv.log');
+// Fake CLI: `auth status` succeeds; a turn records one run line, its argv and the child env, then answers with a success result.
 fs.writeFileSync(path.join(binDir, 'claude'), [
   '#!/bin/sh',
   `if [ "$1" = "auth" ]; then echo '{"loggedIn":true,"authMethod":"claude.ai"}'; exit 0; fi`,
   `echo run >> "${runLog}"`,
+  `printf '%s\\n' "$*" >> "${argLog}"`,
   `env >> "${envLog}"`,
   `printf '%s\\n' '{"type":"result","subtype":"success","is_error":false,"result":"ok","usage":{}}'`,
   '',
@@ -49,6 +51,9 @@ const CLI_PATH = path.join(binDir, 'claude');
 const toUri = p => ({ fsPath: p, path: p, scheme: 'file' });
 const inert = { get: (t, k) => (k in t ? t[k] : typeof k === 'symbol' ? undefined : new Proxy(function () {}, inert)), apply: () => new Proxy(function () {}, inert), construct: () => new Proxy({}, inert) };
 let runtime = 'chalk-extension';
+// The coach runtime setting a turn reads (F2 runs one turn on the agent-sdk runtime); the upload status a turn gets back.
+let coachRuntimeSetting = 'proxy';
+let uploadStatus = 201;
 const commands = [];
 const ui = { modal: [], answer: undefined, onModal: undefined };
 const modal = async (message, _opts, ...items) => { ui.modal.push({ message, items }); await ui.onModal?.(); return ui.answer; };
@@ -57,7 +62,7 @@ const vscode = new Proxy({
   env: { appName: 'HypeProof Studio' },
   window: { showWarningMessage: modal, showInformationMessage: modal, withProgress: async (_o, task) => task({ report() {} }), createOutputChannel: () => ({ appendLine() {} }) },
   ProgressLocation: { Window: 10, Notification: 15 },
-  workspace: { getConfiguration: () => ({ get: (k, fallback) => (k === 'instructorRuntime' ? runtime : fallback) }), get workspaceFolders() { return [{ uri: toUri(ws.folder), name: 'w' }]; }, textDocuments: [] },
+  workspace: { getConfiguration: () => ({ get: (k, fallback) => (k === 'instructorRuntime' ? runtime : k === 'coachRuntime' ? coachRuntimeSetting : fallback) }), get workspaceFolders() { return [{ uri: toUri(ws.folder), name: 'w' }]; }, textDocuments: [] },
   Uri: { joinPath: () => toUri('/ext'), file: toUri },
   ViewColumn: { One: 1 },
   commands: { executeCommand: async (...a) => { commands.push(a); return undefined; }, registerCommand: () => ({ dispose() {} }) },
@@ -65,7 +70,11 @@ const vscode = new Proxy({
 }, inert);
 // The upload path calls the global fetch: the sandbox gets a recording stub, never the network.
 const fetchCalls = [];
-const fakeFetch = async (url, init = {}) => { fetchCalls.push({ url: String(url), init }); return new Response(JSON.stringify({ ok: true }), { status: 201, headers: { 'content-type': 'application/json' } }); };
+const fakeFetch = async (url, init = {}) => {
+  fetchCalls.push({ url: String(url), init });
+  const status = String(url).includes('/classroom/rehearsal/turns') ? uploadStatus : 201;
+  return new Response(JSON.stringify({ ok: status < 300 }), { status, headers: { 'content-type': 'application/json' } });
+};
 const unref = fn => (...a) => { const t = fn(...a); t?.unref?.(); return t; };
 const mod = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, fetch: fakeFetch, crypto: globalThis.crypto, Response, URL, AbortController, AbortSignal, setTimeout: unref(setTimeout), clearTimeout, setInterval: unref(setInterval), clearInterval,
@@ -196,11 +205,20 @@ const check = (id, name, cond, why) => (cond ? ok(id, name) : bad(id, name, why)
 // P — the provider's turn guard and runner for each seat (real postConfig, real handleSend up to the runner).
 const turnRows = {};
 async function turnFor(which, opts = {}) {
+  coachRuntimeSetting = opts.runtime ?? 'proxy';
+  uploadStatus = opts.uploadStatus ?? 201;
   const s = seat({ ...SPEC[which], profile: rehearsalProfile, run: SPEC[which].run });
   await s.config();
   s.h.cachedProfile = rehearsalProfile;
   // A store-run task: the send carries a store skill run (the Service composes it; no local runner may take it).
   if (opts.storeRun) s.h.storeRunFor = () => `ski_${'a'.repeat(32)}@1`;
+  // F1: the instructor tool builder is called only by the instructor branch; a learner turn must never call it.
+  let browserToolCalls = 0;
+  s.h.instructorBrowserTools = () => { browserToolCalls++; return undefined; };
+  // F3: every read of the issuer key during the turn, with the value it returned (the turn-end postConfig reads it).
+  const issuerValues = [];
+  s.setHook(async (k, v) => { if (k === ISSUER_TOKEN_KEY) issuerValues.push(v); return undefined; });
+  const argvBefore = fs.existsSync(argLog) ? fs.readFileSync(argLog, 'utf8').split('\n').filter(Boolean).length : 0;
   s.h.ensureProfile = async () => rehearsalProfile;
   s.h.rehearsalCoachPrompt = async () => 'coach-prompt';
   s.h.takeMaterials = async () => undefined;
@@ -226,7 +244,8 @@ async function turnFor(which, opts = {}) {
   const runs = (fs.existsSync(runLog) ? fs.readFileSync(runLog, 'utf8').split('\n').filter(Boolean).length : 0) - runsBefore;
   const uploads = fetchCalls.slice(fetchBefore).filter(c => c.url.includes('/classroom/rehearsal/turns'));
   const issuerReads = s.reads.slice(readsBefore).filter(k => k === ISSUER_TOKEN_KEY).length;
-  return { s, error, runs, uploads, issuerReads, noLocal: error?.message === NO_LOCAL_RUNTIME_MESSAGE };
+  const argv = (fs.existsSync(argLog) ? fs.readFileSync(argLog, 'utf8').split('\n').filter(Boolean) : []).slice(argvBefore);
+  return { s, error, runs, uploads, issuerReads, issuerValues, browserToolCalls, argv, noLocal: error?.message === NO_LOCAL_RUNTIME_MESSAGE };
 }
 for (const which of SEATS) turnRows[which] = await turnFor(which);
 console.log(`  info: isInstructor after the turn: ${SEATS.map(w => `${w}=${turnRows[w].s.h._instructorMode.isInstructor}`).join(' ')}`);
@@ -265,6 +284,49 @@ check('N2-env', 'no instructor credential in the runner environment (N2)', !envT
   const row = await turnFor('rehearsal', { storeRun: true });
   const refused = row.s.posts.some(m => m.type === 'streamError' && m.error === STORE_RUN_NEEDS_SERVICE);
   check('D8-store', 'a store-run turn in the learner rehearsal seat is refused before any local runner', refused && row.runs === 0 && row.uploads.length === 0, `refused=${refused} runs=${row.runs} uploads=${row.uploads.length} error=${row.error?.message ?? 'none'}`);
+}
+// N2 widened (F3-iii): the credential appears in no request body or header, no output, no argv and no env of the learner turn.
+{
+  const everything = JSON.stringify({ fetch: fetchCalls.map(c => c.init), posts: rehearsalRow.s.posts, argv: rehearsalRow.argv }) + envText;
+  check('N2-all', 'the instructor credential is in no request, header, output, argv or env of the learner turn (N2, F3-iii)', !everything.includes(ISSUER_SENTINEL), 'sentinel found in a learner-turn output');
+}
+// F3 (ii): the issuer key is read once during the learner turn (the turn-end postConfig) and returns nothing.
+check('N1-turn', 'the learner turn reads the issuer key only at turn end, and it returns nothing (F3-ii)', rehearsalRow.issuerValues.length === 1 && rehearsalRow.issuerValues.every(v => v === undefined), `reads=${rehearsalRow.issuerValues.length} values=${JSON.stringify(rehearsalRow.issuerValues)}`);
+// F1 — the learner turn's tools: no instructor tool builder call, and the CLI is given only the studio tool server.
+check('T-browser', 'the learner turn never calls the instructor tool builder (F1)', rehearsalRow.browserToolCalls === 0, `calls=${rehearsalRow.browserToolCalls}`);
+check('T-argv', 'the learner CLI call names the studio tool server only and no chalk tool (F1)', rehearsalRow.argv.length === 1 && rehearsalRow.argv[0].includes('mcp__studio__*') && !/chalk/i.test(rehearsalRow.argv[0]), `argv=${JSON.stringify(rehearsalRow.argv).slice(0, 200)}`);
+// B6 — the upload body says the turn was answered and names its step.
+{
+  const body = rehearsalRow.uploads[0] ? JSON.parse(rehearsalRow.uploads[0].init.body) : {};
+  check('B6-answered', 'the upload says the turn was answered (B6)', body.answered === true, `answered=${body.answered}`);
+  check('B6-step', 'the upload carries the step id of the turn (B6)', body.step_id === 'step-1', `step_id=${body.step_id}`);
+}
+// B4 — the report sends only what is still unsent.
+{
+  const turnUploads = () => fetchCalls.filter(c => c.url.includes('/classroom/rehearsal/turns')).length;
+  const sent = turnUploads();
+  await rehearsalRow.s.h.sendRehearsalReport([], undefined, undefined).catch(() => undefined);
+  check('B4-sent', 'a report after an uploaded turn sends no second upload (B4)', turnUploads() - sent === 0, `extra=${turnUploads() - sent}`);
+  const fresh = seat({ secrets: SPEC.rehearsal.secrets, profile: rehearsalProfile });
+  await fresh.config(); fresh.h.cachedProfile = rehearsalProfile; fresh.h.rehearsalUploadUnsent = new Map();
+  const none = turnUploads();
+  await fresh.h.sendRehearsalReport([], undefined, undefined).catch(() => undefined);
+  check('B4-none', 'a report without any turn uploads nothing (B4)', turnUploads() - none === 0, `extra=${turnUploads() - none}`);
+  const failed = await turnFor('rehearsal', { uploadStatus: 500 });
+  const unsentBefore = failed.s.h.rehearsalUploadUnsent.size;
+  uploadStatus = 201;
+  const retryFrom = turnUploads();
+  await failed.s.h.sendRehearsalReport([], undefined, undefined).catch(() => undefined);
+  const retried = fetchCalls.filter(c => c.url.includes('/classroom/rehearsal/turns')).slice(retryFrom);
+  const sameTurn = retried.length === 1 && JSON.parse(retried[0].init.body).turn_id === JSON.parse(failed.uploads.at(-1).init.body).turn_id;
+  check('B4-retry', 'a failed turn upload is retried once by the report, with the same turn id, then the queue is empty (B4)', unsentBefore === 1 && sameTurn && failed.s.h.rehearsalUploadUnsent.size === 0, `unsent before=${unsentBefore} retries=${retried.length} sameTurn=${sameTurn} queue=${failed.s.h.rehearsalUploadUnsent.size}`);
+}
+// F2 — a store-run turn on the agent-sdk runtime with a local runner is refused by the `local` term alone.
+{
+  const row = await turnFor('rehearsal', { storeRun: true, runtime: 'agent-sdk' });
+  const refused = row.s.posts.some(m => m.type === 'streamError' && m.error === STORE_RUN_NEEDS_SERVICE);
+  check('D8-sdk', 'a store-run turn on the agent-sdk runtime is refused before any local runner (F2)', refused && row.runs === 0 && row.uploads.length === 0, `refused=${refused} runs=${row.runs} uploads=${row.uploads.length} error=${row.error?.message ?? 'none'}`);
+  coachRuntimeSetting = 'proxy';
 }
 check('N3-flags','isInstructor stays false in the rehearsal turn (N3)', rehearsalRow.s.h._instructorMode.isInstructor !== true, `isInstructor ${rehearsalRow.s.h._instructorMode.isInstructor}`);
 

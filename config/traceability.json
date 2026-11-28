@@ -4695,6 +4695,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/chalk-instructor-seat-gates.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/rehearsal-subscription-release.smoke.mjs"
         }
       ]
     },
