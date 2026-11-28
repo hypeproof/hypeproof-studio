@@ -98,18 +98,25 @@ async function sdkHarness() {
     }
     if (req.method !== "POST" || !req.url.startsWith("/v1/messages")) { res.writeHead(404); res.end("{}"); return; }
     const isMain = Array.isArray(body.tools) && body.tools.some((t) => t.name === "Read");
-    if (!isMain) { sse(res, msg({ type: "text", text: "side" }, "end_turn")); return; }
+    if (!isMain) { req.kind = "side"; sse(res, msg({ type: "text", text: "side" }, "end_turn")); return; }
     const key = req.headers[H] ?? "(none)";
     const n = (mainCalls.get(key) ?? 0) + 1;
     mainCalls.set(key, n);
     if (n === 1) {
+      req.kind = "529";
       res.writeHead(529, { "content-type": "application/json" });
       res.end(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }));
       return;
     }
-    const hasResult = (body.messages ?? []).some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_result"));
-    if (!hasResult) sse(res, msg({ type: "tool_use", id: `toolu_${n}`, name: "Read", input: { file_path: path.join(ws, "note.txt") } }, "tool_use"));
-    else sse(res, msg({ type: "text", text: "읽었어요" }, "end_turn"));
+    const toolResult = (body.messages ?? []).flatMap((m) => (Array.isArray(m.content) ? m.content : [])).find((b) => b.type === "tool_result");
+    if (!toolResult) {
+      req.kind = "tool_use";
+      sse(res, msg({ type: "tool_use", id: `toolu_${n}`, name: "Read", input: { file_path: path.join(ws, "note.txt") } }, "tool_use"));
+    } else {
+      req.kind = "tool_result";
+      req.toolResult = JSON.stringify(toolResult.content);
+      sse(res, msg({ type: "text", text: "읽었어요" }, "end_turn"));
+    }
   });
   const agent = profileToAgentOptions(
     { game: { template_tier: "website" }, sdk_tools: { read: true } },
@@ -123,13 +130,14 @@ async function sdkHarness() {
     });
     const abortController = new AbortController();
     const timer = setTimeout(() => abortController.abort(), 90_000);
+    let result;
     try {
-      for await (const _ev of sdk.query({
+      for await (const ev of sdk.query({
         prompt: "note.txt 읽어 줘",
         options: { ...options, abortController, canUseTool: async (_n, input) => ({ behavior: "allow", updatedInput: input }) },
-      })) { /* drain */ }
+      })) { if (ev.type === "result") result = ev; }
     } finally { clearTimeout(timer); }
-    return srv.requests.slice(before);
+    return { reqs: srv.requests.slice(before), result };
   };
   const close = async () => {
     await srv.close();
@@ -177,9 +185,13 @@ const tests = {
   async test_tc_0265_agent_sdk_retry_tool_and_text_share_turn_id() {
     const h = await sdkHarness();
     try {
-      const reqs = await h.runTurn(TURN);
-      const main = reqs.filter((r) => { try { return JSON.parse(r.body).tools?.some((t) => t.name === "Read"); } catch { return false; } });
-      assert.ok(main.length >= 3, `529, tool_use and text reached the gateway (saw ${main.length})`);
+      const { reqs, result } = await h.runTurn(TURN);
+      const main = reqs.filter((r) => r.kind && r.kind !== "side");
+      assert.deepEqual(main.map((r) => r.kind), ["529", "tool_use", "tool_result"], "529 retry, tool_use, then tool_result → text");
+      assert.match(main[2].toolResult, /turn id/, "the Read tool actually ran and its output was sent back");
+      assert.equal(result?.subtype, "success");
+      assert.equal(result?.result, "읽었어요", "the final text answer reached the user");
+      assert.deepEqual(main.map((r) => r.headers[H]), [TURN, TURN, TURN]);
       assert.deepEqual([...new Set(reqs.map((r) => r.headers[H]))], [TURN], "every request, including CLI side calls");
     } finally { await h.close(); }
   },
@@ -189,8 +201,26 @@ const tests = {
     try {
       const a = await h.runTurn("turn_a");
       const b = await h.runTurn("turn_b");
-      assert.deepEqual([...new Set(a.map((r) => r.headers[H]))], ["turn_a"]);
-      assert.deepEqual([...new Set(b.map((r) => r.headers[H]))], ["turn_b"]);
+      assert.equal(a.result?.result, "읽었어요");
+      assert.equal(b.result?.result, "읽었어요");
+      assert.deepEqual([...new Set(a.reqs.map((r) => r.headers[H]))], ["turn_a"]);
+      assert.deepEqual([...new Set(b.reqs.map((r) => r.headers[H]))], ["turn_b"]);
+      assert.deepEqual([...new Set([...a.reqs, ...b.reqs].map((r) => r.headers[H]))], ["turn_a", "turn_b"]);
+    } finally { await h.close(); }
+  },
+
+  async test_tc_0269_agent_sdk_invalid_turn_id_not_sent_valid_uuid_is() {
+    const h = await sdkHarness();
+    try {
+      const bad = await h.runTurn("bad id!");
+      assert.equal(bad.result?.result, "읽었어요", "turn still completes without the header");
+      assert.ok(bad.reqs.some((r) => r.kind === "tool_result"), "full tool loop ran");
+      assert.ok(bad.reqs.every((r) => !(H in r.headers)), "SDK gateway: invalid id never sent on any request");
+      const uuid = crypto.randomUUID();
+      const good = await h.runTurn(uuid);
+      assert.equal(good.result?.result, "읽었어요");
+      assert.deepEqual(good.reqs.filter((r) => r.kind && r.kind !== "side").map((r) => r.kind), ["529", "tool_use", "tool_result"]);
+      assert.ok(good.reqs.every((r) => r.headers[H] === uuid), "SDK gateway: valid UUID sent unchanged on every request");
     } finally { await h.close(); }
   },
 
