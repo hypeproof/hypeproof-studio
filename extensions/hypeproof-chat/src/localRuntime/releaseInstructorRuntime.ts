@@ -42,6 +42,13 @@ export async function releaseInstructorRuntime(
   if (input.panelMode !== "instructor") return { ok: false, reason: "student_slot" };
   if (!input.setting) return { ok: false, reason: "setting_off" };
   if (input.rehearsal) return { ok: false, reason: "rehearsal" };
+  return releaseCliRuntime(deps);
+}
+
+/** The CLI search and login check shared by the instructor gate and the learner rehearsal gate (same order, same checks). */
+export async function releaseCliRuntime(
+  deps: ReleaseGateDeps,
+): Promise<{ ok: true; config: LocalRuntimeConfig } | { ok: false; reason: ReleaseGateReason }> {
   for (const provider of PROVIDER_ORDER) {
     const executable = deps.locate(provider);
     if (!executable) continue;
@@ -54,6 +61,27 @@ export async function releaseInstructorRuntime(
     };
   }
   return { ok: false, reason: "no_cli" };
+}
+
+export interface LearnerRehearsalInput {
+  /** The profile is a learner-condition rehearsal code (its turns are subscription turns). */
+  rehearsal: boolean;
+  /** rehearsalInsideFor: a return is held, the seat record is `inside`, this window is the rehearsal folder. */
+  inside: boolean;
+}
+
+/**
+ * The learner rehearsal turn runner (release app). Separate from releaseInstructorRuntime: it does not read
+ * isInstructor, the issuer token or the instructor setting. It opens only inside a rehearsal seat and is used only
+ * for a learner-condition subscription rehearsal turn (chatPanelProvider handleSend). Closed otherwise.
+ */
+export async function learnerRehearsalRuntime(
+  input: LearnerRehearsalInput,
+  deps: ReleaseGateDeps,
+): Promise<{ ok: true; config: LocalRuntimeConfig } | { ok: false; reason: "not_rehearsal" | "not_inside" | ReleaseGateReason }> {
+  if (!input.rehearsal) return { ok: false, reason: "not_rehearsal" };
+  if (!input.inside) return { ok: false, reason: "not_inside" };
+  return releaseCliRuntime(deps);
 }
 
 /** The learner-facing sentence for a closed reason, shown only to the instructor. No numbers, no paths, no output. */

@@ -57,7 +57,7 @@ import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait
 import { setLocalStallTimeoutProvider } from './localRuntime/stallWatch';
 import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { cliLoginOk, locateCli } from './localRuntime/cliLocate';
-import { instructorLocalRuntime, releaseGateNotice, releaseInstructorRuntime, shouldRecheckRelease, type ReleaseGateReason } from './localRuntime/releaseInstructorRuntime';
+import { learnerRehearsalRuntime, instructorLocalRuntime, releaseGateNotice, releaseInstructorRuntime, shouldRecheckRelease, type ReleaseGateReason } from './localRuntime/releaseInstructorRuntime';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
@@ -147,7 +147,7 @@ import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} 
 import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot, leaveRehearsalAfterReport, leaveRehearsalFromBand, markRehearsalReportSent } from "./extension";
-import { rehearsalSeatActiveFor, rehearsalStucksAt, checklistForReport, rehearsalRouteFor } from "./rehearsalSeat";
+import { rehearsalSeatActiveFor, rehearsalInsideFor, rehearsalStucksAt, checklistForReport, rehearsalRouteFor } from "./rehearsalSeat";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, REHEARSAL_REPORT_SENT_KEY } from "./rehearsalSeat";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
@@ -8904,6 +8904,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.contractSync;
   }
 
+  /**
+   * The release learner rehearsal runner for a subscription rehearsal turn. Opens only inside a rehearsal seat
+   * (learnerRehearsalRuntime) and never for an instructor seat. It reads the seat and the return key, never the issuer.
+   */
+  private async learnerRehearsalLocal(rehearsal: boolean): Promise<LocalRuntimeConfig | null> {
+    if (!rehearsal || this._instructorMode.isInstructor === true) return null;
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let folder = root;
+    try { if (root) folder = canonicalRoot(root); } catch { folder = root; }
+    try {
+      const inside = await rehearsalInsideFor(this.context.secrets, folder);
+      const gate = await learnerRehearsalRuntime({ rehearsal, inside }, {
+        locate: (provider) => locateCli(provider),
+        loginOk: (executable, provider) => cliLoginOk(executable, provider),
+      });
+      return gate.ok ? gate.config : null;
+    } catch { return null; }
+  }
+
   chalkRunner(): LocalRunner {
     const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
     const local = (): LocalRuntimeConfig | null => {
@@ -10163,7 +10182,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Blocked for it: loadAccess, prepareObservation, the learning-wiki brainCall, and the Service model routes (messages and chat completions).
     // Without a local runtime the turn stops here with the existing no-local-runtime sentence.
     const rehearsalSubscriptionEarly = mustStayLocal(this.cachedProfile?.rehearsal);
-    if (rehearsalSubscriptionEarly && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
+    if (rehearsalSubscriptionEarly && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime) ?? await this.learnerRehearsalLocal(rehearsalSubscriptionEarly))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     const previousTurn = this.turnSettling, settle = turnSettleSignal();
     this.turnSettling = settle.promise;
     const previousSettled = previousTurn ? await waitAtMost(previousTurn) : true;
@@ -10337,7 +10356,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const resolvedProfile = temporaryTurn && servedProfile ? temporaryTaskProfile(servedProfile) : servedProfile;
     // #4099 — the late decision, from the resolved server profile (the same source as the cached one). A first turn without a cached profile is caught here.
     const rehearsalSubscription = rehearsalSubscriptionEarly || mustStayLocal(servedProfile?.rehearsal);
-    if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
+    if (rehearsalSubscription && !(localRuntimeConfig(vscode.env.appName, vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime) ?? await this.learnerRehearsalLocal(rehearsalSubscription))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     // #4099 — the access view chooses funding for server routes only; a subscription rehearsal turn does not read it.
     if (!rehearsalSubscription) await this.loadAccess();
     const fundingSource=this.accessState?.selected;
@@ -11175,7 +11194,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await withCoachSeatLock(coachSeatKeyFor({ token: token ?? undefined, profile: profile ?? undefined }), async () => {
       // #3608 — a learner turn never reads the release runner; an instructor turn re-checks a gate closed for no CLI or a failed login.
       if (this._instructorMode.isInstructor === true && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
-      const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime);
+      const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime) ?? (rehearsalSubscription ? await this.learnerRehearsalLocal(rehearsalSubscription) : null);
       // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
       if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
