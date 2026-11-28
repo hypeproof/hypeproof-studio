@@ -12780,6 +12780,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return { panelMode, issuerToken: issuerToken ?? undefined, isInstructor, instructorSeat, chalkInstructorTab };
   }
 
+  /**
+   * #4548 — after a completed rehearsal return (activateAfterReturn), the instructor decision once, with no chat view.
+   * It uses the same decision as postConfig and posts nothing to the webview.
+   */
+  async refreshAfterReturn(): Promise<void> {
+    const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    await this.refreshInstructorSeat({ token, profile: this.cachedProfile ?? null, seatGen, proxyUrl });
+  }
+
   private async postConfig(): Promise<void> {
     const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
     this.currentClassNoticeId = undefined;
