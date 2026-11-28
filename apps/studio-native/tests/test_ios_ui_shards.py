@@ -321,16 +321,50 @@ class WarmUpContracts(unittest.TestCase):
         self.assertEqual(merged['verdict'], 'FAIL')
         self.assertEqual(merged['unplanned_outside_last_shard'], [WARM_UP])
 
-    def test_the_warm_up_source_drives_settings_only_and_cannot_fail_or_skip(self):
+    def test_the_warm_up_source_drives_settings_then_one_app_launch_and_cannot_fail_or_skip(self):
         source = (NATIVE / 'ios/UITests/ShardWarmUpUITests.swift').read_text()
         code = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('//'))
         self.assertIn('XCUIApplication(bundleIdentifier: "com.apple.Preferences")', code)
-        for forbidden in ('studioApp(', 'XCUIApplication()', 'XCTAssert', 'XCTFail', 'XCTSkip', 'XCTUnwrap', 'try ', 'throws', '.terminate('):
+        for forbidden in ('XCUIApplication()', 'XCTAssert', 'XCTFail', 'XCTSkip', 'XCTUnwrap', 'try ', 'throws', '.terminate('):
             self.assertNotIn(forbidden, code, forbidden)
         self.assertIn('static let limit: TimeInterval = 60', code)
         self.assertIn('"settled": settled', code)
         project = (NATIVE / 'ios/HPStudio.xcodeproj/project.pbxproj').read_text()
         self.assertIn('path = ShardWarmUpUITests.swift;', project)
+
+    def test_the_warm_up_app_launch_is_isolated_bounded_recorded_and_untouched(self):
+        source = (NATIVE / 'ios/UITests/ShardWarmUpUITests.swift').read_text()
+        code = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('//'))
+        launch = code[code.index('let app = studioApp()'):code.index('XCUIDevice.shared.press(.home)')]
+        # The fixture is on: the scenario is on the fixture's own list, so no real server or Keychain is used.
+        scenario = re.search(r'static let appScenario = "([\w-]+)"', code).group(1)
+        fixture = (NATIVE / 'ios/App/NativeJourneyFixture.swift').read_text()
+        listed = fixture[fixture.index('private enum JourneyConfiguration'):fixture.index('private final class JourneyTransport')]
+        self.assertIn(f'"{scenario}"', listed.split('].contains(scenario)')[0])
+        self.assertIn('app.launchArguments = ["--native-journey"]', launch)
+        self.assertIn('app.launchEnvironment["HP_NATIVE_JOURNEY"] = Self.appScenario', launch)
+        # Its own namespace, which passes the fixture's namespace check (letters, digits, "-", at most 64).
+        self.assertIn('app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = "warmup" + UUID().uuidString.replacingOccurrences(of: "-", with: "")', launch)
+        self.assertLessEqual(len('warmup') + 32, 64)
+        # Launch and wait for the foreground only: no tap, no typing, no query of the app's UI, no terminate.
+        for forbidden in ('.tap(', 'typeText', 'app.buttons', 'app.staticTexts', 'app.textFields', 'app.otherElements', '.terminate('):
+            self.assertNotIn(forbidden, launch, forbidden)
+        self.assertIn('step("app-launch", &appLaunch)', launch)
+        self.assertIn('return app.wait(for: .runningForeground, timeout: left())', launch)
+        # Never a failure: a launch issue is a non-strict expected failure of this case.
+        self.assertIn('options.isStrict = false', launch)
+        self.assertIn('XCTExpectFailure(', launch)
+        self.assertEqual(code.count('XCTExpectFailure('), 1)
+        # After Settings, before Home; its time is in the attachment's steps and in the log line.
+        self.assertLess(code.index('step("typing"'), code.index('step("app-launch"'))
+        self.assertLess(code.index('step("app-launch"'), code.index('XCUIDevice.shared.press(.home)'))
+        self.assertIn('row["seconds"] = rounded(Date().timeIntervalSince(began))', code)
+        self.assertIn('"; app launch \\(appSeconds) s" + appFailure', code)
+        # An expected failure is counted: its reasons go to the step row and to the log line.
+        self.assertIn('options.issueMatcher = { issue in issues.reasons.append(issue.compactDescription); return true }', launch)
+        self.assertIn('if !issues.reasons.isEmpty { detail["expected_failure"] = issues.reasons }', launch)
+        self.assertIn('let appIssues = appRow?["expected_failure"] as? [String] ?? []', code)
+        self.assertIn('"; app launch expected-failure \\(appIssues.count): "', code)
 
 
 class MergeContracts(unittest.TestCase):
@@ -1769,6 +1803,125 @@ class StallSamples(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(observe.scan_stall(Path(directory), self.DEVICE, Path(directory) / 'none.log',
                                                 run=lambda *_: self.fail('no command without a log')), 0)
+
+
+class HangDiagnostics(unittest.TestCase):
+    """ios-sim-observe.py scan_hang (#4432, run 46002155151 shard 2): a stuck launch or relaunch is recorded; diagnostics only."""
+    DEVICE = SimObserve.DEVICE
+    # Run 46002155151 shard 2, testBackgroundStops…: the relaunch after its Terminate step never returned.
+    STUCK = ("Test Case '-[HPStudioUITests.StudioJourneyTests testB]' started.\n"
+             '    t =     0.16s     Launch ai.hypeproof.studio.mobile\n'
+             '    t =    79.18s         Setting up automation session\n'
+             '    t =   120.09s Terminate ai.hypeproof.studio.mobile:13677\n'
+             '    t =   131.16s Open ai.hypeproof.studio.mobile\n'
+             '    t =   131.17s     Launch ai.hypeproof.studio.mobile\n'
+             "2026-11-27 13:12:20.233 xcodebuild[8630:31928] [MT] IDELaunchParametersSnapshot: no debugger version\n")
+    AFTER = ("Test Case '-[HPStudioUITests.StudioJourneyTests testB]' exceeded execution time allowance of 3 minutes.\n"
+             '<unknown>:0: error: -[HPStudioUITests.StudioJourneyTests testB] : Failed to get launch progress for '
+             '<XCUIApplicationImpl: 0x109dff140 ai.hypeproof.studio.mobile at /x/HPStudio.app>: No failure details provided\n'
+             '    t =   182.09s Tear Down\n')
+    OUTPUTS = {'launchctl': 'PID\tStatus\tLabel\n-\t0\tUIKitApplication:ai.hypeproof.studio.mobile[9f][rb-legacy]\n1\t0\tcom.apple.other\n',
+               'ps': '  PID  PPID STAT ELAPSED COMM\n13677     1 Z    02:01 HPStudio\n16184  900 S    00:40 HPStudioUITests-Runner\n  900     1 S    09:00 launchd_sim\n',
+               'list': '== Devices ==\n-- iOS 27.2 --\n    HP-Studio-1 (%s) (Booted) \n',
+               'log': 'runningboardd: [app<ai.hypeproof.studio.mobile>] launch request timed out\n'}
+
+    def scan(self, evidence, text, quiet):
+        log = evidence / 'simulator-test.log'; log.write_text(text)
+        calls = []
+        def run(args, limit):
+            calls.append((args, limit))
+            key = 'ps' if args[0] == 'ps' else ('list' if args[2] == 'list' else args[4])
+            return self.OUTPUTS[key].replace('%s', self.DEVICE)
+        taken = observe.scan_hang(evidence, self.DEVICE, log, run=run, now=log.stat().st_mtime + quiet)
+        return taken, calls
+
+    def test_a_launch_quiet_for_less_than_the_threshold_is_not_a_hang(self):
+        self.assertEqual(observe.HANG_QUIET_SECONDS, 30)
+        self.assertEqual(observe.hang_events(self.STUCK, 29.9), [])
+        self.assertEqual(observe.hang_events(self.STUCK, 30),
+                         [('launch-quiet', 'testB', 'testB@131.17', 'Launch ai.hypeproof.studio.mobile')])
+
+    def test_a_launch_with_a_later_step_or_another_last_step_is_not_a_hang(self):
+        passed = self.STUCK + '    t =   133.00s         Setting up automation session\n    t =   134.00s Find the "x" Button\n'
+        self.assertEqual(observe.hang_events(passed, 600), [])
+        self.assertEqual(observe.hang_events('    t =     5.00s Tap "x" Button\n', 600), [])
+        # A slow first launch that is still going is one event; its later stuck relaunch is another.
+        first = self.STUCK.split('    t =    79.18s')[0]
+        self.assertEqual([e[2] for e in observe.hang_events(first, 40)], ['testB@0.16'])
+
+    def test_a_test_that_ran_out_of_time_is_one_after_event_with_its_last_step(self):
+        events = observe.hang_events(self.STUCK + self.AFTER, 0)
+        self.assertEqual(events, [('after', 'testB', 'testB@after', 'Launch ai.hypeproof.studio.mobile')])
+        # Either line alone is enough.
+        self.assertEqual([e[2] for e in observe.hang_events(self.AFTER.splitlines()[1] + '\n', 0)], ['testB@after'])
+
+    def test_a_stuck_launch_takes_only_ps_and_the_failure_adds_the_simctl_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, self.STUCK, 45)
+            self.assertEqual(taken, 1)
+            # While the launch may still succeed: one ps of process names (-c, comm), never arguments, and no simctl.
+            self.assertEqual(calls, [(['ps', '-axco', 'pid,ppid,state,etime,comm'], 10)])
+            self.assertFalse([args for args, _ in calls if 'simctl' in args or args[0] == 'xcrun'])
+            self.assertEqual(self.scan(evidence, self.STUCK, 90), (0, []))
+            taken, calls = self.scan(evidence, self.STUCK + self.AFTER, 0)
+            self.assertEqual(taken, 1)
+            self.assertEqual([(args, limit) for args, limit in calls[:3]],
+                             [(['ps', '-axco', 'pid,ppid,state,etime,comm'], 10),
+                              (['xcrun', 'simctl', 'spawn', self.DEVICE, 'launchctl', 'list'], 30),
+                              (['xcrun', 'simctl', 'list', 'devices', self.DEVICE], 30)])
+            self.assertEqual((calls[3][0][4:7], calls[3][1], len(calls)), (['log', 'show', '--last'], 60, 4))
+            self.assertEqual(self.scan(evidence, self.STUCK + self.AFTER, 0), (0, []))
+            text = (evidence / 'hang-diagnostics.txt').read_text()
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        quiet, after = text.split('== hang 2 ')
+        self.assertIn('== hang 1 launch-quiet testB@131.17 ', quiet)
+        self.assertIn('-- last step: Launch ai.hypeproof.studio.mobile', quiet)
+        self.assertIn('13677     1 Z    02:01 HPStudio', quiet)
+        self.assertNotIn('launchd_sim', quiet)
+        self.assertNotIn('launchctl', quiet); self.assertNotIn('simctl', quiet); self.assertNotIn('log show', quiet)
+        self.assertTrue(after.startswith('after testB@after '))
+        self.assertIn('UIKitApplication:ai.hypeproof.studio.mobile[9f][rb-legacy]', after)
+        self.assertNotIn('com.apple.other', after)
+        self.assertIn('(Booted)', after)
+        self.assertIn('launch request timed out', after)
+        keys = ('step', 'command', 'sample', 'kind', 'test', 'processes', 'launchctl', 'log')
+        self.assertEqual([{k: r.get(k) for k in keys} for r in rows],
+                         [{'step': 'hang', 'command': 'diagnose', 'sample': 1, 'kind': 'launch-quiet', 'test': 'testB',
+                           'processes': 'listed', 'launchctl': None, 'log': None},
+                          {'step': 'hang', 'command': 'diagnose', 'sample': 2, 'kind': 'after', 'test': 'testB',
+                           'processes': 'listed', 'launchctl': 'listed', 'log': 'shown'}])
+        self.assertNotIn('device_state', rows[0])
+        self.assertIn(self.DEVICE, rows[1]['device_state'])
+
+    def test_a_command_that_does_not_return_is_recorded_not_raised(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); log = evidence / 'simulator-test.log'; log.write_text(self.STUCK + self.AFTER)
+            taken = observe.scan_hang(evidence, self.DEVICE, log, run=lambda args, limit: f'<{args[0]} did not return within {limit}s>')
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+        self.assertEqual(taken, 1)
+        self.assertEqual((row['launchctl'], row['processes'], row['device_state'], row['log']), ('timeout',) * 4)
+
+    def test_captures_stop_at_the_per_shard_cap_for_each_kind(self):
+        text = ''.join(self.AFTER.replace('testB', f'test{n}') for n in range(5))
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, text, 0)
+            self.assertEqual(taken, observe.HANG_CAPTURES)
+            self.assertEqual(len(calls), 4 * observe.HANG_CAPTURES)
+            self.assertEqual(self.scan(evidence, text, 0), (0, []))
+
+    def test_a_missing_log_takes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(observe.scan_hang(Path(directory), self.DEVICE, Path(directory) / 'none.log',
+                                               run=lambda *_: self.fail('no command without a log')), 0)
+
+    def test_the_terminate_watch_and_scan_also_scan_for_hangs(self):
+        source = (NATIVE / 'scripts/ios-sim-observe.py').read_text()
+        loop = source[source.index('if args.command.startswith("terminate-"):'):source.index('if args.command == "stall-watch":')]
+        self.assertIn('scan_terminate(args.evidence, args.device, args.log)', loop)
+        self.assertIn('scan_hang(args.evidence, args.device, args.log)', loop)
+        self.assertLess(loop.index('scan_terminate('), loop.index('scan_hang('))
 
 
 class TerminateDiagnostics(unittest.TestCase):

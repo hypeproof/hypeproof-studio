@@ -1546,13 +1546,25 @@ final class StudioJourneyTests: XCTestCase {
     /// `input.isEnabled && input.isHittable`, read once in the same order (isHittable only when enabled). When it is
     /// false, the two values it was decided from are attached (#4432 F21: run 45338232297 failed here and the log
     /// could not tell which half was false). The returned value is the one recorded; nothing is read twice.
-    @MainActor private func composerReachable(_ input: XCUIElement) -> Bool {
+    /// Only after the value is decided, and only when it is false, the field's snapshot frame, the window, the centre
+    /// point XCTest would use, whether a keyboard exists and the app hierarchy are attached (#4432: main runs 45828625133
+    /// and 45860675447 recorded `isHittable=false` with the field drawn and uncovered). No wait, tap or retry is added.
+    @MainActor private func composerReachable(_ input: XCUIElement, app: XCUIApplication) -> Bool {
         let enabled = input.isEnabled
         let hittable: Bool? = enabled ? input.isHittable : nil
         let reachable = enabled && hittable == true
         if !reachable {
-            let record = XCTAttachment(string: "isEnabled=\(enabled) isHittable=\(hittable.map { String($0) } ?? "not read (disabled)")")
+            let field: String
+            do {
+                let snapshot = try input.snapshot()
+                field = "frame=\(snapshot.frame) identifier=\(snapshot.identifier) type=\(snapshot.elementType.rawValue)"
+            } catch { field = "snapshot unavailable: \(error)" }
+            let centre = input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).screenPoint
+            let record = XCTAttachment(string: "isEnabled=\(enabled) isHittable=\(hittable.map { String($0) } ?? "not read (disabled)")"
+                + "\n\(field) centre=\(centre) window=\(app.frame) keyboard=\(app.keyboards.firstMatch.exists)")
             record.name = "composer-reachability"; record.lifetime = .keepAlways; add(record)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "composer-reachability-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
         }
         return reachable
     }
@@ -1562,7 +1574,7 @@ final class StudioJourneyTests: XCTestCase {
         let dark = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'dark'"), object: diagnostic("nativeJourneyAppearance", in: app))
         XCTAssertEqual(XCTWaiter.wait(for: [dark], timeout: 5), .completed, "Observe the actual view environment, not just a launch preference.")
         let input = field(app)
-        XCTAssertTrue(composerReachable(input))
+        XCTAssertTrue(composerReachable(input, app: app))
         try evidence("journey-first-use-dark-large-text", app: app)
         let thought = "This is my first thought\nI have more to say\nI want to understand it\nAnd keep these words\nBefore I sign in"
         input.tap(); input.typeText(thought)
