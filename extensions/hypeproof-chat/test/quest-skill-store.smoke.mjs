@@ -107,7 +107,8 @@ const recipe = defaultAutomationRecipe();
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
   // #3597: the local route also carries the release instructor runner (instructorLocalRuntime, instructor turns only); the guard is the same.
-  const route = src.indexOf('const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime);');
+  // #4544: the local route also carries the learner rehearsal runner; the guard is the same.
+  const route = src.indexOf('const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime) ?? (rehearsalSubscription ? await this.learnerRehearsalLocal(rehearsalSubscription) : null);');
   const routeGuard = src.indexOf('throw new Error(STORE_RUN_NEEDS_SERVICE)', route);
   assert.ok(route > 0 && routeGuard > route && routeGuard < src.indexOf('if (local) {', route), 'refused before the runtime route');
   const fallback = src.indexOf('if (!(err instanceof SdkUnavailableError)) throw err;');

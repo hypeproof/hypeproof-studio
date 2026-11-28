@@ -351,6 +351,17 @@ export async function rehearsalSeatActiveFor(secrets: SeatSecrets, root: string 
   return !!seat && sameFolder(seat.rehearsalFolder, root);
 }
 
+/**
+ * The learner rehearsal runner's seat check: a return is held, the seat record is `inside`, and this window is the
+ * rehearsal folder. It reads the return key and the seat record only. It never reads the issuer token (the instructor
+ * credential is removed while a rehearsal runs, enterRehearsal).
+ */
+export async function rehearsalInsideFor(secrets: SeatSecrets, root: string | undefined): Promise<boolean> {
+  if (!root || !(await returnHeld(secrets))) return false;
+  const seat = parseSeat(await secrets.get(REHEARSAL_SEAT_KEY));
+  return !!seat && seat.phase === "inside" && sameFolder(seat.rehearsalFolder, root);
+}
+
 /** Asks one question with two buttons; resolves to the label the person chose, or undefined when dismissed. */
 export type LeaveAsk = (message: string, buttons: readonly string[]) => Promise<string | undefined>;
 
