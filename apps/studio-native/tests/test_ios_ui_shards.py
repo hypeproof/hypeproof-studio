@@ -1771,6 +1771,125 @@ class StallSamples(unittest.TestCase):
                                                 run=lambda *_: self.fail('no command without a log')), 0)
 
 
+class HangDiagnostics(unittest.TestCase):
+    """ios-sim-observe.py scan_hang (#4432, run 46002155151 shard 2): a stuck launch or relaunch is recorded; diagnostics only."""
+    DEVICE = SimObserve.DEVICE
+    # Run 46002155151 shard 2, testBackgroundStops…: the relaunch after its Terminate step never returned.
+    STUCK = ("Test Case '-[HPStudioUITests.StudioJourneyTests testB]' started.\n"
+             '    t =     0.16s     Launch ai.hypeproof.studio.mobile\n'
+             '    t =    79.18s         Setting up automation session\n'
+             '    t =   120.09s Terminate ai.hypeproof.studio.mobile:13677\n'
+             '    t =   131.16s Open ai.hypeproof.studio.mobile\n'
+             '    t =   131.17s     Launch ai.hypeproof.studio.mobile\n'
+             "2026-11-27 13:12:20.233 xcodebuild[8630:31928] [MT] IDELaunchParametersSnapshot: no debugger version\n")
+    AFTER = ("Test Case '-[HPStudioUITests.StudioJourneyTests testB]' exceeded execution time allowance of 3 minutes.\n"
+             '<unknown>:0: error: -[HPStudioUITests.StudioJourneyTests testB] : Failed to get launch progress for '
+             '<XCUIApplicationImpl: 0x109dff140 ai.hypeproof.studio.mobile at /x/HPStudio.app>: No failure details provided\n'
+             '    t =   182.09s Tear Down\n')
+    OUTPUTS = {'launchctl': 'PID\tStatus\tLabel\n-\t0\tUIKitApplication:ai.hypeproof.studio.mobile[9f][rb-legacy]\n1\t0\tcom.apple.other\n',
+               'ps': '  PID  PPID STAT ELAPSED COMM\n13677     1 Z    02:01 HPStudio\n16184  900 S    00:40 HPStudioUITests-Runner\n  900     1 S    09:00 launchd_sim\n',
+               'list': '== Devices ==\n-- iOS 27.2 --\n    HP-Studio-1 (%s) (Booted) \n',
+               'log': 'runningboardd: [app<ai.hypeproof.studio.mobile>] launch request timed out\n'}
+
+    def scan(self, evidence, text, quiet):
+        log = evidence / 'simulator-test.log'; log.write_text(text)
+        calls = []
+        def run(args, limit):
+            calls.append((args, limit))
+            key = 'ps' if args[0] == 'ps' else ('list' if args[2] == 'list' else args[4])
+            return self.OUTPUTS[key].replace('%s', self.DEVICE)
+        taken = observe.scan_hang(evidence, self.DEVICE, log, run=run, now=log.stat().st_mtime + quiet)
+        return taken, calls
+
+    def test_a_launch_quiet_for_less_than_the_threshold_is_not_a_hang(self):
+        self.assertEqual(observe.HANG_QUIET_SECONDS, 30)
+        self.assertEqual(observe.hang_events(self.STUCK, 29.9), [])
+        self.assertEqual(observe.hang_events(self.STUCK, 30),
+                         [('launch-quiet', 'testB', 'testB@131.17', 'Launch ai.hypeproof.studio.mobile')])
+
+    def test_a_launch_with_a_later_step_or_another_last_step_is_not_a_hang(self):
+        passed = self.STUCK + '    t =   133.00s         Setting up automation session\n    t =   134.00s Find the "x" Button\n'
+        self.assertEqual(observe.hang_events(passed, 600), [])
+        self.assertEqual(observe.hang_events('    t =     5.00s Tap "x" Button\n', 600), [])
+        # A slow first launch that is still going is one event; its later stuck relaunch is another.
+        first = self.STUCK.split('    t =    79.18s')[0]
+        self.assertEqual([e[2] for e in observe.hang_events(first, 40)], ['testB@0.16'])
+
+    def test_a_test_that_ran_out_of_time_is_one_after_event_with_its_last_step(self):
+        events = observe.hang_events(self.STUCK + self.AFTER, 0)
+        self.assertEqual(events, [('after', 'testB', 'testB@after', 'Launch ai.hypeproof.studio.mobile')])
+        # Either line alone is enough.
+        self.assertEqual([e[2] for e in observe.hang_events(self.AFTER.splitlines()[1] + '\n', 0)], ['testB@after'])
+
+    def test_a_stuck_launch_takes_only_ps_and_the_failure_adds_the_simctl_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, self.STUCK, 45)
+            self.assertEqual(taken, 1)
+            # While the launch may still succeed: one ps of process names (-c, comm), never arguments, and no simctl.
+            self.assertEqual(calls, [(['ps', '-axco', 'pid,ppid,state,etime,comm'], 10)])
+            self.assertFalse([args for args, _ in calls if 'simctl' in args or args[0] == 'xcrun'])
+            self.assertEqual(self.scan(evidence, self.STUCK, 90), (0, []))
+            taken, calls = self.scan(evidence, self.STUCK + self.AFTER, 0)
+            self.assertEqual(taken, 1)
+            self.assertEqual([(args, limit) for args, limit in calls[:3]],
+                             [(['ps', '-axco', 'pid,ppid,state,etime,comm'], 10),
+                              (['xcrun', 'simctl', 'spawn', self.DEVICE, 'launchctl', 'list'], 30),
+                              (['xcrun', 'simctl', 'list', 'devices', self.DEVICE], 30)])
+            self.assertEqual((calls[3][0][4:7], calls[3][1], len(calls)), (['log', 'show', '--last'], 60, 4))
+            self.assertEqual(self.scan(evidence, self.STUCK + self.AFTER, 0), (0, []))
+            text = (evidence / 'hang-diagnostics.txt').read_text()
+            rows = [json.loads(line) for line in (evidence / 'simulator-steps.jsonl').read_text().splitlines()]
+        quiet, after = text.split('== hang 2 ')
+        self.assertIn('== hang 1 launch-quiet testB@131.17 ', quiet)
+        self.assertIn('-- last step: Launch ai.hypeproof.studio.mobile', quiet)
+        self.assertIn('13677     1 Z    02:01 HPStudio', quiet)
+        self.assertNotIn('launchd_sim', quiet)
+        self.assertNotIn('launchctl', quiet); self.assertNotIn('simctl', quiet); self.assertNotIn('log show', quiet)
+        self.assertTrue(after.startswith('after testB@after '))
+        self.assertIn('UIKitApplication:ai.hypeproof.studio.mobile[9f][rb-legacy]', after)
+        self.assertNotIn('com.apple.other', after)
+        self.assertIn('(Booted)', after)
+        self.assertIn('launch request timed out', after)
+        keys = ('step', 'command', 'sample', 'kind', 'test', 'processes', 'launchctl', 'log')
+        self.assertEqual([{k: r.get(k) for k in keys} for r in rows],
+                         [{'step': 'hang', 'command': 'diagnose', 'sample': 1, 'kind': 'launch-quiet', 'test': 'testB',
+                           'processes': 'listed', 'launchctl': None, 'log': None},
+                          {'step': 'hang', 'command': 'diagnose', 'sample': 2, 'kind': 'after', 'test': 'testB',
+                           'processes': 'listed', 'launchctl': 'listed', 'log': 'shown'}])
+        self.assertNotIn('device_state', rows[0])
+        self.assertIn(self.DEVICE, rows[1]['device_state'])
+
+    def test_a_command_that_does_not_return_is_recorded_not_raised(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); log = evidence / 'simulator-test.log'; log.write_text(self.STUCK + self.AFTER)
+            taken = observe.scan_hang(evidence, self.DEVICE, log, run=lambda args, limit: f'<{args[0]} did not return within {limit}s>')
+            row = json.loads((evidence / 'simulator-steps.jsonl').read_text())
+        self.assertEqual(taken, 1)
+        self.assertEqual((row['launchctl'], row['processes'], row['device_state'], row['log']), ('timeout',) * 4)
+
+    def test_captures_stop_at_the_per_shard_cap_for_each_kind(self):
+        text = ''.join(self.AFTER.replace('testB', f'test{n}') for n in range(5))
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            taken, calls = self.scan(evidence, text, 0)
+            self.assertEqual(taken, observe.HANG_CAPTURES)
+            self.assertEqual(len(calls), 4 * observe.HANG_CAPTURES)
+            self.assertEqual(self.scan(evidence, text, 0), (0, []))
+
+    def test_a_missing_log_takes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(observe.scan_hang(Path(directory), self.DEVICE, Path(directory) / 'none.log',
+                                               run=lambda *_: self.fail('no command without a log')), 0)
+
+    def test_the_terminate_watch_and_scan_also_scan_for_hangs(self):
+        source = (NATIVE / 'scripts/ios-sim-observe.py').read_text()
+        loop = source[source.index('if args.command.startswith("terminate-"):'):source.index('if args.command == "stall-watch":')]
+        self.assertIn('scan_terminate(args.evidence, args.device, args.log)', loop)
+        self.assertIn('scan_hang(args.evidence, args.device, args.log)', loop)
+        self.assertLess(loop.index('scan_terminate('), loop.index('scan_hang('))
+
+
 class TerminateDiagnostics(unittest.TestCase):
     """ios-sim-observe.py terminate-watch/terminate-scan (#4432 F6): diagnostics only."""
     DEVICE = SimObserve.DEVICE
