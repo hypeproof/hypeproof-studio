@@ -36,6 +36,21 @@ final class AccountQuestionTests: XCTestCase {
          "text": ["label": "내 생각", "placeholder": "덧붙일 말", "max": 2000, "value": NSNull()],
          "actions": [["id": "continue", "label": "이 생각으로 이어가기", "primary": true, "needs_answer": true]], "skip": "나중에", "note": NSNull()]
     }
+    private func decodedCard(expiresAt: Any) throws -> AccountQuestion {
+        var object = Self.card; object["expires_at"] = expiresAt
+        let card = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object))
+        try card.validate()
+        return card
+    }
+    func test_tc_0025_card_is_unavailable_at_the_exact_expiry_instant() throws {
+        XCTAssertFalse(try decodedCard(expiresAt: 1_000_000).available(now: 1000))
+    }
+    func test_tc_0026_card_is_available_one_millisecond_before_expiry() throws {
+        XCTAssertTrue(try decodedCard(expiresAt: 1_000_000).available(now: 999.999))
+    }
+    func test_tc_0027_card_without_expiry_is_always_available() throws {
+        XCTAssertTrue(try decodedCard(expiresAt: NSNull()).available(now: 9_999_999_999))
+    }
     @MainActor func testSessionBoundProfileAndRealCardTransportRequireExplicitAnswer() async throws {
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [QuestionProtocol.self]
         let session = URLSession(configuration: config); defer { session.invalidateAndCancel(); QuestionProtocol.respond = nil }
