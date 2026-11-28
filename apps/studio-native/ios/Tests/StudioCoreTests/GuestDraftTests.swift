@@ -72,6 +72,35 @@ final class GuestDraftTests: XCTestCase {
         XCTAssertEqual(try GuestDraft.load(from: file).text, ""); XCTAssertNil(account.request)
     }
 
+    func test_tc_0022_newlines_emoji_korean_and_edge_spaces_round_trip_byte_for_byte() throws {
+        let file = try temporaryFile()
+        let words = "  안녕\n👩‍🎓 질문 \r\n끝  "
+        try GuestDraft(text: words).save(to: file)
+        let restored = try GuestDraft.load(from: file)
+        XCTAssertEqual(restored.text, words)
+        XCTAssertEqual(Array(restored.text.utf8), Array(words.utf8))
+    }
+
+    func test_tc_0023_empty_text_round_trips_as_an_empty_draft_that_cannot_restore() throws {
+        let file = try temporaryFile()
+        try GuestDraft(text: "").save(to: file)
+        let restored = try GuestDraft.load(from: file)
+        XCTAssertEqual(restored.text, "")
+        XCTAssertFalse(restored.canRestore(into: ConversationCache()))
+        XCTAssertFalse(GuestDraft(text: "").canRestore(into: ConversationCache()))
+    }
+
+    func test_tc_0024_whitespace_only_draft_is_handed_off_unchanged() throws {
+        let file = try temporaryFile()
+        var guest = GuestDraft(text: "\n\n"); try guest.save(to: file)
+        var account = ConversationCache()
+        XCTAssertTrue(guest.canRestore(into: account))
+        XCTAssertTrue(try guest.handoff(into: account, saveAccount: { account = $0 }, saveGuest: { try $0.save(to: file) }))
+        XCTAssertEqual(Array(account.draft.utf8), Array("\n\n".utf8))
+        XCTAssertEqual(guest.text, "")
+        XCTAssertEqual(try GuestDraft.load(from: file).text, "")
+    }
+
     func testUnreadableOrFutureFileIsNotTreatedAsAnEmptyDraft() throws {
         let file = try temporaryFile()
         for bytes in [Data("broken".utf8), Data(#"{"version":9,"text":"keep this original"}"#.utf8)] {
