@@ -52,7 +52,7 @@ export const VERDICT_FIX = "고칠 것";
 export const NOTE_HINT = "무엇을 고칠지 적으세요";
 export const MODEL_DIFFERS = "리허설 모델과 수업 모델이 다릅니다. 학생이 받는 답과 다를 수 있습니다.";
 export const MINOR_LINES = ["리허설에서는 미성년 내용 검사가 없습니다.", "리허설에서는 미성년 답변 길이 제한이 없습니다."] as const;
-export const RECORD_LINE = "리허설 대화는 서버 기록에 남지 않습니다.";
+export const RECORD_LINE = "리허설 대화 본문은 서버에 저장하지 않습니다. 단계·도구 같은 기록만 올라갑니다.";
 const UNKNOWN_MODEL = "알 수 없음";
 
 export interface RehearsalRoute { rehearsalModel: string | null; lessonModel: string | null; minor: boolean }

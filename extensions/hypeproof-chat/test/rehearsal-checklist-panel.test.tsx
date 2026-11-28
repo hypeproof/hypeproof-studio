@@ -41,7 +41,7 @@ async function main() {
   // Route lines: the rehearsal name, the lesson line, and the server-record line.
   assert.ok(host.textContent.includes('리허설: 내 구독 · gpt-x'), 'rehearsal model line');
   assert.ok(host.textContent.includes('수업: 서버 · gpt-x'), 'lesson model line');
-  assert.ok(host.textContent.includes('리허설 대화는 서버 기록에 남지 않습니다.'), 'server record line');
+  assert.ok(host.textContent.includes('리허설 대화 본문은 서버에 저장하지 않습니다. 단계·도구 같은 기록만 올라갑니다.'), 'server record line');
   assert.equal(host.textContent.includes('리허설 모델과 수업 모델이 다릅니다'), false, 'same models: no difference line');
   assert.equal(host.textContent.includes('미성년'), false, 'not a minor class: no minor lines');
 
