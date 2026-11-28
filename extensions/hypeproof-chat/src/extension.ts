@@ -1,4 +1,5 @@
 import { registerMobileConversation } from "./mobileConversationHost";
+import { activateAfterReturn } from './returnActivation';
 import type { MobileConversation } from "./mobileConversation";
 import { registerAutomationHost } from "./automationHost";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
@@ -350,6 +351,8 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
+  // #4548 — a completed rehearsal return activates the instructor Chalk surface once, without a chat view.
+  void activateAfterReturn(provider, seatOutcome).catch(() => undefined);
   const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId(), onState: (state) => provider.postPerfTraceState(state) });
   provider.perfTraceObserver = (msg) => perfTrace.observe(msg);
   provider.perfTracePanel = { state: () => perfTrace.state, stop: (id) => perfTrace.stopFromPanel(id) };

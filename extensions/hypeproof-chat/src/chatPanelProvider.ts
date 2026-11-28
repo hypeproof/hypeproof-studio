@@ -12730,31 +12730,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private runFailuresTracker: RunFailureTracker | undefined;
   private get runFailures(): RunFailureTracker { return this.runFailuresTracker ??= new RunFailureTracker(); }
 
-  private async postConfig(): Promise<void> {
-    const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
-    this.currentClassNoticeId = undefined;
-    // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
-    void this.downloadWatcher?.reapply();
-    const activity=activityConnections(this.context)?.current;
-    const scope=activity?.id;
-    await this.draftWrites;
-    await this.loadAccess();
-    this.applyPendingFundingSelection();
-    const cfg = vscode.workspace.getConfiguration("hypeproofChat");
-    const token = await this.context.secrets.get(TOKEN_KEY);
-    const profile = await this.ensureProfile();
-    const selection = availableModelSelection(profile, cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'));
-    const settingModel = cfg.get<string>('model', 'hypeproof-default');
-    const model = profile && selection ? selectedModel(profile, selection, this.context.workspaceState.get<SavedModelChoice>('hps.modelChoice'), settingModel) : settingModel;
-    const effort = profile && selection ? selectedEffort(profile,selection,model,this.context.workspaceState.get<SavedEffortChoice>('hps.effortChoice')) : undefined;
-    const effortScope = profile ? JSON.stringify([token, modelSelectionScope(profile)]) : undefined;
-    if (this.effortScope !== effortScope) {
-      this.effortScope = effortScope;
-      this.effortTurn = undefined; this.effortResult = undefined; this.effortNotice = undefined;
-    }
-    if (scope!==activityConnections(this.context)?.scope) return;
-    const local=(localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime));
-    const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+  /**
+   * #4548 — the instructor seat decision and the Chalk activation. postConfig calls it on the chat view path, and the
+   * reopen path calls it once after a completed rehearsal return (refreshAfterReturn). It posts nothing to the webview.
+   */
+  private async refreshInstructorSeat(input: { token: string | null | undefined; issuerToken: string | undefined; profile: ResolvedProfile | null; seatGen: number; proxyUrl: string }): Promise<{ panelMode: ReturnType<typeof decideMode>; issuerToken: string | undefined; isInstructor: boolean; instructorSeat: boolean; chalkInstructorTab: ReturnType<typeof chalkInstructorTabField> }> {
+    const { seatGen, proxyUrl, issuerToken } = input;
+    const token = input.token;
+    const profile = input.profile;
     // #1298 A-01 — student slot takes priority. If the student token is active
     // (present, not expired, not hard-rejected), skip the instructor check entirely
     // to prevent the instructor panel from flashing during a rehearsal.
@@ -12768,9 +12751,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     );
     const panelMode = decideMode({ studentToken: token ?? undefined, studentProfileStatus });
     // Instructor auth always uses the issuer token slot, never the student token.
-    const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
-    // cr-review — the director's Weekly Review command follows the switch as the Service answers this token.
-    void this.refreshCrDirectorContext();
     let isInstructor: boolean;
     if (panelMode === "instructor") {
       isInstructor = await this._instructorMode.checkInstructorMode(issuerToken, proxyUrl);
@@ -12796,6 +12776,53 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #3578: the runtime left chalk-extension, so an active Chalk session must end now.
       if (this.chalkContract) void this.endChalkSessionForRuntime();
     }
+    return { panelMode, issuerToken: issuerToken ?? undefined, isInstructor, instructorSeat, chalkInstructorTab };
+  }
+
+  /**
+   * #4548 — after a completed rehearsal return (activateAfterReturn), the instructor decision once, with no chat view.
+   * It uses the same decision as postConfig and posts nothing to the webview.
+   */
+  async refreshAfterReturn(): Promise<void> {
+    const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
+    await this.refreshInstructorSeat({ token, issuerToken, profile: this.cachedProfile ?? null, seatGen, proxyUrl });
+  }
+
+  private async postConfig(): Promise<void> {
+    const seatGen = this.instructorSeatGen = (this.instructorSeatGen ?? 0) + 1;
+    this.currentClassNoticeId = undefined;
+    // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
+    void this.downloadWatcher?.reapply();
+    const activity=activityConnections(this.context)?.current;
+    const scope=activity?.id;
+    await this.draftWrites;
+    await this.loadAccess();
+    this.applyPendingFundingSelection();
+    const cfg = vscode.workspace.getConfiguration("hypeproofChat");
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const profile = await this.ensureProfile();
+    const selection = availableModelSelection(profile, cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'));
+    const settingModel = cfg.get<string>('model', 'hypeproof-default');
+    const model = profile && selection ? selectedModel(profile, selection, this.context.workspaceState.get<SavedModelChoice>('hps.modelChoice'), settingModel) : settingModel;
+    const effort = profile && selection ? selectedEffort(profile,selection,model,this.context.workspaceState.get<SavedEffortChoice>('hps.effortChoice')) : undefined;
+    const effortScope = profile ? JSON.stringify([token, modelSelectionScope(profile)]) : undefined;
+    if (this.effortScope !== effortScope) {
+      this.effortScope = effortScope;
+      this.effortTurn = undefined; this.effortResult = undefined; this.effortNotice = undefined;
+    }
+    if (scope!==activityConnections(this.context)?.scope) return;
+    const local=(localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime));
+    const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    // Instructor auth always uses the issuer token slot, never the student token. Read before the director call, as before the extraction.
+    const issuerTokenRead = await resolveInstructorTokenFromSecrets(this.context.secrets);
+    // cr-review — the director's Weekly Review command follows the switch as the Service answers this token.
+    void this.refreshCrDirectorContext();
+    const decision = await this.refreshInstructorSeat({ token, issuerToken: issuerTokenRead, profile, seatGen, proxyUrl });
+    const { panelMode, issuerToken, chalkInstructorTab, instructorSeat } = decision;
+    let isInstructor = decision.isInstructor;
     // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
     if (this.lastAllowInstructor !== undefined && this.lastAllowInstructor !== isInstructor) this.endTaskCommandAllows();
     this.lastAllowInstructor = isInstructor;

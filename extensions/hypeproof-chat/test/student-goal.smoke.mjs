@@ -346,6 +346,8 @@ function makeHost(context, profile, provider = proto) {
     applyPendingFundingSelection: proto.applyPendingFundingSelection,
     // CGP-SHELL-R-024 — postConfig asks the classroom settings-change line (no globalState here, so it draws none).
     observeLessonSettings: proto.observeLessonSettings,
+    // #4548 — the instructor-seat decision postConfig calls (extracted method). Harness wiring only; no assertion changed.
+    refreshInstructorSeat: proto.refreshInstructorSeat,
     ensureProfile: async () => profile,
     lastProfileFailure: null,
     refreshCrDirectorContext: async () => {},
